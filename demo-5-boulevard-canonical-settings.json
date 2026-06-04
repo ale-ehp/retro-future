@@ -1,7 +1,7 @@
 {
-  "savedAt": "2026-06-02T20:37:56.883Z",
+  "savedAt": "2026-06-04T13:19:03.396Z",
   "source": "chrome-localStorage://Google Chrome/Default/http://127.0.0.1:60121",
-  "chromeSavedAt": "2026-06-02T20:37:56.883Z",
+  "chromeSavedAt": "2026-06-04T13:19:03.396Z",
   "spawn": {
     "x": 1021.9157138958009,
     "y": 591.0351224586902,
@@ -132,11 +132,11 @@
     "vertical-speed": 112,
     "movement-accel": 9,
     "movement-decel": 8,
-    "walk-bob": 0.63,
+    "walk-bob": 0.31,
     "run-bob": 0.39,
     "strafe-bob-scale": 0.72,
     "backward-bob-scale": 0.55,
-    "walk-step-rate": 0.9,
+    "walk-step-rate": 1.65,
     "run-step-rate": 1.9,
     "step-snap": 0.35,
     "movement-sway": 0.33,
@@ -273,7 +273,7 @@
     "wireframe-backplate": 0
   },
   "chromeTabs": {
-    "movementSavedAt": "2026-05-18T22:25:06.907Z",
+    "movementSavedAt": "2026-06-04T13:19:03.396Z",
     "fxSavedAt": "2026-05-18T22:25:04.343Z",
     "ledGlowFxSavedAt": "2026-06-01T13:00:24.597Z",
     "atmosphereFxSavedAt": "2026-06-01T12:53:44.128Z",
