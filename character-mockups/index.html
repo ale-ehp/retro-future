@@ -116,6 +116,67 @@
       align-items: stretch;
     }
 
+    .scene-launch {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      margin: 0 0 22px;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      background:
+        linear-gradient(90deg, rgba(33, 216, 255, 0.12), transparent 54%),
+        rgba(5, 12, 17, 0.72);
+      padding: 16px 18px;
+      box-shadow: 0 0 34px rgba(33, 216, 255, 0.08);
+    }
+
+    .scene-launch strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 1rem;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+
+    .scene-launch span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.42;
+    }
+
+    .scene-launch a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      border: 1px solid rgba(141, 240, 255, 0.64);
+      border-radius: 999px;
+      padding: 0 14px;
+      color: var(--cyan-bright);
+      background: rgba(33, 216, 255, 0.08);
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.72rem;
+      font-weight: 900;
+      text-decoration: none;
+      text-transform: uppercase;
+      white-space: nowrap;
+      box-shadow: 0 0 18px rgba(33, 216, 255, 0.16);
+    }
+
+    .scene-launch a:focus-visible {
+      outline: 2px solid var(--cyan-bright);
+      outline-offset: 3px;
+    }
+
+    .scene-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: end;
+      gap: 10px;
+    }
+
     .character-card {
       position: relative;
       min-height: 680px;
@@ -335,6 +396,10 @@
         grid-template-columns: 1fr;
       }
 
+      .scene-launch {
+        grid-template-columns: 1fr;
+      }
+
       .character-card {
         min-height: 640px;
       }
@@ -365,6 +430,19 @@
         <span>Motion ready</span>
       </div>
     </header>
+
+    <section class="scene-launch" aria-label="Mockup 3D camminata">
+      <div>
+        <strong>Scene 3D reali</strong>
+        <span>Due strade: modello GLB riggato con skeleton reale, oppure personaggio custom costruito con mesh 3D e LED emissivi.</span>
+      </div>
+      <div class="scene-actions">
+        <a href="walk-rigged-glb.html">A Interactive GLB</a>
+        <a href="walk-rigged-explorer.html">Explorer 3D</a>
+        <a href="walk-rigged-runner.html">Runner 3D</a>
+        <a href="walk-custom-3d.html">B Custom 3D</a>
+      </div>
+    </section>
 
     <section class="gallery" aria-label="Mockup personaggi stile retro-future">
       <article class="character-card">

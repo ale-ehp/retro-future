@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Retro-Future 3D Walker</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23030609'/%3E%3Cpath d='M2 8h12M8 2v12' stroke='%2321d8ff' stroke-width='1.5'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: oklch(8% 0.015 225);
+      --ink: oklch(96% 0.018 220);
+      --muted: oklch(74% 0.052 220);
+      --cyan: oklch(82% 0.22 205);
+      --cyan-soft: oklch(82% 0.22 205 / 0.2);
+      --panel: oklch(12% 0.018 225 / 0.86);
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, "DM Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .hud {
+      position: fixed;
+      top: 24px;
+      left: 24px;
+      z-index: 3;
+      display: grid;
+      gap: 12px;
+      max-width: min(420px, calc(100vw - 48px));
+      pointer-events: none;
+    }
+
+    .hud-main {
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--cyan-soft);
+      border-radius: 8px;
+      background: linear-gradient(180deg, var(--panel), oklch(7% 0.016 225 / 0.84));
+      box-shadow: 0 0 38px oklch(82% 0.22 205 / 0.12);
+      padding: 14px 16px 15px;
+    }
+
+    .eyebrow {
+      margin: 0;
+      color: var(--cyan);
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 5vw, 3.8rem);
+      font-weight: 900;
+      line-height: 0.95;
+    }
+
+    .sub {
+      max-width: 52ch;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.42;
+    }
+
+    .hud-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip,
+    .back-link {
+      border: 1px solid var(--cyan-soft);
+      border-radius: 999px;
+      background: oklch(11% 0.028 225 / 0.72);
+      color: var(--ink);
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.68rem;
+      font-weight: 800;
+      line-height: 1;
+      text-transform: uppercase;
+      text-decoration: none;
+    }
+
+    .chip {
+      padding: 7px 9px;
+    }
+
+    .back-link {
+      width: fit-content;
+      padding: 9px 11px;
+      pointer-events: auto;
+    }
+
+    .back-link:focus-visible {
+      outline: 2px solid var(--cyan);
+      outline-offset: 3px;
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 50% 55%, transparent 36%, oklch(5% 0.012 225 / 0.42) 76%),
+        linear-gradient(180deg, oklch(5% 0.012 225 / 0.24), transparent 18%, oklch(5% 0.012 225 / 0.42));
+      mix-blend-mode: multiply;
+    }
+
+    .loading {
+      position: fixed;
+      inset: auto 24px 24px auto;
+      z-index: 4;
+      color: var(--muted);
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    body.is-ready .loading {
+      display: none;
+    }
+
+    @media (max-width: 720px) {
+      .hud {
+        top: 14px;
+        left: 14px;
+        max-width: calc(100vw - 28px);
+      }
+
+      .hud-main {
+        padding: 12px;
+      }
+
+      .sub {
+        display: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hud-main {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="app" aria-label="Scena 3D con personaggio che cammina su strada retro-future"></main>
+  <aside class="hud" aria-label="Dettagli mockup">
+    <div class="hud-main">
+      <p class="eyebrow">3D Walker Mockup</p>
+      <h1>Strada simulata</h1>
+      <p class="sub">Personaggio realistico dai mockup, inserito nel canvas Three.js e animato mentre avanza sul boulevard neon.</p>
+      <div class="hud-row" aria-label="Specifiche">
+        <span class="chip">Mockup real</span>
+        <span class="chip">Bloom</span>
+        <span class="chip">Walk loop</span>
+      </div>
+    </div>
+    <a class="back-link" href="./">Concept 2D</a>
+  </aside>
+  <div class="vignette" aria-hidden="true"></div>
+  <div class="loading">Caricamento scena</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../three.module.min.js",
+      "three/addons/postprocessing/EffectComposer.js": "../EffectComposer.js",
+      "three/addons/postprocessing/RenderPass.js": "../RenderPass.js",
+      "three/addons/postprocessing/UnrealBloomPass.js": "../UnrealBloomPass.js",
+      "three/addons/postprocessing/OutputPass.js": "../OutputPass.js",
+      "three/addons/postprocessing/FXAAPass.js": "../FXAAPass.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+    import { FXAAPass } from 'three/addons/postprocessing/FXAAPass.js';
+
+    const app = document.getElementById('app');
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const startedAt = performance.now();
+    let lastFrameAt = startedAt;
+    const frameState = {
+      frames: 0,
+      elapsed: 0,
+      walkerZ: 0,
+      streetOffset: 0,
+      post: false,
+      ready: false,
+      textureReady: false,
+    };
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: false,
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: true,
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.35));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.82;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    app.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x020609);
+    scene.fog = new THREE.FogExp2(0x03141b, 0.022);
+
+    const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 260);
+    camera.position.set(0, 3.7, 9.4);
+    camera.lookAt(0, 2.35, -2.4);
+
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.24, 0.22, 0.42);
+    const outputPass = new OutputPass();
+    const fxaaPass = new FXAAPass();
+    composer.addPass(renderPass);
+    composer.addPass(bloomPass);
+    composer.addPass(outputPass);
+    composer.addPass(fxaaPass);
+    frameState.post = true;
+
+    const palette = {
+      cyan: 0x23dfff,
+      cyanHot: 0x8df6ff,
+      blue: 0x0f7aff,
+      black: 0x02080b,
+      blackSoft: 0x071015,
+      asphalt: 0x03080b,
+      sidewalk: 0x071014,
+    };
+
+    const roadMat = new THREE.MeshStandardMaterial({
+      color: palette.asphalt,
+      roughness: 0.52,
+      metalness: 0.58,
+    });
+    const sidewalkMat = new THREE.MeshStandardMaterial({
+      color: palette.sidewalk,
+      roughness: 0.58,
+      metalness: 0.5,
+    });
+    const buildingMat = new THREE.MeshStandardMaterial({
+      color: 0x020709,
+      roughness: 0.48,
+      metalness: 0.64,
+    });
+    const ledMat = new THREE.MeshStandardMaterial({
+      color: palette.cyanHot,
+      emissive: palette.cyan,
+      emissiveIntensity: 3.35,
+      roughness: 0.2,
+      metalness: 0.15,
+    });
+    ledMat.toneMapped = false;
+    const ledSoftMat = new THREE.MeshStandardMaterial({
+      color: 0x4be9ff,
+      emissive: 0x19bff4,
+      emissiveIntensity: 1.55,
+      roughness: 0.25,
+      metalness: 0.12,
+      transparent: true,
+      opacity: 0.78,
+    });
+    ledSoftMat.toneMapped = false;
+
+    scene.add(new THREE.HemisphereLight(0x78eaff, 0x010305, 1.45));
+    const key = new THREE.DirectionalLight(0xb8fbff, 1.8);
+    key.position.set(-6, 12, 9);
+    scene.add(key);
+    const rim = new THREE.PointLight(0x21d8ff, 56, 34, 1.6);
+    rim.position.set(0, 5, -7);
+    scene.add(rim);
+    const suitFill = new THREE.PointLight(0x7defff, 22, 10, 1.8);
+    suitFill.position.set(0, 3.2, 4.5);
+    scene.add(suitFill);
+
+    const street = new THREE.Group();
+    scene.add(street);
+
+    function addBox(parent, size, position, material, name = '') {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), material);
+      mesh.position.set(position[0], position[1], position[2]);
+      mesh.name = name;
+      parent.add(mesh);
+      return mesh;
+    }
+
+    function addLedBar(parent, size, position, rotation = [0, 0, 0], material = ledMat) {
+      const bar = addBox(parent, size, position, material, 'led-bar');
+      bar.rotation.set(rotation[0], rotation[1], rotation[2]);
+      return bar;
+    }
+
+    function buildStreet() {
+      const roadWidth = 11.6;
+      const sidewalkWidth = 4.4;
+      const length = 190;
+      addBox(street, [roadWidth, 0.08, length], [0, -0.06, -22], roadMat, 'road');
+      addBox(street, [sidewalkWidth, 0.14, length], [-8.05, 0, -22], sidewalkMat, 'left-sidewalk');
+      addBox(street, [sidewalkWidth, 0.14, length], [8.05, 0, -22], sidewalkMat, 'right-sidewalk');
+
+      addLedBar(street, [0.11, 0.045, length], [-5.85, 0.035, -22], [0, 0, 0], ledMat);
+      addLedBar(street, [0.11, 0.045, length], [5.85, 0.035, -22], [0, 0, 0], ledMat);
+      addLedBar(street, [0.055, 0.035, length], [0, 0.028, -22], [0, 0, 0], ledSoftMat);
+
+      for (let z = -112; z <= 70; z += 7.5) {
+        addLedBar(street, [1.8, 0.035, 0.08], [-2.8, 0.032, z], [0, 0, 0], ledSoftMat);
+        addLedBar(street, [1.8, 0.035, 0.08], [2.8, 0.032, z + 3.75], [0, 0, 0], ledSoftMat);
+      }
+
+      for (let z = -112; z <= 70; z += 10) {
+        addLedBar(street, [roadWidth + sidewalkWidth * 2, 0.025, 0.045], [0, 0.04, z], [0, 0, 0], ledSoftMat);
+      }
+
+      const buildingData = [
+        [8, 16, 10, -98], [10, 12, 13, -82], [8, 18, 11, -64], [11, 14, 14, -47],
+        [9, 22, 12, -30], [10, 13, 10, -12], [8, 17, 12, 8], [11, 20, 13, 28],
+        [9, 14, 10, 48],
+      ];
+      for (const [width, height, depth, z] of buildingData) {
+        createBuilding(-1, width, height, depth, z);
+        createBuilding(1, width * 0.92, height * 0.86 + 2, depth * 1.08, z + 7);
+      }
+      createBridge(-50);
+    }
+
+    function createBuilding(side, width, height, depth, z) {
+      const group = new THREE.Group();
+      const x = side * (10.8 + width / 2);
+      group.position.set(x, 0, z);
+      street.add(group);
+      addBox(group, [width, height, depth], [0, height / 2, 0], buildingMat, 'building-body');
+
+      const faceX = side < 0 ? width / 2 + 0.035 : -width / 2 - 0.035;
+      const faceSide = side < 0 ? 1 : -1;
+      const faceRot = [0, 0, 0];
+      addLedBar(group, [0.075, height * 0.78, 0.09], [faceX, height * 0.5, -depth * 0.38], faceRot, ledSoftMat);
+      addLedBar(group, [0.075, height * 0.78, 0.09], [faceX, height * 0.5, depth * 0.38], faceRot, ledSoftMat);
+      addLedBar(group, [0.075, 0.075, depth * 0.78], [faceX, height * 0.12, 0], faceRot, ledSoftMat);
+      addLedBar(group, [0.075, 0.075, depth * 0.78], [faceX, height * 0.88, 0], faceRot, ledSoftMat);
+      addLedBar(group, [0.08, height * 0.42, 0.08], [faceX + faceSide * 0.02, height * 0.5, 0], faceRot, ledMat);
+
+      const roof = addLedBar(group, [width * 0.72, 0.07, 0.07], [0, height + 0.04, -depth * 0.44], [0, 0, 0], ledSoftMat);
+      roof.rotation.y = 0;
+    }
+
+    function createBridge(z) {
+      const group = new THREE.Group();
+      group.position.set(0, 0, z);
+      street.add(group);
+      addBox(group, [25, 1.4, 2.2], [0, 8.7, 0], buildingMat, 'bridge-deck');
+      addBox(group, [1.2, 8, 1.2], [-10.7, 4, 0], buildingMat, 'bridge-left-pier');
+      addBox(group, [1.2, 8, 1.2], [10.7, 4, 0], buildingMat, 'bridge-right-pier');
+      addLedBar(group, [22, 0.08, 0.08], [0, 9.45, -1.14], [0, 0, 0], ledMat);
+      addLedBar(group, [22, 0.08, 0.08], [0, 8.02, -1.14], [0, 0, 0], ledSoftMat);
+      addLedBar(group, [0.08, 7.1, 0.08], [-11.35, 4.2, -0.65], [0, 0, 0], ledSoftMat);
+      addLedBar(group, [0.08, 7.1, 0.08], [11.35, 4.2, -0.65], [0, 0, 0], ledSoftMat);
+    }
+
+    buildStreet();
+
+    const walker = new THREE.Group();
+    walker.name = 'mockup-realistic-walker';
+    walker.position.set(0, 0.02, 2.35);
+    scene.add(walker);
+
+    const walkerParts = {
+      body: null,
+      glowShell: null,
+      groundShadow: null,
+      footGlow: null,
+    };
+
+    function createMockupWalker() {
+      const textureLoader = new THREE.TextureLoader();
+      textureLoader.load('assets/character-walker-cutout.webp', (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+
+        const width = 1.92;
+        const height = width * (1466 / 515);
+        const body = new THREE.Mesh(
+          new THREE.PlaneGeometry(width, height, 1, 1),
+          new THREE.MeshBasicMaterial({
+            alphaTest: 0.04,
+            map: texture,
+            color: 0xb8d7de,
+            side: THREE.DoubleSide,
+            transparent: true,
+            toneMapped: true,
+          })
+        );
+        body.position.set(0, height * 0.5 - 0.08, 0);
+        body.name = 'mockup-explorer-plane';
+        walker.add(body);
+
+        const glowShell = new THREE.Mesh(
+          new THREE.PlaneGeometry(width * 1.015, height * 1.015, 1, 1),
+          new THREE.MeshBasicMaterial({
+            alphaTest: 0.035,
+            map: texture,
+            color: 0x53e8ff,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            opacity: 0.07,
+            side: THREE.DoubleSide,
+            transparent: true,
+            toneMapped: false,
+          })
+        );
+        glowShell.position.copy(body.position);
+        glowShell.position.z = -0.035;
+        walker.add(glowShell);
+
+        const groundShadow = new THREE.Mesh(
+          new THREE.CircleGeometry(1.35, 48),
+          new THREE.MeshBasicMaterial({
+            color: 0x00070a,
+            depthWrite: false,
+            opacity: 0.58,
+            transparent: true,
+          })
+        );
+        groundShadow.rotation.x = -Math.PI / 2;
+        groundShadow.position.set(0, 0.025, 0.2);
+        groundShadow.scale.set(1, 0.36, 1);
+        walker.add(groundShadow);
+
+        const footGlow = new THREE.Mesh(
+          new THREE.CircleGeometry(1.15, 48),
+          new THREE.MeshBasicMaterial({
+            color: 0x21d8ff,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            opacity: 0.2,
+            transparent: true,
+          })
+        );
+        footGlow.rotation.x = -Math.PI / 2;
+        footGlow.position.set(0, 0.035, -0.18);
+        footGlow.scale.set(1.1, 0.24, 1);
+        walker.add(footGlow);
+
+        walkerParts.body = body;
+        walkerParts.glowShell = glowShell;
+        walkerParts.groundShadow = groundShadow;
+        walkerParts.footGlow = footGlow;
+        frameState.textureReady = true;
+      });
+    }
+
+    createMockupWalker();
+
+    const glowMarkers = [];
+    for (let i = 0; i < 8; i += 1) {
+      const light = new THREE.PointLight(0x20d8ff, 16, 18, 2);
+      light.position.set(i % 2 ? -5.4 : 5.4, 0.35, -90 + i * 22);
+      street.add(light);
+      glowMarkers.push(light);
+    }
+
+    function updateWalker(time) {
+      const phase = time * 4.65;
+      const c = Math.cos(phase);
+      const bob = prefersReducedMotion ? 0.015 : Math.abs(c) * 0.085;
+      const lean = prefersReducedMotion ? 0 : Math.sin(phase) * 0.018;
+      walker.position.y = 0.02 + bob;
+      walker.position.x = Math.sin(time * 0.7) * 0.06;
+      walker.rotation.z = lean;
+      walker.rotation.y = Math.sin(time * 0.58) * 0.045;
+      const bodyScale = 1 + Math.abs(c) * 0.006;
+      if (walkerParts.body) walkerParts.body.scale.set(bodyScale, bodyScale, 1);
+      if (walkerParts.glowShell) {
+        walkerParts.glowShell.scale.set(bodyScale * 1.012, bodyScale * 1.012, 1);
+        walkerParts.glowShell.material.opacity = 0.05 + Math.abs(c) * 0.035;
+      }
+      if (walkerParts.groundShadow) walkerParts.groundShadow.material.opacity = 0.44 + (1 - Math.abs(c)) * 0.16;
+      if (walkerParts.footGlow) walkerParts.footGlow.material.opacity = 0.14 + Math.abs(Math.sin(phase)) * 0.13;
+    }
+
+    function updateStreet(time) {
+      const speed = prefersReducedMotion ? 0.7 : 5.6;
+      const segment = 20;
+      const offset = (time * speed) % segment;
+      street.position.z = offset;
+      frameState.streetOffset = offset;
+      for (let i = 0; i < glowMarkers.length; i += 1) {
+        glowMarkers[i].intensity = 14 + Math.sin(time * 2.4 + i) * 3;
+      }
+    }
+
+    function updateCamera(time) {
+      const target = new THREE.Vector3(walker.position.x * 0.22, 2.55, -4.4);
+      const desired = new THREE.Vector3(
+        Math.sin(time * 0.34) * 0.62,
+        3.62 + Math.sin(time * 0.5) * 0.08,
+        9.1
+      );
+      camera.position.lerp(desired, 0.04);
+      camera.lookAt(target);
+    }
+
+    function updateSize() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      renderer.setSize(width, height);
+      composer.setSize(width, height);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.35);
+      renderer.setPixelRatio(pixelRatio);
+      composer.setPixelRatio(pixelRatio);
+      bloomPass.resolution.set(width, height);
+      fxaaPass.setSize(width * pixelRatio, height * pixelRatio);
+    }
+
+    window.addEventListener('resize', updateSize);
+    updateSize();
+
+    function render(now = performance.now()) {
+      const dt = Math.min((now - lastFrameAt) / 1000, 0.05);
+      lastFrameAt = now;
+      const elapsed = (now - startedAt) / 1000;
+      frameState.frames += 1;
+      frameState.elapsed = elapsed;
+      frameState.walkerZ = walker.position.z;
+
+      updateWalker(elapsed, dt);
+      updateStreet(elapsed);
+      updateCamera(elapsed);
+      composer.render(dt);
+
+      if (!frameState.ready && frameState.frames > 2) {
+        frameState.ready = true;
+        document.body.classList.add('is-ready');
+      }
+      requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+
+    window.__tron3dWalkerInspect = () => {
+      const canvas = renderer.domElement;
+      const gl = renderer.getContext();
+      const pixels = new Uint8Array(4);
+      try {
+        gl.readPixels(
+          Math.max(0, Math.floor(gl.drawingBufferWidth * 0.5)),
+          Math.max(0, Math.floor(gl.drawingBufferHeight * 0.52)),
+          1,
+          1,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          pixels
+        );
+      } catch (error) {
+        pixels[0] = 0;
+        pixels[1] = 0;
+        pixels[2] = 0;
+        pixels[3] = 0;
+      }
+      return {
+        ...frameState,
+        canvasWidth: canvas.width,
+        canvasHeight: canvas.height,
+        objectCount: scene.children.length,
+        centerPixel: Array.from(pixels),
+        walkerPosition: walker.position.toArray(),
+        cameraPosition: camera.position.toArray(),
+      };
+    };
+  </script>
+</body>
+</html>
