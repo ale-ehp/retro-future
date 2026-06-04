@@ -315,8 +315,8 @@
   }
   .control-panel { display: none; }
   .control-panel.active { display: block; }
-  #hud-controls .control-tab:not([data-tab="movement"]):not([data-tab="bloom-fx"]):not([data-tab="led-glow-fx"]):not([data-tab="wireframe-fx"]):not([data-tab="atmosphere-fx"]):not([data-tab="performance-fx"]),
-  #hud-controls .control-panel:not([data-panel="movement"]):not([data-panel="bloom-fx"]):not([data-panel="led-glow-fx"]):not([data-panel="wireframe-fx"]):not([data-panel="atmosphere-fx"]):not([data-panel="performance-fx"]) {
+  #hud-controls .control-tab:not([data-tab="movement"]):not([data-tab="bloom-fx"]):not([data-tab="led-glow-fx"]):not([data-tab="central-building-leds"]):not([data-tab="wireframe-fx"]):not([data-tab="atmosphere-fx"]):not([data-tab="performance-fx"]),
+  #hud-controls .control-panel:not([data-panel="movement"]):not([data-panel="bloom-fx"]):not([data-panel="led-glow-fx"]):not([data-panel="central-building-leds"]):not([data-panel="wireframe-fx"]):not([data-panel="atmosphere-fx"]):not([data-panel="performance-fx"]) {
     display: none !important;
   }
   .control-box {
@@ -498,6 +498,7 @@
     <button class="control-tab" type="button" data-tab="buildings">Palazzi</button>
     <button class="control-tab" type="button" data-tab="bloom-fx">Bloom</button>
     <button class="control-tab" type="button" data-tab="led-glow-fx">Glow LED</button>
+    <button class="control-tab" type="button" data-tab="central-building-leds">LED centrali palazzi</button>
     <button class="control-tab" type="button" data-tab="wireframe-fx">Wireframe</button>
     <button class="control-tab" type="button" data-tab="atmosphere-fx">Atmosfera</button>
     <button class="control-tab" type="button" data-tab="performance-fx">Performance</button>
@@ -825,9 +826,14 @@
       <div id="led-glow-fx-city-controls"></div>
       <div class="control-section">Mio palazzo</div>
       <div id="led-glow-fx-main-controls"></div>
-      <div class="control-section">Centrali laterali</div>
-      <div id="led-glow-fx-side-controls"></div>
       <button class="control-action save-tab-settings" type="button" data-save-tab="led-glow-fx">Salva scheda Glow LED</button>
+    </section>
+
+    <section class="control-panel" data-panel="central-building-leds">
+      <div class="control-box" id="side-facade-led-controls">
+        <div class="control-section">LED centrali 12 palazzi</div>
+      </div>
+      <button class="control-action save-tab-settings" type="button" data-save-tab="central-building-leds">Salva scheda LED centrali palazzi</button>
     </section>
 
     <section class="control-panel" data-panel="wireframe-fx">
@@ -866,9 +872,6 @@
       <label class="control-row"><span class="control-head"><span>Pixel ratio</span><output id="pixel-ratio-val">1.25</output></span><input id="pixel-ratio" type="range" min="0.75" max="1.25" step="0.05" value="1.25" /></label>
       <div class="control-box" id="main-facade-led-controls">
         <div class="control-section">LED centrale mio palazzo</div>
-      </div>
-      <div class="control-box" id="side-facade-led-controls">
-        <div class="control-section">LED centrali 12 palazzi</div>
       </div>
       <button class="control-action save-tab-settings" type="button" data-save-tab="fx">Salva scheda FX</button>
     </section>
@@ -2820,6 +2823,7 @@ const SIDE_ROAD_WIDTH = GRID_BLOCK * 2;
 const SIDE_BUILDING_BASE = GRID_BLOCK * 6;
 const SIDE_BUILDING_GAP = GRID_BLOCK * 2;
 const SIDE_BUILDING_SPACING = SIDE_BUILDING_BASE + SIDE_BUILDING_GAP;
+const SIDE_FACADE_LED_REFERENCE_HEIGHT = GRID_BLOCK * 11;
 const SIDE_BUILDING_MIN_CLEARANCE = SIDE_BUILDING_GAP;
 const BRIDGE_BUILDING_CLEARANCE = 6;
 const BRIDGE_INNER_BUILDING_FACE_X = SIDE_BUILDING_X - SIDE_BUILDING_BASE / 2;
@@ -4839,6 +4843,10 @@ let sharedFacadeHousingMaterial = null;
 const sharedFacadeLedMaterials = new Map();
 const sideBuildingDoorGroups = [];
 const sideBuildingDoorLedMeshes = [];
+const sideBuildingCivicNumberGroups = [];
+const sideBuildingCivicNumberMaterials = [];
+const sideBuildingCivicNumberTextureCache = new Map();
+const sideBuildingCivicNumberPlaneGeometry = new THREE.PlaneGeometry(1, 1);
 const sideDoorCount = () => sideBuildingDoorGroups.length;
 const sideDoorUnitBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
 const SIDE_DOOR_FIXED = Object.freeze({
@@ -4850,6 +4858,21 @@ const SIDE_DOOR_FIXED = Object.freeze({
   y: -2.35,
   faceOffset: 12.7,
 });
+const SIDE_BUILDING_CIVIC_NUMBER_FIXED = Object.freeze({
+  singleWidth: 59,
+  doubleWidth: 91,
+  height: 47,
+  faceOffset: 2.1,
+  verticalLift: 1.05,
+  renderOrder: 18,
+  depthLayers: [
+    { x: 0, y: 0, z: -0.24, opacity: 0.34, color: 0x05283a },
+    { x: 0, y: 0, z: -0.16, opacity: 0.42, color: 0x0a5267 },
+    { x: 0, y: 0, z: -0.08, opacity: 0.52, color: 0x1393aa },
+  ],
+});
+const BRIDGE_PAIR_5_6_INDEX = 2;
+const BRIDGE_PAIR_5_6_Y_OFFSET = 66;
 const sideBuildingEdgeBatch = {
   mesh: null,
   material: null,
@@ -5311,6 +5334,7 @@ function readBridgeNumber(record, key) {
   const input = getBridgeControl(record.index, key);
   const fallback = bridgeControlFields.find((field) => field.key === key)?.value ?? 0;
   const value = Number(input?.value ?? fallback);
+  if (record.index === BRIDGE_PAIR_5_6_INDEX && key === 'yOffset') return BRIDGE_PAIR_5_6_Y_OFFSET;
   return Number.isFinite(value) ? value : fallback;
 }
 
@@ -5326,9 +5350,16 @@ function updateBridgeControlOutputs() {
       const input = getBridgeControl(record.index, field.key);
       const output = document.getElementById(`${bridgeControlId(record.index, field.key)}-val`);
       if (!input || !output) continue;
-      output.textContent = Number(input.value).toFixed(field.digits ?? 2);
+      output.textContent = readBridgeNumber(record, field.key).toFixed(field.digits ?? 2);
     }
   }
+}
+
+function applyBridgeFixedDefaults() {
+  const input = getBridgeControl(BRIDGE_PAIR_5_6_INDEX, 'yOffset');
+  if (!input) return;
+  input.value = String(BRIDGE_PAIR_5_6_Y_OFFSET);
+  input.defaultValue = String(BRIDGE_PAIR_5_6_Y_OFFSET);
 }
 
 function renderBridgeControls() {
@@ -6138,9 +6169,10 @@ function addTronFacadeTreatment(buildingMesh, w, h, d, options = {}) {
   const role = options.edgeRole || 'side-building';
   const scale = Math.min(w, d);
   const ribbon = Math.max(0.72, scale * 0.018);
-  const low = h * 0.12;
-  const mid = h * 0.48;
-  const high = h * 0.88;
+  const layoutH = role === 'side-building' ? SIDE_FACADE_LED_REFERENCE_HEIGHT : h;
+  const low = layoutH * 0.12;
+  const mid = layoutH * 0.48;
+  const high = layoutH * 0.88;
   const uA = -scale * 0.30;
   const uB = scale * 0.02;
   const uC = scale * 0.28;
@@ -6155,9 +6187,9 @@ function addTronFacadeTreatment(buildingMesh, w, h, d, options = {}) {
       [uC, high],
     ], ribbon, role, { segmentOffset: 0, withHousing: false });
     addFacadeLedPolyline(buildingMesh, w, d, face, sign, [
-      [uC, h * 0.22],
-      [uC, h * 0.54],
-      [uC - scale * 0.13, h * 0.64],
+      [uC, layoutH * 0.22],
+      [uC, layoutH * 0.54],
+      [uC - scale * 0.13, layoutH * 0.64],
     ], ribbon * 0.72, role, { segmentOffset: 4, withHousing: false });
   } else {
     addFacadeLedSegment(buildingMesh, w, d, face, sign, [uA, low], [uA, high * 0.82], ribbon, role, { sideFacadeSegmentIndex: 0, withHousing: false });
@@ -6165,11 +6197,11 @@ function addTronFacadeTreatment(buildingMesh, w, h, d, options = {}) {
     addFacadeLedSegment(buildingMesh, w, d, face, sign, [uB, high], [uC, high], ribbon * 0.82, role, { sideFacadeSegmentIndex: 2, withHousing: false });
     addFacadeLedSegment(buildingMesh, w, d, face, sign, [uA, low], [uB, low], ribbon * 0.82, role, { sideFacadeSegmentIndex: 3, withHousing: false });
 
-    addFacadeLedSegment(buildingMesh, w, d, face, sign, [uC, h * 0.22], [uC, h * 0.54], ribbon * 0.72, role, { sideFacadeSegmentIndex: 4, withHousing: false });
-    addFacadeLedSegment(buildingMesh, w, d, face, sign, [uC, h * 0.54], [uC - scale * 0.13, h * 0.64], ribbon * 0.72, role, { sideFacadeSegmentIndex: 5, withHousing: false });
+    addFacadeLedSegment(buildingMesh, w, d, face, sign, [uC, layoutH * 0.22], [uC, layoutH * 0.54], ribbon * 0.72, role, { sideFacadeSegmentIndex: 4, withHousing: false });
+    addFacadeLedSegment(buildingMesh, w, d, face, sign, [uC, layoutH * 0.54], [uC - scale * 0.13, layoutH * 0.64], ribbon * 0.72, role, { sideFacadeSegmentIndex: 5, withHousing: false });
   }
 
-  addFacadeSlotStack(buildingMesh, w, d, h, face, sign, scale * 0.16, mid, role === 'main-building' ? 8 : 6, role, ribbon, role === 'main-building' ? {
+  addFacadeSlotStack(buildingMesh, w, d, layoutH, face, sign, scale * 0.16, mid, role === 'main-building' ? 8 : 6, role, ribbon, role === 'main-building' ? {
     withHousing: false,
     yOffset: -GRID_BLOCK,
     mainFacadeUsesGlobalControls: true,
@@ -6593,6 +6625,113 @@ function createSelectedSideBuildingDoorModel() {
   return group;
 }
 
+function createSideBuildingCivicNumberTexture(value) {
+  const key = String(value);
+  if (sideBuildingCivicNumberTextureCache.has(key)) return sideBuildingCivicNumberTextureCache.get(key);
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 640;
+  const ctx = canvas.getContext('2d');
+  const text = String(value);
+  const fontSize = text.length > 1 ? 386 : 436;
+  const x = canvas.width * 0.5 - 20;
+  const y = canvas.height * 0.56;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `900 ${fontSize}px Impact, Haettenschweiler, "Arial Narrow", sans-serif`;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(5, 30, 43, 0.98)';
+  ctx.lineWidth = 76;
+  ctx.strokeText(text, x, y);
+  ctx.strokeStyle = 'rgba(12, 89, 110, 0.94)';
+  ctx.lineWidth = 58;
+  ctx.strokeText(text, x, y);
+  ctx.strokeStyle = 'rgba(28, 165, 184, 0.88)';
+  ctx.lineWidth = 44;
+  ctx.strokeText(text, x, y);
+  ctx.shadowColor = 'rgba(98, 247, 255, 0.72)';
+  ctx.shadowBlur = 18;
+  ctx.strokeStyle = 'rgba(143, 252, 255, 1)';
+  ctx.lineWidth = 34;
+  ctx.strokeText(text, x, y);
+  ctx.shadowBlur = 8;
+  ctx.strokeStyle = 'rgba(231, 253, 255, 0.94)';
+  ctx.lineWidth = 12;
+  ctx.strokeText(text, x, y);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(143, 252, 255, 0.08)';
+  ctx.fillText(text, x, y);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 1);
+  texture.needsUpdate = true;
+  sideBuildingCivicNumberTextureCache.set(key, texture);
+  return texture;
+}
+
+function createSideBuildingCivicNumberMaterial(record, color = 0xffffff, opacity = 1) {
+  const material = new THREE.MeshBasicMaterial({
+    map: createSideBuildingCivicNumberTexture(record.civicNumberValue),
+    color,
+    transparent: true,
+    opacity,
+    alphaTest: 0.018,
+    depthWrite: false,
+    depthTest: true,
+    toneMapped: false,
+    side: THREE.DoubleSide,
+  });
+  sideBuildingCivicNumberMaterials.push(material);
+  return material;
+}
+
+function addSideBuildingCivicNumberPlane(group, record, material, name, layer = null) {
+  const mesh = new THREE.Mesh(sideBuildingCivicNumberPlaneGeometry, material);
+  mesh.name = `side-building-civic-number-${name}-${record.civicNumberValue}`;
+  mesh.renderOrder = SIDE_BUILDING_CIVIC_NUMBER_FIXED.renderOrder;
+  if (layer) {
+    mesh.position.set(layer.x, layer.y, layer.z);
+    mesh.renderOrder -= 1;
+  }
+  mesh.frustumCulled = false;
+  group.add(mesh);
+  return mesh;
+}
+
+function buildSideBuildingCivicNumber(record) {
+  const group = new THREE.Group();
+  group.name = `side-building-civic-number-${record.civicNumberValue}`;
+  group.userData.civicNumberValue = record.civicNumberValue;
+  for (const layer of SIDE_BUILDING_CIVIC_NUMBER_FIXED.depthLayers) {
+    addSideBuildingCivicNumberPlane(
+      group,
+      record,
+      createSideBuildingCivicNumberMaterial(record, layer.color, layer.opacity),
+      'depth',
+      layer
+    );
+  }
+  addSideBuildingCivicNumberPlane(
+    group,
+    record,
+    createSideBuildingCivicNumberMaterial(record),
+    'front'
+  );
+  record.civicNumberGroup = group;
+  sideBuildingCivicNumberGroups.push(group);
+  overlayGroup.add(group);
+  return group;
+}
+
 function buildSideBuildingDoor(record) {
   const group = createSelectedSideBuildingDoorModel();
   record.sideDoor = group;
@@ -6601,22 +6740,44 @@ function buildSideBuildingDoor(record) {
   return group;
 }
 
+function updateSideBuildingCivicNumberTransform(record, faceSign) {
+  const group = record.civicNumberGroup;
+  if (!group) return;
+  const text = String(record.civicNumberValue);
+  const doorScaleRatio = Math.max(0.35, sideDoorScale / SIDE_DOOR_FIXED.scale);
+  const numberWidth = (text.length > 1
+    ? SIDE_BUILDING_CIVIC_NUMBER_FIXED.doubleWidth
+    : SIDE_BUILDING_CIVIC_NUMBER_FIXED.singleWidth) * doorScaleRatio;
+  const numberHeight = SIDE_BUILDING_CIVIC_NUMBER_FIXED.height * doorScaleRatio;
+  const doorTopY = sideDoorY + sideDoorHeight * sideDoorScale;
+  group.visible = record.mesh.visible;
+  group.position.set(
+    record.mesh.position.x + faceSign * (record.collider.hw + sideDoorFaceOffset + SIDE_BUILDING_CIVIC_NUMBER_FIXED.faceOffset),
+    doorTopY + numberHeight * SIDE_BUILDING_CIVIC_NUMBER_FIXED.verticalLift,
+    record.mesh.position.z
+  );
+  group.rotation.set(0, faceSign > 0 ? Math.PI / 2 : -Math.PI / 2, 0);
+  group.scale.set(Math.max(0.01, numberWidth), Math.max(0.01, numberHeight), 1);
+}
+
 function updateSideBuildingDoorTransforms() {
   for (const record of sideBuildingRecords) {
-    if (!record.sideDoor) continue;
     const faceSign = record.sign < 0 ? 1 : -1;
-    record.sideDoor.visible = sideDoorEnabled && record.mesh.visible;
-    record.sideDoor.position.set(
-      record.mesh.position.x + faceSign * (record.collider.hw + sideDoorFaceOffset),
-      sideDoorY,
-      record.mesh.position.z
-    );
-    record.sideDoor.rotation.set(0, faceSign > 0 ? Math.PI / 2 : -Math.PI / 2, 0);
-    record.sideDoor.scale.set(
-      Math.max(0.01, sideDoorWidth * sideDoorScale),
-      Math.max(0.01, sideDoorHeight * sideDoorScale),
-      Math.max(0.01, sideDoorDepth * sideDoorScale)
-    );
+    if (record.sideDoor) {
+      record.sideDoor.visible = sideDoorEnabled && record.mesh.visible;
+      record.sideDoor.position.set(
+        record.mesh.position.x + faceSign * (record.collider.hw + sideDoorFaceOffset),
+        sideDoorY,
+        record.mesh.position.z
+      );
+      record.sideDoor.rotation.set(0, faceSign > 0 ? Math.PI / 2 : -Math.PI / 2, 0);
+      record.sideDoor.scale.set(
+        Math.max(0.01, sideDoorWidth * sideDoorScale),
+        Math.max(0.01, sideDoorHeight * sideDoorScale),
+        Math.max(0.01, sideDoorDepth * sideDoorScale)
+      );
+    }
+    updateSideBuildingCivicNumberTransform(record, faceSign);
   }
 }
 
@@ -6631,6 +6792,12 @@ function updateSideBuildingDoorMaterials(brightness, hueDeg) {
     material.envMap = reflectionEnvMap;
     material.envMapIntensity = material === sideDoorPanelMat ? 1.45 : 1.24;
   }
+}
+
+function sideBuildingCivicNumberForBuildIndex(buildIndex) {
+  const laneIndex = Math.floor(buildIndex / 2);
+  const sideIndex = buildIndex % 2;
+  return (laneZ.length - 1 - laneIndex) * 2 + sideIndex + 1;
 }
 
 function buildSideBuilding(x, z, h) {
@@ -6654,6 +6821,7 @@ function buildSideBuilding(x, z, h) {
     mesh: m,
     collider,
     basePad,
+    civicNumberValue: sideBuildingCivicNumberForBuildIndex(sideBuildingRecords.length),
     sign: x < 0 ? -1 : 1,
     zFactor: z / SIDE_BUILDING_SPACING,
     baseW: SIDE_BASE,
@@ -6663,6 +6831,7 @@ function buildSideBuilding(x, z, h) {
   sideBuildingRecords.push(record);
   sideBuildingBasePadRecords.push(basePad);
   buildSideBuildingDoor(record);
+  buildSideBuildingCivicNumber(record);
   addBuildingEdges(overlayGroup, SIDE_BASE, h, SIDE_BASE, x, 0, z, PAL.tealLight, chamfer * 0.82, 'side-building', { footprintChamfer: chamfer });
 }
 
@@ -8487,6 +8656,7 @@ const PRODUCTION_CONTROL_PANELS = new Set([
   'movement',
   'bloom-fx',
   'led-glow-fx',
+  'central-building-leds',
   'wireframe-fx',
   'atmosphere-fx',
   'performance-fx',
@@ -8643,7 +8813,6 @@ function mountFxCategoryPanels() {
     ]);
   }
   appendElement('led-glow-fx-main-controls', 'main-facade-led-controls');
-  appendElement('led-glow-fx-side-controls', 'side-facade-led-controls');
 }
 
 const CONTROLS_VISIBILITY_KEY = 'tron-boulevard-controls-hidden';
@@ -10271,6 +10440,7 @@ updateControlTabs();
 setupSettingsToggle();
 async function bootSceneWithFinalDefaults() {
   await loadProjectCanonicalDefaults();
+  applyBridgeFixedDefaults();
   loadStoredPlayerSpawn();
   applyLiveControls();
   setTronNoclip(false, { silent: true });
@@ -10287,6 +10457,41 @@ window.__tronInspect = () => ({
   noclip: tronNoclipEnabled,
   cameraCollisionDisabled: isCameraCollisionDisabled(),
   mouseLookEnabled: isMouseLookEnabled(),
+  sideBuildingCivicNumberCount: sideBuildingCivicNumberGroups.length,
+  sideBuildingCivicNumbers: sideBuildingRecords.map((record) => ({
+    value: record.civicNumberValue,
+    visible: Boolean(record.civicNumberGroup?.visible),
+    layers: record.civicNumberGroup?.children.length ?? 0,
+    x: record.civicNumberGroup?.position.x ?? null,
+    y: record.civicNumberGroup?.position.y ?? null,
+    z: record.civicNumberGroup?.position.z ?? null,
+    rotationY: record.civicNumberGroup?.rotation.y ?? null,
+    scaleX: record.civicNumberGroup?.scale.x ?? null,
+    scaleY: record.civicNumberGroup?.scale.y ?? null,
+  })),
+  sideBuildingLedLayouts: sideBuildingRecords.map((record) => {
+    const centers = facadeStripPositionSpecs
+      .filter((spec) => spec.parent === record.mesh && spec.edgeRole === 'side-building' && spec.batchKind === 'led')
+      .map((spec) => facadeStripDynamicTransform(spec).basePosition.y)
+      .sort((a, b) => a - b);
+    return {
+      value: record.civicNumberValue,
+      baseH: record.collider?.baseH ?? null,
+      z: record.mesh.position.z,
+      yMin: centers[0] ?? null,
+      yMax: centers[centers.length - 1] ?? null,
+      yCenters: centers,
+    };
+  }),
+  bridgeLinks: bridgeRecords.map((record) => ({
+    index: record.index,
+    baseZ: record.baseZ,
+    visible: Boolean(record.mesh.visible),
+    yOffset: readBridgeNumber(record, 'yOffset'),
+    x: record.mesh.position.x,
+    y: record.mesh.position.y,
+    z: record.mesh.position.z,
+  })),
   pointerLocked,
   welcomePanelMotion: { ...welcomeWindowMotionState },
   backspaceIntroTriggered,
