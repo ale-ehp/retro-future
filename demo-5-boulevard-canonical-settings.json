@@ -276,16 +276,16 @@
     "runner-key-light": 3,
     "runner-rim-light": 3,
     "runner-fill-light": 0,
-    "runner-floor-reflection": 0.16,
-    "runner-floor-reflection-scale": 0.55,
+    "runner-floor-reflection": 0.35,
+    "runner-floor-reflection-scale": 3,
     "runner-scale": 0.65,
     "runner-animation-speed": 1,
     "runner-walk-speed": 2.8,
     "runner-stride-sync": 1,
-    "runner-material-reflect": 0.06,
-    "runner-material-metalness": 0.12,
-    "runner-material-roughness": 0.92,
-    "runner-shadow-softness": 1.15,
+    "runner-material-reflect": 1.9,
+    "runner-material-metalness": 0,
+    "runner-material-roughness": 0.52,
+    "runner-shadow-softness": 1.32,
     "runner-shadow-pulse": 0.08,
     "runner-shadow-cyan": 0,
     "runner-shadow-offset-x": 0,
@@ -302,32 +302,24 @@
     "atmosphereFxSavedAt": "2026-06-01T12:53:44.128Z",
     "bloomFxSavedAt": "2026-06-01T13:00:20.530Z",
     "performanceFxSavedAt": "2026-06-01T12:58:43.432Z",
-    "wireframeFxSavedAt": "2026-06-01T13:00:27.146Z"
+    "wireframeFxSavedAt": "2026-06-01T13:00:27.146Z",
+    "characterSavedAt": "2026-06-06T07:24:29.673Z"
   },
   "characterPreset": {
     "source": "chrome-localStorage://Google Chrome/Default/http://127.0.0.1:60124/tron-boulevard-tab:character",
-    "chromeSavedAt": "2026-06-05T07:52:01.100Z",
+    "chromeSavedAt": "2026-06-06T07:24:29.673Z",
     "settings": {
       "runner-body-light": 3,
       "runner-line-light": 3,
       "runner-key-light": 3,
       "runner-rim-light": 3,
       "runner-fill-light": 0,
-      "runner-floor-reflection": 0,
-      "runner-floor-reflection-scale": 0.2,
-      "runner-scale": 0.65,
-      "runner-animation-speed": 1,
-      "runner-walk-speed": 2.8,
-      "runner-stride-sync": 1
-    }
-  },
-  "characterLightingDefaults": {
-    "savedAt": "2026-06-05T21:35:59.510Z",
-    "settings": {
-      "runner-material-reflect": 0.06,
-      "runner-material-metalness": 0.12,
-      "runner-material-roughness": 0.92,
-      "runner-shadow-softness": 1.15,
+      "runner-material-reflect": 1.9,
+      "runner-material-metalness": 0,
+      "runner-material-roughness": 0.52,
+      "runner-floor-reflection": 0.35,
+      "runner-floor-reflection-scale": 3,
+      "runner-shadow-softness": 1.32,
       "runner-shadow-pulse": 0.08,
       "runner-shadow-cyan": 0,
       "runner-shadow-offset-x": 0,
@@ -336,9 +328,30 @@
       "runner-key-light-z": 1.9,
       "runner-rim-light-x": 1.9,
       "runner-fill-light-y": 0.9,
-      "runner-floor-reflection": 0.16,
-      "runner-floor-reflection-scale": 0.55
+      "runner-scale": 0.65,
+      "runner-animation-speed": 1,
+      "runner-walk-speed": 2.8,
+      "runner-stride-sync": 1
+    }
+  },
+  "characterLightingDefaults": {
+    "savedAt": "2026-06-06T07:24:29.673Z",
+    "settings": {
+      "runner-material-reflect": 1.9,
+      "runner-material-metalness": 0,
+      "runner-material-roughness": 0.52,
+      "runner-shadow-softness": 1.32,
+      "runner-shadow-pulse": 0.08,
+      "runner-shadow-cyan": 0,
+      "runner-shadow-offset-x": 0,
+      "runner-shadow-offset-z": 0.2,
+      "runner-key-light-y": 3.1,
+      "runner-key-light-z": 1.9,
+      "runner-rim-light-x": 1.9,
+      "runner-fill-light-y": 0.9,
+      "runner-floor-reflection": 0.35,
+      "runner-floor-reflection-scale": 3
     },
-    "note": "Illuminated runner with dark contact shadow and no floor reflection/glow."
+    "note": "Chrome-saved runner lighting and circular contact shadow preset."
   }
 }

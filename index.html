@@ -315,8 +315,8 @@
   }
   .control-panel { display: none; }
   .control-panel.active { display: block; }
-  #hud-controls .control-tab:not([data-tab="movement"]):not([data-tab="character"]):not([data-tab="bloom-fx"]):not([data-tab="led-glow-fx"]):not([data-tab="central-building-leds"]):not([data-tab="wireframe-fx"]):not([data-tab="atmosphere-fx"]):not([data-tab="performance-fx"]),
-  #hud-controls .control-panel:not([data-panel="movement"]):not([data-panel="character"]):not([data-panel="bloom-fx"]):not([data-panel="led-glow-fx"]):not([data-panel="central-building-leds"]):not([data-panel="wireframe-fx"]):not([data-panel="atmosphere-fx"]):not([data-panel="performance-fx"]) {
+  #hud-controls .control-tab:not([data-tab="movement"]):not([data-tab="character"]):not([data-tab="surface-reflections"]):not([data-tab="bloom-fx"]):not([data-tab="led-glow-fx"]):not([data-tab="central-building-leds"]):not([data-tab="wireframe-fx"]):not([data-tab="atmosphere-fx"]):not([data-tab="performance-fx"]),
+  #hud-controls .control-panel:not([data-panel="movement"]):not([data-panel="character"]):not([data-panel="surface-reflections"]):not([data-panel="bloom-fx"]):not([data-panel="led-glow-fx"]):not([data-panel="central-building-leds"]):not([data-panel="wireframe-fx"]):not([data-panel="atmosphere-fx"]):not([data-panel="performance-fx"]) {
     display: none !important;
   }
   .control-box {
@@ -496,6 +496,7 @@
     <button class="control-tab" type="button" data-tab="camera">Camera</button>
     <button class="control-tab active" type="button" data-tab="movement">Movimento</button>
     <button class="control-tab" type="button" data-tab="character">Personaggio</button>
+    <button class="control-tab" type="button" data-tab="surface-reflections">Specchio</button>
     <button class="control-tab" type="button" data-tab="buildings">Palazzi</button>
     <button class="control-tab" type="button" data-tab="bloom-fx">Bloom</button>
     <button class="control-tab" type="button" data-tab="led-glow-fx">Glow LED</button>
@@ -519,7 +520,6 @@
       <label class="control-row"><span class="control-head"><span>Distanza tra hex</span><output id="hex-gap-val">0.00</output></span><input id="hex-gap" type="range" min="-8" max="4" step="0.05" value="0" /></label>
       <label class="control-row"><span class="control-head"><span>Luce tile colpiti</span><output id="tile-hit-light-val">0.18</output></span><input id="tile-hit-light" type="range" min="0" max="1" step="0.01" value="0.18" /></label>
       <label class="control-row"><span class="control-head"><span>Luce sotto player</span><output id="player-tile-light-val">0.45</output></span><input id="player-tile-light" type="range" min="0" max="2" step="0.01" value="0.45" /></label>
-      <label class="control-row"><span class="control-head"><span>Normal strada</span><output id="road-normal-val">0.00</output></span><input id="road-normal" type="range" min="0" max="2" step="0.01" value="0" /></label>
       <button class="control-action save-tab-settings" type="button" data-save-tab="hex">Salva scheda Hex</button>
     </section>
 
@@ -561,11 +561,6 @@
     <section class="control-panel" data-panel="road">
       <div class="control-section">Materiale strada</div>
       <label class="control-row"><span class="control-head"><span>Larghezza boulevard</span><output id="boulevard-width-scale-val">1.00x</output></span><input id="boulevard-width-scale" type="range" min="0.60" max="3" step="0.01" value="1" /></label>
-      <label class="control-row"><span class="control-head"><span>Luce strada</span><output id="road-light-val">0.18</output></span><input id="road-light" type="range" min="0" max="1.5" step="0.01" value="0.18" /></label>
-      <label class="control-row"><span class="control-head"><span>Riflesso strada</span><output id="road-reflect-val">1.15</output></span><input id="road-reflect" type="range" min="0" max="1.5" step="0.01" value="1.15" /></label>
-      <label class="control-row"><span class="control-head"><span>Riflesso palazzi strada</span><output id="road-building-reflect-val">0.35</output></span><input id="road-building-reflect" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
-      <label class="control-row"><span class="control-head"><span>Road metalness</span><output id="road-metalness-val">0.88</output></span><input id="road-metalness" type="range" min="0" max="1" step="0.01" value="0.88" /></label>
-      <label class="control-row"><span class="control-head"><span>Road roughness</span><output id="road-roughness-val">0.16</output></span><input id="road-roughness" type="range" min="0.05" max="1" step="0.01" value="0.16" /></label>
       <label class="control-row"><span class="control-head"><span>Road hue</span><output id="road-hue-val">0</output></span><input id="road-hue" type="range" min="-120" max="120" step="1" value="0" /></label>
       <label class="control-row"><span class="control-head"><span>Road saturation</span><output id="road-sat-val">1.00</output></span><input id="road-sat" type="range" min="0" max="2" step="0.01" value="1" /></label>
       <label class="control-row"><span class="control-head"><span>Road brightness</span><output id="road-bright-val">1.00</output></span><input id="road-bright" type="range" min="0.35" max="2.2" step="0.01" value="1" /></label>
@@ -646,17 +641,12 @@
 
       <div class="control-section">Texture basi</div>
       <label class="control-row"><span class="control-head"><span>Texture</span><output id="base-pad-texture-mode-val">on</output></span><select id="base-pad-texture-mode"><option value="on" selected>on</option><option value="off">off</option></select></label>
-      <label class="control-row"><span class="control-head"><span>Texture repeat</span><output id="base-pad-texture-repeat-val">1.00x</output></span><input id="base-pad-texture-repeat" type="range" min="0.25" max="8" step="0.05" value="1" /></label>
       <label class="control-row"><span class="control-head"><span>Texture rotazione</span><output id="base-pad-texture-rotation-val">0</output></span><input id="base-pad-texture-rotation" type="range" min="-180" max="180" step="1" value="0" /></label>
-      <label class="control-row"><span class="control-head"><span>Normal texture</span><output id="base-pad-normal-val">0.00</output></span><input id="base-pad-normal" type="range" min="0" max="2.5" step="0.01" value="0" /></label>
 
       <div class="control-section">Materiale / riflessi basi</div>
       <label class="control-row"><span class="control-head"><span>Base hue</span><output id="base-pad-hue-val">0</output></span><input id="base-pad-hue" type="range" min="-120" max="120" step="1" value="0" /></label>
       <label class="control-row"><span class="control-head"><span>Base saturation</span><output id="base-pad-sat-val">1.00</output></span><input id="base-pad-sat" type="range" min="0" max="2" step="0.01" value="1" /></label>
       <label class="control-row"><span class="control-head"><span>Base brightness</span><output id="base-pad-bright-val">1.00</output></span><input id="base-pad-bright" type="range" min="0.2" max="2.4" step="0.01" value="1" /></label>
-      <label class="control-row"><span class="control-head"><span>Base metalness</span><output id="base-pad-metalness-val">0.08</output></span><input id="base-pad-metalness" type="range" min="0" max="1" step="0.01" value="0.08" /></label>
-      <label class="control-row"><span class="control-head"><span>Base roughness</span><output id="base-pad-roughness-val">0.18</output></span><input id="base-pad-roughness" type="range" min="0.02" max="1" step="0.01" value="0.18" /></label>
-      <label class="control-row"><span class="control-head"><span>Base riflesso</span><output id="base-pad-reflect-val">0.88</output></span><input id="base-pad-reflect" type="range" min="0" max="2.5" step="0.01" value="0.88" /></label>
       <label class="control-row"><span class="control-head"><span>Base emissive</span><output id="base-pad-emissive-val">0.04</output></span><input id="base-pad-emissive" type="range" min="0" max="1" step="0.005" value="0.035" /></label>
 
       <div class="control-section">Mesh basi</div>
@@ -790,6 +780,29 @@
       </div>
 
       <button class="control-action save-tab-settings" type="button" data-save-tab="character">Salva scheda Personaggio</button>
+    </section>
+
+    <section class="control-panel" data-panel="surface-reflections">
+      <div class="control-box">
+        <div class="control-section">Strada</div>
+        <label class="control-row"><span class="control-head"><span>Riflesso strada</span><output id="road-reflect-val">1.15</output></span><input id="road-reflect" type="range" min="0" max="2.5" step="0.01" value="1.15" /></label>
+        <label class="control-row"><span class="control-head"><span>Riflesso palazzi</span><output id="road-building-reflect-val">0.35</output></span><input id="road-building-reflect" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+        <label class="control-row"><span class="control-head"><span>Metalness strada</span><output id="road-metalness-val">0.88</output></span><input id="road-metalness" type="range" min="0" max="1" step="0.01" value="0.88" /></label>
+        <label class="control-row"><span class="control-head"><span>Roughness strada</span><output id="road-roughness-val">0.16</output></span><input id="road-roughness" type="range" min="0.01" max="1" step="0.01" value="0.16" /></label>
+        <label class="control-row"><span class="control-head"><span>Normal strada</span><output id="road-normal-val">0.00</output></span><input id="road-normal" type="range" min="0" max="2.5" step="0.01" value="0" /></label>
+        <label class="control-row"><span class="control-head"><span>Luce strada</span><output id="road-light-val">0.18</output></span><input id="road-light" type="range" min="0" max="1.5" step="0.01" value="0.18" /></label>
+      </div>
+
+      <div class="control-box">
+        <div class="control-section">Sidewalk</div>
+        <label class="control-row"><span class="control-head"><span>Riflesso sidewalk</span><output id="base-pad-reflect-val">0.88</output></span><input id="base-pad-reflect" type="range" min="0" max="3.5" step="0.01" value="0.88" /></label>
+        <label class="control-row"><span class="control-head"><span>Metalness sidewalk</span><output id="base-pad-metalness-val">0.08</output></span><input id="base-pad-metalness" type="range" min="0" max="1" step="0.01" value="0.08" /></label>
+        <label class="control-row"><span class="control-head"><span>Roughness sidewalk</span><output id="base-pad-roughness-val">0.18</output></span><input id="base-pad-roughness" type="range" min="0.01" max="1" step="0.01" value="0.18" /></label>
+        <label class="control-row"><span class="control-head"><span>Normal sidewalk</span><output id="base-pad-normal-val">0.00</output></span><input id="base-pad-normal" type="range" min="0" max="2.5" step="0.01" value="0" /></label>
+        <label class="control-row"><span class="control-head"><span>Texture repeat</span><output id="base-pad-texture-repeat-val">1.00x</output></span><input id="base-pad-texture-repeat" type="range" min="0.25" max="8" step="0.05" value="1" /></label>
+      </div>
+
+      <button class="control-action save-tab-settings" type="button" data-save-tab="surface-reflections">Salva scheda Specchio</button>
     </section>
 
     <section class="control-panel" data-panel="buildings">
@@ -1571,6 +1584,9 @@ const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'h
 renderer.setPixelRatio(activePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.localClippingEnabled = true;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.85;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -7136,6 +7152,18 @@ const TRON_RUNNER_SHADOW_CYAN_COLOR = new THREE.Color(0x031a1f);
 const TRON_RUNNER_LIGHTING_MODE = 'self-lit-material';
 const TRON_RUNNER_GROUND_SHADOW_ENABLED = true;
 const TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY = 0.28;
+const TRON_RUNNER_REAL_SHADOW_ENABLED = true;
+const TRON_RUNNER_REAL_SHADOW_LAYER = 4;
+const TRON_RUNNER_REAL_SHADOW_MAP_SIZE = 1024;
+const TRON_RUNNER_REAL_SHADOW_CAMERA_SIZE = 18;
+const TRON_RUNNER_REAL_SHADOW_RECEIVER_RADIUS = 8.5;
+const TRON_RUNNER_REAL_SHADOW_BASE_OPACITY = 0.22;
+const TRON_RUNNER_REAL_SHADOW_COLOR = 0x000203;
+const TRON_RUNNER_CONTACT_SHADOW_ROUNDNESS = 0.96;
+const TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED = true;
+const TRON_RUNNER_DYNAMIC_REFLECTION_MAX_OPACITY = 0.34;
+const TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE = 0.58;
+const TRON_RUNNER_DYNAMIC_REFLECTION_Y = 0.018;
 const tronRunnerWalker = new THREE.Group();
 tronRunnerWalker.name = 'tron-runner-walker';
 tronRunnerWalker.visible = false;
@@ -7324,6 +7352,19 @@ const tronRunnerSuitMat = new THREE.MeshStandardMaterial({
   envMapIntensity: 0.02,
   toneMapped: false,
 });
+function makeTronRunnerReflectionMaterial() {
+  return new THREE.MeshBasicMaterial({
+    color: 0xa7fbff,
+    map: tronRunnerSuitTexture,
+    blending: THREE.NormalBlending,
+    depthTest: false,
+    depthWrite: false,
+    opacity: 0,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+    transparent: true,
+  });
+}
 const tronRunnerShadowMat = new THREE.MeshBasicMaterial({
   color: TRON_RUNNER_SHADOW_COLOR,
   alphaMap: tronRunnerShadowTexture,
@@ -7333,11 +7374,50 @@ const tronRunnerShadowMat = new THREE.MeshBasicMaterial({
   toneMapped: false,
   transparent: true,
 });
+const tronRunnerRealShadowMat = new THREE.ShadowMaterial({
+  color: TRON_RUNNER_REAL_SHADOW_COLOR,
+  opacity: TRON_RUNNER_REAL_SHADOW_BASE_OPACITY,
+  depthWrite: false,
+  transparent: true,
+});
+const tronRunnerRealShadowLight = new THREE.DirectionalLight(0xc7fbff, 0.16);
+tronRunnerRealShadowLight.name = 'tron-runner-real-shadow-light';
+tronRunnerRealShadowLight.castShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
+tronRunnerRealShadowLight.visible = TRON_RUNNER_REAL_SHADOW_ENABLED;
+tronRunnerRealShadowLight.layers.set(TRON_RUNNER_REAL_SHADOW_LAYER);
+tronRunnerRealShadowLight.shadow.mapSize.set(TRON_RUNNER_REAL_SHADOW_MAP_SIZE, TRON_RUNNER_REAL_SHADOW_MAP_SIZE);
+tronRunnerRealShadowLight.shadow.bias = -0.00018;
+tronRunnerRealShadowLight.shadow.normalBias = 0.035;
+tronRunnerRealShadowLight.shadow.radius = 3;
+tronRunnerRealShadowLight.shadow.camera.near = 1;
+tronRunnerRealShadowLight.shadow.camera.far = 46;
+tronRunnerRealShadowLight.shadow.camera.left = -TRON_RUNNER_REAL_SHADOW_CAMERA_SIZE;
+tronRunnerRealShadowLight.shadow.camera.right = TRON_RUNNER_REAL_SHADOW_CAMERA_SIZE;
+tronRunnerRealShadowLight.shadow.camera.top = TRON_RUNNER_REAL_SHADOW_CAMERA_SIZE;
+tronRunnerRealShadowLight.shadow.camera.bottom = -TRON_RUNNER_REAL_SHADOW_CAMERA_SIZE;
+tronRunnerRealShadowLight.shadow.camera.updateProjectionMatrix();
+const tronRunnerRealShadowTarget = new THREE.Object3D();
+tronRunnerRealShadowTarget.name = 'tron-runner-real-shadow-target';
+tronRunnerRealShadowLight.target = tronRunnerRealShadowTarget;
+scene.add(tronRunnerRealShadowLight);
+scene.add(tronRunnerRealShadowTarget);
 const tronRunnerParts = {
   model: null,
   mixer: null,
   skeletonGlow: null,
   groundShadow: null,
+  realShadowReceiver: null,
+  reflectionGroup: null,
+  reflectionModel: null,
+  reflectionMixer: null,
+  reflectionMaterials: [],
+  reflectionActions: {},
+  reflectionActiveAction: null,
+  reflectionActionNames: null,
+  dynamicReflectionMeshCount: 0,
+  realShadowLight: tronRunnerRealShadowLight,
+  realShadowTarget: tronRunnerRealShadowTarget,
+  realShadowCasterCount: 0,
   keyLight: null,
   leftRim: null,
   rightRim: null,
@@ -7376,6 +7456,16 @@ const tronRunnerState = {
   contactShadowMaxOpacity: TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY,
   runnerLightingMode: TRON_RUNNER_LIGHTING_MODE,
   suitTextureMode: TRON_RUNNER_SUIT_TEXTURE_MODE,
+  realShadowEnabled: TRON_RUNNER_REAL_SHADOW_ENABLED,
+  realShadowOpacity: TRON_RUNNER_REAL_SHADOW_BASE_OPACITY,
+  realShadowCasterCount: 0,
+  realShadowReceiverType: 'shadow-material',
+  dynamicReflectionEnabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
+  dynamicReflectionVisible: false,
+  dynamicReflectionOpacity: 0,
+  dynamicReflectionSurface: 'sidewalk',
+  dynamicReflectionMeshCount: 0,
+  dynamicReflectionAnimated: false,
   selfLightIntensity: 0.08,
   modelLineIntensity: 0.42,
   pointLightCount: 0,
@@ -7477,6 +7567,9 @@ function applyTronRunnerVisualControls() {
   tronRunnerState.contactShadowMaxOpacity = TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY;
   tronRunnerState.runnerLightingMode = TRON_RUNNER_LIGHTING_MODE;
   tronRunnerState.suitTextureMode = TRON_RUNNER_SUIT_TEXTURE_MODE;
+  tronRunnerState.realShadowEnabled = TRON_RUNNER_REAL_SHADOW_ENABLED;
+  tronRunnerState.realShadowCasterCount = tronRunnerParts.realShadowCasterCount;
+  tronRunnerState.realShadowReceiverType = 'shadow-material';
   tronRunnerState.selfLightIntensity = selfLightIntensity;
   tronRunnerState.modelLineIntensity = modelLineIntensity;
   tronRunnerState.pointLightCount = 0;
@@ -7499,6 +7592,9 @@ function applyTronRunnerVisualControls() {
   if (tronRunnerParts.activeAction) {
     tronRunnerParts.activeAction.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
   }
+  if (tronRunnerParts.reflectionActiveAction) {
+    tronRunnerParts.reflectionActiveAction.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
+  }
   if (tronRunnerParts.skeletonGlow) {
     tronRunnerParts.skeletonGlow.material.visible = tronRunnerLineLight > 0.001;
     tronRunnerParts.skeletonGlow.material.opacity = modelLineIntensity;
@@ -7518,7 +7614,7 @@ function applyTronRunnerVisualControls() {
     tronRunnerParts.groundShadow.position.set(tronRunnerShadowOffsetX, 0.025, tronRunnerShadowOffsetZ);
     tronRunnerParts.groundShadow.scale.set(
       tronRunnerFloorReflectionScale,
-      0.36 * tronRunnerFloorReflectionScale,
+      TRON_RUNNER_CONTACT_SHADOW_ROUNDNESS * tronRunnerFloorReflectionScale,
       tronRunnerFloorReflectionScale
     );
     tronRunnerParts.groundShadow.material.opacity = THREE.MathUtils.clamp(
@@ -7528,10 +7624,80 @@ function applyTronRunnerVisualControls() {
     );
     tronRunnerParts.groundShadow.material.needsUpdate = true;
   }
+  if (tronRunnerParts.realShadowReceiver) {
+    const realShadowOpacity = TRON_RUNNER_REAL_SHADOW_ENABLED
+      ? THREE.MathUtils.clamp(TRON_RUNNER_REAL_SHADOW_BASE_OPACITY + floorAmount * 0.34, 0, 0.36)
+      : 0;
+    tronRunnerParts.realShadowReceiver.visible = realShadowOpacity > 0.001;
+    tronRunnerParts.realShadowReceiver.material.opacity = realShadowOpacity;
+    tronRunnerParts.realShadowReceiver.material.needsUpdate = true;
+    tronRunnerState.realShadowOpacity = realShadowOpacity;
+  }
+  if (tronRunnerParts.realShadowLight) {
+    tronRunnerParts.realShadowLight.visible = TRON_RUNNER_REAL_SHADOW_ENABLED;
+    tronRunnerParts.realShadowLight.castShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
+    tronRunnerParts.realShadowLight.intensity = TRON_RUNNER_REAL_SHADOW_ENABLED ? 0.16 : 0;
+  }
   tronRunnerParts.keyLight = null;
   tronRunnerParts.leftRim = null;
   tronRunnerParts.rightRim = null;
   tronRunnerParts.lowFill = null;
+}
+
+function tronRunnerDynamicReflectionOpacity() {
+  if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED) return 0;
+  const isSidewalk = tronRunnerState.surface === 'sidewalk';
+  const reflect = isSidewalk ? basePadReflect : Number(controlEls.roadReflect?.value ?? 0);
+  const roughness = isSidewalk ? basePadRoughness : Number(controlEls.roadRoughness?.value ?? 1);
+  const metalness = isSidewalk ? basePadMetalness : Number(controlEls.roadMetalness?.value ?? 0);
+  const reflectLimit = isSidewalk ? 3.5 : 2.5;
+  const reflectAmount = THREE.MathUtils.clamp(reflect / Math.max(0.001, reflectLimit), 0, 1);
+  const smoothness = THREE.MathUtils.clamp(1 - roughness, 0, 1);
+  const materialResponse = THREE.MathUtils.lerp(0.86, 1.04, THREE.MathUtils.clamp(metalness, 0, 1));
+  const opacity = reflectAmount * smoothness * materialResponse * TRON_RUNNER_DYNAMIC_REFLECTION_MAX_OPACITY;
+  return THREE.MathUtils.clamp(opacity, 0, TRON_RUNNER_DYNAMIC_REFLECTION_MAX_OPACITY);
+}
+
+function updateTronRunnerDynamicReflection() {
+  const group = tronRunnerParts.reflectionGroup;
+  const materials = tronRunnerParts.reflectionMaterials || [];
+  const opacity = tronRunnerDynamicReflectionOpacity();
+  const visible = Boolean(
+    TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED &&
+    group &&
+    tronRunnerParts.reflectionModel &&
+    opacity > 0.005
+  );
+  if (group) {
+    group.visible = visible;
+    group.position.y = TRON_RUNNER_DYNAMIC_REFLECTION_Y;
+    group.scale.set(1, -TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE, 1);
+  }
+  for (const material of materials) {
+    material.opacity = opacity;
+    material.needsUpdate = true;
+  }
+  tronRunnerState.dynamicReflectionVisible = visible;
+  tronRunnerState.dynamicReflectionOpacity = opacity;
+  tronRunnerState.dynamicReflectionSurface = tronRunnerState.surface;
+  tronRunnerState.dynamicReflectionMeshCount = tronRunnerParts.dynamicReflectionMeshCount;
+  tronRunnerState.dynamicReflectionAnimated = Boolean(tronRunnerParts.reflectionMixer);
+}
+
+function updateTronRunnerRealShadowRig() {
+  if (!TRON_RUNNER_REAL_SHADOW_ENABLED || !tronRunnerParts.realShadowLight || !tronRunnerParts.realShadowTarget) return;
+  const light = tronRunnerParts.realShadowLight;
+  const target = tronRunnerParts.realShadowTarget;
+  const runnerX = tronRunnerWalker.position.x;
+  const runnerY = tronRunnerWalker.position.y;
+  const runnerZ = tronRunnerWalker.position.z;
+  light.position.set(runnerX - 7.5, runnerY + 18, runnerZ - 9.5);
+  target.position.set(runnerX + 0.5, runnerY + 1.4, runnerZ + 2.2);
+  light.target.updateMatrixWorld();
+  light.updateMatrixWorld();
+  if (tronRunnerParts.realShadowReceiver) {
+    tronRunnerParts.realShadowReceiver.position.y = 0.012;
+  }
 }
 
 function tronRunnerSurfaceYAt(x = tronRunnerWalker.position.x, z = tronRunnerWalker.position.z) {
@@ -7587,11 +7753,30 @@ function fitTronRunnerModel(model) {
   );
 }
 
-function playTronRunnerAction(kind = 'run') {
-  const actionName = tronRunnerParts.actionNames?.[kind] || tronRunnerParts.actionNames?.idle;
-  const next = actionName ? tronRunnerParts.actions?.[actionName] : null;
-  if (!next || tronRunnerParts.activeAction === next) return;
-  const previous = tronRunnerParts.activeAction;
+function loadTronRunnerGltf() {
+  return new Promise((resolve, reject) => {
+    new RunnerGLTFLoader().load(TRON_RUNNER_MODEL_URL, resolve, undefined, reject);
+  });
+}
+
+function makeTronRunnerActionSet(gltf, mixer) {
+  const actions = {};
+  for (const clip of gltf.animations) {
+    const action = mixer.clipAction(clip);
+    action.enabled = true;
+    actions[clip.name] = action;
+  }
+  const idleName = gltf.animations.find((clip) => /idle/i.test(clip.name))?.name || gltf.animations[0]?.name;
+  const walkName = gltf.animations.find((clip) => /walk/i.test(clip.name))?.name || idleName;
+  const runName = gltf.animations.find((clip) => /run/i.test(clip.name))?.name || walkName;
+  return {
+    actions,
+    actionNames: { idle: idleName, walk: walkName, run: runName },
+  };
+}
+
+function switchTronRunnerAction(next, previous) {
+  if (!next || previous === next) return previous;
   next.reset();
   next.enabled = true;
   next.setEffectiveTimeScale(tronRunnerEffectiveAnimationSpeed());
@@ -7599,8 +7784,17 @@ function playTronRunnerAction(kind = 'run') {
   next.fadeIn(0.16);
   next.play();
   if (previous) previous.fadeOut(0.16);
-  tronRunnerParts.activeAction = next;
-  tronRunnerState.clip = actionName;
+  return next;
+}
+
+function playTronRunnerAction(kind = 'run') {
+  const actionName = tronRunnerParts.actionNames?.[kind] || tronRunnerParts.actionNames?.idle;
+  const next = actionName ? tronRunnerParts.actions?.[actionName] : null;
+  tronRunnerParts.activeAction = switchTronRunnerAction(next, tronRunnerParts.activeAction);
+  const reflectionActionName = tronRunnerParts.reflectionActionNames?.[kind] || tronRunnerParts.reflectionActionNames?.idle;
+  const reflectionNext = reflectionActionName ? tronRunnerParts.reflectionActions?.[reflectionActionName] : null;
+  tronRunnerParts.reflectionActiveAction = switchTronRunnerAction(reflectionNext, tronRunnerParts.reflectionActiveAction);
+  tronRunnerState.clip = actionName || reflectionActionName || '';
   tronRunnerState.action = kind === 'run' ? 'Run' : kind === 'walk' ? 'Walk' : 'Idle';
 }
 
@@ -7614,22 +7808,60 @@ async function loadTronRunner() {
   tronRunnerState.doorHalfHeight = tronRunnerDoorHalfHeight();
   tronRunnerState.surfaceY = tronRunnerSurfaceYAt(route.x, route.zA);
   try {
-    const gltf = await new Promise((resolve, reject) => {
-      new RunnerGLTFLoader().load(TRON_RUNNER_MODEL_URL, resolve, undefined, reject);
-    });
+    const [gltf, reflectionGltf] = await Promise.all([
+      loadTronRunnerGltf(),
+      TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED ? loadTronRunnerGltf() : Promise.resolve(null),
+    ]);
     tronRunnerWalker.clear();
     const model = gltf.scene;
     model.name = 'soldier-rigged-runner-city';
     model.rotation.y = Math.PI;
     tronRunnerParts.materials = [];
+    tronRunnerParts.reflectionMaterials = [];
+    tronRunnerParts.realShadowCasterCount = 0;
+    tronRunnerParts.dynamicReflectionMeshCount = 0;
     model.traverse((obj) => {
       if (!obj.isMesh) return;
       obj.frustumCulled = false;
+      obj.castShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
+      obj.receiveShadow = false;
+      obj.layers.enable(TRON_RUNNER_REAL_SHADOW_LAYER);
+      tronRunnerParts.realShadowCasterCount += 1;
       obj.material = tronRunnerSuitMat.clone();
       tronRunnerParts.materials.push(obj.material);
     });
     fitTronRunnerModel(model);
     tronRunnerWalker.add(model);
+
+    let reflectionGroup = null;
+    let reflectionModel = null;
+    let reflectionMixer = null;
+    let reflectionActionSet = { actions: {}, actionNames: null };
+    if (reflectionGltf?.scene) {
+      reflectionGroup = new THREE.Group();
+      reflectionGroup.name = 'tron-runner-dynamic-reflection';
+      reflectionGroup.position.y = TRON_RUNNER_DYNAMIC_REFLECTION_Y;
+      reflectionGroup.scale.set(1, -TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE, 1);
+      reflectionGroup.visible = false;
+      reflectionModel = reflectionGltf.scene;
+      reflectionModel.name = 'soldier-rigged-runner-city-reflection';
+      reflectionModel.rotation.y = Math.PI;
+      reflectionModel.traverse((obj) => {
+        if (!obj.isMesh) return;
+        obj.frustumCulled = false;
+        obj.castShadow = false;
+        obj.receiveShadow = false;
+        obj.renderOrder = 2;
+        obj.material = makeTronRunnerReflectionMaterial();
+        tronRunnerParts.reflectionMaterials.push(obj.material);
+        tronRunnerParts.dynamicReflectionMeshCount += 1;
+      });
+      fitTronRunnerModel(reflectionModel);
+      reflectionGroup.add(reflectionModel);
+      tronRunnerWalker.add(reflectionGroup);
+      reflectionMixer = new THREE.AnimationMixer(reflectionModel);
+      reflectionActionSet = makeTronRunnerActionSet(reflectionGltf, reflectionMixer);
+    }
 
     const helper = new THREE.SkeletonHelper(model);
     helper.material.color.setHex(0x35e6ff);
@@ -7642,25 +7874,40 @@ async function loadTronRunner() {
     const groundShadow = new THREE.Mesh(new THREE.CircleGeometry(1.15, 48), tronRunnerShadowMat);
     groundShadow.rotation.x = -Math.PI / 2;
     groundShadow.position.set(0, 0.025, 0.2);
-    groundShadow.scale.set(1, 0.36, 1);
+    groundShadow.scale.set(1, TRON_RUNNER_CONTACT_SHADOW_ROUNDNESS, 1);
     tronRunnerWalker.add(groundShadow);
 
+    const realShadowReceiver = new THREE.Mesh(
+      new THREE.CircleGeometry(TRON_RUNNER_REAL_SHADOW_RECEIVER_RADIUS, 72),
+      tronRunnerRealShadowMat.clone()
+    );
+    realShadowReceiver.name = 'tron-runner-real-shadow-receiver';
+    realShadowReceiver.rotation.x = -Math.PI / 2;
+    realShadowReceiver.position.set(0, 0.012, 0.2);
+    realShadowReceiver.receiveShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
+    realShadowReceiver.castShadow = false;
+    realShadowReceiver.depthWrite = false;
+    realShadowReceiver.renderOrder = 3;
+    realShadowReceiver.layers.enable(TRON_RUNNER_REAL_SHADOW_LAYER);
+    tronRunnerWalker.add(realShadowReceiver);
+
     const mixer = new THREE.AnimationMixer(model);
-    const actions = {};
-    for (const clip of gltf.animations) {
-      const action = mixer.clipAction(clip);
-      action.enabled = true;
-      actions[clip.name] = action;
-    }
-    const idleName = gltf.animations.find((clip) => /idle/i.test(clip.name))?.name || gltf.animations[0]?.name;
-    const walkName = gltf.animations.find((clip) => /walk/i.test(clip.name))?.name || idleName;
-    const runName = gltf.animations.find((clip) => /run/i.test(clip.name))?.name || walkName;
-    tronRunnerParts.actionNames = { idle: idleName, walk: walkName, run: runName };
+    const actionSet = makeTronRunnerActionSet(gltf, mixer);
+    tronRunnerParts.actionNames = actionSet.actionNames;
     tronRunnerParts.model = model;
     tronRunnerParts.mixer = mixer;
-    tronRunnerParts.actions = actions;
+    tronRunnerParts.actions = actionSet.actions;
     tronRunnerParts.skeletonGlow = helper;
     tronRunnerParts.groundShadow = groundShadow;
+    tronRunnerParts.realShadowReceiver = realShadowReceiver;
+    tronRunnerParts.reflectionGroup = reflectionGroup;
+    tronRunnerParts.reflectionModel = reflectionModel;
+    tronRunnerParts.reflectionMixer = reflectionMixer;
+    tronRunnerParts.reflectionActions = reflectionActionSet.actions;
+    tronRunnerParts.reflectionActionNames = reflectionActionSet.actionNames;
+    tronRunnerParts.reflectionActiveAction = null;
+    tronRunnerParts.realShadowLight = tronRunnerRealShadowLight;
+    tronRunnerParts.realShadowTarget = tronRunnerRealShadowTarget;
     tronRunnerParts.keyLight = null;
     tronRunnerParts.leftRim = null;
     tronRunnerParts.rightRim = null;
@@ -7702,7 +7949,10 @@ function updateTronRunner(dt) {
   tronRunnerYaw = lerpAngle(tronRunnerYaw, tronRunnerTargetYaw, Math.min(1, dt * 9));
   tronRunnerWalker.position.set(route.x, tronRunnerSurfaceYAt(route.x, z), z);
   tronRunnerWalker.rotation.set(0, tronRunnerYaw, 0);
+  updateTronRunnerRealShadowRig();
   tronRunnerParts.mixer?.update(dt);
+  tronRunnerParts.reflectionMixer?.update(dt);
+  updateTronRunnerDynamicReflection();
 
   const phasePulse = tronRunnerElapsed * 4.65;
   const c = Math.cos(phasePulse);
@@ -7732,6 +7982,12 @@ function tronRunnerInspect() {
     tronRunnerSize.set(0, 0, 0);
   }
   const runnerMaterial = tronRunnerParts.materials[0] || null;
+  const realShadowMaterial = tronRunnerParts.realShadowReceiver?.material || null;
+  const realShadowReceiverType = realShadowMaterial?.isShadowMaterial || realShadowMaterial?.type === 'ShadowMaterial'
+    ? 'shadow-material'
+    : null;
+  const groundShadowScaleX = tronRunnerParts.groundShadow?.scale?.x ?? 0;
+  const groundShadowScaleZ = tronRunnerParts.groundShadow?.scale?.y ?? 0;
   return {
     ...tronRunnerState,
     x: Number(tronRunnerWalker.position.x.toFixed(2)),
@@ -7741,6 +7997,33 @@ function tronRunnerInspect() {
     visible: tronRunnerWalker.visible,
     groundShadowVisible: Boolean(tronRunnerParts.groundShadow?.visible),
     groundShadowOpacity: Number((tronRunnerParts.groundShadow?.material?.opacity ?? 0).toFixed(3)),
+    groundShadowScaleX: Number(groundShadowScaleX.toFixed(3)),
+    groundShadowScaleZ: Number(groundShadowScaleZ.toFixed(3)),
+    contactShadowRoundness: groundShadowScaleX > 0
+      ? Number((groundShadowScaleZ / groundShadowScaleX).toFixed(3))
+      : 0,
+    shadowMapEnabled: Boolean(renderer.shadowMap?.enabled),
+    shadowMapType: renderer.shadowMap?.type ?? null,
+    realShadowEnabled: TRON_RUNNER_REAL_SHADOW_ENABLED,
+    realShadowReceiverType,
+    realShadowReceiverGeometryType: tronRunnerParts.realShadowReceiver?.geometry?.type ?? null,
+    realShadowReceiverRadius: TRON_RUNNER_REAL_SHADOW_RECEIVER_RADIUS,
+    realShadowReceiverVisible: Boolean(tronRunnerParts.realShadowReceiver?.visible),
+    realShadowReceiverOpacity: Number((tronRunnerParts.realShadowReceiver?.material?.opacity ?? 0).toFixed(3)),
+    realShadowLightCastShadow: Boolean(tronRunnerParts.realShadowLight?.castShadow),
+    realShadowLightVisible: Boolean(tronRunnerParts.realShadowLight?.visible),
+    realShadowLightIntensity: Number((tronRunnerParts.realShadowLight?.intensity ?? 0).toFixed(3)),
+    realShadowMapSize: tronRunnerParts.realShadowLight?.shadow?.mapSize?.x ?? 0,
+    realShadowCasterCount: tronRunnerParts.realShadowCasterCount,
+    dynamicReflection: {
+      enabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
+      visible: Boolean(tronRunnerParts.reflectionGroup?.visible),
+      opacity: Number((tronRunnerState.dynamicReflectionOpacity ?? 0).toFixed(3)),
+      surface: tronRunnerState.dynamicReflectionSurface,
+      meshCount: tronRunnerParts.dynamicReflectionMeshCount,
+      animated: Boolean(tronRunnerParts.reflectionMixer),
+      yScale: TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
+    },
     suitColorHex: runnerMaterial?.color?.getHexString?.() ?? null,
     suitEmissiveHex: runnerMaterial?.emissive?.getHexString?.() ?? null,
     suitTextureMode: TRON_RUNNER_SUIT_TEXTURE_MODE,
@@ -9552,6 +9835,7 @@ const DEFAULT_PRODUCTION_PANEL = 'bloom-fx';
 const PRODUCTION_CONTROL_PANELS = new Set([
   'movement',
   'character',
+  'surface-reflections',
   'bloom-fx',
   'led-glow-fx',
   'central-building-leds',
@@ -11470,6 +11754,18 @@ window.__tronInspect = () => ({
     z: record.mesh.position.z,
   })),
   tronRunner: tronRunnerInspect(),
+  surfaceReflections: {
+    roadReflect: Number(controlEls.roadReflect.value),
+    roadBuildingReflect: Number(controlEls.roadBuildingReflect.value),
+    roadMetalness: Number(controlEls.roadMetalness.value),
+    roadRoughness: Number(controlEls.roadRoughness.value),
+    roadNormal: Number(controlEls.roadNormal.value),
+    basePadReflect: Number(controlEls.basePadReflect.value),
+    basePadMetalness: Number(controlEls.basePadMetalness.value),
+    basePadRoughness: Number(controlEls.basePadRoughness.value),
+    basePadNormal: Number(controlEls.basePadNormal.value),
+    basePadTextureRepeat: Number(controlEls.basePadTextureRepeat.value),
+  },
   pointerLocked,
   footsteps: window.__tronFootstepInspect?.(),
   welcomePanelMotion: { ...welcomeWindowMotionState },
