@@ -6015,7 +6015,6 @@ function ensureHorizontalLedLoopSegments(spec, count) {
   spec.segmentMesh = mesh;
   spec.segmentCapacity = capacity;
   spec.segmentGroup.add(mesh);
-  if (spec.edgeRole === 'main-building') registerMainBuildingVerticalRevealOverlayObject(mesh);
 }
 
 function updateHorizontalLedLoopSegments(spec, width, depth, chamfer, distance, stripWidth, radiusScale, centerX, centerY, centerZ, widthScale = 1, depthScale = 1) {
@@ -6038,7 +6037,7 @@ function updateHorizontalLedLoopSegments(spec, width, depth, chamfer, distance, 
 function addHorizontalBuildingLedRing(group, w, d, x, y, z, color, options, chamfer, distance = 0) {
   const segmentMode = options.edgeRole === 'main-building';
   const material = segmentMode
-    ? getMainBuildingEdgeVerticalRevealLedMaterial(color)
+    ? createFacadeLedMaterial(color)
     : new THREE.MeshBasicMaterial({
       color,
       toneMapped: false,
@@ -6208,7 +6207,7 @@ function elStrip(p1, p2, color = PAL.tealLight, thickness = 0.04, options = {}) 
   const len = v1.distanceTo(v2);
   const geo = new THREE.BoxGeometry(thickness, thickness, len);
   const mat = options.edge && options.edgeRole === 'main-building'
-    ? getMainBuildingEdgeVerticalRevealLedMaterial(color)
+    ? createFacadeLedMaterial(color)
     : new THREE.MeshBasicMaterial({
       color,
       transparent: options.opacity !== undefined && options.opacity < 1,
@@ -6217,7 +6216,6 @@ function elStrip(p1, p2, color = PAL.tealLight, thickness = 0.04, options = {}) 
       depthWrite: options.depthWrite ?? true,
     });
   const m = new THREE.Mesh(geo, mat);
-  if (options.edge && options.edgeRole === 'main-building') registerMainBuildingVerticalRevealOverlayObject(m);
   m.position.copy(v1).add(v2).multiplyScalar(0.5);
   const dir = new THREE.Vector3().subVectors(v2, v1).normalize();
   m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
@@ -6573,7 +6571,7 @@ function addFacadeLedSegment(parent, w, d, face, sign, p1, p2, width, role, opti
   const housingWidth = width * 2.55;
   const stripOptions = {};
   if (options.mainFacadeUsesGlobalControls) stripOptions.mainFacadeUsesGlobalControls = true;
-  if (role === 'main-building' || options.mainFacadeVerticalReveal) stripOptions.mainFacadeVerticalReveal = true;
+  if (options.mainFacadeVerticalReveal) stripOptions.mainFacadeVerticalReveal = true;
   if (Number.isInteger(options.sideFacadeSegmentIndex)) stripOptions.sideFacadeSegmentIndex = options.sideFacadeSegmentIndex;
   if (options.withHousing !== false) {
     const housing = addFacadeStrip(parent, w, d, face, sign, p1, p2, housingWidth, 0.16, getSharedFacadeHousingMaterial(), role, 'housing', stripOptions);
@@ -6607,7 +6605,7 @@ function addFacadeLedPolyline(parent, w, d, face, sign, points, width, role, opt
   const withHousing = options.withHousing !== false;
   for (let i = 0; i < points.length - 1; i++) {
     const stripOptions = hasSegmentControls ? { mainFacadeSegmentIndex: options.segmentOffset + i } : {};
-    if (role === 'main-building' || options.mainFacadeVerticalReveal) stripOptions.mainFacadeVerticalReveal = true;
+    if (options.mainFacadeVerticalReveal) stripOptions.mainFacadeVerticalReveal = true;
     const [housingP1, housingP2] = trimmedFacadeSegment(points, i, housingWidth);
     const [ledP1, ledP2] = trimmedFacadeSegment(points, i, width);
     if (withHousing) addFacadeStrip(parent, w, d, face, sign, housingP1, housingP2, housingWidth, 0.16, getSharedFacadeHousingMaterial(), role, 'housing', stripOptions);
