@@ -1,7 +1,7 @@
 {
-  "savedAt": "2026-06-04T13:19:03.396Z",
-  "source": "chrome-localStorage://Google Chrome/Default/http://127.0.0.1:60121",
-  "chromeSavedAt": "2026-06-04T13:19:03.396Z",
+  "savedAt": "2026-06-06T11:02:34.660Z",
+  "source": "chrome-localStorage://Google Chrome/Default/http://127.0.0.1:60124",
+  "chromeSavedAt": "2026-06-06T11:02:34.660Z",
   "spawn": {
     "x": 1021.9157138958009,
     "y": 591.0351224586902,
@@ -101,13 +101,13 @@
     "base-pad-texture-mode": "on",
     "base-pad-texture-repeat": 8,
     "base-pad-texture-rotation": -141,
-    "base-pad-normal": 0.51,
+    "base-pad-normal": 0.72,
     "base-pad-hue": -6,
     "base-pad-sat": 0.64,
     "base-pad-bright": 1.15,
-    "base-pad-metalness": 0.77,
-    "base-pad-roughness": 0.25,
-    "base-pad-reflect": 1.31,
+    "base-pad-metalness": 1,
+    "base-pad-roughness": 0.27,
+    "base-pad-reflect": 1.96,
     "base-pad-emissive": 0,
     "base-pad-bevel-size": 2,
     "base-pad-bevel-segments": 8,
@@ -206,7 +206,7 @@
     "render-resolution": 1,
     "aa-mode": "fxaa",
     "bloom-enabled": "on",
-    "bloom-strength": 0.05,
+    "bloom-strength": 0.09,
     "bloom-radius": 0,
     "bloom-threshold": 0.79,
     "bloom-quality": 1,
@@ -278,9 +278,9 @@
     "runner-fill-light": 0,
     "runner-floor-reflection": 0.35,
     "runner-floor-reflection-scale": 3,
-    "runner-scale": 0.65,
-    "runner-animation-speed": 1,
-    "runner-walk-speed": 2.8,
+    "runner-scale": 0.55,
+    "runner-animation-speed": 0.82,
+    "runner-walk-speed": 3.2,
     "runner-stride-sync": 1,
     "runner-material-reflect": 1.9,
     "runner-material-metalness": 0,
@@ -353,5 +353,27 @@
       "runner-floor-reflection-scale": 3
     },
     "note": "Chrome-saved runner lighting and circular contact shadow preset."
-  }
+  },
+  "chromePresetTabs": [
+    {
+      "tab": "performance-fx",
+      "savedAt": "2026-06-06T10:58:47.377Z",
+      "settingsCount": 4
+    },
+    {
+      "tab": "surface-reflections",
+      "savedAt": "2026-06-06T07:44:13.823Z",
+      "settingsCount": 11
+    },
+    {
+      "tab": "bloom-fx",
+      "savedAt": "2026-06-06T10:58:44.093Z",
+      "settingsCount": 5
+    },
+    {
+      "tab": "character",
+      "savedAt": "2026-06-06T10:59:14.811Z",
+      "settingsCount": 23
+    }
+  ]
 }

@@ -2070,11 +2070,13 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (e.code === 'Space' && welcomeWindowVisible() && !isTextEditingTarget(e.target)) {
     e.preventDefault();
+    ensureFootstepAudioReady();
     triggerBackspaceDroneIntro('welcome-space');
     return;
   }
   if (e.code === DRONE_INTRO_TRIGGER_KEY && !isTextEditingTarget(e.target)) {
     e.preventDefault();
+    ensureFootstepAudioReady();
     triggerBackspaceDroneIntro();
     return;
   }
@@ -2164,11 +2166,15 @@ const FOOTSTEP_AUDIO_USER_KEYS = new Set([
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
 ]);
+const FOOTSTEP_PLAYER_BUS = 'player-local';
+const FOOTSTEP_NPC_SPATIAL_BUS = 'npc-spatial';
 const footstepBuffers = { road: [], sidewalk: [] };
 const footstepVariantCursor = {
   road: { left: 0, right: 0 },
   sidewalk: { left: 0, right: 0 },
 };
+const footstepAudioForward = new THREE.Vector3();
+const footstepAudioUp = new THREE.Vector3();
 let footstepAudioContext = null;
 let footstepAudioReadyPromise = null;
 let footstepAudioError = '';
@@ -2219,7 +2225,62 @@ function pickFootstepSample(surfaceKind, side) {
   return { surface, sample: candidates[cursor] };
 }
 
-function playFootstepForSurface(surfaceKind = walkSurfaceKind, intensity = 1, side = 'right') {
+function setFootstepAudioParam(param, value, time) {
+  if (param?.setValueAtTime) param.setValueAtTime(value, time);
+}
+
+function syncFootstepAudioListener(now = footstepAudioContext?.currentTime ?? 0) {
+  if (!footstepAudioContext?.listener) return;
+  const listener = footstepAudioContext.listener;
+  const pos = camera.position;
+  footstepAudioForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+  footstepAudioUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+  if ('positionX' in listener) {
+    setFootstepAudioParam(listener.positionX, pos.x, now);
+    setFootstepAudioParam(listener.positionY, pos.y, now);
+    setFootstepAudioParam(listener.positionZ, pos.z, now);
+    setFootstepAudioParam(listener.forwardX, footstepAudioForward.x, now);
+    setFootstepAudioParam(listener.forwardY, footstepAudioForward.y, now);
+    setFootstepAudioParam(listener.forwardZ, footstepAudioForward.z, now);
+    setFootstepAudioParam(listener.upX, footstepAudioUp.x, now);
+    setFootstepAudioParam(listener.upY, footstepAudioUp.y, now);
+    setFootstepAudioParam(listener.upZ, footstepAudioUp.z, now);
+  } else {
+    listener.setPosition?.(pos.x, pos.y, pos.z);
+    listener.setOrientation?.(
+      footstepAudioForward.x,
+      footstepAudioForward.y,
+      footstepAudioForward.z,
+      footstepAudioUp.x,
+      footstepAudioUp.y,
+      footstepAudioUp.z
+    );
+  }
+}
+
+function setFootstepPannerPosition(panner, origin, now) {
+  if (!panner || !origin) return;
+  if ('positionX' in panner) {
+    setFootstepAudioParam(panner.positionX, origin.x, now);
+    setFootstepAudioParam(panner.positionY, origin.y, now);
+    setFootstepAudioParam(panner.positionZ, origin.z, now);
+  } else {
+    panner.setPosition?.(origin.x, origin.y, origin.z);
+  }
+}
+
+function footstepInverseDistanceGain(distance, refDistance, maxDistance, rolloffFactor) {
+  if (!Number.isFinite(distance)) return 1;
+  if (distance <= refDistance) return 1;
+  if (distance >= maxDistance) return 0;
+  return THREE.MathUtils.clamp(
+    refDistance / (refDistance + rolloffFactor * (distance - refDistance)),
+    0,
+    1
+  );
+}
+
+function playFootstepForSurface(surfaceKind = walkSurfaceKind, intensity = 1, side = 'right', options = {}) {
   ensureFootstepAudioReady();
   if (!footstepAudioContext || !footstepBuffers.road.length) return false;
   const picked = pickFootstepSample(surfaceKind, side);
@@ -2229,24 +2290,87 @@ function playFootstepForSurface(surfaceKind = walkSurfaceKind, intensity = 1, si
   const source = footstepAudioContext.createBufferSource();
   const gain = footstepAudioContext.createGain();
   const tone = footstepAudioContext.createBiquadFilter();
+  const bus = options.bus || FOOTSTEP_PLAYER_BUS;
+  const spatialOrigin = options.spatialOrigin || null;
+  const spatialized = Boolean(spatialOrigin && footstepAudioContext.createPanner);
+  const panner = spatialized ? footstepAudioContext.createPanner() : null;
+  const listenerPosition = camera.position;
+  const distance = spatialOrigin
+    ? Math.hypot(
+      spatialOrigin.x - listenerPosition.x,
+      spatialOrigin.y - listenerPosition.y,
+      spatialOrigin.z - listenerPosition.z
+    )
+    : 0;
+  const refDistance = Number(options.refDistance ?? 1);
+  const maxDistance = Number(options.maxDistance ?? 10000);
+  const rolloffFactor = Number(options.rolloffFactor ?? 1);
+  const distanceModel = options.distanceModel || 'inverse';
+  const distanceGain = distanceModel === 'inverse'
+    ? footstepInverseDistanceGain(distance, refDistance, maxDistance, rolloffFactor)
+    : 1;
   const surfaceVolume = picked.surface === 'sidewalk' ? 0.28 : 0.34;
   const surfaceRate = picked.surface === 'sidewalk' ? 1.03 : 0.96;
-  const runLift = THREE.MathUtils.lerp(1, 1.08, movementRunMix);
-  const volume = THREE.MathUtils.clamp(surfaceVolume * intensity, 0.03, 0.46);
+  const runLift = Number(options.runLift ?? THREE.MathUtils.lerp(1, 1.08, movementRunMix));
+  const rateMultiplier = Number(options.rateMultiplier ?? 1);
+  const minVolume = Number(options.minVolume ?? 0.03);
+  const maxVolume = Number(options.maxVolume ?? 0.46);
+  const volumeScale = Number(options.volumeScale ?? 1);
+  const playbackRate = surfaceRate * runLift * rateMultiplier;
+  const volume = THREE.MathUtils.clamp(surfaceVolume * intensity * volumeScale, minVolume, maxVolume);
+  const lowpassFrequency = Number(options.lowpassFrequency ?? (picked.surface === 'sidewalk' ? 2650 : 2200));
+  const fadeOutTime = Number(options.fadeOutTime ?? 0.24);
+
+  if (panner) {
+    syncFootstepAudioListener(now);
+    panner.panningModel = options.panningModel || 'HRTF';
+    panner.distanceModel = distanceModel;
+    panner.refDistance = refDistance;
+    panner.maxDistance = maxDistance;
+    panner.rolloffFactor = rolloffFactor;
+    panner.coneInnerAngle = 360;
+    panner.coneOuterAngle = 360;
+    panner.coneOuterGain = 1;
+    setFootstepPannerPosition(panner, spatialOrigin, now);
+  }
 
   source.buffer = picked.sample.buffer;
-  source.playbackRate.setValueAtTime(surfaceRate * runLift, now);
+  source.playbackRate.setValueAtTime(playbackRate, now);
   tone.type = 'lowpass';
-  tone.frequency.setValueAtTime(picked.surface === 'sidewalk' ? 2650 : 2200, now);
+  tone.frequency.setValueAtTime(lowpassFrequency, now);
   tone.Q.setValueAtTime(0.55, now);
   gain.gain.setValueAtTime(0.0001, now);
   gain.gain.exponentialRampToValueAtTime(volume, now + 0.012);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
-  source.connect(tone).connect(gain).connect(footstepAudioContext.destination);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + fadeOutTime);
+  if (panner) {
+    source.connect(tone).connect(panner).connect(gain).connect(footstepAudioContext.destination);
+  } else {
+    source.connect(tone).connect(gain).connect(footstepAudioContext.destination);
+  }
   source.start(now);
 
   lastFootstepSurface = picked.surface;
   lastFootstepSample = picked.sample.key;
+  if (options.returnDetails) {
+    return {
+      played: true,
+      bus,
+      spatialized,
+      surface: picked.surface,
+      sampleKey: picked.sample.key,
+      gain: volume,
+      distance,
+      distanceGain,
+      distanceModel: panner?.distanceModel || 'none',
+      refDistance,
+      maxDistance,
+      rolloffFactor,
+      playbackRate,
+      lowpassFrequency,
+      pan: distance > 0.001 ? THREE.MathUtils.clamp((spatialOrigin.x - listenerPosition.x) / distance, -1, 1) : 0,
+      syncSource: options.syncSource || 'player-cadence',
+    };
+  }
   return true;
 }
 
@@ -7144,6 +7268,21 @@ const TRON_RUNNER_ROUTE_OFFSET = 0.25;
 const TRON_RUNNER_GROUND_OFFSET = 0.04;
 const TRON_RUNNER_SIDEWALK_SIGN = -1;
 const TRON_RUNNER_SIDEWALK_INSET = 7.2;
+const TRON_RUNNER_FREE_ROAM_ENABLED = true;
+const TRON_RUNNER_FREE_ROAM_COLLISIONS_ENABLED = true;
+const TRON_RUNNER_FREE_ROAM_FOOTSTEPS_ENABLED = true;
+const TRON_RUNNER_FREE_ROAM_REACH_RADIUS = 4.2;
+const TRON_RUNNER_FREE_ROAM_COLLISION_RADIUS = 1.1;
+const TRON_RUNNER_FREE_ROAM_SIDEWALK_INSET = 7.2;
+const TRON_RUNNER_FREE_ROAM_STRIDE_LENGTH = 2.15;
+const TRON_RUNNER_FOOTSTEP_VOLUME_SCALE = 0.34;
+const TRON_RUNNER_FOOTSTEP_REF_DISTANCE = 8;
+const TRON_RUNNER_FOOTSTEP_MAX_DISTANCE = 92;
+const TRON_RUNNER_FOOTSTEP_ROLLOFF = 1.35;
+const TRON_RUNNER_FOOTSTEP_CONTACTS = Object.freeze([
+  { phase: 0.18, side: 'left' },
+  { phase: 0.68, side: 'right' },
+]);
 const TRON_RUNNER_SUIT_TEXTURE_MODE = 'procedural-uv-suit';
 const TRON_RUNNER_SUIT_COLOR = new THREE.Color(0xffffff);
 const TRON_RUNNER_SUIT_EMISSIVE = new THREE.Color(0xffffff);
@@ -7466,6 +7605,36 @@ const tronRunnerState = {
   dynamicReflectionSurface: 'sidewalk',
   dynamicReflectionMeshCount: 0,
   dynamicReflectionAnimated: false,
+  autonomy: {
+    mode: 'free-roam',
+    collisionEnabled: TRON_RUNNER_FREE_ROAM_COLLISIONS_ENABLED,
+    footstepsEnabled: TRON_RUNNER_FREE_ROAM_FOOTSTEPS_ENABLED,
+    waypointIndex: 0,
+    waypointCount: 0,
+    distanceWalked: 0,
+    collisionCount: 0,
+    lastCollision: false,
+    lastFootstepSurface: '',
+    lastFootstepSample: '',
+    lastFootstepPlayed: false,
+    audio: {
+      bus: FOOTSTEP_NPC_SPATIAL_BUS,
+      spatialized: false,
+      distanceModel: 'inverse',
+      refDistance: TRON_RUNNER_FOOTSTEP_REF_DISTANCE,
+      maxDistance: TRON_RUNNER_FOOTSTEP_MAX_DISTANCE,
+      rolloffFactor: TRON_RUNNER_FOOTSTEP_ROLLOFF,
+      volumeScale: TRON_RUNNER_FOOTSTEP_VOLUME_SCALE,
+      syncSource: 'walk-cycle',
+      lastGain: 0,
+      lastDistance: 0,
+      lastDistanceGain: 1,
+      lastPlaybackRate: 0,
+      lastPan: 0,
+      lastSample: '',
+      lastSurface: '',
+    },
+  },
   selfLightIntensity: 0.08,
   modelLineIntensity: 0.42,
   pointLightCount: 0,
@@ -7502,6 +7671,28 @@ let tronRunnerScale = 1;
 let tronRunnerWalkSpeed = TRON_RUNNER_DEFAULT_SPEED;
 let tronRunnerAnimationSpeed = 1;
 let tronRunnerStrideSync = 1;
+const tronRunnerAutonomy = {
+  initialized: false,
+  waypointIndex: 0,
+  distanceWalked: 0,
+  collisionCount: 0,
+  lastCollision: false,
+  footstepPhase: 0,
+  lastFootstepIndex: -1,
+  footstepSide: 0,
+  lastFootstepPlayedAt: 0,
+  lastWalkCyclePhase: null,
+  lastFootstepSurface: '',
+  lastFootstepSample: '',
+  lastFootstepPlayed: false,
+  lastFootstepBus: FOOTSTEP_NPC_SPATIAL_BUS,
+  lastFootstepGain: 0,
+  lastFootstepDistance: 0,
+  lastFootstepDistanceGain: 1,
+  lastFootstepPlaybackRate: 0,
+  lastFootstepPan: 0,
+  lastFootstepSyncSource: 'walk-cycle',
+};
 
 function tronRunnerDoorHalfHeight() {
   return sideDoorHeight * sideDoorScale * 0.5;
@@ -7708,7 +7899,360 @@ function tronRunnerSurfaceYAt(x = tronRunnerWalker.position.x, z = tronRunnerWal
   return tronRunnerState.surfaceY;
 }
 
+function tronRunnerFootstepSurface() {
+  return tronRunnerState.surface === 'sidewalk' ? 'sidewalk' : 'road';
+}
+
+function tronRunnerFootstepAudioState() {
+  return {
+    bus: tronRunnerAutonomy.lastFootstepBus,
+    spatialized: tronRunnerAutonomy.lastFootstepBus === FOOTSTEP_NPC_SPATIAL_BUS && tronRunnerAutonomy.lastFootstepPlayed,
+    distanceModel: 'inverse',
+    refDistance: TRON_RUNNER_FOOTSTEP_REF_DISTANCE,
+    maxDistance: TRON_RUNNER_FOOTSTEP_MAX_DISTANCE,
+    rolloffFactor: TRON_RUNNER_FOOTSTEP_ROLLOFF,
+    volumeScale: TRON_RUNNER_FOOTSTEP_VOLUME_SCALE,
+    syncSource: tronRunnerAutonomy.lastFootstepSyncSource,
+    lastGain: Number(tronRunnerAutonomy.lastFootstepGain.toFixed(4)),
+    lastDistance: Number(tronRunnerAutonomy.lastFootstepDistance.toFixed(2)),
+    lastDistanceGain: Number(tronRunnerAutonomy.lastFootstepDistanceGain.toFixed(4)),
+    lastPlaybackRate: Number(tronRunnerAutonomy.lastFootstepPlaybackRate.toFixed(3)),
+    lastPan: Number(tronRunnerAutonomy.lastFootstepPan.toFixed(3)),
+    lastSample: tronRunnerAutonomy.lastFootstepSample,
+    lastSurface: tronRunnerAutonomy.lastFootstepSurface,
+  };
+}
+
+function tronRunnerFootstepOrigin(side) {
+  const sideSign = side === 'left' ? -1 : 1;
+  const sideOffset = 0.28 * sideSign;
+  return {
+    x: tronRunnerWalker.position.x + Math.cos(tronRunnerYaw) * sideOffset,
+    y: tronRunnerWalker.position.y + 0.16,
+    z: tronRunnerWalker.position.z - Math.sin(tronRunnerYaw) * sideOffset,
+  };
+}
+
+function tronRunnerWalkCyclePhase() {
+  const action = tronRunnerParts.activeAction;
+  const clip = action?.getClip?.() || action?._clip;
+  const duration = clip?.duration;
+  if (!action || !Number.isFinite(duration) || duration <= 0.001) return null;
+  return ((action.time / duration) % 1 + 1) % 1;
+}
+
+function tronRunnerPhaseCrossed(previous, current, target) {
+  if (previous === null || previous === undefined) return false;
+  if (current >= previous) return previous < target && current >= target;
+  return previous < target || current >= target;
+}
+
+function tronRunnerWalkCycleFootstep(movedDistance) {
+  const phase = tronRunnerWalkCyclePhase();
+  if (phase !== null) {
+    const previous = tronRunnerAutonomy.lastWalkCyclePhase;
+    tronRunnerAutonomy.lastWalkCyclePhase = phase;
+    if (movedDistance <= 0.001 || previous === null) {
+      return { triggered: false, syncSource: 'walk-cycle', phase };
+    }
+    for (const contact of TRON_RUNNER_FOOTSTEP_CONTACTS) {
+      if (tronRunnerPhaseCrossed(previous, phase, contact.phase)) {
+        return { triggered: true, side: contact.side, syncSource: 'walk-cycle', phase };
+      }
+    }
+    return { triggered: false, syncSource: 'walk-cycle', phase };
+  }
+
+  tronRunnerAutonomy.footstepPhase += movedDistance / TRON_RUNNER_FREE_ROAM_STRIDE_LENGTH * Math.PI;
+  const nextStepIndex = Math.floor(tronRunnerAutonomy.footstepPhase / Math.PI);
+  if (movedDistance <= 0.001 || nextStepIndex === tronRunnerAutonomy.lastFootstepIndex) {
+    return { triggered: false, syncSource: 'distance-phase' };
+  }
+  tronRunnerAutonomy.lastFootstepIndex = nextStepIndex;
+  tronRunnerAutonomy.footstepSide = 1 - tronRunnerAutonomy.footstepSide;
+  return {
+    triggered: true,
+    side: tronRunnerAutonomy.footstepSide ? 'right' : 'left',
+    syncSource: 'distance-phase',
+  };
+}
+
+function tronRunnerDroneAnchor() {
+  const target = computeDroneIntroTargetPose?.();
+  if (target && Number.isFinite(target.x) && Number.isFinite(target.z)) return { x: target.x, z: target.z };
+  return {
+    x: Number.isFinite(playerSpawn?.x) ? playerSpawn.x : 0,
+    z: Number.isFinite(playerSpawn?.z) ? playerSpawn.z : dynamicRoadCenter,
+  };
+}
+
+function tronRunnerWaypointForSideBuilding(record) {
+  const pad = record?.basePad;
+  const points = pad?.innerHitPolygon?.length ? pad.innerHitPolygon : pad?.hitPolygon;
+  if (!record || !pad?.border || !points?.length) return null;
+  const localXs = points.map(([x]) => x);
+  const localZs = points.map(([, z]) => z);
+  const roadFacingX = record.sign < 0 ? Math.max(...localXs) : Math.min(...localXs);
+  const safeX = roadFacingX + record.sign * TRON_RUNNER_FREE_ROAM_SIDEWALK_INSET;
+  const minZ = Math.min(...localZs) + 2;
+  const maxZ = Math.max(...localZs) - 2;
+  const localZ = THREE.MathUtils.clamp(0, minZ, maxZ);
+  return {
+    x: pad.border.position.x + safeX,
+    z: pad.border.position.z + localZ,
+    surface: 'sidewalk',
+    label: `sidewalk-${record.civicNumberValue ?? 'building'}`,
+  };
+}
+
+function tronRunnerRoadWaypoint(z, label = 'road') {
+  const limits = roadHexBoundaryLimits();
+  return {
+    x: THREE.MathUtils.clamp(0, limits.minX + 2, limits.maxX - 2),
+    z: THREE.MathUtils.clamp(z, limits.minZ + 2, limits.maxZ - 2),
+    surface: 'road',
+    label,
+  };
+}
+
+function rotateTronRunnerWaypointsToAnchor(waypoints, anchor) {
+  if (!waypoints.length) return waypoints;
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+  waypoints.forEach((point, index) => {
+    const distance = Math.hypot(point.x - anchor.x, point.z - anchor.z);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+  return waypoints.slice(bestIndex).concat(waypoints.slice(0, bestIndex));
+}
+
+function tronRunnerFreeRoamRouteSpec() {
+  const rows = [...new Set(sideBuildingRecords
+    .filter((record) => record.mesh?.visible !== false && record.basePad?.hitPolygon?.length)
+    .map((record) => Number(record.mesh.position.z.toFixed(3))))]
+    .sort((a, b) => b - a);
+  const waypoints = [];
+  rows.forEach((z, index) => {
+    const rowRecords = sideBuildingRecords
+      .filter((record) => Math.abs(record.mesh.position.z - z) < GRID_BLOCK)
+      .sort((a, b) => a.sign - b.sign);
+    const left = rowRecords.find((record) => record.sign < 0);
+    const right = rowRecords.find((record) => record.sign > 0);
+    const firstSide = index % 2 === 0 ? left : right;
+    const secondSide = index % 2 === 0 ? right : left;
+    const first = tronRunnerWaypointForSideBuilding(firstSide);
+    const second = tronRunnerWaypointForSideBuilding(secondSide);
+    if (first) waypoints.push(first);
+    waypoints.push(tronRunnerRoadWaypoint(z, `road-${z}`));
+    if (second) waypoints.push(second);
+    waypoints.push(tronRunnerRoadWaypoint(z, `road-return-${z}`));
+  });
+  if (mainBuildingRecords[0]?.basePad?.hitPolygon?.length) {
+    const z = mainBuildingRecords[0].mesh.position.z + mainBuildingRecords[0].collider.hd + GRID_BLOCK * 1.5;
+    waypoints.push(tronRunnerRoadWaypoint(z, 'main-road-front'));
+  }
+  const anchor = tronRunnerDroneAnchor();
+  const rotated = rotateTronRunnerWaypointsToAnchor(waypoints.filter(Boolean), anchor);
+  if (!rotated.length) return null;
+  return {
+    mode: 'free-roam',
+    closed: true,
+    waypoints: rotated,
+    waypointCount: rotated.length,
+    x: rotated[0].x,
+    zA: rotated[0].z,
+    zB: rotated[1]?.z ?? rotated[0].z,
+    anchor,
+  };
+}
+
+function resolveTronRunnerRoundedCollider(point, collider, padding) {
+  const dx = point.x - collider.x;
+  const dz = point.z - collider.z;
+  const sx = dx >= 0 ? 1 : -1;
+  const sz = dz >= 0 ? 1 : -1;
+  const ax = Math.abs(dx);
+  const az = Math.abs(dz);
+  const hx = collider.hw + padding;
+  const hz = collider.hd + padding;
+  const radius = THREE.MathUtils.clamp((collider.chamfer || 0) + padding, 0, Math.min(hx, hz) * 0.98);
+  if (radius <= 0.001) {
+    if (ax >= hx || az >= hz) return false;
+    const pushX = hx - ax;
+    const pushZ = hz - az;
+    if (pushX < pushZ) point.x = collider.x + sx * hx;
+    else point.z = collider.z + sz * hz;
+    return true;
+  }
+
+  const innerX = hx - radius;
+  const innerZ = hz - radius;
+  const qx = ax - innerX;
+  const qz = az - innerZ;
+  if (qx > 0 && qz > 0) {
+    const dist = Math.hypot(qx, qz);
+    if (dist >= radius) return false;
+    const nx = dist > 1e-5 ? qx / dist : Math.SQRT1_2;
+    const nz = dist > 1e-5 ? qz / dist : Math.SQRT1_2;
+    point.x = collider.x + sx * (innerX + nx * radius);
+    point.z = collider.z + sz * (innerZ + nz * radius);
+    return true;
+  }
+
+  if (ax >= hx || az >= hz) return false;
+  const pushX = hx - ax;
+  const pushZ = hz - az;
+  if (pushX < pushZ) point.x = collider.x + sx * hx;
+  else point.z = collider.z + sz * hz;
+  return true;
+}
+
+function resolveTronRunnerAutonomyCollision(point) {
+  let collision = false;
+  if (TRON_RUNNER_FREE_ROAM_COLLISIONS_ENABLED) {
+    for (const collider of buildingColliders) {
+      const basePadding = collider.role === 'main-building' ? mainBuildingCollisionPadding : collisionPadding;
+      if (resolveTronRunnerRoundedCollider(point, collider, basePadding + TRON_RUNNER_FREE_ROAM_COLLISION_RADIUS)) {
+        collision = true;
+      }
+    }
+    const limits = roadHexBoundaryLimits();
+    const nextX = THREE.MathUtils.clamp(point.x, limits.minX, limits.maxX);
+    const nextZ = THREE.MathUtils.clamp(point.z, limits.minZ, limits.maxZ);
+    if (Math.abs(nextX - point.x) > 0.001 || Math.abs(nextZ - point.z) > 0.001) collision = true;
+    point.x = nextX;
+    point.z = nextZ;
+  }
+  return collision;
+}
+
+function updateTronRunnerAutonomyState(route, movedDistance = 0, collision = false) {
+  tronRunnerState.autonomy = {
+    mode: route?.mode || 'free-roam',
+    collisionEnabled: TRON_RUNNER_FREE_ROAM_COLLISIONS_ENABLED,
+    footstepsEnabled: TRON_RUNNER_FREE_ROAM_FOOTSTEPS_ENABLED,
+    waypointIndex: tronRunnerAutonomy.waypointIndex,
+    waypointCount: route?.waypointCount ?? route?.waypoints?.length ?? 0,
+    targetLabel: route?.waypoints?.[tronRunnerAutonomy.waypointIndex]?.label ?? '',
+    distanceWalked: Number(tronRunnerAutonomy.distanceWalked.toFixed(2)),
+    lastMoveDistance: Number(movedDistance.toFixed(3)),
+    collisionCount: tronRunnerAutonomy.collisionCount,
+    lastCollision: collision,
+    lastFootstepSurface: tronRunnerAutonomy.lastFootstepSurface,
+    lastFootstepSample: tronRunnerAutonomy.lastFootstepSample,
+    lastFootstepPlayed: tronRunnerAutonomy.lastFootstepPlayed,
+    audio: tronRunnerFootstepAudioState(),
+  };
+}
+
+function updateTronRunnerAutonomyFootsteps(movedDistance, dt) {
+  if (!TRON_RUNNER_FREE_ROAM_FOOTSTEPS_ENABLED) return;
+  const contact = tronRunnerWalkCycleFootstep(movedDistance);
+  tronRunnerAutonomy.lastFootstepSyncSource = contact.syncSource || 'walk-cycle';
+  if (!contact.triggered) return;
+  const surface = tronRunnerFootstepSurface();
+  const now = performance.now();
+  if (now - tronRunnerAutonomy.lastFootstepPlayedAt < FOOTSTEP_MIN_INTERVAL_MS) return;
+  tronRunnerAutonomy.lastFootstepPlayedAt = now;
+  const side = contact.side || 'right';
+  const moveRatio = movedDistance / Math.max(0.05, tronRunnerWalkSpeed * Math.max(dt, 0.001));
+  const intensity = THREE.MathUtils.clamp(0.28 + moveRatio * 0.16, 0.18, 0.54);
+  const details = playFootstepForSurface(surface, intensity, side, {
+    bus: FOOTSTEP_NPC_SPATIAL_BUS,
+    returnDetails: true,
+    spatialOrigin: tronRunnerFootstepOrigin(side),
+    volumeScale: TRON_RUNNER_FOOTSTEP_VOLUME_SCALE,
+    minVolume: 0.002,
+    maxVolume: 0.13,
+    refDistance: TRON_RUNNER_FOOTSTEP_REF_DISTANCE,
+    maxDistance: TRON_RUNNER_FOOTSTEP_MAX_DISTANCE,
+    rolloffFactor: TRON_RUNNER_FOOTSTEP_ROLLOFF,
+    distanceModel: 'inverse',
+    panningModel: 'HRTF',
+    rateMultiplier: surface === 'sidewalk' ? 1.08 : 0.90,
+    runLift: 1,
+    lowpassFrequency: surface === 'sidewalk' ? 1900 : 1550,
+    fadeOutTime: 0.2,
+    syncSource: contact.syncSource || 'walk-cycle',
+  });
+  tronRunnerAutonomy.lastFootstepPlayed = Boolean(details?.played);
+  if (details?.played) {
+    tronRunnerAutonomy.lastFootstepBus = details.bus;
+    tronRunnerAutonomy.lastFootstepSurface = details.surface;
+    tronRunnerAutonomy.lastFootstepSample = details.sampleKey;
+    tronRunnerAutonomy.lastFootstepGain = details.gain;
+    tronRunnerAutonomy.lastFootstepDistance = details.distance;
+    tronRunnerAutonomy.lastFootstepDistanceGain = details.distanceGain;
+    tronRunnerAutonomy.lastFootstepPlaybackRate = details.playbackRate;
+    tronRunnerAutonomy.lastFootstepPan = details.pan;
+    tronRunnerAutonomy.lastFootstepSyncSource = details.syncSource;
+  }
+}
+
+function updateTronRunnerFreeRoam(dt, route) {
+  const waypoints = route?.waypoints || [];
+  if (!waypoints.length) return null;
+  if (!tronRunnerAutonomy.initialized) {
+    tronRunnerAutonomy.initialized = true;
+    tronRunnerAutonomy.waypointIndex = 1 % waypoints.length;
+    return {
+      x: waypoints[0].x,
+      z: waypoints[0].z,
+      directionX: 0,
+      directionZ: 1,
+      movedDistance: 0,
+      collision: false,
+    };
+  }
+
+  let target = waypoints[tronRunnerAutonomy.waypointIndex % waypoints.length];
+  let currentX = tronRunnerWalker.position.x;
+  let currentZ = tronRunnerWalker.position.z;
+  let dx = target.x - currentX;
+  let dz = target.z - currentZ;
+  let distance = Math.hypot(dx, dz);
+  if (distance <= TRON_RUNNER_FREE_ROAM_REACH_RADIUS) {
+    tronRunnerAutonomy.waypointIndex = (tronRunnerAutonomy.waypointIndex + 1) % waypoints.length;
+    target = waypoints[tronRunnerAutonomy.waypointIndex];
+    dx = target.x - currentX;
+    dz = target.z - currentZ;
+    distance = Math.hypot(dx, dz);
+  }
+  const directionX = distance > 0.001 ? dx / distance : Math.sin(tronRunnerYaw);
+  const directionZ = distance > 0.001 ? dz / distance : Math.cos(tronRunnerYaw);
+  const step = Math.min(distance, Math.max(0, tronRunnerWalkSpeed * dt));
+  const point = {
+    x: currentX + directionX * step,
+    z: currentZ + directionZ * step,
+  };
+  const collision = resolveTronRunnerAutonomyCollision(point);
+  const movedDistance = Math.hypot(point.x - currentX, point.z - currentZ);
+  tronRunnerAutonomy.distanceWalked += movedDistance;
+  if (collision) {
+    tronRunnerAutonomy.collisionCount += 1;
+    if (movedDistance < Math.max(0.02, step * 0.2)) {
+      tronRunnerAutonomy.waypointIndex = (tronRunnerAutonomy.waypointIndex + 1) % waypoints.length;
+    }
+  }
+  tronRunnerAutonomy.lastCollision = collision;
+  return {
+    x: point.x,
+    z: point.z,
+    directionX,
+    directionZ,
+    movedDistance,
+    collision,
+  };
+}
+
 function tronRunnerRouteSpec() {
+  if (TRON_RUNNER_FREE_ROAM_ENABLED) {
+    const freeRoamRoute = tronRunnerFreeRoamRouteSpec();
+    if (freeRoamRoute) return freeRoamRoute;
+  }
   const minZ = dynamicRoadCenter - dynamicRoadLength * 0.5 + GRID_BLOCK * 5;
   const maxZ = dynamicRoadCenter + dynamicRoadLength * 0.5 - GRID_BLOCK * 5;
   const anchorZ = THREE.MathUtils.clamp((playerSpawn?.z ?? maxZ) - GRID_BLOCK * 8, minZ + GRID_BLOCK * 12, maxZ - GRID_BLOCK * 4);
@@ -7732,6 +8276,7 @@ function tronRunnerRouteSpec() {
   const zA = Math.abs(padStartZ - padEndZ) > 4 ? padStartZ : THREE.MathUtils.clamp(padMaxZ - 3, minZ, maxZ);
   const zB = Math.abs(padStartZ - padEndZ) > 4 ? padEndZ : THREE.MathUtils.clamp(padMinZ + 3, minZ, maxZ);
   return {
+    mode: 'sidewalk-line',
     x,
     zA,
     zB,
@@ -7807,6 +8352,26 @@ async function loadTronRunner() {
   tronRunnerState.route = route;
   tronRunnerState.doorHalfHeight = tronRunnerDoorHalfHeight();
   tronRunnerState.surfaceY = tronRunnerSurfaceYAt(route.x, route.zA);
+  tronRunnerAutonomy.initialized = false;
+  tronRunnerAutonomy.waypointIndex = 0;
+  tronRunnerAutonomy.distanceWalked = 0;
+  tronRunnerAutonomy.collisionCount = 0;
+  tronRunnerAutonomy.lastCollision = false;
+  tronRunnerAutonomy.footstepPhase = 0;
+  tronRunnerAutonomy.lastFootstepIndex = -1;
+  tronRunnerAutonomy.lastFootstepPlayedAt = 0;
+  tronRunnerAutonomy.lastWalkCyclePhase = null;
+  tronRunnerAutonomy.lastFootstepSurface = '';
+  tronRunnerAutonomy.lastFootstepSample = '';
+  tronRunnerAutonomy.lastFootstepPlayed = false;
+  tronRunnerAutonomy.lastFootstepBus = FOOTSTEP_NPC_SPATIAL_BUS;
+  tronRunnerAutonomy.lastFootstepGain = 0;
+  tronRunnerAutonomy.lastFootstepDistance = 0;
+  tronRunnerAutonomy.lastFootstepDistanceGain = 1;
+  tronRunnerAutonomy.lastFootstepPlaybackRate = 0;
+  tronRunnerAutonomy.lastFootstepPan = 0;
+  tronRunnerAutonomy.lastFootstepSyncSource = 'walk-cycle';
+  updateTronRunnerAutonomyState(route);
   try {
     const [gltf, reflectionGltf] = await Promise.all([
       loadTronRunnerGltf(),
@@ -7936,22 +8501,43 @@ function updateTronRunner(dt) {
   if (!tronRunnerState.ready && !tronRunnerParts.model) return;
   tronRunnerElapsed += Math.min(dt, 0.05);
   const route = tronRunnerState.route || tronRunnerRouteSpec();
-  const span = Math.max(1, Math.abs(route.zA - route.zB));
-  const loopDistance = span * 2;
-  const phase = ((TRON_RUNNER_ROUTE_OFFSET + tronRunnerElapsed * tronRunnerWalkSpeed / loopDistance) % 1 + 1) % 1;
-  const forwardLeg = phase < 0.5;
-  const t = forwardLeg ? phase * 2 : (1 - phase) * 2;
-  const z = THREE.MathUtils.lerp(route.zA, route.zB, t);
-  const directionZ = route.zB >= route.zA
-    ? (forwardLeg ? 1 : -1)
-    : (forwardLeg ? -1 : 1);
-  tronRunnerTargetYaw = Math.atan2(0, directionZ);
+  let x = route.x;
+  let z = route.zA;
+  let directionX = 0;
+  let directionZ = 1;
+  let movedDistance = 0;
+  let collision = false;
+  if (route.mode === 'free-roam') {
+    const next = updateTronRunnerFreeRoam(dt, route);
+    if (next) {
+      x = next.x;
+      z = next.z;
+      directionX = next.directionX;
+      directionZ = next.directionZ;
+      movedDistance = next.movedDistance;
+      collision = next.collision;
+    }
+  } else {
+    const span = Math.max(1, Math.abs(route.zA - route.zB));
+    const loopDistance = span * 2;
+    const phase = ((TRON_RUNNER_ROUTE_OFFSET + tronRunnerElapsed * tronRunnerWalkSpeed / loopDistance) % 1 + 1) % 1;
+    const forwardLeg = phase < 0.5;
+    const t = forwardLeg ? phase * 2 : (1 - phase) * 2;
+    z = THREE.MathUtils.lerp(route.zA, route.zB, t);
+    directionZ = route.zB >= route.zA
+      ? (forwardLeg ? 1 : -1)
+      : (forwardLeg ? -1 : 1);
+    movedDistance = Math.hypot(x - tronRunnerWalker.position.x, z - tronRunnerWalker.position.z);
+  }
+  tronRunnerTargetYaw = Math.atan2(directionX, directionZ);
   tronRunnerYaw = lerpAngle(tronRunnerYaw, tronRunnerTargetYaw, Math.min(1, dt * 9));
-  tronRunnerWalker.position.set(route.x, tronRunnerSurfaceYAt(route.x, z), z);
+  tronRunnerWalker.position.set(x, tronRunnerSurfaceYAt(x, z), z);
   tronRunnerWalker.rotation.set(0, tronRunnerYaw, 0);
-  updateTronRunnerRealShadowRig();
   tronRunnerParts.mixer?.update(dt);
   tronRunnerParts.reflectionMixer?.update(dt);
+  updateTronRunnerAutonomyFootsteps(movedDistance, dt);
+  updateTronRunnerAutonomyState(route, movedDistance, collision);
+  updateTronRunnerRealShadowRig();
   updateTronRunnerDynamicReflection();
 
   const phasePulse = tronRunnerElapsed * 4.65;
