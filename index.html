@@ -8792,6 +8792,11 @@ const cityRevealRoadGridObjects = [];
 const cityRevealRoadFadeObjects = [];
 const cityRevealSolidObjects = [];
 const cityRevealRealClipPlane = new THREE.Plane(CITY_REVEAL_SWEEP_NORMAL.clone(), -cityRevealFrontZ);
+const CITY_REVEAL_REAL_PREWARM_TARGET_SIZE = 4;
+let cityRevealRealPrewarmTarget = null;
+let cityRevealRealPrewarmStatus = 'pending';
+let cityRevealRealPrewarmMs = 0;
+let cityRevealRealPrewarmError = '';
 const cityRevealBoundsBox = new THREE.Box3();
 const cityRevealStripLineStart = new THREE.Vector3();
 const cityRevealStripLineEnd = new THREE.Vector3();
@@ -9812,6 +9817,52 @@ function renderSceneWithCityRevealClip() {
   scene.background = previousSceneBackground;
   domeMesh.visible = previousDomeVisible;
   renderer.clippingPlanes = previousClippingPlanes;
+}
+
+function prewarmCityRevealRealPass() {
+  if (cityRevealRealPrewarmStatus === 'done' || cityRevealRealPrewarmStatus === 'running') return;
+  cityRevealRealPrewarmStatus = 'running';
+  cityRevealRealPrewarmError = '';
+  const started = performance.now();
+  const previousTarget = renderer.getRenderTarget();
+  const previousAutoClear = renderer.autoClear;
+  const previousClippingPlanes = renderer.clippingPlanes;
+  const previousSceneBackground = scene.background;
+  const previousDomeVisible = domeMesh.visible;
+  const previousCameraLayerMask = camera.layers.mask;
+  try {
+    refreshCityRevealSweepBounds();
+    setCityRevealSweepFront(cityRevealFrontForProgress(0.04));
+    if (!cityRevealRealPrewarmTarget) {
+      cityRevealRealPrewarmTarget = new THREE.WebGLRenderTarget(
+        CITY_REVEAL_REAL_PREWARM_TARGET_SIZE,
+        CITY_REVEAL_REAL_PREWARM_TARGET_SIZE,
+        { depthBuffer: true, stencilBuffer: false }
+      );
+      cityRevealRealPrewarmTarget.texture.name = 'city-reveal-real-prewarm-target';
+    }
+    renderer.setRenderTarget(cityRevealRealPrewarmTarget);
+    renderer.autoClear = true;
+    renderer.clippingPlanes = [cityRevealRealClipPlane];
+    scene.background = null;
+    domeMesh.visible = false;
+    camera.layers.set(0);
+    renderer.compile(scene, camera);
+    renderer.render(scene, camera);
+    cityRevealRealPrewarmStatus = 'done';
+  } catch (error) {
+    cityRevealRealPrewarmStatus = 'error';
+    cityRevealRealPrewarmError = error?.message || String(error);
+    console.warn('[city-reveal-prewarm]', cityRevealRealPrewarmError);
+  } finally {
+    camera.layers.mask = previousCameraLayerMask;
+    scene.background = previousSceneBackground;
+    domeMesh.visible = previousDomeVisible;
+    renderer.clippingPlanes = previousClippingPlanes;
+    renderer.autoClear = previousAutoClear;
+    renderer.setRenderTarget(previousTarget);
+    cityRevealRealPrewarmMs = performance.now() - started;
+  }
 }
 
 function renderCityRevealCompositeFrame() {
@@ -12366,6 +12417,7 @@ async function bootSceneWithFinalDefaults() {
   setTronNoclip(false, { silent: true });
   applyPlayerSpawn(playerSpawn, false);
   await loadTronRunner();
+  prewarmCityRevealRealPass();
   scheduleDroneIntroAutoFlight();
 }
 
@@ -12464,6 +12516,12 @@ window.__tronInspect = () => ({
   cityRevealSweepEndZ,
   cityRevealSweepProgress,
   cityRevealMainBuildingSlow: cityRevealMainBuildingSlowDiagnostics(),
+  cityRevealRealPrewarm: {
+    status: cityRevealRealPrewarmStatus,
+    durationMs: Number(cityRevealRealPrewarmMs.toFixed(2)),
+    error: cityRevealRealPrewarmError,
+    targetSize: CITY_REVEAL_REAL_PREWARM_TARGET_SIZE,
+  },
   cityRevealMainFacadeVerticalLed: { ...mainFacadeVerticalRevealState },
   cityRevealStarted: cityRevealStartedAt > 0,
   cityRevealWaitingForBackspace: cityRevealWireframeEnabled && !backspaceIntroTriggered && !cityRevealStartedAt && !cityRevealComplete,
