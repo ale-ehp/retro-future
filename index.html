@@ -7394,6 +7394,13 @@ const TRON_RUNNER_CROWD_ENABLED = true;
 const TRON_RUNNER_CROWD_COUNT = 10;
 const TRON_RUNNER_CROWD_SCALE_LOCK = 0.55;
 const TRON_RUNNER_CROWD_GROUND_OFFSET = TRON_RUNNER_GROUND_OFFSET;
+const TRON_RUNNER_CROWD_PATH_MODE = 'sidewalk-building-loops';
+const TRON_RUNNER_CROWD_COLLISIONS_ENABLED = true;
+const TRON_RUNNER_CROWD_REACH_RADIUS = 0.85;
+const TRON_RUNNER_CROWD_COLLISION_RADIUS = 1.1;
+const TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET = 3.2;
+const TRON_RUNNER_CROWD_BUILDING_CLEARANCE = 6.2;
+const TRON_RUNNER_CROWD_SPEED_SCALE = 0.72;
 const tronRunnerWalker = new THREE.Group();
 tronRunnerWalker.name = 'tron-runner-walker';
 tronRunnerWalker.visible = false;
@@ -8217,11 +8224,12 @@ function tronRunnerSurfaceYForPoint(x, z) {
   const padHit = basePadAtPoint(x, z);
   return {
     y: (padHit?.topY ?? roadTileTopY()) + TRON_RUNNER_CROWD_GROUND_OFFSET,
+    groundY: padHit?.topY ?? roadTileTopY(),
     surface: padHit ? 'sidewalk' : 'road-fallback',
   };
 }
 
-function tronRunnerCrowdPlacement(index) {
+function tronRunnerCrowdFallbackPlacement(index) {
   const limits = roadHexBoundaryLimits();
   const row = index % 5;
   const side = index < 5 ? -1 : 1;
@@ -8246,6 +8254,65 @@ function tronRunnerCrowdPlacement(index) {
   };
 }
 
+function tronRunnerCrowdCandidateRecords() {
+  return sideBuildingRecords
+    .filter((record) => record.mesh?.visible !== false && record.basePad?.hitPolygon?.length && record.collider)
+    .sort((a, b) => {
+      const az = Number(a.mesh?.position?.z ?? 0);
+      const bz = Number(b.mesh?.position?.z ?? 0);
+      if (Math.abs(az - bz) > GRID_BLOCK * 0.5) return bz - az;
+      return (a.sign || 0) - (b.sign || 0);
+    });
+}
+
+function tronRunnerCrowdRouteForRecord(record, index) {
+  const pad = record?.basePad;
+  const polygon = pad?.innerHitPolygon?.length ? pad.innerHitPolygon : pad?.hitPolygon;
+  if (!record || !pad?.border || !polygon?.length || !record.collider) return null;
+  const xs = polygon.map(([x]) => x);
+  const zs = polygon.map(([, z]) => z);
+  const minX = Math.min(...xs) + TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET;
+  const maxX = Math.max(...xs) - TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET;
+  const minZ = Math.min(...zs) + TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET;
+  const maxZ = Math.max(...zs) - TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET;
+  if (maxX - minX < 2 || maxZ - minZ < 2) return null;
+
+  const colliderX = record.collider.x - pad.border.position.x;
+  const colliderZ = record.collider.z - pad.border.position.z;
+  const left = THREE.MathUtils.clamp(colliderX - record.collider.hw - TRON_RUNNER_CROWD_BUILDING_CLEARANCE, minX, maxX);
+  const right = THREE.MathUtils.clamp(colliderX + record.collider.hw + TRON_RUNNER_CROWD_BUILDING_CLEARANCE, minX, maxX);
+  const near = THREE.MathUtils.clamp(colliderZ - record.collider.hd - TRON_RUNNER_CROWD_BUILDING_CLEARANCE, minZ, maxZ);
+  const far = THREE.MathUtils.clamp(colliderZ + record.collider.hd + TRON_RUNNER_CROWD_BUILDING_CLEARANCE, minZ, maxZ);
+  const routeLeft = right - left > 3 ? left : minX;
+  const routeRight = right - left > 3 ? right : maxX;
+  const routeNear = far - near > 3 ? near : minZ;
+  const routeFar = far - near > 3 ? far : maxZ;
+  const padX = pad.border.position.x;
+  const padZ = pad.border.position.z;
+  const y = (pad.innerTopY ?? pad.topY ?? roadTileTopY()) + TRON_RUNNER_CROWD_GROUND_OFFSET;
+  const points = [
+    { x: padX + routeLeft, y, z: padZ + routeNear },
+    { x: padX + routeRight, y, z: padZ + routeNear },
+    { x: padX + routeRight, y, z: padZ + routeFar },
+    { x: padX + routeLeft, y, z: padZ + routeFar },
+  ];
+  if (index % 2) points.reverse();
+  return {
+    mode: TRON_RUNNER_CROWD_PATH_MODE,
+    record,
+    pad,
+    polygon,
+    points,
+    label: `building-${record.civicNumberValue ?? index + 1}`,
+  };
+}
+
+function tronRunnerCrowdBuildRoute(index) {
+  const records = tronRunnerCrowdCandidateRecords();
+  const record = records[index % Math.max(1, records.length)];
+  return tronRunnerCrowdRouteForRecord(record, index);
+}
+
 function clearTronRunnerCrowd() {
   tronRunnerCrowd.length = 0;
   while (tronRunnerCrowdGroup.children.length) {
@@ -8256,11 +8323,21 @@ function clearTronRunnerCrowd() {
 
 function syncTronRunnerCrowdScaleAndGround() {
   for (const member of tronRunnerCrowd) {
-    const placement = tronRunnerCrowdPlacement(member.index);
     member.group.scale.copy(tronRunnerWalker.scale);
-    member.group.position.set(placement.x, placement.y, placement.z);
-    member.group.rotation.y = placement.yaw;
-    member.surface = placement.surface;
+    const surface = member.route
+      ? tronRunnerSurfaceYForPoint(member.group.position.x, member.group.position.z)
+      : null;
+    if (surface) {
+      member.group.position.y = surface.y;
+      member.surface = surface.surface;
+      member.groundOffset = member.group.position.y - surface.groundY;
+    } else {
+      const placement = tronRunnerCrowdFallbackPlacement(member.index);
+      member.group.position.set(placement.x, placement.y, placement.z);
+      member.group.rotation.y = placement.yaw;
+      member.surface = placement.surface;
+      member.groundOffset = TRON_RUNNER_CROWD_GROUND_OFFSET;
+    }
   }
 }
 
@@ -8316,19 +8393,104 @@ function buildTronRunnerCrowd(sourceModel, animations) {
     group.add(cloneModel);
 
     const { mixer, action } = makeTronRunnerCrowdActionSet(cloneModel, animations, index);
+    const route = tronRunnerCrowdBuildRoute(index);
+    const fallback = tronRunnerCrowdFallbackPlacement(index);
+    const start = route?.points?.[index % route.points.length] || fallback;
+    group.position.set(start.x, start.y, start.z);
+    group.rotation.y = start.yaw ?? 0;
     const member = {
       index,
       group,
       model: cloneModel,
       mixer,
       action,
-      surface: 'road-fallback',
+      route,
+      waypointIndex: route?.points?.length ? (index + 1) % route.points.length : 0,
+      speed: tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (0.86 + (index % 5) * 0.035),
+      surface: route ? 'sidewalk' : 'road-fallback',
+      groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
+      distanceWalked: 0,
+      lastMovedDistance: 0,
+      collisionCount: 0,
+      lastCollision: false,
     };
     tronRunnerCrowd.push(member);
     tronRunnerCrowdGroup.add(group);
   }
   syncTronRunnerCrowdScaleAndGround();
   syncTronRunnerCrowdVisibility();
+}
+
+function tronRunnerCrowdPointInsideRoute(member, x, z) {
+  const pad = member.route?.pad;
+  const polygon = member.route?.polygon;
+  if (!pad?.border || !polygon?.length) return true;
+  const localX = x - pad.border.position.x;
+  const localZ = z - pad.border.position.z;
+  return pointInBasePadPolygon(localX, localZ, polygon);
+}
+
+function resolveTronRunnerCrowdCollision(member, point) {
+  if (!TRON_RUNNER_CROWD_COLLISIONS_ENABLED) return false;
+  let collided = false;
+  const record = member.route?.record;
+  if (record?.collider) {
+    const beforeX = point.x;
+    const beforeZ = point.z;
+    if (resolveTronRunnerRoundedCollider(point, record.collider, TRON_RUNNER_CROWD_COLLISION_RADIUS)) {
+      collided = true;
+      if (!tronRunnerCrowdPointInsideRoute(member, point.x, point.z)) {
+        point.x = beforeX;
+        point.z = beforeZ;
+      }
+    }
+  }
+  if (!tronRunnerCrowdPointInsideRoute(member, point.x, point.z)) {
+    collided = true;
+    const current = member.group.position;
+    point.x = current.x;
+    point.z = current.z;
+  }
+  return collided;
+}
+
+function advanceTronRunnerCrowdMember(member, dt) {
+  const route = member.route;
+  if (!route?.points?.length) {
+    member.lastMovedDistance = 0;
+    return;
+  }
+  const target = route.points[member.waypointIndex % route.points.length];
+  const current = member.group.position;
+  const dx = target.x - current.x;
+  const dz = target.z - current.z;
+  const distance = Math.hypot(dx, dz);
+  if (distance <= TRON_RUNNER_CROWD_REACH_RADIUS) {
+    member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
+    member.lastMovedDistance = 0;
+    return;
+  }
+  const dirX = dx / Math.max(distance, 0.001);
+  const dirZ = dz / Math.max(distance, 0.001);
+  const step = Math.min(distance, Math.max(0, member.speed * Math.min(dt, 0.05)));
+  const nextPoint = {
+    x: current.x + dirX * step,
+    z: current.z + dirZ * step,
+  };
+  const collided = resolveTronRunnerCrowdCollision(member, nextPoint);
+  if (collided) {
+    member.collisionCount += 1;
+    member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
+  }
+  const movedDistance = Math.hypot(nextPoint.x - current.x, nextPoint.z - current.z);
+  const surface = tronRunnerSurfaceYForPoint(nextPoint.x, nextPoint.z);
+  member.group.position.set(nextPoint.x, surface.y, nextPoint.z);
+  member.group.rotation.y = lerpAngle(member.group.rotation.y, Math.atan2(dirX, dirZ), Math.min(1, dt * 8));
+  member.surface = surface.surface;
+  member.groundOffset = member.group.position.y - surface.groundY;
+  member.distanceWalked += movedDistance;
+  member.lastMovedDistance = movedDistance;
+  member.lastCollision = collided;
 }
 
 function updateTronRunnerCrowd(dt) {
@@ -8339,6 +8501,7 @@ function updateTronRunnerCrowd(dt) {
   for (const member of tronRunnerCrowd) {
     member.action?.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
     member.mixer?.update(step);
+    advanceTronRunnerCrowdMember(member, step);
   }
 }
 
@@ -8360,18 +8523,32 @@ function tronRunnerCrowdInspect() {
       scale: Number(member.group.scale.x.toFixed(4)),
       targetHeight: Number(targetHeight.toFixed(3)),
       heightFromRoad: Number(heightFromRoad.toFixed(3)),
+      groundOffset: Number((member.groundOffset ?? TRON_RUNNER_CROWD_GROUND_OFFSET).toFixed(3)),
       surface: member.surface,
+      routeMode: member.route?.mode ?? 'fallback-road',
+      routeLabel: member.route?.label ?? 'fallback',
+      waypointIndex: member.waypointIndex ?? 0,
+      distanceWalked: Number((member.distanceWalked ?? 0).toFixed(2)),
+      lastMovedDistance: Number((member.lastMovedDistance ?? 0).toFixed(4)),
+      collisionCount: member.collisionCount ?? 0,
+      lastCollision: Boolean(member.lastCollision),
       sizeY: Number(tronRunnerCrowdSize.y.toFixed(3)),
     };
   });
   const scaleDeltas = members.map((member) => Math.abs(member.scale - runnerScale));
   const targetHeightDeltas = members.map((member) => Math.abs(member.targetHeight - runnerTargetHeight));
   const heightFromRoadDeltas = members.map((member) => Math.abs(member.heightFromRoad - runnerHeightFromRoad));
+  const groundOffsetDeltas = members.map((member) => Math.abs(member.groundOffset - TRON_RUNNER_CROWD_GROUND_OFFSET));
   return {
     enabled: TRON_RUNNER_CROWD_ENABLED,
-    mode: 'post-fit-skeleton-clones',
+    mode: TRON_RUNNER_CROWD_PATH_MODE,
     count: tronRunnerCrowd.length,
     visibleCount: members.filter((member) => member.visible).length,
+    sidewalkMembers: members.filter((member) => member.surface === 'sidewalk').length,
+    routeLoopMembers: members.filter((member) => member.routeMode === TRON_RUNNER_CROWD_PATH_MODE).length,
+    movingMembers: members.filter((member) => member.lastMovedDistance > 0.0005).length,
+    collisionEnabled: TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
+    collisionCount: members.reduce((sum, member) => sum + member.collisionCount, 0),
     requestedCount: TRON_RUNNER_CROWD_COUNT,
     cloneSource: 'runner-post-fit-model',
     skeletonClone: Boolean(cloneRunnerSkeleton),
@@ -8385,6 +8562,7 @@ function tronRunnerCrowdInspect() {
     maxScaleDelta: Number((scaleDeltas.length ? Math.max(...scaleDeltas) : 0).toFixed(4)),
     maxTargetHeightDelta: Number((targetHeightDeltas.length ? Math.max(...targetHeightDeltas) : 0).toFixed(4)),
     maxHeightFromRoadDelta: Number((heightFromRoadDeltas.length ? Math.max(...heightFromRoadDeltas) : 0).toFixed(4)),
+    maxGroundOffsetDelta: Number((groundOffsetDeltas.length ? Math.max(...groundOffsetDeltas) : 0).toFixed(4)),
     members,
   };
 }
