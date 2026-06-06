@@ -9577,6 +9577,10 @@ function setCityRevealRoadGridAlphaFactor(factor) {
   cityRevealRoadGridAlphaFactor = THREE.MathUtils.clamp(Number(factor) || 0, 0, 1);
 }
 
+function isCityRevealBackplateActive() {
+  return cityRevealBackplate.visible && cityRevealBackplateMat.opacity > 0.002;
+}
+
 function startCityRevealWireframe() {
   if (!cityRevealWireframeEnabled) {
     clearCityRevealWire();
@@ -9653,8 +9657,10 @@ function renderCityRevealWireframe() {
   const previousAutoClear = renderer.autoClear;
   renderer.autoClear = false;
   renderer.clearDepth();
-  renderer.render(cityRevealOverlayScene, cityRevealOverlayCamera);
-  renderer.clearDepth();
+  if (isCityRevealBackplateActive()) {
+    renderer.render(cityRevealOverlayScene, cityRevealOverlayCamera);
+    renderer.clearDepth();
+  }
   renderer.render(cityRevealWireScene, camera);
   renderer.render(cityRevealRoadGridScene, camera);
   renderer.autoClear = previousAutoClear;
@@ -9784,7 +9790,7 @@ function syncCityRevealComposerPasses() {
   syncMainBuildingVerticalRevealOverlayLayers();
   syncGlobalFxaaPass();
   if (cityRevealSkyPass) cityRevealSkyPass.enabled = wireActive;
-  if (cityRevealOverlayPass) cityRevealOverlayPass.enabled = wireActive;
+  if (cityRevealOverlayPass) cityRevealOverlayPass.enabled = wireActive && isCityRevealBackplateActive();
   if (cityRevealWirePass) cityRevealWirePass.enabled = wireActive;
   if (cityRevealRoadGridPass) cityRevealRoadGridPass.enabled = wireActive;
   if (cityRevealWireFxaaPass) cityRevealWireFxaaPass.enabled = false;
@@ -9827,7 +9833,7 @@ function renderCityRevealCompositeFrame() {
 
   renderCityRevealSkyBase();
   renderer.autoClear = false;
-  renderer.render(cityRevealOverlayScene, cityRevealOverlayCamera);
+  if (isCityRevealBackplateActive()) renderer.render(cityRevealOverlayScene, cityRevealOverlayCamera);
   renderer.render(cityRevealWireScene, camera);
   renderer.render(cityRevealRoadGridScene, camera);
   const realRevealActive = isCityRevealRealRevealActive();
