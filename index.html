@@ -7377,6 +7377,10 @@ const TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED = true;
 const TRON_RUNNER_DYNAMIC_REFLECTION_MAX_OPACITY = 0.34;
 const TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE = 0.58;
 const TRON_RUNNER_DYNAMIC_REFLECTION_Y = 0.018;
+const TRON_RUNNER_REVEAL_ENABLED = true;
+const TRON_RUNNER_REVEAL_DURATION_MS = 700;
+const TRON_RUNNER_REVEAL_SCAN_RADIUS = 1.35;
+const TRON_RUNNER_REVEAL_SCAN_TUBE = 0.035;
 const tronRunnerWalker = new THREE.Group();
 tronRunnerWalker.name = 'tron-runner-walker';
 tronRunnerWalker.visible = false;
@@ -7593,6 +7597,14 @@ const tronRunnerRealShadowMat = new THREE.ShadowMaterial({
   depthWrite: false,
   transparent: true,
 });
+const tronRunnerRevealScanMat = new THREE.MeshBasicMaterial({
+  color: 0x62f7ff,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  opacity: 0,
+  toneMapped: false,
+  transparent: true,
+});
 const tronRunnerRealShadowLight = new THREE.DirectionalLight(0xc7fbff, 0.16);
 tronRunnerRealShadowLight.name = 'tron-runner-real-shadow-light';
 tronRunnerRealShadowLight.castShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
@@ -7631,6 +7643,7 @@ const tronRunnerParts = {
   realShadowLight: tronRunnerRealShadowLight,
   realShadowTarget: tronRunnerRealShadowTarget,
   realShadowCasterCount: 0,
+  revealScan: null,
   keyLight: null,
   leftRim: null,
   rightRim: null,
@@ -7716,6 +7729,19 @@ const tronRunnerState = {
   keyLightZ: 1.9,
   rimLightX: 1.9,
   fillLightY: 0.9,
+  reveal: {
+    enabled: TRON_RUNNER_REVEAL_ENABLED,
+    mode: 'post-city-scan-pulse',
+    durationMs: TRON_RUNNER_REVEAL_DURATION_MS,
+    phase: 'waiting-city',
+    progress: 0,
+    rawProgress: 0,
+    active: false,
+    complete: false,
+    visibleFactor: 0,
+    scanVisible: false,
+    scanY: 0,
+  },
 };
 const tronRunnerBox = new THREE.Box3();
 const tronRunnerSize = new THREE.Vector3();
@@ -7745,6 +7771,11 @@ let tronRunnerScale = 1;
 let tronRunnerWalkSpeed = TRON_RUNNER_DEFAULT_SPEED;
 let tronRunnerAnimationSpeed = 1;
 let tronRunnerStrideSync = 1;
+let tronRunnerRevealStartedAt = 0;
+let tronRunnerRevealProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
+let tronRunnerRevealRawProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
+let tronRunnerRevealActive = false;
+let tronRunnerRevealComplete = !TRON_RUNNER_REVEAL_ENABLED;
 const tronRunnerAutonomy = {
   initialized: false,
   waypointIndex: 0,
@@ -7792,6 +7823,182 @@ function tronRunnerModelLineIntensity(lineAmount, keyAmount, rimAmount, keyShape
     0,
     0.62
   );
+}
+
+function tronRunnerRevealEase(t) {
+  const clamped = THREE.MathUtils.clamp(t, 0, 1);
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
+function makeTronRunnerRevealScan() {
+  const scan = new THREE.Group();
+  scan.name = 'tron-runner-reveal-scan';
+  scan.visible = false;
+  const outer = new THREE.Mesh(
+    new THREE.TorusGeometry(TRON_RUNNER_REVEAL_SCAN_RADIUS, TRON_RUNNER_REVEAL_SCAN_TUBE, 8, 96),
+    tronRunnerRevealScanMat
+  );
+  outer.name = 'tron-runner-reveal-scan-ring';
+  outer.rotation.x = Math.PI / 2;
+  outer.scale.set(1, 0.58, 1);
+  scan.add(outer);
+  const inner = new THREE.Mesh(
+    new THREE.TorusGeometry(TRON_RUNNER_REVEAL_SCAN_RADIUS * 0.72, TRON_RUNNER_REVEAL_SCAN_TUBE * 0.55, 8, 72),
+    tronRunnerRevealScanMat.clone()
+  );
+  inner.name = 'tron-runner-reveal-scan-core';
+  inner.rotation.x = Math.PI / 2;
+  inner.scale.set(1, 0.52, 1);
+  scan.add(inner);
+  return scan;
+}
+
+function setTronRunnerRevealState(progress, rawProgress, phase, active, complete) {
+  tronRunnerRevealProgress = THREE.MathUtils.clamp(progress, 0, 1);
+  tronRunnerRevealRawProgress = THREE.MathUtils.clamp(rawProgress, 0, 1);
+  tronRunnerRevealActive = Boolean(active);
+  tronRunnerRevealComplete = Boolean(complete);
+  tronRunnerState.reveal = {
+    enabled: TRON_RUNNER_REVEAL_ENABLED,
+    mode: 'post-city-scan-pulse',
+    durationMs: TRON_RUNNER_REVEAL_DURATION_MS,
+    phase,
+    progress: Number(tronRunnerRevealProgress.toFixed(3)),
+    rawProgress: Number(tronRunnerRevealRawProgress.toFixed(3)),
+    active: tronRunnerRevealActive,
+    complete: tronRunnerRevealComplete,
+    visibleFactor: Number(tronRunnerRevealProgress.toFixed(3)),
+    scanVisible: Boolean(tronRunnerParts.revealScan?.visible),
+    scanY: Number((tronRunnerParts.revealScan?.position.y ?? 0).toFixed(3)),
+  };
+}
+
+function resetTronRunnerRevealState() {
+  tronRunnerRevealStartedAt = 0;
+  const complete = !TRON_RUNNER_REVEAL_ENABLED;
+  setTronRunnerRevealState(complete ? 1 : 0, complete ? 1 : 0, complete ? 'complete' : 'waiting-city', false, complete);
+  applyTronRunnerRevealVisuals();
+}
+
+function startTronRunnerReveal(now) {
+  if (!TRON_RUNNER_REVEAL_ENABLED) {
+    setTronRunnerRevealState(1, 1, 'complete', false, true);
+    applyTronRunnerRevealVisuals();
+    return;
+  }
+  tronRunnerRevealStartedAt = now;
+  setTronRunnerRevealState(0, 0, 'active', true, false);
+  applyTronRunnerRevealVisuals();
+}
+
+function baseMaterialOpacity(material, fallback = 1) {
+  return Number.isFinite(material?.userData?.tronRunnerBaseOpacity)
+    ? material.userData.tronRunnerBaseOpacity
+    : fallback;
+}
+
+function applyTronRunnerRevealVisuals() {
+  const factor = TRON_RUNNER_REVEAL_ENABLED ? tronRunnerRevealProgress : 1;
+  const visibleFactor = THREE.MathUtils.clamp(factor, 0, 1);
+  const complete = visibleFactor >= 0.995 || !TRON_RUNNER_REVEAL_ENABLED;
+  const activePulse = tronRunnerRevealActive ? Math.sin(Math.PI * tronRunnerRevealRawProgress) : 0;
+  const shouldRenderRunner = Boolean(tronRunnerState.ready && (visibleFactor > 0.002 || tronRunnerRevealActive || complete));
+  tronRunnerWalker.visible = shouldRenderRunner;
+
+  for (const material of tronRunnerParts.materials) {
+    const baseEmissive = Number.isFinite(material.userData.tronRunnerBaseEmissiveIntensity)
+      ? material.userData.tronRunnerBaseEmissiveIntensity
+      : material.emissiveIntensity;
+    material.transparent = !complete;
+    material.opacity = complete ? 1 : visibleFactor;
+    material.depthWrite = complete;
+    material.emissiveIntensity = complete
+      ? baseEmissive
+      : baseEmissive * (0.2 + visibleFactor * 0.8) + activePulse * 0.72;
+    material.needsUpdate = true;
+  }
+
+  const groundShadow = tronRunnerParts.groundShadow;
+  if (groundShadow?.material) {
+    const baseOpacity = baseMaterialOpacity(groundShadow.material, groundShadow.material.opacity);
+    groundShadow.visible = TRON_RUNNER_GROUND_SHADOW_ENABLED && baseOpacity * visibleFactor > 0.002;
+    groundShadow.material.opacity = baseOpacity * visibleFactor;
+    groundShadow.material.needsUpdate = true;
+  }
+
+  const realShadowReceiver = tronRunnerParts.realShadowReceiver;
+  if (realShadowReceiver?.material) {
+    const baseOpacity = baseMaterialOpacity(realShadowReceiver.material, realShadowReceiver.material.opacity);
+    realShadowReceiver.visible = baseOpacity * visibleFactor > 0.002;
+    realShadowReceiver.material.opacity = baseOpacity * visibleFactor;
+    realShadowReceiver.material.needsUpdate = true;
+    tronRunnerState.realShadowOpacity = baseOpacity * visibleFactor;
+  }
+
+  if (tronRunnerParts.realShadowLight) {
+    tronRunnerParts.realShadowLight.visible = TRON_RUNNER_REAL_SHADOW_ENABLED && visibleFactor > 0.01;
+    tronRunnerParts.realShadowLight.intensity = TRON_RUNNER_REAL_SHADOW_ENABLED ? 0.16 * visibleFactor : 0;
+  }
+
+  const reflectionGroup = tronRunnerParts.reflectionGroup;
+  const reflectionFactor = complete ? 1 : visibleFactor;
+  if (reflectionGroup) reflectionGroup.visible = reflectionGroup.visible && reflectionFactor > 0.01;
+  for (const material of tronRunnerParts.reflectionMaterials || []) {
+    const baseOpacity = baseMaterialOpacity(material, material.opacity);
+    material.opacity = baseOpacity * reflectionFactor;
+    material.needsUpdate = true;
+  }
+  tronRunnerState.dynamicReflectionOpacity *= reflectionFactor;
+
+  const scan = tronRunnerParts.revealScan;
+  if (scan) {
+    const scanPulse = tronRunnerRevealActive ? Math.sin(Math.PI * tronRunnerRevealRawProgress) : 0;
+    const scanY = TRON_RUNNER_TARGET_HEIGHT * THREE.MathUtils.lerp(0.06, 0.98, tronRunnerRevealProgress);
+    scan.position.y = scanY;
+    scan.visible = tronRunnerRevealActive && scanPulse > 0.02;
+    scan.scale.setScalar(1 + scanPulse * 0.08);
+    scan.traverse((object) => {
+      if (!object.material) return;
+      object.material.opacity = scanPulse * (object.name.includes('core') ? 0.48 : 0.72);
+      object.material.needsUpdate = true;
+    });
+  }
+
+  const phase = tronRunnerRevealComplete ? 'complete' : tronRunnerRevealActive ? 'active' : 'waiting-city';
+  setTronRunnerRevealState(visibleFactor, tronRunnerRevealRawProgress, phase, tronRunnerRevealActive, tronRunnerRevealComplete);
+}
+
+function updateTronRunnerReveal(now) {
+  if (!tronRunnerState.ready) {
+    resetTronRunnerRevealState();
+    return;
+  }
+  if (!TRON_RUNNER_REVEAL_ENABLED) {
+    setTronRunnerRevealState(1, 1, 'complete', false, true);
+    applyTronRunnerRevealVisuals();
+    return;
+  }
+  if (!cityRevealComplete) {
+    if (tronRunnerRevealStartedAt || tronRunnerRevealProgress > 0 || tronRunnerRevealComplete) resetTronRunnerRevealState();
+    else applyTronRunnerRevealVisuals();
+    return;
+  }
+  if (!tronRunnerRevealStartedAt && !tronRunnerRevealComplete) {
+    startTronRunnerReveal(now);
+    return;
+  }
+  if (tronRunnerRevealComplete) {
+    applyTronRunnerRevealVisuals();
+    return;
+  }
+  const raw = THREE.MathUtils.clamp((now - tronRunnerRevealStartedAt) / TRON_RUNNER_REVEAL_DURATION_MS, 0, 1);
+  const progress = tronRunnerRevealEase(raw);
+  if (raw >= 1) {
+    setTronRunnerRevealState(1, 1, 'complete', false, true);
+  } else {
+    setTronRunnerRevealState(progress, raw, 'active', true, false);
+  }
+  applyTronRunnerRevealVisuals();
 }
 
 function applyTronRunnerVisualControls() {
@@ -7852,6 +8059,8 @@ function applyTronRunnerVisualControls() {
     material.envMapIntensity = materialReflect * 0.12;
     material.metalness = materialMetalness;
     material.roughness = materialRoughness;
+    material.userData.tronRunnerBaseOpacity = 1;
+    material.userData.tronRunnerBaseEmissiveIntensity = material.emissiveIntensity;
     material.needsUpdate = true;
   }
   if (tronRunnerParts.activeAction) {
@@ -7878,11 +8087,13 @@ function applyTronRunnerVisualControls() {
       TRON_RUNNER_CONTACT_SHADOW_ROUNDNESS * tronRunnerFloorReflectionScale,
       tronRunnerFloorReflectionScale
     );
-    tronRunnerParts.groundShadow.material.opacity = THREE.MathUtils.clamp(
+    const groundShadowOpacity = THREE.MathUtils.clamp(
       floorAmount * 0.78,
       0,
       TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY
     );
+    tronRunnerParts.groundShadow.material.userData.tronRunnerBaseOpacity = groundShadowOpacity;
+    tronRunnerParts.groundShadow.material.opacity = groundShadowOpacity;
     tronRunnerParts.groundShadow.material.needsUpdate = true;
   }
   if (tronRunnerParts.realShadowReceiver) {
@@ -7890,6 +8101,7 @@ function applyTronRunnerVisualControls() {
       ? THREE.MathUtils.clamp(TRON_RUNNER_REAL_SHADOW_BASE_OPACITY + floorAmount * 0.34, 0, 0.36)
       : 0;
     tronRunnerParts.realShadowReceiver.visible = realShadowOpacity > 0.001;
+    tronRunnerParts.realShadowReceiver.material.userData.tronRunnerBaseOpacity = realShadowOpacity;
     tronRunnerParts.realShadowReceiver.material.opacity = realShadowOpacity;
     tronRunnerParts.realShadowReceiver.material.needsUpdate = true;
     tronRunnerState.realShadowOpacity = realShadowOpacity;
@@ -7903,6 +8115,7 @@ function applyTronRunnerVisualControls() {
   tronRunnerParts.leftRim = null;
   tronRunnerParts.rightRim = null;
   tronRunnerParts.lowFill = null;
+  applyTronRunnerRevealVisuals();
 }
 
 function tronRunnerDynamicReflectionOpacity() {
@@ -7935,6 +8148,7 @@ function updateTronRunnerDynamicReflection() {
     group.scale.set(1, -TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE, 1);
   }
   for (const material of materials) {
+    material.userData.tronRunnerBaseOpacity = opacity;
     material.opacity = opacity;
     material.needsUpdate = true;
   }
@@ -8220,6 +8434,7 @@ function updateTronRunnerAutonomyState(route, movedDistance = 0, collision = fal
 
 function updateTronRunnerAutonomyFootsteps(movedDistance, dt) {
   if (!TRON_RUNNER_FREE_ROAM_FOOTSTEPS_ENABLED) return;
+  if (TRON_RUNNER_REVEAL_ENABLED && !tronRunnerRevealComplete) return;
   const contact = tronRunnerWalkCycleFootstep(movedDistance);
   tronRunnerAutonomy.lastFootstepSyncSource = contact.syncSource || 'walk-cycle';
   if (!contact.triggered) return;
@@ -8455,6 +8670,7 @@ async function loadTronRunner() {
     tronRunnerParts.reflectionMaterials = [];
     tronRunnerParts.realShadowCasterCount = 0;
     tronRunnerParts.dynamicReflectionMeshCount = 0;
+    tronRunnerParts.revealScan = null;
     model.traverse((obj) => {
       if (!obj.isMesh) return;
       obj.frustumCulled = false;
@@ -8467,6 +8683,8 @@ async function loadTronRunner() {
     });
     fitTronRunnerModel(model);
     tronRunnerWalker.add(model);
+    const revealScan = makeTronRunnerRevealScan();
+    tronRunnerWalker.add(revealScan);
 
     let reflectionGroup = null;
     let reflectionModel = null;
@@ -8535,6 +8753,7 @@ async function loadTronRunner() {
     tronRunnerParts.reflectionActiveAction = null;
     tronRunnerParts.realShadowLight = tronRunnerRealShadowLight;
     tronRunnerParts.realShadowTarget = tronRunnerRealShadowTarget;
+    tronRunnerParts.revealScan = revealScan;
     tronRunnerParts.keyLight = null;
     tronRunnerParts.leftRim = null;
     tronRunnerParts.rightRim = null;
@@ -8544,11 +8763,11 @@ async function loadTronRunner() {
 
     tronRunnerElapsed = 0;
     tronRunnerYaw = 0;
-    tronRunnerWalker.visible = true;
-    updateTronRunner(0);
     tronRunnerState.ready = true;
     tronRunnerState.loaded = 1;
     tronRunnerState.error = '';
+    resetTronRunnerRevealState();
+    updateTronRunner(0);
     return true;
   } catch (error) {
     tronRunnerWalker.visible = false;
@@ -8605,17 +8824,20 @@ function updateTronRunner(dt) {
   if (tronRunnerParts.groundShadow) {
     if (!TRON_RUNNER_GROUND_SHADOW_ENABLED) {
       tronRunnerParts.groundShadow.visible = false;
+      tronRunnerParts.groundShadow.material.userData.tronRunnerBaseOpacity = 0;
       tronRunnerParts.groundShadow.material.opacity = 0;
       return;
     }
     const phasePulse = tronRunnerElapsed * 4.65;
     const c = Math.cos(phasePulse);
     const shadowPulse = 1 + (1 - Math.abs(c)) * THREE.MathUtils.clamp(tronRunnerShadowPulse, 0, 1.5);
-    tronRunnerParts.groundShadow.material.opacity = THREE.MathUtils.clamp(
+    const groundShadowOpacity = THREE.MathUtils.clamp(
       tronRunnerFloorReflection * 0.78 * shadowPulse,
       0,
       TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY
     );
+    tronRunnerParts.groundShadow.material.userData.tronRunnerBaseOpacity = groundShadowOpacity;
+    tronRunnerParts.groundShadow.material.opacity = groundShadowOpacity;
   }
 }
 
@@ -12879,6 +13101,7 @@ function tick(now) {
   if (domeMesh.visible) domeMat.uniforms.uTime.value = now * 0.001 * SKY_ANIMATION_SPEED;
   flushHexTileBatchUploads();
   updateCityRevealWireframe(now);
+  updateTronRunnerReveal(now);
   updateMainFacadeVerticalReveal();
   renderCityRevealCompositeFrame();
 }
