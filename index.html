@@ -8813,7 +8813,9 @@ const CITY_REVEAL_ROAD_FADE_BANDS = 8;
 const CITY_REVEAL_ROAD_FADE_MAX_OPACITY = 0.42;
 const CITY_REVEAL_ROAD_GRID_BASE_OPACITY = 0.58;
 const CITY_REVEAL_ROAD_GRID_RENDER_ORDER = 2;
-const CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS = 0;
+const CITY_REVEAL_ROAD_SOLID_FADE_ENABLED = false;
+const CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS = 64;
+const CITY_REVEAL_ROAD_GRID_PROCEDURAL = true;
 const CITY_REVEAL_ROAD_GRID_FADE_BANDS = 10;
 const CITY_REVEAL_ROAD_PERIMETER_EPS = 0.05;
 const CITY_REVEAL_SIDEWALK_WIRE_ROAD_CLEARANCE = 0.08;
@@ -8864,6 +8866,69 @@ const cityRevealRoadGridMat = registerCityRevealWireMaterial(new THREE.LineBasic
 }), CITY_REVEAL_ROAD_GRID_BASE_OPACITY);
 cityRevealRoadGridMat.userData.cityRevealRoadGridMaterial = true;
 cityRevealRoadGridMat.depthTest = true;
+const cityRevealRoadGridShaderMat = registerCityRevealWireMaterial(new THREE.ShaderMaterial({
+  uniforms: {
+    uColor: { value: new THREE.Color(cityRevealWireColor) },
+    uOpacity: { value: CITY_REVEAL_ROAD_GRID_BASE_OPACITY },
+    uXSpacing: { value: GRID_BLOCK },
+    uZSpacing: { value: GRID_BLOCK },
+    uRoadHalfW: { value: 1 },
+    uRoadMinZ: { value: -1 },
+    uRoadMaxZ: { value: 1 },
+    uFadeWidth: { value: 1 },
+    uPerimeterEps: { value: CITY_REVEAL_ROAD_PERIMETER_EPS },
+  },
+  vertexShader: `
+    varying vec3 vWorldPosition;
+
+    void main() {
+      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+      vWorldPosition = worldPosition.xyz;
+      gl_Position = projectionMatrix * viewMatrix * worldPosition;
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 uColor;
+    uniform float uOpacity;
+    uniform float uXSpacing;
+    uniform float uZSpacing;
+    uniform float uRoadHalfW;
+    uniform float uRoadMinZ;
+    uniform float uRoadMaxZ;
+    uniform float uFadeWidth;
+    uniform float uPerimeterEps;
+    varying vec3 vWorldPosition;
+
+    float gridLine(vec2 coord) {
+      vec2 derivative = max(fwidth(coord), vec2(0.0001));
+      vec2 grid = abs(fract(coord - 0.5) - 0.5) / derivative;
+      return 1.0 - min(min(grid.x, grid.y), 1.0);
+    }
+
+    void main() {
+      vec2 gridCoord = vec2(vWorldPosition.x / uXSpacing, vWorldPosition.z / uZSpacing);
+      float line = gridLine(gridCoord);
+      float xOverflow = max(0.0, abs(vWorldPosition.x) - uRoadHalfW) / max(uFadeWidth, 0.001);
+      float zOverflow = max(0.0, max(uRoadMinZ - vWorldPosition.z, vWorldPosition.z - uRoadMaxZ)) / max(uFadeWidth, 0.001);
+      float fade = clamp(1.0 - max(xOverflow, zOverflow), 0.0, 1.0);
+      float roadEdgeX = abs(abs(vWorldPosition.x) - uRoadHalfW);
+      float roadEdgeZ = min(abs(vWorldPosition.z - uRoadMinZ), abs(vWorldPosition.z - uRoadMaxZ));
+      float perimeterMask = smoothstep(uPerimeterEps, uPerimeterEps * 3.0, min(roadEdgeX, roadEdgeZ));
+      float alpha = line * fade * perimeterMask * uOpacity;
+      if (alpha <= 0.002) discard;
+      gl_FragColor = vec4(uColor, alpha);
+    }
+  `,
+  transparent: true,
+  depthWrite: false,
+  depthTest: true,
+  blending: THREE.AdditiveBlending,
+  toneMapped: false,
+  extensions: { derivatives: true },
+}), CITY_REVEAL_ROAD_GRID_BASE_OPACITY);
+cityRevealRoadGridShaderMat.userData.cityRevealRoadGridMaterial = true;
+cityRevealRoadGridShaderMat.userData.cityRevealRoadGridShaderMaterial = true;
+cityRevealRoadGridShaderMat.depthTest = true;
 
 function cityRevealRoadGridMaterialForBand(band) {
   const safeBand = THREE.MathUtils.clamp(Math.round(band), 1, CITY_REVEAL_ROAD_GRID_FADE_BANDS);
@@ -9217,6 +9282,7 @@ function addCityRevealRoadGridSegment(buckets, a, b, y, bounds) {
 }
 
 function addCityRevealRoadFade(y) {
+  if (!CITY_REVEAL_ROAD_SOLID_FADE_ENABLED) return;
   if (cityRevealRoadGridExtraWidth() <= 0) return;
   const bounds = cityRevealRoadGridBounds();
   const fadeWidth = bounds.fadeWidth / CITY_REVEAL_ROAD_FADE_BANDS;
@@ -9236,7 +9302,43 @@ function addCityRevealRoadFade(y) {
   }
 }
 
+function updateCityRevealRoadGridShaderUniforms(bounds) {
+  const density = Math.max(1, cityRevealWireframeDensity);
+  cityRevealRoadGridShaderMat.uniforms.uOpacity.value = cityRevealRoadGridShaderMat.opacity;
+  cityRevealRoadGridShaderMat.uniforms.uXSpacing.value = (GRID_BLOCK * 1.5) / density;
+  cityRevealRoadGridShaderMat.uniforms.uZSpacing.value = (GRID_BLOCK * 3) / density;
+  cityRevealRoadGridShaderMat.uniforms.uRoadHalfW.value = bounds.roadHalfW;
+  cityRevealRoadGridShaderMat.uniforms.uRoadMinZ.value = bounds.roadMinZ;
+  cityRevealRoadGridShaderMat.uniforms.uRoadMaxZ.value = bounds.roadMaxZ;
+  cityRevealRoadGridShaderMat.uniforms.uFadeWidth.value = bounds.fadeWidth;
+  cityRevealRoadGridShaderMat.uniforms.uPerimeterEps.value = CITY_REVEAL_ROAD_PERIMETER_EPS;
+}
+
+function addCityRevealRoadGridPlane(y) {
+  const bounds = cityRevealRoadGridBounds();
+  const width = bounds.gridHalfW * 2;
+  const depth = bounds.gridMaxZ - bounds.gridMinZ;
+  const gridY = y + 0.06;
+  const gridZ = (bounds.gridMinZ + bounds.gridMaxZ) * 0.5;
+  updateCityRevealRoadGridShaderUniforms(bounds);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, depth, 1, 1), cityRevealRoadGridShaderMat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(0, gridY, gridZ);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = CITY_REVEAL_ROAD_GRID_RENDER_ORDER;
+  mesh.userData.cityRevealRole = 'road-grid';
+  mesh.userData.cityRevealRoadGridProcedural = true;
+  setCityRevealObjectBoxBounds(mesh, 0.01, depth, gridY, gridZ);
+  cityRevealRoadGridGroup.add(mesh);
+  cityRevealRoadGridObjects.push(mesh);
+  return mesh;
+}
+
 function addCityRevealRoadGrid(y) {
+  if (CITY_REVEAL_ROAD_GRID_PROCEDURAL) {
+    addCityRevealRoadGridPlane(y);
+    return;
+  }
   const bounds = cityRevealRoadGridBounds();
   const gridY = y + 0.06;
   const density = Math.max(1, cityRevealWireframeDensity);
@@ -9573,6 +9675,9 @@ function setCityRevealWireAlpha(alpha) {
     const roadGridFactor = material.userData.cityRevealRoadGridMaterial ? cityRevealRoadGridAlphaFactor : 1;
     material.opacity = material.userData.baseOpacity * cityRevealWireOpacityScale * cityRevealWireAlpha * roadGridFactor;
     material.visible = material.opacity > 0.002;
+    if (material.userData.cityRevealRoadGridShaderMaterial && material.uniforms?.uOpacity) {
+      material.uniforms.uOpacity.value = material.opacity;
+    }
   }
   cityRevealWireGroup.visible = cityRevealWireAlpha > 0.002;
   cityRevealRoadGridGroup.visible = cityRevealWireAlpha > 0.002;
@@ -12612,8 +12717,10 @@ window.__tronInspect = () => ({
   cityRevealRoadGridBaseOpacity: cityRevealRoadGridMat.userData.baseOpacity,
   cityRevealRoadGridRenderOrder: CITY_REVEAL_ROAD_GRID_RENDER_ORDER,
   cityRevealRoadGridLayerOrder: 'below-real-city',
-  cityRevealRoadGridMode: 'road-only-no-fade',
+  cityRevealRoadGridMode: CITY_REVEAL_ROAD_GRID_PROCEDURAL ? 'procedural-extended-wire-grid' : 'extended-wire-grid',
   cityRevealRoadGridAlphaFactor,
+  cityRevealRoadSolidFadeEnabled: CITY_REVEAL_ROAD_SOLID_FADE_ENABLED,
+  cityRevealRoadGridProcedural: CITY_REVEAL_ROAD_GRID_PROCEDURAL,
   cityRevealRoadGridExtraBlocks: CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS,
   cityRevealRoadGridZExtraBlocks: CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS,
   cityRevealRoadGridFadeEnabled: CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS > 0,
