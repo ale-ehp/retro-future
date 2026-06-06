@@ -5218,6 +5218,13 @@ const cityRevealMainLedDepthMat = new THREE.MeshBasicMaterial({
   depthTest: true,
   side: THREE.DoubleSide,
 });
+const cityRevealMainLedDepthScene = new THREE.Scene();
+const cityRevealMainLedDepthGroup = new THREE.Group();
+const cityRevealMainLedDepthProxyGeometry = new THREE.BoxGeometry(1, 1, 1);
+const cityRevealMainLedDepthProxyObjects = [];
+let cityRevealMainLedDepthProxyVisibleCount = 0;
+let cityRevealMainLedDepthProxyLastMode = 'idle';
+cityRevealMainLedDepthScene.add(cityRevealMainLedDepthGroup);
 const MAIN_FACADE_VERTICAL_REVEAL_FEATHER = 18;
 const mainFacadeVerticalRevealState = {
   enabled: false,
@@ -6105,6 +6112,75 @@ function syncMainBuildingVerticalRevealOverlayLayers() {
   for (const object of mainBuildingVerticalRevealOverlayObjects) {
     setCityRevealMainLedObjectLayer(object, layer);
   }
+}
+
+function ensureCityRevealMainLedDepthProxyCount(count) {
+  while (cityRevealMainLedDepthProxyObjects.length < count) {
+    const proxy = new THREE.Mesh(cityRevealMainLedDepthProxyGeometry, cityRevealMainLedDepthMat);
+    proxy.name = 'city-reveal-main-led-depth-proxy';
+    proxy.frustumCulled = false;
+    proxy.visible = false;
+    cityRevealMainLedDepthProxyObjects.push(proxy);
+    cityRevealMainLedDepthGroup.add(proxy);
+  }
+}
+
+function cityRevealMainLedDepthSources() {
+  const sources = [];
+  for (const record of [...sideBuildingRecords, ...mainBuildingRecords]) {
+    const collider = record.collider;
+    if (!record.mesh || !collider) continue;
+    const width = Math.abs(collider.hw * 2);
+    const height = Math.abs(collider.h);
+    const depth = Math.abs(collider.hd * 2);
+    if (![width, height, depth].every(Number.isFinite) || width <= 0.001 || height <= 0.001 || depth <= 0.001) continue;
+    sources.push({
+      visible: record.mesh.visible !== false,
+      x: Number.isFinite(collider.x) ? collider.x : record.mesh.position.x,
+      y: (Number.isFinite(collider.y) ? collider.y : record.mesh.position.y) + height * 0.5,
+      z: Number.isFinite(collider.z) ? collider.z : record.mesh.position.z,
+      width,
+      height,
+      depth,
+    });
+  }
+  for (const record of bridgeRecords) {
+    if (!record.mesh) continue;
+    const width = Math.abs(record.baseWidth * record.mesh.scale.x);
+    const height = Math.abs(record.baseHeight * record.mesh.scale.y);
+    const depth = Math.abs(record.baseDepth * record.mesh.scale.z);
+    if (![width, height, depth].every(Number.isFinite) || width <= 0.001 || height <= 0.001 || depth <= 0.001) continue;
+    sources.push({
+      visible: record.mesh.visible !== false,
+      x: record.mesh.position.x,
+      y: record.mesh.position.y + height * 0.5,
+      z: record.mesh.position.z,
+      width,
+      height,
+      depth,
+    });
+  }
+  return sources;
+}
+
+function syncCityRevealMainLedDepthProxies() {
+  const sources = cityRevealMainLedDepthSources();
+  ensureCityRevealMainLedDepthProxyCount(sources.length);
+  cityRevealMainLedDepthProxyVisibleCount = 0;
+  for (let i = 0; i < cityRevealMainLedDepthProxyObjects.length; i++) {
+    const proxy = cityRevealMainLedDepthProxyObjects[i];
+    const source = sources[i];
+    if (!source || !source.visible) {
+      proxy.visible = false;
+      continue;
+    }
+    proxy.position.set(source.x, source.y, source.z);
+    proxy.scale.set(source.width, source.height, source.depth);
+    proxy.visible = true;
+    cityRevealMainLedDepthProxyVisibleCount++;
+  }
+  cityRevealMainLedDepthGroup.visible = cityRevealMainLedDepthProxyVisibleCount > 0;
+  return cityRevealMainLedDepthProxyVisibleCount;
 }
 
 function elStrip(p1, p2, color = PAL.tealLight, thickness = 0.04, options = {}) {
@@ -9668,9 +9744,16 @@ function renderCityRevealMainLedRevealOverlay(rendererInstance, target = null) {
   domeMesh.visible = false;
   rendererInstance.clearDepth();
   camera.layers.set(0);
-  scene.overrideMaterial = cityRevealMainLedDepthMat;
-  rendererInstance.render(scene, camera);
-  scene.overrideMaterial = previousOverrideMaterial;
+  const depthProxyCount = syncCityRevealMainLedDepthProxies();
+  if (depthProxyCount > 0) {
+    cityRevealMainLedDepthProxyLastMode = 'proxy-depth-mask';
+    rendererInstance.render(cityRevealMainLedDepthScene, camera);
+  } else {
+    cityRevealMainLedDepthProxyLastMode = 'scene-depth-mask-fallback';
+    scene.overrideMaterial = cityRevealMainLedDepthMat;
+    rendererInstance.render(scene, camera);
+    scene.overrideMaterial = previousOverrideMaterial;
+  }
   camera.layers.set(CITY_REVEAL_MAIN_LED_LAYER);
   rendererInstance.render(scene, camera);
   camera.layers.mask = previousCameraLayerMask;
@@ -12405,6 +12488,9 @@ window.__tronInspect = () => ({
   cityRevealMainLedRevealDelayMs: CITY_REVEAL_MAIN_LED_VISIBLE_DELAY_MS,
   cityRevealMainLedRevealElapsedMs: cityRevealMainLedRevealElapsedMs(),
   cityRevealMainLedRevealReady: isCityRevealMainLedRevealOverlayActive(),
+  cityRevealMainLedOverlayMode: cityRevealMainLedDepthProxyLastMode,
+  cityRevealMainLedDepthProxyObjects: cityRevealMainLedDepthProxyObjects.length,
+  cityRevealMainLedDepthProxyVisibleObjects: cityRevealMainLedDepthProxyVisibleCount,
   cityRevealWireAaMode: 'global-fxaa-only',
   cityRevealWireAaActive: Boolean(cityRevealWireFxaaPass?.enabled),
   cityRevealWireAaLocalized: false,
