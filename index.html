@@ -315,8 +315,8 @@
   }
   .control-panel { display: none; }
   .control-panel.active { display: block; }
-  #hud-controls .control-tab:not([data-tab="movement"]):not([data-tab="bloom-fx"]):not([data-tab="led-glow-fx"]):not([data-tab="central-building-leds"]):not([data-tab="wireframe-fx"]):not([data-tab="atmosphere-fx"]):not([data-tab="performance-fx"]),
-  #hud-controls .control-panel:not([data-panel="movement"]):not([data-panel="bloom-fx"]):not([data-panel="led-glow-fx"]):not([data-panel="central-building-leds"]):not([data-panel="wireframe-fx"]):not([data-panel="atmosphere-fx"]):not([data-panel="performance-fx"]) {
+  #hud-controls .control-tab:not([data-tab="movement"]):not([data-tab="character"]):not([data-tab="bloom-fx"]):not([data-tab="led-glow-fx"]):not([data-tab="central-building-leds"]):not([data-tab="wireframe-fx"]):not([data-tab="atmosphere-fx"]):not([data-tab="performance-fx"]),
+  #hud-controls .control-panel:not([data-panel="movement"]):not([data-panel="character"]):not([data-panel="bloom-fx"]):not([data-panel="led-glow-fx"]):not([data-panel="central-building-leds"]):not([data-panel="wireframe-fx"]):not([data-panel="atmosphere-fx"]):not([data-panel="performance-fx"]) {
     display: none !important;
   }
   .control-box {
@@ -495,6 +495,7 @@
     <button class="control-tab" type="button" data-tab="bridges">Ponti</button>
     <button class="control-tab" type="button" data-tab="camera">Camera</button>
     <button class="control-tab active" type="button" data-tab="movement">Movimento</button>
+    <button class="control-tab" type="button" data-tab="character">Personaggio</button>
     <button class="control-tab" type="button" data-tab="buildings">Palazzi</button>
     <button class="control-tab" type="button" data-tab="bloom-fx">Bloom</button>
     <button class="control-tab" type="button" data-tab="led-glow-fx">Glow LED</button>
@@ -744,6 +745,53 @@
       <button class="control-action save-tab-settings" type="button" data-save-tab="movement">Salva scheda Movimento</button>
     </section>
 
+    <section class="control-panel" data-panel="character">
+      <div class="control-box">
+        <div class="control-section">Luminosita</div>
+        <label class="control-row"><span class="control-head"><span>Corpo</span><output id="runner-body-light-val">1.00</output></span><input id="runner-body-light" type="range" min="0" max="3" step="0.01" value="1" /></label>
+        <label class="control-row"><span class="control-head"><span>Linee figura</span><output id="runner-line-light-val">1.00</output></span><input id="runner-line-light" type="range" min="0" max="3" step="0.01" value="1" /></label>
+        <label class="control-row"><span class="control-head"><span>Luce frontale</span><output id="runner-key-light-val">1.00</output></span><input id="runner-key-light" type="range" min="0" max="3" step="0.01" value="1" /></label>
+        <label class="control-row"><span class="control-head"><span>Rim laterale</span><output id="runner-rim-light-val">1.00</output></span><input id="runner-rim-light" type="range" min="0" max="3" step="0.01" value="1" /></label>
+        <label class="control-row"><span class="control-head"><span>Fill basso</span><output id="runner-fill-light-val">1.00</output></span><input id="runner-fill-light" type="range" min="0" max="3" step="0.01" value="1" /></label>
+        <label class="control-row"><span class="control-head"><span>Riflesso corpo</span><output id="runner-material-reflect-val">0.06</output></span><input id="runner-material-reflect" type="range" min="0" max="2" step="0.01" value="0.06" /></label>
+        <label class="control-row"><span class="control-head"><span>Metalness</span><output id="runner-material-metalness-val">0.12</output></span><input id="runner-material-metalness" type="range" min="0" max="1" step="0.01" value="0.12" /></label>
+        <label class="control-row"><span class="control-head"><span>Roughness</span><output id="runner-material-roughness-val">0.92</output></span><input id="runner-material-roughness" type="range" min="0.02" max="1" step="0.01" value="0.92" /></label>
+      </div>
+
+      <div class="control-box">
+        <div class="control-section">Ombre pavimento</div>
+        <label class="control-row"><span class="control-head"><span>Ombra contatto</span><output id="runner-floor-reflection-val">0.16</output></span><input id="runner-floor-reflection" type="range" min="0" max="0.35" step="0.01" value="0.16" /></label>
+        <label class="control-row"><span class="control-head"><span>Scala ombra</span><output id="runner-floor-reflection-scale-val">0.55</output></span><input id="runner-floor-reflection-scale" type="range" min="0.2" max="3" step="0.01" value="0.55" /></label>
+        <label class="control-row"><span class="control-head"><span>Morbidezza ombra</span><output id="runner-shadow-softness-val">1.15</output></span><input id="runner-shadow-softness" type="range" min="0.2" max="1.6" step="0.01" value="1.15" /></label>
+        <label class="control-row"><span class="control-head"><span>Pulse ombra</span><output id="runner-shadow-pulse-val">0.08</output></span><input id="runner-shadow-pulse" type="range" min="0" max="0.5" step="0.01" value="0.08" /></label>
+        <label class="control-row"><span class="control-head"><span>Tinta ciano</span><output id="runner-shadow-cyan-val">0.00</output></span><input id="runner-shadow-cyan" type="range" min="0" max="0.35" step="0.01" value="0" /></label>
+        <label class="control-row"><span class="control-head"><span>Offset X</span><output id="runner-shadow-offset-x-val">0.00</output></span><input id="runner-shadow-offset-x" type="range" min="-2.5" max="2.5" step="0.01" value="0" /></label>
+        <label class="control-row"><span class="control-head"><span>Offset Z</span><output id="runner-shadow-offset-z-val">0.20</output></span><input id="runner-shadow-offset-z" type="range" min="-2.5" max="2.5" step="0.01" value="0.2" /></label>
+      </div>
+
+      <div class="control-box">
+        <div class="control-section">Bilanciamento self-lit</div>
+        <label class="control-row"><span class="control-head"><span>Forza frontale</span><output id="runner-key-light-y-val">3.10</output></span><input id="runner-key-light-y" type="range" min="0" max="8" step="0.01" value="3.1" /></label>
+        <label class="control-row"><span class="control-head"><span>Profondita materiale</span><output id="runner-key-light-z-val">1.90</output></span><input id="runner-key-light-z" type="range" min="-4" max="6" step="0.01" value="1.9" /></label>
+        <label class="control-row"><span class="control-head"><span>Bordo figura</span><output id="runner-rim-light-x-val">1.90</output></span><input id="runner-rim-light-x" type="range" min="0.1" max="5" step="0.01" value="1.9" /></label>
+        <label class="control-row"><span class="control-head"><span>Fill materiale</span><output id="runner-fill-light-y-val">0.90</output></span><input id="runner-fill-light-y" type="range" min="0" max="5" step="0.01" value="0.9" /></label>
+      </div>
+
+      <div class="control-box">
+        <div class="control-section">Dimensione</div>
+        <label class="control-row"><span class="control-head"><span>Scala personaggio</span><output id="runner-scale-val">1.00</output></span><input id="runner-scale" type="range" min="0.35" max="2" step="0.01" value="1" /></label>
+      </div>
+
+      <div class="control-box">
+        <div class="control-section">Camminata</div>
+        <label class="control-row"><span class="control-head"><span>Velocita animazione</span><output id="runner-animation-speed-val">1.00x</output></span><input id="runner-animation-speed" type="range" min="0.2" max="2.5" step="0.01" value="1" /></label>
+        <label class="control-row"><span class="control-head"><span>Spostamento suolo</span><output id="runner-walk-speed-val">2.80</output></span><input id="runner-walk-speed" type="range" min="0.1" max="12" step="0.05" value="2.8" /></label>
+        <label class="control-row"><span class="control-head"><span>Aggancio passi</span><output id="runner-stride-sync-val">1.00</output></span><input id="runner-stride-sync" type="range" min="0" max="1" step="0.01" value="1" /></label>
+      </div>
+
+      <button class="control-action save-tab-settings" type="button" data-save-tab="character">Salva scheda Personaggio</button>
+    </section>
+
     <section class="control-panel" data-panel="buildings">
       <div class="control-section">Geometria e layout</div>
       <label class="control-row"><span class="control-head"><span>Larghezza X 12 palazzi</span><output id="side-building-width-scale-val">2.00</output></span><input id="side-building-width-scale" type="range" min="0.4" max="8" step="0.01" value="2" /></label>
@@ -914,6 +962,7 @@ ti auguriamo un esperienza illuminante.</p>
     "three/addons/postprocessing/FXAAPass.js": "./FXAAPass.js",
     "three/addons/postprocessing/Pass.js": "./Pass.js",
     "three/addons/postprocessing/MaskPass.js": "./MaskPass.js",
+    "three/addons/loaders/GLTFLoader.js": "./GLTFLoader.js",
     "three/addons/shaders/CopyShader.js": "./CopyShader.js",
     "three/addons/shaders/LuminosityHighPassShader.js": "./LuminosityHighPassShader.js",
     "three/addons/shaders/FXAAShader.js": "./FXAAShader.js",
@@ -995,6 +1044,14 @@ try {
   usePost = true;
 } catch (e) {
   console.warn('Postprocessing unavailable, falling back to plain renderer:', e.message);
+}
+
+let RunnerGLTFLoader = null;
+try {
+  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+  RunnerGLTFLoader = GLTFLoader;
+} catch (e) {
+  console.warn('Runner GLB support unavailable:', e.message);
 }
 
 // ---------- palette ----------
@@ -1282,6 +1339,52 @@ const controlEls = {
   headMotionSmoothingVal: document.getElementById('head-motion-smoothing-val'),
   mouseSensitivity: document.getElementById('mouse-sensitivity'),
   mouseSensitivityVal: document.getElementById('mouse-sensitivity-val'),
+  runnerBodyLight: document.getElementById('runner-body-light'),
+  runnerBodyLightVal: document.getElementById('runner-body-light-val'),
+  runnerLineLight: document.getElementById('runner-line-light'),
+  runnerLineLightVal: document.getElementById('runner-line-light-val'),
+  runnerKeyLight: document.getElementById('runner-key-light'),
+  runnerKeyLightVal: document.getElementById('runner-key-light-val'),
+  runnerRimLight: document.getElementById('runner-rim-light'),
+  runnerRimLightVal: document.getElementById('runner-rim-light-val'),
+  runnerFillLight: document.getElementById('runner-fill-light'),
+  runnerFillLightVal: document.getElementById('runner-fill-light-val'),
+  runnerMaterialReflect: document.getElementById('runner-material-reflect'),
+  runnerMaterialReflectVal: document.getElementById('runner-material-reflect-val'),
+  runnerMaterialMetalness: document.getElementById('runner-material-metalness'),
+  runnerMaterialMetalnessVal: document.getElementById('runner-material-metalness-val'),
+  runnerMaterialRoughness: document.getElementById('runner-material-roughness'),
+  runnerMaterialRoughnessVal: document.getElementById('runner-material-roughness-val'),
+  runnerFloorReflection: document.getElementById('runner-floor-reflection'),
+  runnerFloorReflectionVal: document.getElementById('runner-floor-reflection-val'),
+  runnerFloorReflectionScale: document.getElementById('runner-floor-reflection-scale'),
+  runnerFloorReflectionScaleVal: document.getElementById('runner-floor-reflection-scale-val'),
+  runnerShadowSoftness: document.getElementById('runner-shadow-softness'),
+  runnerShadowSoftnessVal: document.getElementById('runner-shadow-softness-val'),
+  runnerShadowPulse: document.getElementById('runner-shadow-pulse'),
+  runnerShadowPulseVal: document.getElementById('runner-shadow-pulse-val'),
+  runnerShadowCyan: document.getElementById('runner-shadow-cyan'),
+  runnerShadowCyanVal: document.getElementById('runner-shadow-cyan-val'),
+  runnerShadowOffsetX: document.getElementById('runner-shadow-offset-x'),
+  runnerShadowOffsetXVal: document.getElementById('runner-shadow-offset-x-val'),
+  runnerShadowOffsetZ: document.getElementById('runner-shadow-offset-z'),
+  runnerShadowOffsetZVal: document.getElementById('runner-shadow-offset-z-val'),
+  runnerKeyLightY: document.getElementById('runner-key-light-y'),
+  runnerKeyLightYVal: document.getElementById('runner-key-light-y-val'),
+  runnerKeyLightZ: document.getElementById('runner-key-light-z'),
+  runnerKeyLightZVal: document.getElementById('runner-key-light-z-val'),
+  runnerRimLightX: document.getElementById('runner-rim-light-x'),
+  runnerRimLightXVal: document.getElementById('runner-rim-light-x-val'),
+  runnerFillLightY: document.getElementById('runner-fill-light-y'),
+  runnerFillLightYVal: document.getElementById('runner-fill-light-y-val'),
+  runnerScale: document.getElementById('runner-scale'),
+  runnerScaleVal: document.getElementById('runner-scale-val'),
+  runnerAnimationSpeed: document.getElementById('runner-animation-speed'),
+  runnerAnimationSpeedVal: document.getElementById('runner-animation-speed-val'),
+  runnerWalkSpeed: document.getElementById('runner-walk-speed'),
+  runnerWalkSpeedVal: document.getElementById('runner-walk-speed-val'),
+  runnerStrideSync: document.getElementById('runner-stride-sync'),
+  runnerStrideSyncVal: document.getElementById('runner-stride-sync-val'),
   sideBuildingBrightness: document.getElementById('side-building-brightness'),
   sideBuildingBrightnessVal: document.getElementById('side-building-brightness-val'),
   sideBuildingHue: document.getElementById('side-building-hue'),
@@ -7016,6 +7119,652 @@ buildSideBuildingEdgeBatch(overlayGroup);
 
 buildStaticFacadeStripBatches();
 
+// ---------- Runner character from character-mockups/walk-rigged-runner.html ----------
+const TRON_RUNNER_MODEL_URL = 'character-mockups/assets/models/soldier.glb';
+const TRON_RUNNER_ENABLED = true;
+const TRON_RUNNER_TARGET_HEIGHT = 8.66;
+const TRON_RUNNER_DEFAULT_SPEED = 2.8;
+const TRON_RUNNER_ROUTE_OFFSET = 0.25;
+const TRON_RUNNER_GROUND_OFFSET = 0.04;
+const TRON_RUNNER_SIDEWALK_SIGN = -1;
+const TRON_RUNNER_SIDEWALK_INSET = 7.2;
+const TRON_RUNNER_SUIT_TEXTURE_MODE = 'procedural-uv-suit';
+const TRON_RUNNER_SUIT_COLOR = new THREE.Color(0xffffff);
+const TRON_RUNNER_SUIT_EMISSIVE = new THREE.Color(0xffffff);
+const TRON_RUNNER_SHADOW_COLOR = new THREE.Color(0x000305);
+const TRON_RUNNER_SHADOW_CYAN_COLOR = new THREE.Color(0x031a1f);
+const TRON_RUNNER_LIGHTING_MODE = 'self-lit-material';
+const TRON_RUNNER_GROUND_SHADOW_ENABLED = true;
+const TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY = 0.28;
+const tronRunnerWalker = new THREE.Group();
+tronRunnerWalker.name = 'tron-runner-walker';
+tronRunnerWalker.visible = false;
+scene.add(tronRunnerWalker);
+
+function makeTronRunnerShadowTexture(softness = 0.9) {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const center = size * 0.5;
+  const soft = THREE.MathUtils.clamp(softness, 0.2, 1.6);
+  const midStop = THREE.MathUtils.clamp(0.18 + soft * 0.16, 0.18, 0.44);
+  const falloffStop = THREE.MathUtils.clamp(0.52 + soft * 0.22, 0.52, 0.92);
+  const gradient = ctx.createRadialGradient(center, center, size * 0.04, center, center, size * 0.49);
+  gradient.addColorStop(0, 'rgb(255,255,255)');
+  gradient.addColorStop(midStop, 'rgb(190,190,190)');
+  gradient.addColorStop(falloffStop, 'rgb(58,58,58)');
+  gradient.addColorStop(1, 'rgb(0,0,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy?.() || 1);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function configureTronRunnerSuitTexture(texture) {
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1, 1);
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 1);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function makeTronRunnerSuitTexture() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const base = ctx.createLinearGradient(0, 0, 0, size);
+  base.addColorStop(0, '#071016');
+  base.addColorStop(0.45, '#04080b');
+  base.addColorStop(1, '#020405');
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (let i = 0; i < 1400; i += 1) {
+    const x = (Math.sin(i * 17.234) * 0.5 + 0.5) * size;
+    const y = (Math.sin(i * 31.741 + 3.2) * 0.5 + 0.5) * size;
+    const a = 0.012 + ((i % 7) * 0.003);
+    ctx.fillStyle = `rgba(91, 156, 166, ${a})`;
+    ctx.fillRect(x, y, 1.4, 1.4);
+  }
+  ctx.restore();
+
+  ctx.lineJoin = 'miter';
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.58)';
+  ctx.lineWidth = 8;
+  [
+    [52, 42, 164, 176],
+    [296, 42, 164, 176],
+    [76, 216, 360, 108],
+    [46, 360, 178, 110],
+    [288, 360, 178, 110],
+  ].forEach(([x, y, w, h]) => ctx.strokeRect(x, y, w, h));
+
+  ctx.strokeStyle = 'rgba(94, 170, 184, 0.16)';
+  ctx.lineWidth = 2;
+  [
+    [56, 46, 156, 168],
+    [300, 46, 156, 168],
+    [80, 220, 352, 100],
+    [50, 364, 170, 102],
+    [292, 364, 170, 102],
+  ].forEach(([x, y, w, h]) => ctx.strokeRect(x, y, w, h));
+
+  ctx.strokeStyle = 'rgba(82, 247, 255, 0.14)';
+  ctx.lineWidth = 1.5;
+  [[256, 28, 256, 482], [36, 252, 476, 252], [112, 332, 218, 464], [400, 332, 294, 464]].forEach(([x1, y1, x2, y2]) => {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  });
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return configureTronRunnerSuitTexture(texture);
+}
+
+function makeTronRunnerSuitEmissiveTexture() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const body = ctx.createLinearGradient(0, 0, 0, size);
+  body.addColorStop(0, '#1b2a30');
+  body.addColorStop(0.5, '#0c1519');
+  body.addColorStop(1, '#070a0c');
+  ctx.fillStyle = body;
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.strokeStyle = 'rgba(46, 84, 92, 0.78)';
+  ctx.lineWidth = 5;
+  [
+    [56, 46, 156, 168],
+    [300, 46, 156, 168],
+    [80, 220, 352, 100],
+    [50, 364, 170, 102],
+    [292, 364, 170, 102],
+  ].forEach(([x, y, w, h]) => ctx.strokeRect(x, y, w, h));
+
+  ctx.fillStyle = 'rgba(32, 58, 64, 0.68)';
+  [
+    [70, 60, 128, 140],
+    [314, 60, 128, 140],
+    [96, 236, 320, 68],
+    [68, 380, 132, 72],
+    [312, 380, 132, 72],
+  ].forEach(([x, y, w, h]) => ctx.fillRect(x, y, w, h));
+
+  function glowLine(x1, y1, x2, y2, width = 3, alpha = 0.88) {
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.shadowColor = 'rgba(53, 230, 255, 0.78)';
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = `rgba(88, 248, 255, ${alpha})`;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = `rgba(235, 255, 255, ${Math.min(1, alpha + 0.08)})`;
+    ctx.lineWidth = Math.max(1, width * 0.38);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  glowLine(256, 30, 256, 206, 3.2, 0.9);
+  glowLine(256, 250, 256, 482, 3.2, 0.9);
+  glowLine(78, 116, 212, 116, 2.8, 0.72);
+  glowLine(300, 116, 434, 116, 2.8, 0.72);
+  glowLine(82, 252, 430, 252, 3, 0.82);
+  glowLine(108, 344, 214, 456, 2.6, 0.7);
+  glowLine(404, 344, 298, 456, 2.6, 0.7);
+  glowLine(112, 52, 76, 196, 2.4, 0.58);
+  glowLine(400, 52, 436, 196, 2.4, 0.58);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return configureTronRunnerSuitTexture(texture);
+}
+
+let tronRunnerShadowTexture = makeTronRunnerShadowTexture();
+let tronRunnerShadowTextureSoftness = 0.9;
+const tronRunnerSuitTexture = makeTronRunnerSuitTexture();
+const tronRunnerSuitEmissiveTexture = makeTronRunnerSuitEmissiveTexture();
+
+const tronRunnerSuitMat = new THREE.MeshStandardMaterial({
+  color: TRON_RUNNER_SUIT_COLOR,
+  map: tronRunnerSuitTexture,
+  emissive: TRON_RUNNER_SUIT_EMISSIVE,
+  emissiveMap: tronRunnerSuitEmissiveTexture,
+  emissiveIntensity: 0.44,
+  roughness: 0.72,
+  metalness: 0.48,
+  envMap: reflectionEnvMap,
+  envMapIntensity: 0.02,
+  toneMapped: false,
+});
+const tronRunnerShadowMat = new THREE.MeshBasicMaterial({
+  color: TRON_RUNNER_SHADOW_COLOR,
+  alphaMap: tronRunnerShadowTexture,
+  blending: THREE.NormalBlending,
+  depthWrite: false,
+  opacity: 0.16,
+  toneMapped: false,
+  transparent: true,
+});
+const tronRunnerParts = {
+  model: null,
+  mixer: null,
+  skeletonGlow: null,
+  groundShadow: null,
+  keyLight: null,
+  leftRim: null,
+  rightRim: null,
+  lowFill: null,
+  materials: [],
+  actions: {},
+  activeAction: null,
+  actionNames: null,
+};
+const tronRunnerState = {
+  enabled: TRON_RUNNER_ENABLED,
+  ready: false,
+  loaded: 0,
+  error: '',
+  action: 'Walk',
+  clip: '',
+  targetHeight: TRON_RUNNER_TARGET_HEIGHT,
+  doorHalfHeight: 0,
+  surfaceY: 0,
+  route: null,
+  surface: 'sidewalk',
+  scale: 1,
+  walkSpeed: TRON_RUNNER_DEFAULT_SPEED,
+  animationSpeed: 1,
+  effectiveAnimationSpeed: 1,
+  strideSync: 1,
+  materialReflect: 0.06,
+  materialMetalness: 0.12,
+  materialRoughness: 0.92,
+  shadowSoftness: 1.15,
+  shadowPulse: 0.08,
+  shadowCyan: 0,
+  shadowOffsetX: 0,
+  shadowOffsetZ: 0.2,
+  groundShadowEnabled: TRON_RUNNER_GROUND_SHADOW_ENABLED,
+  contactShadowMaxOpacity: TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY,
+  runnerLightingMode: TRON_RUNNER_LIGHTING_MODE,
+  suitTextureMode: TRON_RUNNER_SUIT_TEXTURE_MODE,
+  selfLightIntensity: 0.08,
+  modelLineIntensity: 0.42,
+  pointLightCount: 0,
+  keyLightY: 3.1,
+  keyLightZ: 1.9,
+  rimLightX: 1.9,
+  fillLightY: 0.9,
+};
+const tronRunnerBox = new THREE.Box3();
+const tronRunnerSize = new THREE.Vector3();
+let tronRunnerElapsed = 0;
+let tronRunnerYaw = 0;
+let tronRunnerTargetYaw = 0;
+let tronRunnerBodyLight = 1;
+let tronRunnerLineLight = 1;
+let tronRunnerKeyLight = 1;
+let tronRunnerRimLight = 1;
+let tronRunnerFillLight = 1;
+let tronRunnerMaterialReflect = 0.06;
+let tronRunnerMaterialMetalness = 0.12;
+let tronRunnerMaterialRoughness = 0.92;
+let tronRunnerFloorReflection = 0.16;
+let tronRunnerFloorReflectionScale = 0.55;
+let tronRunnerShadowSoftness = 1.15;
+let tronRunnerShadowPulse = 0.08;
+let tronRunnerShadowCyan = 0;
+let tronRunnerShadowOffsetX = 0;
+let tronRunnerShadowOffsetZ = 0.2;
+let tronRunnerKeyLightY = 3.1;
+let tronRunnerKeyLightZ = 1.9;
+let tronRunnerRimLightX = 1.9;
+let tronRunnerFillLightY = 0.9;
+let tronRunnerScale = 1;
+let tronRunnerWalkSpeed = TRON_RUNNER_DEFAULT_SPEED;
+let tronRunnerAnimationSpeed = 1;
+let tronRunnerStrideSync = 1;
+
+function tronRunnerDoorHalfHeight() {
+  return sideDoorHeight * sideDoorScale * 0.5;
+}
+
+function tronRunnerEffectiveAnimationSpeed() {
+  const speedRatio = THREE.MathUtils.clamp(tronRunnerWalkSpeed / Math.max(0.001, TRON_RUNNER_DEFAULT_SPEED), 0.05, 8);
+  return tronRunnerAnimationSpeed * THREE.MathUtils.lerp(1, speedRatio, tronRunnerStrideSync);
+}
+
+function tronRunnerSuitLightIntensity(bodyAmount, fillAmount, materialDepth = 0.5) {
+  return THREE.MathUtils.clamp(
+    0.035 + bodyAmount * 0.025 + fillAmount * 0.006 + materialDepth * 0.018,
+    0.025,
+    0.16
+  );
+}
+
+function tronRunnerModelLineIntensity(lineAmount, keyAmount, rimAmount, keyShape = 1, rimShape = 1) {
+  if (lineAmount <= 0.001) return 0;
+  return THREE.MathUtils.clamp(
+    0.08 + lineAmount * 0.09 + keyAmount * 0.025 * keyShape + rimAmount * 0.018 * rimShape,
+    0,
+    0.62
+  );
+}
+
+function applyTronRunnerVisualControls() {
+  const bodyAmount = THREE.MathUtils.clamp(tronRunnerBodyLight, 0, 3);
+  const keyAmount = THREE.MathUtils.clamp(tronRunnerKeyLight, 0, 3);
+  const rimAmount = THREE.MathUtils.clamp(tronRunnerRimLight, 0, 3);
+  const fillAmount = THREE.MathUtils.clamp(tronRunnerFillLight, 0, 3);
+  const keyShape = THREE.MathUtils.clamp(tronRunnerKeyLightY / 3.1, 0, 1.8);
+  const rimShape = THREE.MathUtils.clamp(tronRunnerRimLightX / 1.9, 0.1, 1.8);
+  const fillShape = THREE.MathUtils.clamp(tronRunnerFillLightY / 0.9, 0, 1.8);
+  const materialDepth = THREE.MathUtils.clamp((tronRunnerKeyLightZ + 4) / 10, 0, 1);
+  const selfLightIntensity = tronRunnerSuitLightIntensity(bodyAmount, fillAmount, materialDepth);
+  const modelLineIntensity = tronRunnerModelLineIntensity(tronRunnerLineLight, keyAmount, rimAmount, keyShape, rimShape);
+  const floorAmount = TRON_RUNNER_GROUND_SHADOW_ENABLED
+    ? THREE.MathUtils.clamp(tronRunnerFloorReflection, 0, 1.2)
+    : 0;
+  const materialReflect = THREE.MathUtils.clamp(tronRunnerMaterialReflect, 0, 2);
+  const materialMetalness = THREE.MathUtils.clamp(tronRunnerMaterialMetalness, 0, 1);
+  const materialRoughness = THREE.MathUtils.clamp(tronRunnerMaterialRoughness, 0.02, 1);
+  const shadowSoftness = THREE.MathUtils.clamp(tronRunnerShadowSoftness, 0.2, 1.6);
+  const shadowCyan = THREE.MathUtils.clamp(tronRunnerShadowCyan, 0, 1);
+  tronRunnerWalker.scale.setScalar(Math.max(0.01, tronRunnerScale));
+  tronRunnerState.scale = tronRunnerScale;
+  tronRunnerState.targetHeight = TRON_RUNNER_TARGET_HEIGHT * tronRunnerScale;
+  tronRunnerState.walkSpeed = tronRunnerWalkSpeed;
+  tronRunnerState.animationSpeed = tronRunnerAnimationSpeed;
+  tronRunnerState.effectiveAnimationSpeed = tronRunnerEffectiveAnimationSpeed();
+  tronRunnerState.strideSync = tronRunnerStrideSync;
+  tronRunnerState.materialReflect = materialReflect;
+  tronRunnerState.materialMetalness = materialMetalness;
+  tronRunnerState.materialRoughness = materialRoughness;
+  tronRunnerState.shadowSoftness = shadowSoftness;
+  tronRunnerState.shadowPulse = tronRunnerShadowPulse;
+  tronRunnerState.shadowCyan = shadowCyan;
+  tronRunnerState.shadowOffsetX = tronRunnerShadowOffsetX;
+  tronRunnerState.shadowOffsetZ = tronRunnerShadowOffsetZ;
+  tronRunnerState.groundShadowEnabled = TRON_RUNNER_GROUND_SHADOW_ENABLED;
+  tronRunnerState.contactShadowMaxOpacity = TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY;
+  tronRunnerState.runnerLightingMode = TRON_RUNNER_LIGHTING_MODE;
+  tronRunnerState.suitTextureMode = TRON_RUNNER_SUIT_TEXTURE_MODE;
+  tronRunnerState.selfLightIntensity = selfLightIntensity;
+  tronRunnerState.modelLineIntensity = modelLineIntensity;
+  tronRunnerState.pointLightCount = 0;
+  tronRunnerState.keyLightY = tronRunnerKeyLightY;
+  tronRunnerState.keyLightZ = tronRunnerKeyLightZ;
+  tronRunnerState.rimLightX = tronRunnerRimLightX;
+  tronRunnerState.fillLightY = tronRunnerFillLightY;
+
+  for (const material of tronRunnerParts.materials) {
+    material.map = tronRunnerSuitTexture;
+    material.emissiveMap = tronRunnerSuitEmissiveTexture;
+    material.color.copy(TRON_RUNNER_SUIT_COLOR).multiplyScalar(0.82 + bodyAmount * 0.035 + materialDepth * 0.035);
+    material.emissive.copy(TRON_RUNNER_SUIT_EMISSIVE);
+    material.emissiveIntensity = THREE.MathUtils.clamp(0.34 + selfLightIntensity * 1.05 + modelLineIntensity * 0.78, 0.18, 1);
+    material.envMapIntensity = materialReflect * 0.12;
+    material.metalness = materialMetalness;
+    material.roughness = materialRoughness;
+    material.needsUpdate = true;
+  }
+  if (tronRunnerParts.activeAction) {
+    tronRunnerParts.activeAction.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
+  }
+  if (tronRunnerParts.skeletonGlow) {
+    tronRunnerParts.skeletonGlow.material.visible = tronRunnerLineLight > 0.001;
+    tronRunnerParts.skeletonGlow.material.opacity = modelLineIntensity;
+  }
+  if (tronRunnerParts.groundShadow) {
+    tronRunnerParts.groundShadow.visible = TRON_RUNNER_GROUND_SHADOW_ENABLED && floorAmount > 0.001;
+    if (Math.abs(shadowSoftness - tronRunnerShadowTextureSoftness) > 0.001) {
+      const oldTexture = tronRunnerShadowTexture;
+      tronRunnerShadowTexture = makeTronRunnerShadowTexture(shadowSoftness);
+      tronRunnerShadowTextureSoftness = shadowSoftness;
+      tronRunnerParts.groundShadow.material.alphaMap = tronRunnerShadowTexture;
+      oldTexture?.dispose?.();
+    }
+    tronRunnerParts.groundShadow.material.color
+      .copy(TRON_RUNNER_SHADOW_COLOR)
+      .lerp(TRON_RUNNER_SHADOW_CYAN_COLOR, shadowCyan);
+    tronRunnerParts.groundShadow.position.set(tronRunnerShadowOffsetX, 0.025, tronRunnerShadowOffsetZ);
+    tronRunnerParts.groundShadow.scale.set(
+      tronRunnerFloorReflectionScale,
+      0.36 * tronRunnerFloorReflectionScale,
+      tronRunnerFloorReflectionScale
+    );
+    tronRunnerParts.groundShadow.material.opacity = THREE.MathUtils.clamp(
+      floorAmount * 0.78,
+      0,
+      TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY
+    );
+    tronRunnerParts.groundShadow.material.needsUpdate = true;
+  }
+  tronRunnerParts.keyLight = null;
+  tronRunnerParts.leftRim = null;
+  tronRunnerParts.rightRim = null;
+  tronRunnerParts.lowFill = null;
+}
+
+function tronRunnerSurfaceYAt(x = tronRunnerWalker.position.x, z = tronRunnerWalker.position.z) {
+  const padHit = basePadAtPoint(x, z);
+  const topY = padHit?.topY ?? roadTileTopY();
+  tronRunnerState.surface = padHit ? 'sidewalk' : 'road-fallback';
+  tronRunnerState.surfaceY = topY + TRON_RUNNER_GROUND_OFFSET;
+  return tronRunnerState.surfaceY;
+}
+
+function tronRunnerRouteSpec() {
+  const minZ = dynamicRoadCenter - dynamicRoadLength * 0.5 + GRID_BLOCK * 5;
+  const maxZ = dynamicRoadCenter + dynamicRoadLength * 0.5 - GRID_BLOCK * 5;
+  const anchorZ = THREE.MathUtils.clamp((playerSpawn?.z ?? maxZ) - GRID_BLOCK * 8, minZ + GRID_BLOCK * 12, maxZ - GRID_BLOCK * 4);
+  const sidewalkRecords = sideBuildingRecords
+    .filter((record) => record.sign === TRON_RUNNER_SIDEWALK_SIGN && record.basePad?.hitPolygon?.length)
+    .sort((a, b) => Math.abs(a.mesh.position.z - anchorZ) - Math.abs(b.mesh.position.z - anchorZ));
+  const sidewalkRecord = sidewalkRecords[0];
+  const pad = sidewalkRecord?.basePad;
+  const padLocalXs = pad?.innerHitPolygon?.length ? pad.innerHitPolygon.map(([x]) => x) : pad?.hitPolygon?.map(([x]) => x);
+  const padLocalZs = pad?.innerHitPolygon?.length ? pad.innerHitPolygon.map(([, z]) => z) : pad?.hitPolygon?.map(([, z]) => z);
+  const padMinZ = padLocalZs?.length ? Math.min(...padLocalZs) + pad.border.position.z : minZ;
+  const padMaxZ = padLocalZs?.length ? Math.max(...padLocalZs) + pad.border.position.z : maxZ;
+  const padInnerEdgeX = padLocalXs?.length
+    ? (TRON_RUNNER_SIDEWALK_SIGN < 0 ? Math.max(...padLocalXs) : Math.min(...padLocalXs))
+    : 0;
+  const x = pad
+    ? pad.border.position.x + padInnerEdgeX + TRON_RUNNER_SIDEWALK_SIGN * TRON_RUNNER_SIDEWALK_INSET
+    : TRON_RUNNER_SIDEWALK_SIGN * Math.max(10, roadHalf() + streetEdgeWidth + TRON_RUNNER_SIDEWALK_INSET);
+  const padStartZ = THREE.MathUtils.clamp(anchorZ - GRID_BLOCK * 1.6, padMinZ + 2, padMaxZ - 2);
+  const padEndZ = THREE.MathUtils.clamp(anchorZ - GRID_BLOCK * 6.2, padMinZ + 2, padMaxZ - 2);
+  const zA = Math.abs(padStartZ - padEndZ) > 4 ? padStartZ : THREE.MathUtils.clamp(padMaxZ - 3, minZ, maxZ);
+  const zB = Math.abs(padStartZ - padEndZ) > 4 ? padEndZ : THREE.MathUtils.clamp(padMinZ + 3, minZ, maxZ);
+  return {
+    x,
+    zA,
+    zB,
+    padZ: sidewalkRecord?.mesh.position.z ?? null,
+  };
+}
+
+function fitTronRunnerModel(model) {
+  const initialBox = new THREE.Box3().setFromObject(model);
+  const initialSize = initialBox.getSize(new THREE.Vector3());
+  model.scale.setScalar(TRON_RUNNER_TARGET_HEIGHT / Math.max(initialSize.y, 0.001));
+  model.scale.x *= 0.74;
+  model.scale.z *= 0.70;
+  const fittedBox = new THREE.Box3().setFromObject(model);
+  model.position.set(
+    -(fittedBox.min.x + fittedBox.max.x) * 0.5,
+    -fittedBox.min.y,
+    -(fittedBox.min.z + fittedBox.max.z) * 0.5
+  );
+}
+
+function playTronRunnerAction(kind = 'run') {
+  const actionName = tronRunnerParts.actionNames?.[kind] || tronRunnerParts.actionNames?.idle;
+  const next = actionName ? tronRunnerParts.actions?.[actionName] : null;
+  if (!next || tronRunnerParts.activeAction === next) return;
+  const previous = tronRunnerParts.activeAction;
+  next.reset();
+  next.enabled = true;
+  next.setEffectiveTimeScale(tronRunnerEffectiveAnimationSpeed());
+  next.setEffectiveWeight(1);
+  next.fadeIn(0.16);
+  next.play();
+  if (previous) previous.fadeOut(0.16);
+  tronRunnerParts.activeAction = next;
+  tronRunnerState.clip = actionName;
+  tronRunnerState.action = kind === 'run' ? 'Run' : kind === 'walk' ? 'Walk' : 'Idle';
+}
+
+async function loadTronRunner() {
+  if (!TRON_RUNNER_ENABLED || !RunnerGLTFLoader) {
+    tronRunnerState.error = RunnerGLTFLoader ? '' : 'GLTF loader unavailable';
+    return false;
+  }
+  const route = tronRunnerRouteSpec();
+  tronRunnerState.route = route;
+  tronRunnerState.doorHalfHeight = tronRunnerDoorHalfHeight();
+  tronRunnerState.surfaceY = tronRunnerSurfaceYAt(route.x, route.zA);
+  try {
+    const gltf = await new Promise((resolve, reject) => {
+      new RunnerGLTFLoader().load(TRON_RUNNER_MODEL_URL, resolve, undefined, reject);
+    });
+    tronRunnerWalker.clear();
+    const model = gltf.scene;
+    model.name = 'soldier-rigged-runner-city';
+    model.rotation.y = Math.PI;
+    tronRunnerParts.materials = [];
+    model.traverse((obj) => {
+      if (!obj.isMesh) return;
+      obj.frustumCulled = false;
+      obj.material = tronRunnerSuitMat.clone();
+      tronRunnerParts.materials.push(obj.material);
+    });
+    fitTronRunnerModel(model);
+    tronRunnerWalker.add(model);
+
+    const helper = new THREE.SkeletonHelper(model);
+    helper.material.color.setHex(0x35e6ff);
+    helper.material.transparent = true;
+    helper.material.opacity = 0.18;
+    helper.material.depthWrite = false;
+    helper.frustumCulled = false;
+    tronRunnerWalker.add(helper);
+
+    const groundShadow = new THREE.Mesh(new THREE.CircleGeometry(1.15, 48), tronRunnerShadowMat);
+    groundShadow.rotation.x = -Math.PI / 2;
+    groundShadow.position.set(0, 0.025, 0.2);
+    groundShadow.scale.set(1, 0.36, 1);
+    tronRunnerWalker.add(groundShadow);
+
+    const mixer = new THREE.AnimationMixer(model);
+    const actions = {};
+    for (const clip of gltf.animations) {
+      const action = mixer.clipAction(clip);
+      action.enabled = true;
+      actions[clip.name] = action;
+    }
+    const idleName = gltf.animations.find((clip) => /idle/i.test(clip.name))?.name || gltf.animations[0]?.name;
+    const walkName = gltf.animations.find((clip) => /walk/i.test(clip.name))?.name || idleName;
+    const runName = gltf.animations.find((clip) => /run/i.test(clip.name))?.name || walkName;
+    tronRunnerParts.actionNames = { idle: idleName, walk: walkName, run: runName };
+    tronRunnerParts.model = model;
+    tronRunnerParts.mixer = mixer;
+    tronRunnerParts.actions = actions;
+    tronRunnerParts.skeletonGlow = helper;
+    tronRunnerParts.groundShadow = groundShadow;
+    tronRunnerParts.keyLight = null;
+    tronRunnerParts.leftRim = null;
+    tronRunnerParts.rightRim = null;
+    tronRunnerParts.lowFill = null;
+    playTronRunnerAction('walk');
+    applyTronRunnerVisualControls();
+
+    tronRunnerElapsed = 0;
+    tronRunnerYaw = 0;
+    tronRunnerWalker.visible = true;
+    updateTronRunner(0);
+    tronRunnerState.ready = true;
+    tronRunnerState.loaded = 1;
+    tronRunnerState.error = '';
+    return true;
+  } catch (error) {
+    tronRunnerWalker.visible = false;
+    tronRunnerState.ready = false;
+    tronRunnerState.error = error?.message || String(error);
+    console.warn('[tron-runner]', tronRunnerState.error);
+    return false;
+  }
+}
+
+function updateTronRunner(dt) {
+  if (!tronRunnerState.ready && !tronRunnerParts.model) return;
+  tronRunnerElapsed += Math.min(dt, 0.05);
+  const route = tronRunnerState.route || tronRunnerRouteSpec();
+  const span = Math.max(1, Math.abs(route.zA - route.zB));
+  const loopDistance = span * 2;
+  const phase = ((TRON_RUNNER_ROUTE_OFFSET + tronRunnerElapsed * tronRunnerWalkSpeed / loopDistance) % 1 + 1) % 1;
+  const forwardLeg = phase < 0.5;
+  const t = forwardLeg ? phase * 2 : (1 - phase) * 2;
+  const z = THREE.MathUtils.lerp(route.zA, route.zB, t);
+  const directionZ = route.zB >= route.zA
+    ? (forwardLeg ? 1 : -1)
+    : (forwardLeg ? -1 : 1);
+  tronRunnerTargetYaw = Math.atan2(0, directionZ);
+  tronRunnerYaw = lerpAngle(tronRunnerYaw, tronRunnerTargetYaw, Math.min(1, dt * 9));
+  tronRunnerWalker.position.set(route.x, tronRunnerSurfaceYAt(route.x, z), z);
+  tronRunnerWalker.rotation.set(0, tronRunnerYaw, 0);
+  tronRunnerParts.mixer?.update(dt);
+
+  const phasePulse = tronRunnerElapsed * 4.65;
+  const c = Math.cos(phasePulse);
+  if (tronRunnerParts.skeletonGlow) {
+    tronRunnerParts.skeletonGlow.material.opacity = tronRunnerState.modelLineIntensity * (0.9 + Math.abs(c) * 0.1);
+  }
+  if (tronRunnerParts.groundShadow) {
+    if (!TRON_RUNNER_GROUND_SHADOW_ENABLED) {
+      tronRunnerParts.groundShadow.visible = false;
+      tronRunnerParts.groundShadow.material.opacity = 0;
+      return;
+    }
+    const shadowPulse = 1 + (1 - Math.abs(c)) * THREE.MathUtils.clamp(tronRunnerShadowPulse, 0, 1.5);
+    tronRunnerParts.groundShadow.material.opacity = THREE.MathUtils.clamp(
+      tronRunnerFloorReflection * 0.78 * shadowPulse,
+      0,
+      TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY
+    );
+  }
+}
+
+function tronRunnerInspect() {
+  if (tronRunnerParts.model) {
+    tronRunnerBox.setFromObject(tronRunnerWalker);
+    tronRunnerBox.getSize(tronRunnerSize);
+  } else {
+    tronRunnerSize.set(0, 0, 0);
+  }
+  const runnerMaterial = tronRunnerParts.materials[0] || null;
+  return {
+    ...tronRunnerState,
+    x: Number(tronRunnerWalker.position.x.toFixed(2)),
+    y: Number(tronRunnerWalker.position.y.toFixed(2)),
+    z: Number(tronRunnerWalker.position.z.toFixed(2)),
+    yaw: Number(tronRunnerYaw.toFixed(3)),
+    visible: tronRunnerWalker.visible,
+    groundShadowVisible: Boolean(tronRunnerParts.groundShadow?.visible),
+    groundShadowOpacity: Number((tronRunnerParts.groundShadow?.material?.opacity ?? 0).toFixed(3)),
+    suitColorHex: runnerMaterial?.color?.getHexString?.() ?? null,
+    suitEmissiveHex: runnerMaterial?.emissive?.getHexString?.() ?? null,
+    suitTextureMode: TRON_RUNNER_SUIT_TEXTURE_MODE,
+    suitMapEnabled: Boolean(runnerMaterial?.map?.isTexture),
+    suitEmissiveMapEnabled: Boolean(runnerMaterial?.emissiveMap?.isTexture),
+    ledStripCount: 0,
+    ledStripIntensity: 0,
+    modelLineIntensity: Number((tronRunnerState.modelLineIntensity ?? 0).toFixed(3)),
+    keyLightLayerMask: null,
+    modelLightLayerEnabled: false,
+    pointLightCount: [
+      tronRunnerParts.keyLight,
+      tronRunnerParts.leftRim,
+      tronRunnerParts.rightRim,
+      tronRunnerParts.lowFill,
+    ].filter(Boolean).length,
+    heightFromRoad: Number((tronRunnerWalker.position.y - roadTileTopY()).toFixed(2)),
+    surface: tronRunnerState.surface,
+    sizeX: Number(tronRunnerSize.x.toFixed(2)),
+    sizeY: Number(tronRunnerSize.y.toFixed(2)),
+    sizeZ: Number(tronRunnerSize.z.toFixed(2)),
+  };
+}
+
 // ---------- Exact boulevard elevated links, rendered with demo-5 cubemap materials ----------
 function bridgeSpanLength(nextSideWidthScale = sideBuildingWidthScale, width = streetEdgeWidth) {
   return 2 * (roadHalf() + width + SIDE_BUILDING_BASE * nextSideWidthScale / 2);
@@ -8802,6 +9551,7 @@ function updateControlTabs() {
 const DEFAULT_PRODUCTION_PANEL = 'bloom-fx';
 const PRODUCTION_CONTROL_PANELS = new Set([
   'movement',
+  'character',
   'bloom-fx',
   'led-glow-fx',
   'central-building-leds',
@@ -9384,6 +10134,31 @@ const MOVEMENT_FAST_CONTROL_IDS = new Set([
   'head-motion-smoothing',
   'mouse-sensitivity',
 ]);
+const CHARACTER_FAST_CONTROL_IDS = new Set([
+  'runner-body-light',
+  'runner-line-light',
+  'runner-key-light',
+  'runner-rim-light',
+  'runner-fill-light',
+  'runner-material-reflect',
+  'runner-material-metalness',
+  'runner-material-roughness',
+  'runner-floor-reflection',
+  'runner-floor-reflection-scale',
+  'runner-shadow-softness',
+  'runner-shadow-pulse',
+  'runner-shadow-cyan',
+  'runner-shadow-offset-x',
+  'runner-shadow-offset-z',
+  'runner-key-light-y',
+  'runner-key-light-z',
+  'runner-rim-light-x',
+  'runner-fill-light-y',
+  'runner-scale',
+  'runner-animation-speed',
+  'runner-walk-speed',
+  'runner-stride-sync',
+]);
 const LIGHT_FAST_CONTROL_IDS = new Set(['ambient-light', 'key-light', 'exposure']);
 const HEX_RUNTIME_FAST_CONTROL_IDS = new Set([
   'hex-offset',
@@ -9463,6 +10238,7 @@ function fastScopeForControl(target) {
   if (POST_FAST_CONTROL_IDS.has(target.id)) return 'post';
   if (WIREFRAME_FAST_CONTROL_IDS.has(target.id)) return 'wireframe';
   if (MOVEMENT_FAST_CONTROL_IDS.has(target.id)) return 'movement';
+  if (CHARACTER_FAST_CONTROL_IDS.has(target.id)) return 'character';
   if (LIGHT_FAST_CONTROL_IDS.has(target.id)) return 'light';
   if (HEX_RUNTIME_FAST_CONTROL_IDS.has(target.id)) return 'hex-runtime';
   if (ROAD_MATERIAL_FAST_CONTROL_IDS.has(target.id)) return 'road-material';
@@ -9492,6 +10268,7 @@ function scheduleLiveControls(event) {
     else if (scope === 'post') applyPostControlsFromUI();
     else if (scope === 'wireframe') applyWireframeFxControlsFromUI();
     else if (scope === 'movement') applyMovementControlsFromUI();
+    else if (scope === 'character') applyCharacterControlsFromUI();
     else if (scope === 'light') applyLightControlsFromUI();
     else if (scope === 'hex-runtime') applyHexRuntimeControlsFromUI();
     else if (scope === 'road-material') applyRoadMaterialControlsFromUI();
@@ -9621,6 +10398,56 @@ function applyMovementControlsFromUI() {
   controlEls.strafeLeanVal.textContent = strafeLeanAmount.toFixed(3);
   controlEls.headMotionSmoothingVal.textContent = headMotionSmoothing.toFixed(1);
   controlEls.mouseSensitivityVal.textContent = mouseSensitivityScale.toFixed(2);
+}
+
+function applyCharacterControlsFromUI() {
+  tronRunnerBodyLight = Number(controlEls.runnerBodyLight.value);
+  tronRunnerLineLight = Number(controlEls.runnerLineLight.value);
+  tronRunnerKeyLight = Number(controlEls.runnerKeyLight.value);
+  tronRunnerRimLight = Number(controlEls.runnerRimLight.value);
+  tronRunnerFillLight = Number(controlEls.runnerFillLight.value);
+  tronRunnerMaterialReflect = Number(controlEls.runnerMaterialReflect.value);
+  tronRunnerMaterialMetalness = Number(controlEls.runnerMaterialMetalness.value);
+  tronRunnerMaterialRoughness = Number(controlEls.runnerMaterialRoughness.value);
+  tronRunnerFloorReflection = Number(controlEls.runnerFloorReflection.value);
+  tronRunnerFloorReflectionScale = Number(controlEls.runnerFloorReflectionScale.value);
+  tronRunnerShadowSoftness = Number(controlEls.runnerShadowSoftness.value);
+  tronRunnerShadowPulse = Number(controlEls.runnerShadowPulse.value);
+  tronRunnerShadowCyan = Number(controlEls.runnerShadowCyan.value);
+  tronRunnerShadowOffsetX = Number(controlEls.runnerShadowOffsetX.value);
+  tronRunnerShadowOffsetZ = Number(controlEls.runnerShadowOffsetZ.value);
+  tronRunnerKeyLightY = Number(controlEls.runnerKeyLightY.value);
+  tronRunnerKeyLightZ = Number(controlEls.runnerKeyLightZ.value);
+  tronRunnerRimLightX = Number(controlEls.runnerRimLightX.value);
+  tronRunnerFillLightY = Number(controlEls.runnerFillLightY.value);
+  tronRunnerScale = Number(controlEls.runnerScale.value);
+  tronRunnerAnimationSpeed = Number(controlEls.runnerAnimationSpeed.value);
+  tronRunnerWalkSpeed = Number(controlEls.runnerWalkSpeed.value);
+  tronRunnerStrideSync = Number(controlEls.runnerStrideSync.value);
+  applyTronRunnerVisualControls();
+  controlEls.runnerBodyLightVal.textContent = tronRunnerBodyLight.toFixed(2);
+  controlEls.runnerLineLightVal.textContent = tronRunnerLineLight.toFixed(2);
+  controlEls.runnerKeyLightVal.textContent = tronRunnerKeyLight.toFixed(2);
+  controlEls.runnerRimLightVal.textContent = tronRunnerRimLight.toFixed(2);
+  controlEls.runnerFillLightVal.textContent = tronRunnerFillLight.toFixed(2);
+  controlEls.runnerMaterialReflectVal.textContent = tronRunnerMaterialReflect.toFixed(2);
+  controlEls.runnerMaterialMetalnessVal.textContent = tronRunnerMaterialMetalness.toFixed(2);
+  controlEls.runnerMaterialRoughnessVal.textContent = tronRunnerMaterialRoughness.toFixed(2);
+  controlEls.runnerFloorReflectionVal.textContent = tronRunnerFloorReflection.toFixed(2);
+  controlEls.runnerFloorReflectionScaleVal.textContent = tronRunnerFloorReflectionScale.toFixed(2);
+  controlEls.runnerShadowSoftnessVal.textContent = tronRunnerShadowSoftness.toFixed(2);
+  controlEls.runnerShadowPulseVal.textContent = tronRunnerShadowPulse.toFixed(2);
+  controlEls.runnerShadowCyanVal.textContent = tronRunnerShadowCyan.toFixed(2);
+  controlEls.runnerShadowOffsetXVal.textContent = tronRunnerShadowOffsetX.toFixed(2);
+  controlEls.runnerShadowOffsetZVal.textContent = tronRunnerShadowOffsetZ.toFixed(2);
+  controlEls.runnerKeyLightYVal.textContent = tronRunnerKeyLightY.toFixed(2);
+  controlEls.runnerKeyLightZVal.textContent = tronRunnerKeyLightZ.toFixed(2);
+  controlEls.runnerRimLightXVal.textContent = tronRunnerRimLightX.toFixed(2);
+  controlEls.runnerFillLightYVal.textContent = tronRunnerFillLightY.toFixed(2);
+  controlEls.runnerScaleVal.textContent = tronRunnerScale.toFixed(2);
+  controlEls.runnerAnimationSpeedVal.textContent = `${tronRunnerAnimationSpeed.toFixed(2)}x`;
+  controlEls.runnerWalkSpeedVal.textContent = tronRunnerWalkSpeed.toFixed(2);
+  controlEls.runnerStrideSyncVal.textContent = tronRunnerStrideSync.toFixed(2);
 }
 
 function applyLightControlsFromUI() {
@@ -10494,6 +11321,7 @@ function applyLiveControls() {
   controlEls.bloomThresholdVal.textContent = bloomThreshold.toFixed(2);
   controlEls.bloomQualityVal.textContent = bloomQuality.toFixed(2);
   controlEls.pixelRatioVal.textContent = pixelRatio.toFixed(2);
+  applyCharacterControlsFromUI();
 }
 
 renderBridgeControls();
@@ -10593,6 +11421,7 @@ async function bootSceneWithFinalDefaults() {
   applyLiveControls();
   setTronNoclip(false, { silent: true });
   applyPlayerSpawn(playerSpawn, false);
+  await loadTronRunner();
   scheduleDroneIntroAutoFlight();
 }
 
@@ -10640,6 +11469,7 @@ window.__tronInspect = () => ({
     y: record.mesh.position.y,
     z: record.mesh.position.z,
   })),
+  tronRunner: tronRunnerInspect(),
   pointerLocked,
   footsteps: window.__tronFootstepInspect?.(),
   welcomePanelMotion: { ...welcomeWindowMotionState },
@@ -10831,6 +11661,7 @@ window.__tronInspect = () => ({
   render: { ...renderer.info.render },
   memory: { ...renderer.info.memory },
 });
+window.__tronRunnerInspect = tronRunnerInspect;
 window.__tronCaptureLiveSpawn = captureLivePlayerSpawn;
 window.__tronApplyPlayerSpawn = applyPlayerSpawn;
 window.__tronPerfInspect = () => ({
@@ -10914,6 +11745,7 @@ function tick(now) {
     boundaryErrorAccumulatedDt = 0;
   }
   updateWalkSimulation(dt);
+  updateTronRunner(dt);
   if (now - startPositionLabelLast > 180) {
     updateStartPositionLiveLabel();
     startPositionLabelLast = now;
