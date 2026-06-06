@@ -7786,10 +7786,6 @@ function applyTronRunnerVisualControls() {
   if (tronRunnerParts.reflectionActiveAction) {
     tronRunnerParts.reflectionActiveAction.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
   }
-  if (tronRunnerParts.skeletonGlow) {
-    tronRunnerParts.skeletonGlow.material.visible = tronRunnerLineLight > 0.001;
-    tronRunnerParts.skeletonGlow.material.opacity = modelLineIntensity;
-  }
   if (tronRunnerParts.groundShadow) {
     tronRunnerParts.groundShadow.visible = TRON_RUNNER_GROUND_SHADOW_ENABLED && floorAmount > 0.001;
     if (Math.abs(shadowSoftness - tronRunnerShadowTextureSoftness) > 0.001) {
@@ -8428,14 +8424,6 @@ async function loadTronRunner() {
       reflectionActionSet = makeTronRunnerActionSet(reflectionGltf, reflectionMixer);
     }
 
-    const helper = new THREE.SkeletonHelper(model);
-    helper.material.color.setHex(0x35e6ff);
-    helper.material.transparent = true;
-    helper.material.opacity = 0.18;
-    helper.material.depthWrite = false;
-    helper.frustumCulled = false;
-    tronRunnerWalker.add(helper);
-
     const groundShadow = new THREE.Mesh(new THREE.CircleGeometry(1.15, 48), tronRunnerShadowMat);
     groundShadow.rotation.x = -Math.PI / 2;
     groundShadow.position.set(0, 0.025, 0.2);
@@ -8462,7 +8450,7 @@ async function loadTronRunner() {
     tronRunnerParts.model = model;
     tronRunnerParts.mixer = mixer;
     tronRunnerParts.actions = actionSet.actions;
-    tronRunnerParts.skeletonGlow = helper;
+    tronRunnerParts.skeletonGlow = null;
     tronRunnerParts.groundShadow = groundShadow;
     tronRunnerParts.realShadowReceiver = realShadowReceiver;
     tronRunnerParts.reflectionGroup = reflectionGroup;
@@ -8540,17 +8528,14 @@ function updateTronRunner(dt) {
   updateTronRunnerRealShadowRig();
   updateTronRunnerDynamicReflection();
 
-  const phasePulse = tronRunnerElapsed * 4.65;
-  const c = Math.cos(phasePulse);
-  if (tronRunnerParts.skeletonGlow) {
-    tronRunnerParts.skeletonGlow.material.opacity = tronRunnerState.modelLineIntensity * (0.9 + Math.abs(c) * 0.1);
-  }
   if (tronRunnerParts.groundShadow) {
     if (!TRON_RUNNER_GROUND_SHADOW_ENABLED) {
       tronRunnerParts.groundShadow.visible = false;
       tronRunnerParts.groundShadow.material.opacity = 0;
       return;
     }
+    const phasePulse = tronRunnerElapsed * 4.65;
+    const c = Math.cos(phasePulse);
     const shadowPulse = 1 + (1 - Math.abs(c)) * THREE.MathUtils.clamp(tronRunnerShadowPulse, 0, 1.5);
     tronRunnerParts.groundShadow.material.opacity = THREE.MathUtils.clamp(
       tronRunnerFloorReflection * 0.78 * shadowPulse,
@@ -8618,6 +8603,8 @@ function tronRunnerInspect() {
     ledStripCount: 0,
     ledStripIntensity: 0,
     modelLineIntensity: Number((tronRunnerState.modelLineIntensity ?? 0).toFixed(3)),
+    skeletonHelperPresent: Boolean(tronRunnerParts.skeletonGlow),
+    skeletonHelperVisible: Boolean(tronRunnerParts.skeletonGlow?.visible),
     keyLightLayerMask: null,
     modelLightLayerEnabled: false,
     pointLightCount: [
