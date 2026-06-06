@@ -976,6 +976,7 @@ ti auguriamo un esperienza illuminante.</p>
     "three/addons/postprocessing/Pass.js": "./Pass.js",
     "three/addons/postprocessing/MaskPass.js": "./MaskPass.js",
     "three/addons/loaders/GLTFLoader.js": "./GLTFLoader.js",
+    "three/addons/utils/SkeletonUtils.js": "./SkeletonUtils.js",
     "three/addons/shaders/CopyShader.js": "./CopyShader.js",
     "three/addons/shaders/LuminosityHighPassShader.js": "./LuminosityHighPassShader.js",
     "three/addons/shaders/FXAAShader.js": "./FXAAShader.js",
@@ -1060,9 +1061,14 @@ try {
 }
 
 let RunnerGLTFLoader = null;
+let cloneRunnerSkeleton = null;
 try {
-  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+  const [{ GLTFLoader }, { clone }] = await Promise.all([
+    import('three/addons/loaders/GLTFLoader.js'),
+    import('three/addons/utils/SkeletonUtils.js'),
+  ]);
   RunnerGLTFLoader = GLTFLoader;
+  cloneRunnerSkeleton = clone;
 } catch (e) {
   console.warn('Runner GLB support unavailable:', e.message);
 }
@@ -7384,10 +7390,18 @@ const TRON_RUNNER_REVEAL_SCAN_TUBE = 0.035;
 const TRON_RUNNER_REVEAL_EMISSIVE_BOOST = 1.15;
 const TRON_RUNNER_REVEAL_SCAN_OUTER_OPACITY = 1;
 const TRON_RUNNER_REVEAL_SCAN_CORE_OPACITY = 0.68;
+const TRON_RUNNER_CROWD_ENABLED = true;
+const TRON_RUNNER_CROWD_COUNT = 10;
+const TRON_RUNNER_CROWD_SCALE_LOCK = 0.55;
+const TRON_RUNNER_CROWD_GROUND_OFFSET = TRON_RUNNER_GROUND_OFFSET;
 const tronRunnerWalker = new THREE.Group();
 tronRunnerWalker.name = 'tron-runner-walker';
 tronRunnerWalker.visible = false;
 scene.add(tronRunnerWalker);
+const tronRunnerCrowdGroup = new THREE.Group();
+tronRunnerCrowdGroup.name = 'tron-runner-crowd';
+tronRunnerCrowdGroup.visible = false;
+scene.add(tronRunnerCrowdGroup);
 
 function makeTronRunnerShadowTexture(softness = 0.9) {
   const size = 128;
@@ -7782,6 +7796,9 @@ let tronRunnerRevealProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
 let tronRunnerRevealRawProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
 let tronRunnerRevealActive = false;
 let tronRunnerRevealComplete = !TRON_RUNNER_REVEAL_ENABLED;
+const tronRunnerCrowd = [];
+const tronRunnerCrowdBox = new THREE.Box3();
+const tronRunnerCrowdSize = new THREE.Vector3();
 const tronRunnerAutonomy = {
   initialized: false,
   waypointIndex: 0,
@@ -7913,6 +7930,7 @@ function applyTronRunnerRevealVisuals() {
   const activePulse = tronRunnerRevealActive ? Math.sin(Math.PI * tronRunnerRevealRawProgress) : 0;
   const shouldRenderRunner = Boolean(tronRunnerState.ready && (visibleFactor > 0.002 || tronRunnerRevealActive || complete));
   tronRunnerWalker.visible = shouldRenderRunner;
+  syncTronRunnerCrowdVisibility();
 
   for (const material of tronRunnerParts.materials) {
     const baseEmissive = Number.isFinite(material.userData.tronRunnerBaseEmissiveIntensity)
@@ -8126,6 +8144,7 @@ function applyTronRunnerVisualControls() {
   tronRunnerParts.leftRim = null;
   tronRunnerParts.rightRim = null;
   tronRunnerParts.lowFill = null;
+  syncTronRunnerCrowdScaleAndGround();
   applyTronRunnerRevealVisuals();
 }
 
@@ -8192,6 +8211,182 @@ function tronRunnerSurfaceYAt(x = tronRunnerWalker.position.x, z = tronRunnerWal
   tronRunnerState.surface = padHit ? 'sidewalk' : 'road-fallback';
   tronRunnerState.surfaceY = topY + TRON_RUNNER_GROUND_OFFSET;
   return tronRunnerState.surfaceY;
+}
+
+function tronRunnerSurfaceYForPoint(x, z) {
+  const padHit = basePadAtPoint(x, z);
+  return {
+    y: (padHit?.topY ?? roadTileTopY()) + TRON_RUNNER_CROWD_GROUND_OFFSET,
+    surface: padHit ? 'sidewalk' : 'road-fallback',
+  };
+}
+
+function tronRunnerCrowdPlacement(index) {
+  const limits = roadHexBoundaryLimits();
+  const row = index % 5;
+  const side = index < 5 ? -1 : 1;
+  const minZ = dynamicRoadCenter - dynamicRoadLength * 0.5 + GRID_BLOCK * 8;
+  const maxZ = dynamicRoadCenter + dynamicRoadLength * 0.5 - GRID_BLOCK * 8;
+  const z = THREE.MathUtils.clamp(
+    THREE.MathUtils.lerp(minZ, maxZ, (row + 1) / 6),
+    limits.minZ + GRID_BLOCK * 3,
+    limits.maxZ - GRID_BLOCK * 3
+  );
+  const x = THREE.MathUtils.clamp(
+    side * Math.max(GRID_BLOCK * 2, roadHalf() * 0.34),
+    limits.minX + GRID_BLOCK * 2,
+    limits.maxX - GRID_BLOCK * 2
+  );
+  return {
+    x,
+    y: roadTileTopY() + TRON_RUNNER_CROWD_GROUND_OFFSET,
+    z,
+    yaw: side < 0 ? 0 : Math.PI,
+    surface: 'road-fallback',
+  };
+}
+
+function clearTronRunnerCrowd() {
+  tronRunnerCrowd.length = 0;
+  while (tronRunnerCrowdGroup.children.length) {
+    tronRunnerCrowdGroup.remove(tronRunnerCrowdGroup.children[0]);
+  }
+  tronRunnerCrowdGroup.visible = false;
+}
+
+function syncTronRunnerCrowdScaleAndGround() {
+  for (const member of tronRunnerCrowd) {
+    const placement = tronRunnerCrowdPlacement(member.index);
+    member.group.scale.copy(tronRunnerWalker.scale);
+    member.group.position.set(placement.x, placement.y, placement.z);
+    member.group.rotation.y = placement.yaw;
+    member.surface = placement.surface;
+  }
+}
+
+function syncTronRunnerCrowdVisibility() {
+  const visible = Boolean(TRON_RUNNER_CROWD_ENABLED && tronRunnerRevealComplete && tronRunnerState.ready);
+  tronRunnerCrowdGroup.visible = visible;
+  for (const member of tronRunnerCrowd) {
+    member.group.visible = visible;
+  }
+}
+
+function makeTronRunnerCrowdActionSet(model, animations, offset) {
+  const mixer = new THREE.AnimationMixer(model);
+  const walkClip = animations.find((clip) => /walk/i.test(clip.name)) || animations[0];
+  if (!walkClip) return { mixer, action: null };
+  const action = mixer.clipAction(walkClip);
+  action.enabled = true;
+  action.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed * (0.92 + (offset % 5) * 0.035));
+  action.setEffectiveWeight(1);
+  action.play();
+  action.time = (walkClip.duration || 1) * ((offset * 0.173) % 1);
+  return { mixer, action };
+}
+
+function buildTronRunnerCrowd(sourceModel, animations) {
+  clearTronRunnerCrowd();
+  if (!TRON_RUNNER_CROWD_ENABLED || !sourceModel || !cloneRunnerSkeleton) return;
+  const sourceMeshes = [];
+  sourceModel.traverse((obj) => {
+    if (obj.isMesh) sourceMeshes.push(obj);
+  });
+
+  for (let index = 0; index < TRON_RUNNER_CROWD_COUNT; index += 1) {
+    const group = new THREE.Group();
+    group.name = `tron-runner-crowd-${index + 1}`;
+    group.visible = false;
+    group.scale.copy(tronRunnerWalker.scale);
+
+    const cloneModel = cloneRunnerSkeleton(sourceModel);
+    cloneModel.name = `soldier-rigged-runner-crowd-${index + 1}`;
+    const cloneMeshes = [];
+    cloneModel.traverse((obj) => {
+      if (!obj.isMesh) return;
+      obj.frustumCulled = false;
+      obj.castShadow = false;
+      obj.receiveShadow = false;
+      obj.layers.set(0);
+      cloneMeshes.push(obj);
+    });
+    cloneMeshes.forEach((mesh, meshIndex) => {
+      mesh.material = sourceMeshes[meshIndex]?.material || tronRunnerSuitMat;
+    });
+    group.add(cloneModel);
+
+    const { mixer, action } = makeTronRunnerCrowdActionSet(cloneModel, animations, index);
+    const member = {
+      index,
+      group,
+      model: cloneModel,
+      mixer,
+      action,
+      surface: 'road-fallback',
+    };
+    tronRunnerCrowd.push(member);
+    tronRunnerCrowdGroup.add(group);
+  }
+  syncTronRunnerCrowdScaleAndGround();
+  syncTronRunnerCrowdVisibility();
+}
+
+function updateTronRunnerCrowd(dt) {
+  if (!TRON_RUNNER_CROWD_ENABLED || !tronRunnerCrowd.length) return;
+  syncTronRunnerCrowdVisibility();
+  if (!tronRunnerCrowdGroup.visible) return;
+  const step = Math.min(dt, 0.05);
+  for (const member of tronRunnerCrowd) {
+    member.action?.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
+    member.mixer?.update(step);
+  }
+}
+
+function tronRunnerCrowdInspect() {
+  const runnerScale = Number(tronRunnerWalker.scale.x.toFixed(4));
+  const runnerTargetHeight = TRON_RUNNER_TARGET_HEIGHT * tronRunnerWalker.scale.y;
+  const runnerHeightFromRoad = tronRunnerWalker.position.y - roadTileTopY();
+  const members = tronRunnerCrowd.map((member) => {
+    tronRunnerCrowdBox.setFromObject(member.group);
+    tronRunnerCrowdBox.getSize(tronRunnerCrowdSize);
+    const heightFromRoad = member.group.position.y - roadTileTopY();
+    const targetHeight = TRON_RUNNER_TARGET_HEIGHT * member.group.scale.y;
+    return {
+      index: member.index + 1,
+      visible: Boolean(tronRunnerCrowdGroup.visible && member.group.visible),
+      x: Number(member.group.position.x.toFixed(2)),
+      y: Number(member.group.position.y.toFixed(2)),
+      z: Number(member.group.position.z.toFixed(2)),
+      scale: Number(member.group.scale.x.toFixed(4)),
+      targetHeight: Number(targetHeight.toFixed(3)),
+      heightFromRoad: Number(heightFromRoad.toFixed(3)),
+      surface: member.surface,
+      sizeY: Number(tronRunnerCrowdSize.y.toFixed(3)),
+    };
+  });
+  const scaleDeltas = members.map((member) => Math.abs(member.scale - runnerScale));
+  const targetHeightDeltas = members.map((member) => Math.abs(member.targetHeight - runnerTargetHeight));
+  const heightFromRoadDeltas = members.map((member) => Math.abs(member.heightFromRoad - runnerHeightFromRoad));
+  return {
+    enabled: TRON_RUNNER_CROWD_ENABLED,
+    mode: 'post-fit-skeleton-clones',
+    count: tronRunnerCrowd.length,
+    visibleCount: members.filter((member) => member.visible).length,
+    requestedCount: TRON_RUNNER_CROWD_COUNT,
+    cloneSource: 'runner-post-fit-model',
+    skeletonClone: Boolean(cloneRunnerSkeleton),
+    sharedMaterial: true,
+    realShadows: false,
+    dynamicReflections: false,
+    scaleLock: TRON_RUNNER_CROWD_SCALE_LOCK,
+    sourceScale: runnerScale,
+    sourceTargetHeight: Number(runnerTargetHeight.toFixed(3)),
+    sourceHeightFromRoad: Number(runnerHeightFromRoad.toFixed(3)),
+    maxScaleDelta: Number((scaleDeltas.length ? Math.max(...scaleDeltas) : 0).toFixed(4)),
+    maxTargetHeightDelta: Number((targetHeightDeltas.length ? Math.max(...targetHeightDeltas) : 0).toFixed(4)),
+    maxHeightFromRoadDelta: Number((heightFromRoadDeltas.length ? Math.max(...heightFromRoadDeltas) : 0).toFixed(4)),
+    members,
+  };
 }
 
 function tronRunnerFootstepSurface() {
@@ -8771,6 +8966,7 @@ async function loadTronRunner() {
     tronRunnerParts.lowFill = null;
     playTronRunnerAction('walk');
     applyTronRunnerVisualControls();
+    buildTronRunnerCrowd(model, gltf.animations);
 
     tronRunnerElapsed = 0;
     tronRunnerYaw = 0;
@@ -12804,6 +13000,7 @@ window.__tronInspect = () => ({
     z: record.mesh.position.z,
   })),
   tronRunner: tronRunnerInspect(),
+  tronRunnerCrowd: tronRunnerCrowdInspect(),
   surfaceReflections: {
     roadReflect: Number(controlEls.roadReflect.value),
     roadBuildingReflect: Number(controlEls.roadBuildingReflect.value),
@@ -13103,6 +13300,7 @@ function tick(now) {
   }
   updateWalkSimulation(dt);
   updateTronRunner(dt);
+  updateTronRunnerCrowd(dt);
   if (now - startPositionLabelLast > 180) {
     updateStartPositionLiveLabel();
     startPositionLabelLast = now;
