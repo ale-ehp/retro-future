@@ -7451,8 +7451,10 @@ const TRON_RUNNER_CROWD_PATH_MODE = 'sidewalk-building-loops';
 const TRON_RUNNER_CROWD_COLLISIONS_ENABLED = true;
 const TRON_RUNNER_CROWD_REACH_RADIUS = 0.85;
 const TRON_RUNNER_CROWD_COLLISION_RADIUS = 1.1;
-const TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET = 3.2;
-const TRON_RUNNER_CROWD_BUILDING_CLEARANCE = 6.2;
+const TRON_RUNNER_CROWD_BUILDING_GUARD = 2.4;
+const TRON_RUNNER_CROWD_SIDEWALK_LANE_EDGE_INSET = 1.2;
+const TRON_RUNNER_CROWD_SIDEWALK_ROUTE_END_INSET = 10;
+const TRON_RUNNER_CROWD_MAX_MOVE_SUBSTEP = 0.035;
 const TRON_RUNNER_CROWD_SPEED_SCALE = 0.72;
 const TRON_RUNNER_CROWD_ROUTE_RECORD_SPREAD = TRON_RUNNER_CROWD_COUNT;
 const TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED = true;
@@ -8348,34 +8350,52 @@ function tronRunnerCrowdCandidateRecords() {
 
 function tronRunnerCrowdRouteForRecord(record, index) {
   const pad = record?.basePad;
-  const polygon = pad?.innerHitPolygon?.length ? pad.innerHitPolygon : pad?.hitPolygon;
+  const polygon = pad?.hitPolygon;
   if (!record || !pad?.border || !polygon?.length || !record.collider) return null;
   const xs = polygon.map(([x]) => x);
   const zs = polygon.map(([, z]) => z);
-  const minX = Math.min(...xs) + TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET;
-  const maxX = Math.max(...xs) - TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET;
-  const minZ = Math.min(...zs) + TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET;
-  const maxZ = Math.max(...zs) - TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET;
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minZ = Math.min(...zs);
+  const maxZ = Math.max(...zs);
   if (maxX - minX < 2 || maxZ - minZ < 2) return null;
 
   const colliderX = record.collider.x - pad.border.position.x;
   const colliderZ = record.collider.z - pad.border.position.z;
-  const left = THREE.MathUtils.clamp(colliderX - record.collider.hw - TRON_RUNNER_CROWD_BUILDING_CLEARANCE, minX, maxX);
-  const right = THREE.MathUtils.clamp(colliderX + record.collider.hw + TRON_RUNNER_CROWD_BUILDING_CLEARANCE, minX, maxX);
-  const near = THREE.MathUtils.clamp(colliderZ - record.collider.hd - TRON_RUNNER_CROWD_BUILDING_CLEARANCE, minZ, maxZ);
-  const far = THREE.MathUtils.clamp(colliderZ + record.collider.hd + TRON_RUNNER_CROWD_BUILDING_CLEARANCE, minZ, maxZ);
-  const routeLeft = right - left > 3 ? left : minX;
-  const routeRight = right - left > 3 ? right : maxX;
-  const routeNear = far - near > 3 ? near : minZ;
-  const routeFar = far - near > 3 ? far : maxZ;
+  const routeEndInset = Math.min(
+    TRON_RUNNER_CROWD_SIDEWALK_ROUTE_END_INSET,
+    Math.max(1, (maxZ - minZ) * 0.34)
+  );
+  const routeNear = minZ + routeEndInset;
+  const routeFar = maxZ - routeEndInset;
+  if (routeFar - routeNear < TRON_RUNNER_CROWD_REACH_RADIUS * 3) return null;
+
+  const roadDir = (record.sign || 1) < 0 ? 1 : -1;
+  const roadEdgeX = roadDir > 0
+    ? maxX - TRON_RUNNER_CROWD_SIDEWALK_LANE_EDGE_INSET
+    : minX + TRON_RUNNER_CROWD_SIDEWALK_LANE_EDGE_INSET;
+  const guardX = colliderX + roadDir * (record.collider.hw + TRON_RUNNER_CROWD_BUILDING_GUARD);
+  let routeLaneX = null;
+  for (let step = 0; step <= 36; step += 1) {
+    const candidateX = roadEdgeX - roadDir * step * 0.35;
+    const outsideBuilding = roadDir > 0 ? candidateX >= guardX : candidateX <= guardX;
+    if (!outsideBuilding) break;
+    if (
+      pointInBasePadPolygon(candidateX, routeNear, polygon)
+      && pointInBasePadPolygon(candidateX, routeFar, polygon)
+    ) {
+      routeLaneX = candidateX;
+      break;
+    }
+  }
+  if (routeLaneX === null) return null;
+
   const padX = pad.border.position.x;
   const padZ = pad.border.position.z;
   const y = (pad.innerTopY ?? pad.topY ?? roadTileTopY()) + TRON_RUNNER_CROWD_GROUND_OFFSET;
   const points = [
-    { x: padX + routeLeft, y, z: padZ + routeNear },
-    { x: padX + routeRight, y, z: padZ + routeNear },
-    { x: padX + routeRight, y, z: padZ + routeFar },
-    { x: padX + routeLeft, y, z: padZ + routeFar },
+    { x: padX + routeLaneX, y, z: padZ + routeNear },
+    { x: padX + routeLaneX, y, z: padZ + routeFar },
   ];
   if (index % 2) points.reverse();
   return {
@@ -8678,14 +8698,22 @@ function tronRunnerCrowdPointInsideRoute(member, x, z) {
   return pointInBasePadPolygon(localX, localZ, polygon);
 }
 
+function tronRunnerCrowdColliderRecords() {
+  return [...sideBuildingRecords, ...mainBuildingRecords].filter((record) => record.collider);
+}
+
+function tronRunnerCrowdColliderLabel(record) {
+  if (Number.isFinite(record?.civicNumberValue)) return `building-${record.civicNumberValue}`;
+  return record?.collider?.role || 'building';
+}
+
 function resolveTronRunnerCrowdCollision(member, point) {
   if (!TRON_RUNNER_CROWD_COLLISIONS_ENABLED) return false;
   let collided = false;
-  const record = member.route?.record;
-  if (record?.collider) {
+  for (const record of tronRunnerCrowdColliderRecords()) {
     const beforeX = point.x;
     const beforeZ = point.z;
-    if (resolveTronRunnerRoundedCollider(point, record.collider, TRON_RUNNER_CROWD_COLLISION_RADIUS)) {
+    if (resolveTronRunnerRoundedCollider(point, record.collider, TRON_RUNNER_CROWD_BUILDING_GUARD)) {
       collided = true;
       if (!tronRunnerCrowdPointInsideRoute(member, point.x, point.z)) {
         point.x = beforeX;
@@ -8703,21 +8731,28 @@ function resolveTronRunnerCrowdCollision(member, point) {
 }
 
 function tronRunnerCrowdBuildingCollisionDiagnostic(member) {
-  const record = member.route?.record;
-  const collider = record?.collider;
-  if (!collider) {
-    return { colliding: false, correction: 0 };
+  let colliding = false;
+  let correction = 0;
+  let label = '';
+  for (const record of tronRunnerCrowdColliderRecords()) {
+    const point = {
+      x: member.group.position.x,
+      z: member.group.position.z,
+    };
+    const beforeX = point.x;
+    const beforeZ = point.z;
+    if (!resolveTronRunnerRoundedCollider(point, record.collider, TRON_RUNNER_CROWD_BUILDING_GUARD)) continue;
+    const nextCorrection = Math.hypot(point.x - beforeX, point.z - beforeZ);
+    colliding = true;
+    if (nextCorrection >= correction) {
+      correction = nextCorrection;
+      label = tronRunnerCrowdColliderLabel(record);
+    }
   }
-  const point = {
-    x: member.group.position.x,
-    z: member.group.position.z,
-  };
-  const beforeX = point.x;
-  const beforeZ = point.z;
-  const colliding = resolveTronRunnerRoundedCollider(point, collider, TRON_RUNNER_CROWD_COLLISION_RADIUS);
   return {
     colliding,
-    correction: colliding ? Math.hypot(point.x - beforeX, point.z - beforeZ) : 0,
+    correction,
+    label,
   };
 }
 
@@ -8845,7 +8880,11 @@ function updateTronRunnerCrowd(dt) {
       continue;
     }
     member.mixer?.update(member.mixerDt);
-    advanceTronRunnerCrowdMember(member, member.lodDt, now);
+    const moveSubsteps = Math.max(1, Math.ceil(member.lodDt / TRON_RUNNER_CROWD_MAX_MOVE_SUBSTEP));
+    const moveSubstepDt = member.lodDt / moveSubsteps;
+    for (let stepIndex = 0; stepIndex < moveSubsteps; stepIndex += 1) {
+      advanceTronRunnerCrowdMember(member, moveSubstepDt, now);
+    }
     member.mixerDt = 0;
     member.lodDt = 0;
   }
@@ -8888,6 +8927,7 @@ function tronRunnerCrowdInspect() {
       avoidanceOverlap: Number((member.avoidanceOverlap ?? 0).toFixed(3)),
       buildingCollision: buildingCollision.colliding,
       buildingCollisionCorrection: Number(buildingCollision.correction.toFixed(3)),
+      buildingCollisionLabel: buildingCollision.label,
       waypointIndex: member.waypointIndex ?? 0,
       distanceWalked: Number((member.distanceWalked ?? 0).toFixed(2)),
       lastMovedDistance: Number((member.lastMovedDistance ?? 0).toFixed(4)),
