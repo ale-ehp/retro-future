@@ -2175,15 +2175,20 @@ const FOOTSTEP_AUDIO_USER_KEYS = new Set([
 const FOOTSTEP_PLAYER_BUS = 'player-local';
 const FOOTSTEP_NPC_SPATIAL_BUS = 'npc-spatial';
 const footstepBuffers = { road: [], sidewalk: [] };
+const footstepSampleData = { road: [], sidewalk: [] };
 const footstepVariantCursor = {
   road: { left: 0, right: 0 },
   sidewalk: { left: 0, right: 0 },
 };
+const footstepRequestedSampleCount = Object.values(TRON_FOOTSTEP_BANKS).reduce((sum, samples) => sum + samples.length, 0);
 const footstepAudioForward = new THREE.Vector3();
 const footstepAudioUp = new THREE.Vector3();
 let footstepAudioContext = null;
 let footstepAudioReadyPromise = null;
+let footstepAudioPreloadPromise = null;
 let footstepAudioError = '';
+let footstepAudioDecodeStatus = 'idle';
+let footstepAudioDecodedCount = 0;
 let lastFootstepIndex = -1;
 let lastFootstepPlayedAt = 0;
 let footstepSideToggle = 0;
@@ -2196,12 +2201,58 @@ function createFootstepAudioContext() {
   return new AudioContextCtor();
 }
 
-async function loadFootstepSample(sample) {
+function waitForNextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+async function preloadFootstepSampleData(surface, sample) {
   const response = await fetch(sample.url);
   if (!response.ok) throw new Error(`Footstep fetch failed: ${sample.url}`);
   const data = await response.arrayBuffer();
+  return { ...sample, surface, data };
+}
+
+function preloadFootstepAudioData() {
+  if (footstepAudioPreloadPromise) return footstepAudioPreloadPromise;
+  footstepAudioDecodeStatus = 'preloading';
+  footstepAudioPreloadPromise = Promise.all(
+    Object.entries(TRON_FOOTSTEP_BANKS).map(async ([surface, samples]) => {
+      footstepSampleData[surface] = await Promise.all(samples.map((sample) => preloadFootstepSampleData(surface, sample)));
+    })
+  ).then(() => {
+    if (footstepAudioDecodeStatus === 'preloading') footstepAudioDecodeStatus = 'preloaded';
+    return true;
+  }).catch((error) => {
+    footstepAudioError = error?.message || String(error);
+    footstepAudioDecodeStatus = 'error';
+    console.warn('[tron-footsteps]', footstepAudioError);
+    return false;
+  });
+  return footstepAudioPreloadPromise;
+}
+
+async function decodeFootstepSample(sample) {
+  const data = sample.data?.slice ? sample.data.slice(0) : sample.data;
   const buffer = await footstepAudioContext.decodeAudioData(data);
-  return { ...sample, buffer };
+  return { side: sample.side, key: sample.key, url: sample.url, buffer };
+}
+
+async function decodeFootstepSamplesIncremental() {
+  const preloaded = await preloadFootstepAudioData();
+  if (!preloaded || !footstepAudioContext) return false;
+  footstepAudioDecodeStatus = 'decoding';
+  footstepAudioDecodedCount = 0;
+  footstepBuffers.road = [];
+  footstepBuffers.sidewalk = [];
+  for (const surface of Object.keys(TRON_FOOTSTEP_BANKS)) {
+    for (const sample of footstepSampleData[surface] || []) {
+      footstepBuffers[surface].push(await decodeFootstepSample(sample));
+      footstepAudioDecodedCount += 1;
+      await waitForNextFrame();
+    }
+  }
+  footstepAudioDecodeStatus = 'ready';
+  return true;
 }
 
 function ensureFootstepAudioReady() {
@@ -2209,12 +2260,9 @@ function ensureFootstepAudioReady() {
   if (!footstepAudioContext) return Promise.resolve(false);
   if (footstepAudioContext.state === 'suspended') footstepAudioContext.resume().catch(() => {});
   if (!footstepAudioReadyPromise) {
-    footstepAudioReadyPromise = Promise.all(
-      Object.entries(TRON_FOOTSTEP_BANKS).map(async ([surface, samples]) => {
-        footstepBuffers[surface] = await Promise.all(samples.map(loadFootstepSample));
-      })
-    ).then(() => true).catch((error) => {
+    footstepAudioReadyPromise = decodeFootstepSamplesIncremental().catch((error) => {
       footstepAudioError = error?.message || String(error);
+      footstepAudioDecodeStatus = 'error';
       console.warn('[tron-footsteps]', footstepAudioError);
       return false;
     });
@@ -2408,6 +2456,11 @@ function updateFootstepAudioFromWalk(moveFactor) {
 window.__tronFootstepInspect = () => ({
   contextState: footstepAudioContext?.state || 'not-created',
   ready: Boolean(footstepBuffers.road.length && footstepBuffers.sidewalk.length),
+  preloadStarted: Boolean(footstepAudioPreloadPromise),
+  decodeStatus: footstepAudioDecodeStatus,
+  decodedCount: footstepAudioDecodedCount,
+  requestedCount: footstepRequestedSampleCount,
+  preloadedCount: Object.values(footstepSampleData).reduce((sum, samples) => sum + samples.length, 0),
   error: footstepAudioError,
   surface: walkSurfaceKind,
   lastSurface: lastFootstepSurface,
@@ -7401,6 +7454,7 @@ const TRON_RUNNER_CROWD_COLLISION_RADIUS = 1.1;
 const TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET = 3.2;
 const TRON_RUNNER_CROWD_BUILDING_CLEARANCE = 6.2;
 const TRON_RUNNER_CROWD_SPEED_SCALE = 0.72;
+const TRON_RUNNER_CROWD_ROUTE_RECORD_SPREAD = 4;
 const tronRunnerWalker = new THREE.Group();
 tronRunnerWalker.name = 'tron-runner-walker';
 tronRunnerWalker.visible = false;
@@ -7806,6 +7860,15 @@ let tronRunnerRevealComplete = !TRON_RUNNER_REVEAL_ENABLED;
 const tronRunnerCrowd = [];
 const tronRunnerCrowdBox = new THREE.Box3();
 const tronRunnerCrowdSize = new THREE.Vector3();
+let tronRunnerCrowdBuildJob = null;
+const tronRunnerCrowdBuildStats = {
+  status: 'idle',
+  built: 0,
+  requested: TRON_RUNNER_CROWD_COUNT,
+  startedAt: 0,
+  durationMs: 0,
+  lastChunkMs: 0,
+};
 const tronRunnerAutonomy = {
   initialized: false,
   waypointIndex: 0,
@@ -8309,16 +8372,29 @@ function tronRunnerCrowdRouteForRecord(record, index) {
 
 function tronRunnerCrowdBuildRoute(index) {
   const records = tronRunnerCrowdCandidateRecords();
-  const record = records[index % Math.max(1, records.length)];
-  return tronRunnerCrowdRouteForRecord(record, index);
+  const activeCount = Math.min(records.length, TRON_RUNNER_CROWD_ROUTE_RECORD_SPREAD);
+  const record = records[index % Math.max(1, activeCount)];
+  const route = tronRunnerCrowdRouteForRecord(record, index);
+  if (route) {
+    route.spawnSlot = Math.floor(index / Math.max(1, activeCount));
+    route.activeRouteRecords = activeCount;
+  }
+  return route;
 }
 
 function clearTronRunnerCrowd() {
+  tronRunnerCrowdBuildJob = null;
   tronRunnerCrowd.length = 0;
   while (tronRunnerCrowdGroup.children.length) {
     tronRunnerCrowdGroup.remove(tronRunnerCrowdGroup.children[0]);
   }
   tronRunnerCrowdGroup.visible = false;
+  tronRunnerCrowdBuildStats.status = 'idle';
+  tronRunnerCrowdBuildStats.built = 0;
+  tronRunnerCrowdBuildStats.requested = TRON_RUNNER_CROWD_COUNT;
+  tronRunnerCrowdBuildStats.startedAt = 0;
+  tronRunnerCrowdBuildStats.durationMs = 0;
+  tronRunnerCrowdBuildStats.lastChunkMs = 0;
 }
 
 function syncTronRunnerCrowdScaleAndGround() {
@@ -8362,6 +8438,102 @@ function makeTronRunnerCrowdActionSet(model, animations, offset) {
   return { mixer, action };
 }
 
+function tronRunnerCrowdRoadFacingStart(route, index, fallback) {
+  if (!route?.points?.length) return { placement: fallback, waypointIndex: 0, mode: 'fallback' };
+  const sign = Number(route.record?.sign || Math.sign(route.record?.mesh?.position?.x) || 1);
+  const xs = route.points.map((point) => point.x);
+  const innerX = sign < 0 ? Math.max(...xs) : Math.min(...xs);
+  const innerPoints = route.points
+    .map((point, pointIndex) => ({ point, pointIndex }))
+    .filter(({ point }) => Math.abs(point.x - innerX) < 0.05)
+    .sort((a, b) => a.point.z - b.point.z);
+  if (innerPoints.length < 2) return { placement: route.points[index % route.points.length] || fallback, waypointIndex: 0, mode: 'route-corner' };
+
+  const low = innerPoints[0];
+  const high = innerPoints[innerPoints.length - 1];
+  const spawnSlot = Number.isFinite(route.spawnSlot) ? route.spawnSlot : index;
+  const stagger = [0.18, 0.38, 0.62, 0.82][spawnSlot % 4];
+  const towardHigh = spawnSlot % 2 === 0;
+  const z = THREE.MathUtils.lerp(low.point.z, high.point.z, stagger);
+  const pad = route.pad;
+  let roadSideX = innerX;
+  if (pad?.border && route.polygon?.length) {
+    for (let step = 0; step <= 36; step += 1) {
+      const candidateX = innerX - sign * step;
+      const localX = candidateX - pad.border.position.x;
+      const localZ = z - pad.border.position.z;
+      if (!pointInBasePadPolygon(localX, localZ, route.polygon)) break;
+      roadSideX = candidateX;
+    }
+    roadSideX += sign * TRON_RUNNER_CROWD_COLLISION_RADIUS * 1.8;
+  }
+  return {
+    placement: {
+      x: roadSideX,
+      y: low.point.y,
+      z,
+      yaw: towardHigh ? 0 : Math.PI,
+    },
+    waypointIndex: towardHigh ? high.pointIndex : low.pointIndex,
+    mode: 'road-facing-sidewalk',
+  };
+}
+
+function buildTronRunnerCrowdMember(job, index) {
+  const group = new THREE.Group();
+  group.name = `tron-runner-crowd-${index + 1}`;
+  group.visible = false;
+  group.scale.copy(tronRunnerWalker.scale);
+
+  const cloneModel = cloneRunnerSkeleton(job.sourceModel);
+  cloneModel.name = `soldier-rigged-runner-crowd-${index + 1}`;
+  const cloneMeshes = [];
+  cloneModel.traverse((obj) => {
+    if (!obj.isMesh) return;
+    obj.frustumCulled = false;
+    obj.castShadow = false;
+    obj.receiveShadow = false;
+    obj.layers.set(0);
+    cloneMeshes.push(obj);
+  });
+  cloneMeshes.forEach((mesh, meshIndex) => {
+    mesh.material = job.sourceMeshes[meshIndex]?.material || tronRunnerSuitMat;
+  });
+  group.add(cloneModel);
+
+  const animationScaleOffset = 0.92 + (index % 5) * 0.035;
+  const speedScaleOffset = 0.86 + (index % 5) * 0.035;
+  const { mixer, action } = makeTronRunnerCrowdActionSet(cloneModel, job.animations, index);
+  const route = tronRunnerCrowdBuildRoute(index);
+  const fallback = tronRunnerCrowdFallbackPlacement(index);
+  const startInfo = tronRunnerCrowdRoadFacingStart(route, index, fallback);
+  const start = startInfo.placement;
+  group.position.set(start.x, start.y, start.z);
+  group.rotation.y = start.yaw ?? 0;
+  const member = {
+    index,
+    group,
+    model: cloneModel,
+    mixer,
+    action,
+    route,
+    waypointIndex: startInfo.waypointIndex ?? 0,
+    speed: tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * speedScaleOffset,
+    speedScaleOffset,
+    animationScaleOffset,
+    lastEffectiveAnimationSpeed: null,
+    startMode: startInfo.mode,
+    surface: route ? 'sidewalk' : 'road-fallback',
+    groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
+    distanceWalked: 0,
+    lastMovedDistance: 0,
+    collisionCount: 0,
+    lastCollision: false,
+  };
+  tronRunnerCrowd.push(member);
+  tronRunnerCrowdGroup.add(group);
+}
+
 function buildTronRunnerCrowd(sourceModel, animations) {
   clearTronRunnerCrowd();
   if (!TRON_RUNNER_CROWD_ENABLED || !sourceModel || !cloneRunnerSkeleton) return;
@@ -8369,56 +8541,41 @@ function buildTronRunnerCrowd(sourceModel, animations) {
   sourceModel.traverse((obj) => {
     if (obj.isMesh) sourceMeshes.push(obj);
   });
+  tronRunnerCrowdBuildJob = {
+    sourceModel,
+    sourceMeshes,
+    animations,
+    nextIndex: 0,
+    startedAt: performance.now(),
+  };
+  tronRunnerCrowdBuildStats.status = 'queued';
+  tronRunnerCrowdBuildStats.startedAt = tronRunnerCrowdBuildJob.startedAt;
+  tronRunnerCrowdBuildStats.built = 0;
+  tronRunnerCrowdBuildStats.requested = TRON_RUNNER_CROWD_COUNT;
+}
 
-  for (let index = 0; index < TRON_RUNNER_CROWD_COUNT; index += 1) {
-    const group = new THREE.Group();
-    group.name = `tron-runner-crowd-${index + 1}`;
-    group.visible = false;
-    group.scale.copy(tronRunnerWalker.scale);
-
-    const cloneModel = cloneRunnerSkeleton(sourceModel);
-    cloneModel.name = `soldier-rigged-runner-crowd-${index + 1}`;
-    const cloneMeshes = [];
-    cloneModel.traverse((obj) => {
-      if (!obj.isMesh) return;
-      obj.frustumCulled = false;
-      obj.castShadow = false;
-      obj.receiveShadow = false;
-      obj.layers.set(0);
-      cloneMeshes.push(obj);
-    });
-    cloneMeshes.forEach((mesh, meshIndex) => {
-      mesh.material = sourceMeshes[meshIndex]?.material || tronRunnerSuitMat;
-    });
-    group.add(cloneModel);
-
-    const { mixer, action } = makeTronRunnerCrowdActionSet(cloneModel, animations, index);
-    const route = tronRunnerCrowdBuildRoute(index);
-    const fallback = tronRunnerCrowdFallbackPlacement(index);
-    const start = route?.points?.[index % route.points.length] || fallback;
-    group.position.set(start.x, start.y, start.z);
-    group.rotation.y = start.yaw ?? 0;
-    const member = {
-      index,
-      group,
-      model: cloneModel,
-      mixer,
-      action,
-      route,
-      waypointIndex: route?.points?.length ? (index + 1) % route.points.length : 0,
-      speed: tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (0.86 + (index % 5) * 0.035),
-      surface: route ? 'sidewalk' : 'road-fallback',
-      groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
-      distanceWalked: 0,
-      lastMovedDistance: 0,
-      collisionCount: 0,
-      lastCollision: false,
-    };
-    tronRunnerCrowd.push(member);
-    tronRunnerCrowdGroup.add(group);
-  }
+function processTronRunnerCrowdBuildQueue() {
+  if (!tronRunnerCrowdBuildJob) return;
+  const job = tronRunnerCrowdBuildJob;
+  const started = performance.now();
+  tronRunnerCrowdBuildStats.status = 'building';
+  buildTronRunnerCrowdMember(job, job.nextIndex);
+  job.nextIndex += 1;
+  tronRunnerCrowdBuildStats.built = job.nextIndex;
+  tronRunnerCrowdBuildStats.lastChunkMs = performance.now() - started;
+  if (job.nextIndex < TRON_RUNNER_CROWD_COUNT) return;
   syncTronRunnerCrowdScaleAndGround();
   syncTronRunnerCrowdVisibility();
+  tronRunnerCrowdBuildStats.status = 'done';
+  tronRunnerCrowdBuildStats.durationMs = performance.now() - job.startedAt;
+  tronRunnerCrowdBuildJob = null;
+}
+
+async function drainTronRunnerCrowdBuildQueue() {
+  while (tronRunnerCrowdBuildJob) {
+    processTronRunnerCrowdBuildQueue();
+    await waitForNextFrame();
+  }
 }
 
 function tronRunnerCrowdPointInsideRoute(member, x, z) {
@@ -8494,12 +8651,19 @@ function advanceTronRunnerCrowdMember(member, dt) {
 }
 
 function updateTronRunnerCrowd(dt) {
-  if (!TRON_RUNNER_CROWD_ENABLED || !tronRunnerCrowd.length) return;
+  if (!TRON_RUNNER_CROWD_ENABLED) return;
+  processTronRunnerCrowdBuildQueue();
+  if (!tronRunnerCrowd.length) return;
   syncTronRunnerCrowdVisibility();
   if (!tronRunnerCrowdGroup.visible) return;
   const step = Math.min(dt, 0.05);
   for (const member of tronRunnerCrowd) {
-    member.action?.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
+    const nextEffectiveAnimationSpeed = tronRunnerState.effectiveAnimationSpeed * (member.animationScaleOffset ?? 1);
+    if (member.action && Math.abs((member.lastEffectiveAnimationSpeed ?? -1) - nextEffectiveAnimationSpeed) > 0.0001) {
+      member.action.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
+      member.lastEffectiveAnimationSpeed = nextEffectiveAnimationSpeed;
+    }
+    member.speed = tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (member.speedScaleOffset ?? 1);
     member.mixer?.update(step);
     advanceTronRunnerCrowdMember(member, step);
   }
@@ -8527,6 +8691,7 @@ function tronRunnerCrowdInspect() {
       surface: member.surface,
       routeMode: member.route?.mode ?? 'fallback-road',
       routeLabel: member.route?.label ?? 'fallback',
+      startMode: member.startMode ?? 'unknown',
       waypointIndex: member.waypointIndex ?? 0,
       distanceWalked: Number((member.distanceWalked ?? 0).toFixed(2)),
       lastMovedDistance: Number((member.lastMovedDistance ?? 0).toFixed(4)),
@@ -8555,6 +8720,15 @@ function tronRunnerCrowdInspect() {
     sharedMaterial: true,
     realShadows: false,
     dynamicReflections: false,
+    build: {
+      status: tronRunnerCrowdBuildStats.status,
+      built: tronRunnerCrowdBuildStats.built,
+      requested: tronRunnerCrowdBuildStats.requested,
+      progress: Number((tronRunnerCrowdBuildStats.built / Math.max(1, tronRunnerCrowdBuildStats.requested)).toFixed(3)),
+      durationMs: Number(tronRunnerCrowdBuildStats.durationMs.toFixed(2)),
+      lastChunkMs: Number(tronRunnerCrowdBuildStats.lastChunkMs.toFixed(2)),
+      queued: Boolean(tronRunnerCrowdBuildJob),
+    },
     scaleLock: TRON_RUNNER_CROWD_SCALE_LOCK,
     sourceScale: runnerScale,
     sourceTargetHeight: Number(runnerTargetHeight.toFixed(3)),
@@ -13129,6 +13303,8 @@ async function bootSceneWithFinalDefaults() {
   setTronNoclip(false, { silent: true });
   applyPlayerSpawn(playerSpawn, false);
   await loadTronRunner();
+  await drainTronRunnerCrowdBuildQueue();
+  await ensureFootstepAudioReady();
   prewarmCityRevealRealPass();
   scheduleDroneIntroAutoFlight();
 }
