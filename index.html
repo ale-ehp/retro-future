@@ -7422,6 +7422,8 @@ const TRON_RUNNER_FOOTSTEP_CONTACTS = Object.freeze([
 const TRON_RUNNER_SUIT_TEXTURE_MODE = 'procedural-uv-suit';
 const TRON_RUNNER_SUIT_COLOR = new THREE.Color(0xffffff);
 const TRON_RUNNER_SUIT_EMISSIVE = new THREE.Color(0xffffff);
+const TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST = 1.18;
+const TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY = 0.82;
 const TRON_RUNNER_SHADOW_COLOR = new THREE.Color(0x000305);
 const TRON_RUNNER_SHADOW_CYAN_COLOR = new THREE.Color(0x031a1f);
 const TRON_RUNNER_LIGHTING_MODE = 'self-lit-material';
@@ -7775,8 +7777,10 @@ function makeTronRunnerCrowdSuitMaterial(colorPreset) {
   material.transparent = false;
   material.depthWrite = true;
   material.depthTest = true;
+  material.emissiveIntensity = TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY;
   material.userData.tronRunnerBaseOpacity = 1;
   material.userData.tronRunnerBaseEmissiveIntensity = material.emissiveIntensity;
+  material.userData.tronRunnerLedBloomBoost = TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST;
   return applyTronRunnerCrowdColorToMaterial(material, colorPreset);
 }
 function makeTronRunnerReflectionMaterial() {
@@ -8330,7 +8334,11 @@ function applyTronRunnerVisualControls() {
     material.emissiveMap = tronRunnerSuitEmissiveTexture;
     material.color.copy(TRON_RUNNER_SUIT_COLOR).multiplyScalar(0.82 + bodyAmount * 0.035 + materialDepth * 0.035);
     material.emissive.copy(TRON_RUNNER_SUIT_EMISSIVE);
-    material.emissiveIntensity = THREE.MathUtils.clamp(0.34 + selfLightIntensity * 1.05 + modelLineIntensity * 0.78, 0.18, 1);
+    material.emissiveIntensity = THREE.MathUtils.clamp(
+      (0.34 + selfLightIntensity * 1.05 + modelLineIntensity * 0.78) * TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST,
+      0.18,
+      1.18
+    );
     material.envMapIntensity = materialReflect * 0.12;
     material.metalness = materialMetalness;
     material.roughness = materialRoughness;
@@ -9230,11 +9238,13 @@ function tronRunnerCrowdInspect() {
     const heightFromRoad = member.group.position.y - roadTileTopY();
     const targetHeight = TRON_RUNNER_TARGET_HEIGHT * member.group.scale.y;
     const materialOpacities = [];
+    const materialEmissiveIntensities = [];
     const materialColors = new Set();
     let transparentMaterialCount = 0;
     member.model?.traverse((object) => {
       if (!object.isMesh || !object.material) return;
       if (Number.isFinite(object.material.opacity)) materialOpacities.push(object.material.opacity);
+      if (Number.isFinite(object.material.emissiveIntensity)) materialEmissiveIntensities.push(object.material.emissiveIntensity);
       if (object.material.transparent) transparentMaterialCount += 1;
       const colorHex = object.material.color?.getHexString?.();
       if (colorHex) materialColors.add(colorHex);
@@ -9257,6 +9267,7 @@ function tronRunnerCrowdInspect() {
       colorName: member.colorName ?? 'current cyan',
       materialMinOpacity: Number((materialOpacities.length ? Math.min(...materialOpacities) : 1).toFixed(3)),
       materialMaxOpacity: Number((materialOpacities.length ? Math.max(...materialOpacities) : 1).toFixed(3)),
+      materialMaxEmissiveIntensity: Number((materialEmissiveIntensities.length ? Math.max(...materialEmissiveIntensities) : 0).toFixed(3)),
       transparentMaterialCount,
       materialColors: [...materialColors],
       state: member.state ?? 'walk',
@@ -9301,6 +9312,7 @@ function tronRunnerCrowdInspect() {
     return counts;
   }, {});
   const materialMinOpacity = members.length ? Math.min(...members.map((member) => member.materialMinOpacity)) : 1;
+  const materialMaxEmissiveIntensity = members.length ? Math.max(...members.map((member) => member.materialMaxEmissiveIntensity)) : 0;
   const transparentMaterialCount = members.reduce((sum, member) => sum + member.transparentMaterialCount, 0);
   return {
     enabled: TRON_RUNNER_CROWD_ENABLED,
@@ -9309,6 +9321,8 @@ function tronRunnerCrowdInspect() {
     visibleCount: members.filter((member) => member.visible).length,
     colorCounts,
     materialMinOpacity: Number(materialMinOpacity.toFixed(3)),
+    materialMaxEmissiveIntensity: Number(materialMaxEmissiveIntensity.toFixed(3)),
+    characterLedBloomBoost: TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST,
     transparentMaterialCount,
     sidewalkMembers: members.filter((member) => member.surface === 'sidewalk').length,
     routeLoopMembers: members.filter((member) => member.routeMode === TRON_RUNNER_CROWD_PATH_MODE).length,
@@ -10118,6 +10132,7 @@ function tronRunnerInspect() {
     },
     suitColorHex: runnerMaterial?.color?.getHexString?.() ?? null,
     suitEmissiveHex: runnerMaterial?.emissive?.getHexString?.() ?? null,
+    suitEmissiveIntensity: Number((runnerMaterial?.emissiveIntensity ?? 0).toFixed(3)),
     suitTextureMode: TRON_RUNNER_SUIT_TEXTURE_MODE,
     suitMapEnabled: Boolean(runnerMaterial?.map?.isTexture),
     suitEmissiveMapEnabled: Boolean(runnerMaterial?.emissiveMap?.isTexture),
