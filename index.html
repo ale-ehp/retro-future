@@ -8239,8 +8239,12 @@ function applyTronRunnerVisualControls() {
 }
 
 function tronRunnerDynamicReflectionOpacity() {
+  return tronRunnerDynamicReflectionOpacityForSurface(tronRunnerState.surface);
+}
+
+function tronRunnerDynamicReflectionOpacityForSurface(surface) {
   if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED) return 0;
-  const isSidewalk = tronRunnerState.surface === 'sidewalk';
+  const isSidewalk = surface === 'sidewalk';
   const reflect = isSidewalk ? basePadReflect : Number(controlEls.roadReflect?.value ?? 0);
   const roughness = isSidewalk ? basePadRoughness : Number(controlEls.roadRoughness?.value ?? 1);
   const metalness = isSidewalk ? basePadMetalness : Number(controlEls.roadMetalness?.value ?? 0);
@@ -8516,6 +8520,7 @@ function syncTronRunnerCrowdScaleAndGround() {
       member.surface = placement.surface;
       member.groundOffset = TRON_RUNNER_CROWD_GROUND_OFFSET;
     }
+    updateTronRunnerCrowdReflection(member);
   }
 }
 
@@ -8524,6 +8529,7 @@ function syncTronRunnerCrowdVisibility() {
   tronRunnerCrowdGroup.visible = visible;
   for (const member of tronRunnerCrowd) {
     member.group.visible = visible;
+    updateTronRunnerCrowdReflection(member);
   }
 }
 
@@ -8538,6 +8544,75 @@ function makeTronRunnerCrowdActionSet(model, animations, offset) {
   action.play();
   action.time = (walkClip.duration || 1) * ((offset * 0.173) % 1);
   return { mixer, action };
+}
+
+function buildTronRunnerCrowdReflection(sourceModel, animations, index) {
+  if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED || !sourceModel || !cloneRunnerSkeleton) {
+    return {
+      group: null,
+      model: null,
+      mixer: null,
+      action: null,
+      materials: [],
+      meshCount: 0,
+    };
+  }
+  const group = new THREE.Group();
+  group.name = `tron-runner-crowd-reflection-${index + 1}`;
+  group.position.y = TRON_RUNNER_DYNAMIC_REFLECTION_Y;
+  group.scale.set(1, -TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE, 1);
+  group.visible = false;
+
+  const model = cloneRunnerSkeleton(sourceModel);
+  model.name = `soldier-rigged-runner-crowd-reflection-${index + 1}`;
+  const materials = [];
+  let meshCount = 0;
+  model.traverse((obj) => {
+    if (!obj.isMesh) return;
+    obj.frustumCulled = false;
+    obj.castShadow = false;
+    obj.receiveShadow = false;
+    obj.renderOrder = 2;
+    obj.layers.set(0);
+    obj.material = makeTronRunnerReflectionMaterial();
+    materials.push(obj.material);
+    meshCount += 1;
+  });
+  group.add(model);
+  const { mixer, action } = makeTronRunnerCrowdActionSet(model, animations, index);
+  return {
+    group,
+    model,
+    mixer,
+    action,
+    materials,
+    meshCount,
+  };
+}
+
+function updateTronRunnerCrowdReflection(member) {
+  const group = member.reflectionGroup;
+  const materials = member.reflectionMaterials || [];
+  const opacity = tronRunnerDynamicReflectionOpacityForSurface(member.surface);
+  const visible = Boolean(
+    TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED &&
+    tronRunnerCrowdGroup.visible &&
+    member.group.visible &&
+    group &&
+    opacity > 0.005
+  );
+  if (group) {
+    group.visible = visible;
+    group.position.y = TRON_RUNNER_DYNAMIC_REFLECTION_Y;
+    group.scale.set(1, -TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE, 1);
+  }
+  for (const material of materials) {
+    material.userData.tronRunnerBaseOpacity = opacity;
+    material.opacity = opacity;
+    material.needsUpdate = true;
+  }
+  member.dynamicReflectionVisible = visible;
+  member.dynamicReflectionOpacity = opacity;
 }
 
 function tronRunnerCrowdRoadFacingStart(route, index, fallback) {
@@ -8606,6 +8681,8 @@ function buildTronRunnerCrowdMember(job, index) {
   const animationScaleOffset = 0.92 + (index % 5) * 0.035;
   const speedScaleOffset = 0.86 + (index % 5) * 0.035;
   const { mixer, action } = makeTronRunnerCrowdActionSet(cloneModel, job.animations, index);
+  const reflection = buildTronRunnerCrowdReflection(job.sourceModel, job.animations, index);
+  if (reflection.group) group.add(reflection.group);
   const route = tronRunnerCrowdBuildRoute(index);
   const fallback = tronRunnerCrowdFallbackPlacement(index);
   const startInfo = tronRunnerCrowdRoadFacingStart(route, index, fallback);
@@ -8618,6 +8695,14 @@ function buildTronRunnerCrowdMember(job, index) {
     model: cloneModel,
     mixer,
     action,
+    reflectionGroup: reflection.group,
+    reflectionModel: reflection.model,
+    reflectionMixer: reflection.mixer,
+    reflectionAction: reflection.action,
+    reflectionMaterials: reflection.materials,
+    dynamicReflectionMeshCount: reflection.meshCount,
+    dynamicReflectionVisible: false,
+    dynamicReflectionOpacity: 0,
     route,
     waypointIndex: startInfo.waypointIndex ?? 0,
     speed: tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * speedScaleOffset,
@@ -8868,6 +8953,7 @@ function updateTronRunnerCrowd(dt) {
     const nextEffectiveAnimationSpeed = tronRunnerState.effectiveAnimationSpeed * (member.animationScaleOffset ?? 1);
     if (member.action && Math.abs((member.lastEffectiveAnimationSpeed ?? -1) - nextEffectiveAnimationSpeed) > 0.0001) {
       member.action.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
+      member.reflectionAction?.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
       member.lastEffectiveAnimationSpeed = nextEffectiveAnimationSpeed;
     }
     member.speed = tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (member.speedScaleOffset ?? 1);
@@ -8880,11 +8966,13 @@ function updateTronRunnerCrowd(dt) {
       continue;
     }
     member.mixer?.update(member.mixerDt);
+    member.reflectionMixer?.update(member.mixerDt);
     const moveSubsteps = Math.max(1, Math.ceil(member.lodDt / TRON_RUNNER_CROWD_MAX_MOVE_SUBSTEP));
     const moveSubstepDt = member.lodDt / moveSubsteps;
     for (let stepIndex = 0; stepIndex < moveSubsteps; stepIndex += 1) {
       advanceTronRunnerCrowdMember(member, moveSubstepDt, now);
     }
+    updateTronRunnerCrowdReflection(member);
     member.mixerDt = 0;
     member.lodDt = 0;
   }
@@ -8928,6 +9016,9 @@ function tronRunnerCrowdInspect() {
       buildingCollision: buildingCollision.colliding,
       buildingCollisionCorrection: Number(buildingCollision.correction.toFixed(3)),
       buildingCollisionLabel: buildingCollision.label,
+      dynamicReflectionVisible: Boolean(member.dynamicReflectionVisible),
+      dynamicReflectionOpacity: Number((member.dynamicReflectionOpacity ?? 0).toFixed(3)),
+      dynamicReflectionMeshCount: member.dynamicReflectionMeshCount ?? 0,
       waypointIndex: member.waypointIndex ?? 0,
       distanceWalked: Number((member.distanceWalked ?? 0).toFixed(2)),
       lastMovedDistance: Number((member.lastMovedDistance ?? 0).toFixed(4)),
@@ -8967,7 +9058,13 @@ function tronRunnerCrowdInspect() {
     skeletonClone: Boolean(cloneRunnerSkeleton),
     sharedMaterial: true,
     realShadows: false,
-    dynamicReflections: false,
+    dynamicReflections: {
+      enabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
+      visibleCount: members.filter((member) => member.dynamicReflectionVisible).length,
+      meshCount: members.reduce((sum, member) => sum + (member.dynamicReflectionMeshCount || 0), 0),
+      maxOpacity: Number((members.length ? Math.max(...members.map((member) => member.dynamicReflectionOpacity || 0)) : 0).toFixed(3)),
+      yScale: TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
+    },
     build: {
       status: tronRunnerCrowdBuildStats.status,
       built: tronRunnerCrowdBuildStats.built,

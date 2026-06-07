@@ -1,7 +1,7 @@
 {
-  "savedAt": "2026-06-06T11:02:34.660Z",
+  "savedAt": "2026-06-07T13:57:39.280Z",
   "source": "chrome-localStorage://Google Chrome/Default/http://127.0.0.1:60124",
-  "chromeSavedAt": "2026-06-06T11:02:34.660Z",
+  "chromeSavedAt": "2026-06-07T13:53:22.234Z",
   "spawn": {
     "x": 1021.9157138958009,
     "y": 591.0351224586902,
@@ -101,7 +101,7 @@
     "base-pad-texture-mode": "on",
     "base-pad-texture-repeat": 8,
     "base-pad-texture-rotation": -141,
-    "base-pad-normal": 0.72,
+    "base-pad-normal": 0,
     "base-pad-hue": -6,
     "base-pad-sat": 0.64,
     "base-pad-bright": 1.15,
@@ -300,10 +300,11 @@
     "fxSavedAt": "2026-05-18T22:25:04.343Z",
     "ledGlowFxSavedAt": "2026-06-01T13:00:24.597Z",
     "atmosphereFxSavedAt": "2026-06-01T12:53:44.128Z",
-    "bloomFxSavedAt": "2026-06-01T13:00:20.530Z",
-    "performanceFxSavedAt": "2026-06-01T12:58:43.432Z",
+    "bloomFxSavedAt": "2026-06-06T10:58:44.093Z",
+    "performanceFxSavedAt": "2026-06-06T10:58:47.377Z",
     "wireframeFxSavedAt": "2026-06-01T13:00:27.146Z",
-    "characterSavedAt": "2026-06-06T07:24:29.673Z"
+    "characterSavedAt": "2026-06-06T10:59:14.811Z",
+    "surfaceReflectionsSavedAt": "2026-06-07T13:53:22.234Z"
   },
   "characterPreset": {
     "source": "chrome-localStorage://Google Chrome/Default/http://127.0.0.1:60124/tron-boulevard-tab:character",
