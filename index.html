@@ -7455,6 +7455,15 @@ const TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET = 3.2;
 const TRON_RUNNER_CROWD_BUILDING_CLEARANCE = 6.2;
 const TRON_RUNNER_CROWD_SPEED_SCALE = 0.72;
 const TRON_RUNNER_CROWD_ROUTE_RECORD_SPREAD = 4;
+const TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED = true;
+const TRON_RUNNER_CROWD_AVOIDANCE_ENABLED = true;
+const TRON_RUNNER_CROWD_AVOIDANCE_RADIUS = 5.2;
+const TRON_RUNNER_CROWD_AVOIDANCE_STRENGTH = 7.5;
+const TRON_RUNNER_CROWD_SPATIAL_CELL = 9.5;
+const TRON_RUNNER_CROWD_TURN_DURATION_MS = 180;
+const TRON_RUNNER_CROWD_YIELD_DURATION_MS = 260;
+const TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE = 190;
+const TRON_RUNNER_CROWD_LOD_MID_DISTANCE = 520;
 const tronRunnerWalker = new THREE.Group();
 tronRunnerWalker.name = 'tron-runner-walker';
 tronRunnerWalker.visible = false;
@@ -7860,6 +7869,7 @@ let tronRunnerRevealComplete = !TRON_RUNNER_REVEAL_ENABLED;
 const tronRunnerCrowd = [];
 const tronRunnerCrowdBox = new THREE.Box3();
 const tronRunnerCrowdSize = new THREE.Vector3();
+const tronRunnerCrowdSpatialGrid = new Map();
 let tronRunnerCrowdBuildJob = null;
 const tronRunnerCrowdBuildStats = {
   status: 'idle',
@@ -7868,6 +7878,14 @@ const tronRunnerCrowdBuildStats = {
   startedAt: 0,
   durationMs: 0,
   lastChunkMs: 0,
+};
+const tronRunnerCrowdRuntimeStats = {
+  frame: 0,
+  gridCells: 0,
+  avoidancePairs: 0,
+  maxAvoidanceOverlap: 0,
+  lastThinkMs: 0,
+  maxThinkMs: 0,
 };
 const tronRunnerAutonomy = {
   initialized: false,
@@ -8382,8 +8400,72 @@ function tronRunnerCrowdBuildRoute(index) {
   return route;
 }
 
+function tronRunnerCrowdGridCoord(value) {
+  return Math.floor(value / TRON_RUNNER_CROWD_SPATIAL_CELL);
+}
+
+function tronRunnerCrowdGridKey(cx, cz) {
+  return `${cx}:${cz}`;
+}
+
+function prepareTronRunnerCrowdSpatialGrid() {
+  tronRunnerCrowdSpatialGrid.clear();
+  for (const member of tronRunnerCrowd) {
+    const cx = tronRunnerCrowdGridCoord(member.group.position.x);
+    const cz = tronRunnerCrowdGridCoord(member.group.position.z);
+    const key = tronRunnerCrowdGridKey(cx, cz);
+    let bucket = tronRunnerCrowdSpatialGrid.get(key);
+    if (!bucket) {
+      bucket = [];
+      tronRunnerCrowdSpatialGrid.set(key, bucket);
+    }
+    bucket.push(member);
+  }
+  tronRunnerCrowdRuntimeStats.gridCells = tronRunnerCrowdSpatialGrid.size;
+}
+
+function nearbyTronRunnerCrowdMembers(x, z) {
+  const cx = tronRunnerCrowdGridCoord(x);
+  const cz = tronRunnerCrowdGridCoord(z);
+  const members = [];
+  for (let dz = -1; dz <= 1; dz += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      const bucket = tronRunnerCrowdSpatialGrid.get(tronRunnerCrowdGridKey(cx + dx, cz + dz));
+      if (bucket) members.push(...bucket);
+    }
+  }
+  return members;
+}
+
+function tronRunnerCrowdLodStride(member) {
+  const distance = camera.position.distanceTo(member.group.position);
+  member.lodDistance = distance;
+  if (distance <= TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE) return 1;
+  if (distance <= TRON_RUNNER_CROWD_LOD_MID_DISTANCE) return 2;
+  return 4;
+}
+
+function setTronRunnerCrowdState(member, state, now, durationMs = 0) {
+  member.state = state;
+  member.stateUntil = durationMs > 0 ? now + durationMs : 0;
+}
+
+function normalizeTronRunnerCrowdState(member, now) {
+  if (!TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED) {
+    member.state = 'walk';
+    member.stateUntil = 0;
+    return;
+  }
+  if (!member.state) member.state = 'walk';
+  if (member.stateUntil && now >= member.stateUntil) {
+    member.state = 'walk';
+    member.stateUntil = 0;
+  }
+}
+
 function clearTronRunnerCrowd() {
   tronRunnerCrowdBuildJob = null;
+  tronRunnerCrowdSpatialGrid.clear();
   tronRunnerCrowd.length = 0;
   while (tronRunnerCrowdGroup.children.length) {
     tronRunnerCrowdGroup.remove(tronRunnerCrowdGroup.children[0]);
@@ -8523,6 +8605,15 @@ function buildTronRunnerCrowdMember(job, index) {
     animationScaleOffset,
     lastEffectiveAnimationSpeed: null,
     startMode: startInfo.mode,
+    state: 'walk',
+    stateUntil: 0,
+    lodStride: 1,
+    lodDistance: 0,
+    lodDt: 0,
+    mixerDt: 0,
+    avoidanceNeighbors: 0,
+    avoidanceOverlap: 0,
+    lastMovedAt: 0,
     surface: route ? 'sidewalk' : 'road-fallback',
     groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
     distanceWalked: 0,
@@ -8611,7 +8702,52 @@ function resolveTronRunnerCrowdCollision(member, point) {
   return collided;
 }
 
-function advanceTronRunnerCrowdMember(member, dt) {
+function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, now) {
+  member.avoidanceNeighbors = 0;
+  member.avoidanceOverlap = 0;
+  if (!TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED || !TRON_RUNNER_CROWD_AVOIDANCE_ENABLED) {
+    return { x: 0, z: 0, speedScale: 1 };
+  }
+  let pushX = 0;
+  let pushZ = 0;
+  let speedScale = 1;
+  const radius = TRON_RUNNER_CROWD_AVOIDANCE_RADIUS;
+  const radiusSq = radius * radius;
+  const nearby = nearbyTronRunnerCrowdMembers(nextPoint.x, nextPoint.z);
+  for (const other of nearby) {
+    if (other === member) continue;
+    const dx = nextPoint.x - other.group.position.x;
+    const dz = nextPoint.z - other.group.position.z;
+    const distSq = dx * dx + dz * dz;
+    if (distSq <= 0.0001 || distSq >= radiusSq) continue;
+    const dist = Math.sqrt(distSq);
+    const overlap = radius - dist;
+    const weight = overlap / radius;
+    pushX += dx / dist * weight;
+    pushZ += dz / dist * weight;
+    member.avoidanceNeighbors += 1;
+    member.avoidanceOverlap = Math.max(member.avoidanceOverlap, overlap);
+    tronRunnerCrowdRuntimeStats.avoidancePairs += 1;
+    tronRunnerCrowdRuntimeStats.maxAvoidanceOverlap = Math.max(tronRunnerCrowdRuntimeStats.maxAvoidanceOverlap, overlap);
+
+    const otherDx = other.group.position.x - current.x;
+    const otherDz = other.group.position.z - current.z;
+    const ahead = otherDx * dirX + otherDz * dirZ;
+    const side = Math.abs(otherDx * -dirZ + otherDz * dirX);
+    if (ahead > 0 && ahead < radius * 1.25 && side < radius * 0.7) {
+      speedScale = Math.min(speedScale, 0.28);
+      setTronRunnerCrowdState(member, 'yield', now, TRON_RUNNER_CROWD_YIELD_DURATION_MS);
+    }
+  }
+  return {
+    x: pushX * TRON_RUNNER_CROWD_AVOIDANCE_STRENGTH * dt,
+    z: pushZ * TRON_RUNNER_CROWD_AVOIDANCE_STRENGTH * dt,
+    speedScale,
+  };
+}
+
+function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
+  normalizeTronRunnerCrowdState(member, now);
   const route = member.route;
   if (!route?.points?.length) {
     member.lastMovedDistance = 0;
@@ -8624,20 +8760,30 @@ function advanceTronRunnerCrowdMember(member, dt) {
   const distance = Math.hypot(dx, dz);
   if (distance <= TRON_RUNNER_CROWD_REACH_RADIUS) {
     member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
+    setTronRunnerCrowdState(member, 'turn', now, TRON_RUNNER_CROWD_TURN_DURATION_MS);
     member.lastMovedDistance = 0;
     return;
   }
   const dirX = dx / Math.max(distance, 0.001);
   const dirZ = dz / Math.max(distance, 0.001);
-  const step = Math.min(distance, Math.max(0, member.speed * Math.min(dt, 0.05)));
+  const stateSpeedScale = member.state === 'turn' ? 0.56 : member.state === 'yield' ? 0.34 : 1;
+  const baseStep = Math.max(0, member.speed * Math.min(dt, 0.08) * stateSpeedScale);
   const nextPoint = {
-    x: current.x + dirX * step,
-    z: current.z + dirZ * step,
+    x: current.x + dirX * Math.min(distance, baseStep),
+    z: current.z + dirZ * Math.min(distance, baseStep),
   };
+  const avoidance = tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, now);
+  if (avoidance.speedScale < 1) {
+    nextPoint.x = current.x + dirX * Math.min(distance, baseStep * avoidance.speedScale);
+    nextPoint.z = current.z + dirZ * Math.min(distance, baseStep * avoidance.speedScale);
+  }
+  nextPoint.x += avoidance.x;
+  nextPoint.z += avoidance.z;
   const collided = resolveTronRunnerCrowdCollision(member, nextPoint);
   if (collided) {
     member.collisionCount += 1;
     member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
+    setTronRunnerCrowdState(member, 'avoid', now, TRON_RUNNER_CROWD_YIELD_DURATION_MS);
   }
   const movedDistance = Math.hypot(nextPoint.x - current.x, nextPoint.z - current.z);
   const surface = tronRunnerSurfaceYForPoint(nextPoint.x, nextPoint.z);
@@ -8647,6 +8793,7 @@ function advanceTronRunnerCrowdMember(member, dt) {
   member.groundOffset = member.group.position.y - surface.groundY;
   member.distanceWalked += movedDistance;
   member.lastMovedDistance = movedDistance;
+  if (movedDistance > 0.0005) member.lastMovedAt = now;
   member.lastCollision = collided;
 }
 
@@ -8657,6 +8804,12 @@ function updateTronRunnerCrowd(dt) {
   syncTronRunnerCrowdVisibility();
   if (!tronRunnerCrowdGroup.visible) return;
   const step = Math.min(dt, 0.05);
+  const now = performance.now();
+  const thinkStarted = now;
+  tronRunnerCrowdRuntimeStats.frame += 1;
+  tronRunnerCrowdRuntimeStats.avoidancePairs = 0;
+  tronRunnerCrowdRuntimeStats.maxAvoidanceOverlap = 0;
+  prepareTronRunnerCrowdSpatialGrid();
   for (const member of tronRunnerCrowd) {
     const nextEffectiveAnimationSpeed = tronRunnerState.effectiveAnimationSpeed * (member.animationScaleOffset ?? 1);
     if (member.action && Math.abs((member.lastEffectiveAnimationSpeed ?? -1) - nextEffectiveAnimationSpeed) > 0.0001) {
@@ -8664,15 +8817,31 @@ function updateTronRunnerCrowd(dt) {
       member.lastEffectiveAnimationSpeed = nextEffectiveAnimationSpeed;
     }
     member.speed = tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (member.speedScaleOffset ?? 1);
-    member.mixer?.update(step);
-    advanceTronRunnerCrowdMember(member, step);
+    member.lodStride = TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED ? tronRunnerCrowdLodStride(member) : 1;
+    member.lodDt = Math.min(0.14, (member.lodDt || 0) + step);
+    member.mixerDt = Math.min(0.14, (member.mixerDt || 0) + step);
+    const shouldUpdate = member.lodStride <= 1 || ((tronRunnerCrowdRuntimeStats.frame + member.index) % member.lodStride === 0);
+    if (!shouldUpdate) {
+      member.lastMovedDistance = 0;
+      continue;
+    }
+    member.mixer?.update(member.mixerDt);
+    advanceTronRunnerCrowdMember(member, member.lodDt, now);
+    member.mixerDt = 0;
+    member.lodDt = 0;
   }
+  tronRunnerCrowdRuntimeStats.lastThinkMs = performance.now() - thinkStarted;
+  tronRunnerCrowdRuntimeStats.maxThinkMs = Math.max(
+    tronRunnerCrowdRuntimeStats.maxThinkMs,
+    tronRunnerCrowdRuntimeStats.lastThinkMs
+  );
 }
 
 function tronRunnerCrowdInspect() {
   const runnerScale = Number(tronRunnerWalker.scale.x.toFixed(4));
   const runnerTargetHeight = TRON_RUNNER_TARGET_HEIGHT * tronRunnerWalker.scale.y;
   const runnerHeightFromRoad = tronRunnerWalker.position.y - roadTileTopY();
+  const now = performance.now();
   const members = tronRunnerCrowd.map((member) => {
     tronRunnerCrowdBox.setFromObject(member.group);
     tronRunnerCrowdBox.getSize(tronRunnerCrowdSize);
@@ -8692,9 +8861,15 @@ function tronRunnerCrowdInspect() {
       routeMode: member.route?.mode ?? 'fallback-road',
       routeLabel: member.route?.label ?? 'fallback',
       startMode: member.startMode ?? 'unknown',
+      state: member.state ?? 'walk',
+      lodStride: member.lodStride ?? 1,
+      lodDistance: Number((member.lodDistance ?? 0).toFixed(1)),
+      avoidanceNeighbors: member.avoidanceNeighbors ?? 0,
+      avoidanceOverlap: Number((member.avoidanceOverlap ?? 0).toFixed(3)),
       waypointIndex: member.waypointIndex ?? 0,
       distanceWalked: Number((member.distanceWalked ?? 0).toFixed(2)),
       lastMovedDistance: Number((member.lastMovedDistance ?? 0).toFixed(4)),
+      recentlyMoved: now - (member.lastMovedAt || 0) < 360,
       collisionCount: member.collisionCount ?? 0,
       lastCollision: Boolean(member.lastCollision),
       sizeY: Number(tronRunnerCrowdSize.y.toFixed(3)),
@@ -8704,6 +8879,15 @@ function tronRunnerCrowdInspect() {
   const targetHeightDeltas = members.map((member) => Math.abs(member.targetHeight - runnerTargetHeight));
   const heightFromRoadDeltas = members.map((member) => Math.abs(member.heightFromRoad - runnerHeightFromRoad));
   const groundOffsetDeltas = members.map((member) => Math.abs(member.groundOffset - TRON_RUNNER_CROWD_GROUND_OFFSET));
+  const stateCounts = members.reduce((counts, member) => {
+    counts[member.state] = (counts[member.state] || 0) + 1;
+    return counts;
+  }, {});
+  const lodStrideCounts = members.reduce((counts, member) => {
+    const key = String(member.lodStride || 1);
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
   return {
     enabled: TRON_RUNNER_CROWD_ENABLED,
     mode: TRON_RUNNER_CROWD_PATH_MODE,
@@ -8711,7 +8895,7 @@ function tronRunnerCrowdInspect() {
     visibleCount: members.filter((member) => member.visible).length,
     sidewalkMembers: members.filter((member) => member.surface === 'sidewalk').length,
     routeLoopMembers: members.filter((member) => member.routeMode === TRON_RUNNER_CROWD_PATH_MODE).length,
-    movingMembers: members.filter((member) => member.lastMovedDistance > 0.0005).length,
+    movingMembers: members.filter((member) => member.recentlyMoved).length,
     collisionEnabled: TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
     collisionCount: members.reduce((sum, member) => sum + member.collisionCount, 0),
     requestedCount: TRON_RUNNER_CROWD_COUNT,
@@ -8728,6 +8912,23 @@ function tronRunnerCrowdInspect() {
       durationMs: Number(tronRunnerCrowdBuildStats.durationMs.toFixed(2)),
       lastChunkMs: Number(tronRunnerCrowdBuildStats.lastChunkMs.toFixed(2)),
       queued: Boolean(tronRunnerCrowdBuildJob),
+    },
+    intelligence: {
+      enabled: TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED,
+      mode: 'waypoint-state-machine',
+      avoidanceEnabled: TRON_RUNNER_CROWD_AVOIDANCE_ENABLED,
+      avoidanceRadius: TRON_RUNNER_CROWD_AVOIDANCE_RADIUS,
+      avoidancePairs: tronRunnerCrowdRuntimeStats.avoidancePairs,
+      maxAvoidanceOverlap: Number(tronRunnerCrowdRuntimeStats.maxAvoidanceOverlap.toFixed(3)),
+      spatialGridCell: TRON_RUNNER_CROWD_SPATIAL_CELL,
+      gridCells: tronRunnerCrowdRuntimeStats.gridCells,
+      lodEnabled: TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED,
+      lodNearDistance: TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE,
+      lodMidDistance: TRON_RUNNER_CROWD_LOD_MID_DISTANCE,
+      lodStrideCounts,
+      stateCounts,
+      lastThinkMs: Number(tronRunnerCrowdRuntimeStats.lastThinkMs.toFixed(3)),
+      maxThinkMs: Number(tronRunnerCrowdRuntimeStats.maxThinkMs.toFixed(3)),
     },
     scaleLock: TRON_RUNNER_CROWD_SCALE_LOCK,
     sourceScale: runnerScale,
