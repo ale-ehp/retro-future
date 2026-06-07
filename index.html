@@ -5342,6 +5342,7 @@ const basePadLedBatch = {
   count: 0,
   sceneVisible: true,
 };
+const BASE_PAD_LED_RENDER_ORDER = 12;
 let ledDistance = 0;
 let mainBuildingCollisionPadding = 7.4;
 let buildingHorizontalLedDistance = 0;
@@ -6878,7 +6879,9 @@ function ensureBasePadLedBatchCapacity(count) {
       color: PAL.tealLight,
       toneMapped: false,
       depthWrite: true,
-      transparent: false,
+      // Draw sidewalk LEDs after the fake runner reflection so the reflection
+      // cannot visually sit on top of the LED strips.
+      transparent: true,
       opacity: 1,
     });
   }
@@ -6890,7 +6893,7 @@ function ensureBasePadLedBatchCapacity(count) {
   const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), basePadLedBatch.material, capacity);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
-  mesh.renderOrder = 3;
+  mesh.renderOrder = BASE_PAD_LED_RENDER_ORDER;
   basePadLedBatch.mesh = mesh;
   basePadLedBatch.capacity = capacity;
   overlayGroup.add(mesh);
@@ -13848,6 +13851,11 @@ window.__tronInspect = () => ({
       sidewalkCullingDisabled: sidewalkCullingEnabledCount === 0,
       sidewalkCullingEnabledCount,
       basePadLedBatchFrustumCulled: Boolean(basePadLedBatch.mesh?.frustumCulled),
+      basePadLedBatchRenderOrder: basePadLedBatch.mesh?.renderOrder ?? null,
+      basePadLedBatchTransparent: Boolean(basePadLedBatch.material?.transparent),
+      basePadLedBatchDepthWrite: Boolean(basePadLedBatch.material?.depthWrite),
+      basePadLedBatchDepthTest: Boolean(basePadLedBatch.material?.depthTest),
+      basePadLedBatchCount: basePadLedBatch.count,
       basePadHexClipFrustumCulled: Boolean(basePadHexClipMesh.frustumCulled),
     };
   })(),
