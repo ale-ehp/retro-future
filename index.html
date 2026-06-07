@@ -7713,6 +7713,72 @@ const tronRunnerSuitMat = new THREE.MeshStandardMaterial({
   envMapIntensity: 0.02,
   toneMapped: false,
 });
+const TRON_RUNNER_CROWD_COLOR_PLAN = [
+  'current',
+  'orange',
+  'current',
+  'red',
+  'green',
+  'current',
+  'orange',
+  'red',
+  'current',
+  'green',
+];
+const TRON_RUNNER_CROWD_COLOR_PRESETS = {
+  current: {
+    label: 'current',
+    name: 'current cyan',
+    bodyColor: TRON_RUNNER_SUIT_COLOR.clone(),
+    emissiveColor: TRON_RUNNER_SUIT_EMISSIVE.clone(),
+    reflectionLedColor: new THREE.Color(0xbaffff),
+  },
+  orange: {
+    label: 'orange',
+    name: 'orange',
+    bodyColor: new THREE.Color(0xffb168),
+    emissiveColor: new THREE.Color(0xff7a20),
+    reflectionLedColor: new THREE.Color(0xff9d35),
+  },
+  red: {
+    label: 'red',
+    name: 'red',
+    bodyColor: new THREE.Color(0xff6a6a),
+    emissiveColor: new THREE.Color(0xff2536),
+    reflectionLedColor: new THREE.Color(0xff4350),
+  },
+  green: {
+    label: 'green',
+    name: 'green',
+    bodyColor: new THREE.Color(0x66ff9a),
+    emissiveColor: new THREE.Color(0x2fd37a),
+    reflectionLedColor: new THREE.Color(0x57ff93),
+  },
+};
+
+function tronRunnerCrowdColorPresetForIndex(index) {
+  const key = TRON_RUNNER_CROWD_COLOR_PLAN[index % TRON_RUNNER_CROWD_COLOR_PLAN.length] || 'current';
+  return TRON_RUNNER_CROWD_COLOR_PRESETS[key] || TRON_RUNNER_CROWD_COLOR_PRESETS.current;
+}
+
+function applyTronRunnerCrowdColorToMaterial(material, preset) {
+  if (!material || !preset || preset.label === 'current') return material;
+  if (material.color?.isColor) material.color.copy(preset.bodyColor);
+  if (material.emissive?.isColor) material.emissive.copy(preset.emissiveColor);
+  material.needsUpdate = true;
+  return material;
+}
+
+function makeTronRunnerCrowdSuitMaterial(colorPreset) {
+  const material = tronRunnerSuitMat.clone();
+  material.opacity = 1;
+  material.transparent = false;
+  material.depthWrite = true;
+  material.depthTest = true;
+  material.userData.tronRunnerBaseOpacity = 1;
+  material.userData.tronRunnerBaseEmissiveIntensity = material.emissiveIntensity;
+  return applyTronRunnerCrowdColorToMaterial(material, colorPreset);
+}
 function makeTronRunnerReflectionMaterial() {
   return makeTronRunnerReflectionBodyMaterial();
 }
@@ -7732,9 +7798,10 @@ function makeTronRunnerReflectionBodyMaterial() {
   });
 }
 
-function makeTronRunnerReflectionLedMaterial() {
+function makeTronRunnerReflectionLedMaterial(colorPreset = null) {
+  const color = colorPreset?.reflectionLedColor || new THREE.Color(0xbaffff);
   return new THREE.MeshBasicMaterial({
-    color: 0xbaffff,
+    color,
     map: tronRunnerSuitLedMaskTexture,
     alphaMap: tronRunnerSuitLedMaskTexture,
     blending: THREE.AdditiveBlending,
@@ -8662,7 +8729,7 @@ function makeTronRunnerCrowdActionSet(model, animations, offset) {
   return { mixer, action };
 }
 
-function buildTronRunnerCrowdReflection(sourceModel, animations, index) {
+function buildTronRunnerCrowdReflection(sourceModel, animations, index, colorPreset = null) {
   if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED || !sourceModel || !cloneRunnerSkeleton) {
     return {
       group: null,
@@ -8711,7 +8778,7 @@ function buildTronRunnerCrowdReflection(sourceModel, animations, index) {
     obj.receiveShadow = false;
     obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_LED_RENDER_ORDER;
     obj.layers.set(0);
-    obj.material = makeTronRunnerReflectionLedMaterial();
+    obj.material = makeTronRunnerReflectionLedMaterial(colorPreset);
     ledMaterials.push(obj.material);
     ledMeshCount += 1;
   });
@@ -8815,6 +8882,7 @@ function buildTronRunnerCrowdMember(job, index) {
   group.name = `tron-runner-crowd-${index + 1}`;
   group.visible = false;
   group.scale.copy(tronRunnerWalker.scale);
+  const colorPreset = tronRunnerCrowdColorPresetForIndex(index);
 
   const cloneModel = cloneRunnerSkeleton(job.sourceModel);
   cloneModel.name = `soldier-rigged-runner-crowd-${index + 1}`;
@@ -8827,15 +8895,16 @@ function buildTronRunnerCrowdMember(job, index) {
     obj.layers.set(0);
     cloneMeshes.push(obj);
   });
-  cloneMeshes.forEach((mesh, meshIndex) => {
-    mesh.material = job.sourceMeshes[meshIndex]?.material || tronRunnerSuitMat;
+  const crowdMaterial = makeTronRunnerCrowdSuitMaterial(colorPreset);
+  cloneMeshes.forEach((mesh) => {
+    mesh.material = crowdMaterial;
   });
   group.add(cloneModel);
 
   const animationScaleOffset = 0.92 + (index % 5) * 0.035;
   const speedScaleOffset = 0.86 + (index % 5) * 0.035;
   const { mixer, action } = makeTronRunnerCrowdActionSet(cloneModel, job.animations, index);
-  const reflection = buildTronRunnerCrowdReflection(job.sourceModel, job.animations, index);
+  const reflection = buildTronRunnerCrowdReflection(job.sourceModel, job.animations, index, colorPreset);
   if (reflection.group) group.add(reflection.group);
   const route = tronRunnerCrowdBuildRoute(index);
   const fallback = tronRunnerCrowdFallbackPlacement(index);
@@ -8849,6 +8918,8 @@ function buildTronRunnerCrowdMember(job, index) {
     model: cloneModel,
     mixer,
     action,
+    colorPreset: colorPreset.label,
+    colorName: colorPreset.name,
     reflectionGroup: reflection.group,
     reflectionModel: reflection.model,
     reflectionLedModel: reflection.ledModel,
@@ -9158,6 +9229,16 @@ function tronRunnerCrowdInspect() {
     const buildingCollision = tronRunnerCrowdBuildingCollisionDiagnostic(member);
     const heightFromRoad = member.group.position.y - roadTileTopY();
     const targetHeight = TRON_RUNNER_TARGET_HEIGHT * member.group.scale.y;
+    const materialOpacities = [];
+    const materialColors = new Set();
+    let transparentMaterialCount = 0;
+    member.model?.traverse((object) => {
+      if (!object.isMesh || !object.material) return;
+      if (Number.isFinite(object.material.opacity)) materialOpacities.push(object.material.opacity);
+      if (object.material.transparent) transparentMaterialCount += 1;
+      const colorHex = object.material.color?.getHexString?.();
+      if (colorHex) materialColors.add(colorHex);
+    });
     return {
       index: member.index + 1,
       visible: Boolean(tronRunnerCrowdGroup.visible && member.group.visible),
@@ -9172,6 +9253,12 @@ function tronRunnerCrowdInspect() {
       routeMode: member.route?.mode ?? 'fallback-road',
       routeLabel: member.route?.label ?? 'fallback',
       startMode: member.startMode ?? 'unknown',
+      colorPreset: member.colorPreset ?? 'current',
+      colorName: member.colorName ?? 'current cyan',
+      materialMinOpacity: Number((materialOpacities.length ? Math.min(...materialOpacities) : 1).toFixed(3)),
+      materialMaxOpacity: Number((materialOpacities.length ? Math.max(...materialOpacities) : 1).toFixed(3)),
+      transparentMaterialCount,
+      materialColors: [...materialColors],
       state: member.state ?? 'walk',
       lodStride: member.lodStride ?? 1,
       lodDistance: Number((member.lodDistance ?? 0).toFixed(1)),
@@ -9208,11 +9295,21 @@ function tronRunnerCrowdInspect() {
     counts[key] = (counts[key] || 0) + 1;
     return counts;
   }, {});
+  const colorCounts = members.reduce((counts, member) => {
+    const key = member.colorPreset || 'current';
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
+  const materialMinOpacity = members.length ? Math.min(...members.map((member) => member.materialMinOpacity)) : 1;
+  const transparentMaterialCount = members.reduce((sum, member) => sum + member.transparentMaterialCount, 0);
   return {
     enabled: TRON_RUNNER_CROWD_ENABLED,
     mode: TRON_RUNNER_CROWD_PATH_MODE,
     count: tronRunnerCrowd.length,
     visibleCount: members.filter((member) => member.visible).length,
+    colorCounts,
+    materialMinOpacity: Number(materialMinOpacity.toFixed(3)),
+    transparentMaterialCount,
     sidewalkMembers: members.filter((member) => member.surface === 'sidewalk').length,
     routeLoopMembers: members.filter((member) => member.routeMode === TRON_RUNNER_CROWD_PATH_MODE).length,
     movingMembers: members.filter((member) => member.recentlyMoved).length,
