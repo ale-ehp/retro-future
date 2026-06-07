@@ -7437,6 +7437,13 @@ const TRON_RUNNER_REAL_SHADOW_COLOR = 0x000203;
 const TRON_RUNNER_CONTACT_SHADOW_ROUNDNESS = 0.96;
 const TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED = true;
 const TRON_RUNNER_DYNAMIC_REFLECTION_MAX_OPACITY = 0.34;
+const TRON_RUNNER_DYNAMIC_REFLECTION_OPACITY_SCALE = 0.2;
+const TRON_RUNNER_DYNAMIC_REFLECTION_BODY_OPACITY_MULTIPLIER = 1.55;
+const TRON_RUNNER_DYNAMIC_REFLECTION_LED_OPACITY_MULTIPLIER = 1.08;
+const TRON_RUNNER_DYNAMIC_REFLECTION_BODY_MAX_OPACITY = 0.28;
+const TRON_RUNNER_DYNAMIC_REFLECTION_LED_MAX_OPACITY = 0.22;
+const TRON_RUNNER_DYNAMIC_REFLECTION_BODY_RENDER_ORDER = 2;
+const TRON_RUNNER_DYNAMIC_REFLECTION_LED_RENDER_ORDER = 3;
 const TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE = 0.58;
 const TRON_RUNNER_DYNAMIC_REFLECTION_Y = 0.018;
 const TRON_RUNNER_REVEAL_ENABLED = true;
@@ -7644,10 +7651,55 @@ function makeTronRunnerSuitEmissiveTexture() {
   return configureTronRunnerSuitTexture(texture);
 }
 
+function makeTronRunnerSuitLedMaskTexture() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+
+  function maskLine(x1, y1, x2, y2, width = 3, alpha = 0.9) {
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.shadowColor = 'rgba(120, 252, 255, 0.9)';
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = `rgba(164, 255, 255, ${alpha})`;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = `rgba(255, 255, 255, ${Math.min(1, alpha + 0.08)})`;
+    ctx.lineWidth = Math.max(1, width * 0.34);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  maskLine(256, 30, 256, 206, 3.2, 0.95);
+  maskLine(256, 250, 256, 482, 3.2, 0.95);
+  maskLine(78, 116, 212, 116, 2.8, 0.76);
+  maskLine(300, 116, 434, 116, 2.8, 0.76);
+  maskLine(82, 252, 430, 252, 3, 0.86);
+  maskLine(108, 344, 214, 456, 2.6, 0.74);
+  maskLine(404, 344, 298, 456, 2.6, 0.74);
+  maskLine(112, 52, 76, 196, 2.4, 0.62);
+  maskLine(400, 52, 436, 196, 2.4, 0.62);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return configureTronRunnerSuitTexture(texture);
+}
+
 let tronRunnerShadowTexture = makeTronRunnerShadowTexture();
 let tronRunnerShadowTextureSoftness = 0.9;
 const tronRunnerSuitTexture = makeTronRunnerSuitTexture();
 const tronRunnerSuitEmissiveTexture = makeTronRunnerSuitEmissiveTexture();
+const tronRunnerSuitLedMaskTexture = makeTronRunnerSuitLedMaskTexture();
 
 const tronRunnerSuitMat = new THREE.MeshStandardMaterial({
   color: TRON_RUNNER_SUIT_COLOR,
@@ -7662,8 +7714,12 @@ const tronRunnerSuitMat = new THREE.MeshStandardMaterial({
   toneMapped: false,
 });
 function makeTronRunnerReflectionMaterial() {
+  return makeTronRunnerReflectionBodyMaterial();
+}
+
+function makeTronRunnerReflectionBodyMaterial() {
   return new THREE.MeshBasicMaterial({
-    color: 0xa7fbff,
+    color: 0x12343a,
     map: tronRunnerSuitTexture,
     blending: THREE.NormalBlending,
     depthTest: false,
@@ -7672,6 +7728,23 @@ function makeTronRunnerReflectionMaterial() {
     side: THREE.DoubleSide,
     toneMapped: false,
     transparent: true,
+    userData: { tronRunnerReflectionLayer: 'body' },
+  });
+}
+
+function makeTronRunnerReflectionLedMaterial() {
+  return new THREE.MeshBasicMaterial({
+    color: 0xbaffff,
+    map: tronRunnerSuitLedMaskTexture,
+    alphaMap: tronRunnerSuitLedMaskTexture,
+    blending: THREE.AdditiveBlending,
+    depthTest: false,
+    depthWrite: false,
+    opacity: 0,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+    transparent: true,
+    userData: { tronRunnerReflectionLayer: 'led' },
   });
 }
 const tronRunnerShadowMat = new THREE.MeshBasicMaterial({
@@ -7726,12 +7799,20 @@ const tronRunnerParts = {
   realShadowReceiver: null,
   reflectionGroup: null,
   reflectionModel: null,
+  reflectionLedModel: null,
   reflectionMixer: null,
+  reflectionLedMixer: null,
   reflectionMaterials: [],
+  reflectionBodyMaterials: [],
+  reflectionLedMaterials: [],
   reflectionActions: {},
+  reflectionLedActions: {},
   reflectionActiveAction: null,
+  reflectionLedActiveAction: null,
   reflectionActionNames: null,
+  reflectionLedActionNames: null,
   dynamicReflectionMeshCount: 0,
+  dynamicReflectionLedMeshCount: 0,
   realShadowLight: tronRunnerRealShadowLight,
   realShadowTarget: tronRunnerRealShadowTarget,
   realShadowCasterCount: 0,
@@ -7781,8 +7862,11 @@ const tronRunnerState = {
   dynamicReflectionEnabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
   dynamicReflectionVisible: false,
   dynamicReflectionOpacity: 0,
+  dynamicReflectionBodyOpacity: 0,
+  dynamicReflectionLedOpacity: 0,
   dynamicReflectionSurface: 'sidewalk',
   dynamicReflectionMeshCount: 0,
+  dynamicReflectionLedMeshCount: 0,
   dynamicReflectionAnimated: false,
   autonomy: {
     mode: 'free-roam',
@@ -8069,6 +8153,8 @@ function applyTronRunnerRevealVisuals() {
     material.needsUpdate = true;
   }
   tronRunnerState.dynamicReflectionOpacity *= reflectionFactor;
+  tronRunnerState.dynamicReflectionBodyOpacity *= reflectionFactor;
+  tronRunnerState.dynamicReflectionLedOpacity *= reflectionFactor;
 
   const scan = tronRunnerParts.revealScan;
   if (scan) {
@@ -8191,6 +8277,9 @@ function applyTronRunnerVisualControls() {
   if (tronRunnerParts.reflectionActiveAction) {
     tronRunnerParts.reflectionActiveAction.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
   }
+  if (tronRunnerParts.reflectionLedActiveAction) {
+    tronRunnerParts.reflectionLedActiveAction.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
+  }
   if (tronRunnerParts.groundShadow) {
     tronRunnerParts.groundShadow.visible = TRON_RUNNER_GROUND_SHADOW_ENABLED && floorAmount > 0.001;
     if (Math.abs(shadowSoftness - tronRunnerShadowTextureSoftness) > 0.001) {
@@ -8242,7 +8331,7 @@ function applyTronRunnerVisualControls() {
 }
 
 function tronRunnerDynamicReflectionOpacity() {
-  return tronRunnerDynamicReflectionOpacityForSurface(tronRunnerState.surface);
+  return tronRunnerDynamicReflectionBodyOpacityForSurface(tronRunnerState.surface);
 }
 
 function tronRunnerDynamicReflectionOpacityForSurface(surface) {
@@ -8259,31 +8348,55 @@ function tronRunnerDynamicReflectionOpacityForSurface(surface) {
   return THREE.MathUtils.clamp(opacity, 0, TRON_RUNNER_DYNAMIC_REFLECTION_MAX_OPACITY);
 }
 
+function tronRunnerDynamicReflectionBodyOpacityForSurface(surface) {
+  return Math.min(
+    TRON_RUNNER_DYNAMIC_REFLECTION_BODY_MAX_OPACITY,
+    tronRunnerDynamicReflectionOpacityForSurface(surface) * TRON_RUNNER_DYNAMIC_REFLECTION_BODY_OPACITY_MULTIPLIER
+  ) * TRON_RUNNER_DYNAMIC_REFLECTION_OPACITY_SCALE;
+}
+
+function tronRunnerDynamicReflectionLedOpacityForSurface(surface) {
+  return Math.min(
+    TRON_RUNNER_DYNAMIC_REFLECTION_LED_MAX_OPACITY,
+    tronRunnerDynamicReflectionOpacityForSurface(surface) * TRON_RUNNER_DYNAMIC_REFLECTION_LED_OPACITY_MULTIPLIER
+  ) * TRON_RUNNER_DYNAMIC_REFLECTION_OPACITY_SCALE;
+}
+
 function updateTronRunnerDynamicReflection() {
   const group = tronRunnerParts.reflectionGroup;
-  const materials = tronRunnerParts.reflectionMaterials || [];
-  const opacity = tronRunnerDynamicReflectionOpacity();
+  const bodyMaterials = tronRunnerParts.reflectionBodyMaterials || [];
+  const ledMaterials = tronRunnerParts.reflectionLedMaterials || [];
+  const bodyOpacity = tronRunnerDynamicReflectionBodyOpacityForSurface(tronRunnerState.surface);
+  const ledOpacity = tronRunnerDynamicReflectionLedOpacityForSurface(tronRunnerState.surface);
   const visible = Boolean(
     TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED &&
     group &&
     tronRunnerParts.reflectionModel &&
-    opacity > 0.005
+    bodyOpacity > 0.005
   );
   if (group) {
     group.visible = visible;
     group.position.y = TRON_RUNNER_DYNAMIC_REFLECTION_Y;
     group.scale.set(1, -TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE, 1);
   }
-  for (const material of materials) {
-    material.userData.tronRunnerBaseOpacity = opacity;
-    material.opacity = opacity;
+  for (const material of bodyMaterials) {
+    material.userData.tronRunnerBaseOpacity = bodyOpacity;
+    material.opacity = bodyOpacity;
+    material.needsUpdate = true;
+  }
+  for (const material of ledMaterials) {
+    material.userData.tronRunnerBaseOpacity = ledOpacity;
+    material.opacity = ledOpacity;
     material.needsUpdate = true;
   }
   tronRunnerState.dynamicReflectionVisible = visible;
-  tronRunnerState.dynamicReflectionOpacity = opacity;
+  tronRunnerState.dynamicReflectionOpacity = bodyOpacity;
+  tronRunnerState.dynamicReflectionBodyOpacity = bodyOpacity;
+  tronRunnerState.dynamicReflectionLedOpacity = ledOpacity;
   tronRunnerState.dynamicReflectionSurface = tronRunnerState.surface;
   tronRunnerState.dynamicReflectionMeshCount = tronRunnerParts.dynamicReflectionMeshCount;
-  tronRunnerState.dynamicReflectionAnimated = Boolean(tronRunnerParts.reflectionMixer);
+  tronRunnerState.dynamicReflectionLedMeshCount = tronRunnerParts.dynamicReflectionLedMeshCount;
+  tronRunnerState.dynamicReflectionAnimated = Boolean(tronRunnerParts.reflectionMixer && tronRunnerParts.reflectionLedMixer);
 }
 
 function updateTronRunnerRealShadowRig() {
@@ -8554,10 +8667,16 @@ function buildTronRunnerCrowdReflection(sourceModel, animations, index) {
     return {
       group: null,
       model: null,
+      ledModel: null,
       mixer: null,
+      ledMixer: null,
       action: null,
+      ledAction: null,
       materials: [],
+      bodyMaterials: [],
+      ledMaterials: [],
       meshCount: 0,
+      ledMeshCount: 0,
     };
   }
   const group = new THREE.Group();
@@ -8568,54 +8687,86 @@ function buildTronRunnerCrowdReflection(sourceModel, animations, index) {
 
   const model = cloneRunnerSkeleton(sourceModel);
   model.name = `soldier-rigged-runner-crowd-reflection-${index + 1}`;
-  const materials = [];
+  const ledModel = cloneRunnerSkeleton(sourceModel);
+  ledModel.name = `soldier-rigged-runner-crowd-reflection-led-${index + 1}`;
+  const bodyMaterials = [];
+  const ledMaterials = [];
   let meshCount = 0;
+  let ledMeshCount = 0;
   model.traverse((obj) => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
     obj.castShadow = false;
     obj.receiveShadow = false;
-    obj.renderOrder = 2;
+    obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_BODY_RENDER_ORDER;
     obj.layers.set(0);
-    obj.material = makeTronRunnerReflectionMaterial();
-    materials.push(obj.material);
+    obj.material = makeTronRunnerReflectionBodyMaterial();
+    bodyMaterials.push(obj.material);
     meshCount += 1;
   });
+  ledModel.traverse((obj) => {
+    if (!obj.isMesh) return;
+    obj.frustumCulled = false;
+    obj.castShadow = false;
+    obj.receiveShadow = false;
+    obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_LED_RENDER_ORDER;
+    obj.layers.set(0);
+    obj.material = makeTronRunnerReflectionLedMaterial();
+    ledMaterials.push(obj.material);
+    ledMeshCount += 1;
+  });
   group.add(model);
+  group.add(ledModel);
   const { mixer, action } = makeTronRunnerCrowdActionSet(model, animations, index);
+  const { mixer: ledMixer, action: ledAction } = makeTronRunnerCrowdActionSet(ledModel, animations, index);
   return {
     group,
     model,
+    ledModel,
     mixer,
+    ledMixer,
     action,
-    materials,
+    ledAction,
+    materials: [...bodyMaterials, ...ledMaterials],
+    bodyMaterials,
+    ledMaterials,
     meshCount,
+    ledMeshCount,
   };
 }
 
 function updateTronRunnerCrowdReflection(member) {
   const group = member.reflectionGroup;
-  const materials = member.reflectionMaterials || [];
-  const opacity = tronRunnerDynamicReflectionOpacityForSurface(member.surface);
+  const bodyMaterials = member.reflectionBodyMaterials || [];
+  const ledMaterials = member.reflectionLedMaterials || [];
+  const bodyOpacity = tronRunnerDynamicReflectionBodyOpacityForSurface(member.surface);
+  const ledOpacity = tronRunnerDynamicReflectionLedOpacityForSurface(member.surface);
   const visible = Boolean(
     TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED &&
     tronRunnerCrowdGroup.visible &&
     member.group.visible &&
     group &&
-    opacity > 0.005
+    bodyOpacity > 0.005
   );
   if (group) {
     group.visible = visible;
     group.position.y = TRON_RUNNER_DYNAMIC_REFLECTION_Y;
     group.scale.set(1, -TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE, 1);
   }
-  for (const material of materials) {
-    material.userData.tronRunnerBaseOpacity = opacity;
-    material.opacity = opacity;
+  for (const material of bodyMaterials) {
+    material.userData.tronRunnerBaseOpacity = bodyOpacity;
+    material.opacity = bodyOpacity;
+    material.needsUpdate = true;
+  }
+  for (const material of ledMaterials) {
+    material.userData.tronRunnerBaseOpacity = ledOpacity;
+    material.opacity = ledOpacity;
     material.needsUpdate = true;
   }
   member.dynamicReflectionVisible = visible;
-  member.dynamicReflectionOpacity = opacity;
+  member.dynamicReflectionOpacity = bodyOpacity;
+  member.dynamicReflectionBodyOpacity = bodyOpacity;
+  member.dynamicReflectionLedOpacity = ledOpacity;
 }
 
 function tronRunnerCrowdRoadFacingStart(route, index, fallback) {
@@ -8700,12 +8851,20 @@ function buildTronRunnerCrowdMember(job, index) {
     action,
     reflectionGroup: reflection.group,
     reflectionModel: reflection.model,
+    reflectionLedModel: reflection.ledModel,
     reflectionMixer: reflection.mixer,
+    reflectionLedMixer: reflection.ledMixer,
     reflectionAction: reflection.action,
+    reflectionLedAction: reflection.ledAction,
     reflectionMaterials: reflection.materials,
+    reflectionBodyMaterials: reflection.bodyMaterials,
+    reflectionLedMaterials: reflection.ledMaterials,
     dynamicReflectionMeshCount: reflection.meshCount,
+    dynamicReflectionLedMeshCount: reflection.ledMeshCount,
     dynamicReflectionVisible: false,
     dynamicReflectionOpacity: 0,
+    dynamicReflectionBodyOpacity: 0,
+    dynamicReflectionLedOpacity: 0,
     route,
     waypointIndex: startInfo.waypointIndex ?? 0,
     speed: tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * speedScaleOffset,
@@ -8957,6 +9116,7 @@ function updateTronRunnerCrowd(dt) {
     if (member.action && Math.abs((member.lastEffectiveAnimationSpeed ?? -1) - nextEffectiveAnimationSpeed) > 0.0001) {
       member.action.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
       member.reflectionAction?.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
+      member.reflectionLedAction?.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
       member.lastEffectiveAnimationSpeed = nextEffectiveAnimationSpeed;
     }
     member.speed = tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (member.speedScaleOffset ?? 1);
@@ -8970,6 +9130,7 @@ function updateTronRunnerCrowd(dt) {
     }
     member.mixer?.update(member.mixerDt);
     member.reflectionMixer?.update(member.mixerDt);
+    member.reflectionLedMixer?.update(member.mixerDt);
     const moveSubsteps = Math.max(1, Math.ceil(member.lodDt / TRON_RUNNER_CROWD_MAX_MOVE_SUBSTEP));
     const moveSubstepDt = member.lodDt / moveSubsteps;
     for (let stepIndex = 0; stepIndex < moveSubsteps; stepIndex += 1) {
@@ -9021,7 +9182,10 @@ function tronRunnerCrowdInspect() {
       buildingCollisionLabel: buildingCollision.label,
       dynamicReflectionVisible: Boolean(member.dynamicReflectionVisible),
       dynamicReflectionOpacity: Number((member.dynamicReflectionOpacity ?? 0).toFixed(3)),
+      dynamicReflectionBodyOpacity: Number((member.dynamicReflectionBodyOpacity ?? 0).toFixed(3)),
+      dynamicReflectionLedOpacity: Number((member.dynamicReflectionLedOpacity ?? 0).toFixed(3)),
       dynamicReflectionMeshCount: member.dynamicReflectionMeshCount ?? 0,
+      dynamicReflectionLedMeshCount: member.dynamicReflectionLedMeshCount ?? 0,
       waypointIndex: member.waypointIndex ?? 0,
       distanceWalked: Number((member.distanceWalked ?? 0).toFixed(2)),
       lastMovedDistance: Number((member.lastMovedDistance ?? 0).toFixed(4)),
@@ -9065,7 +9229,10 @@ function tronRunnerCrowdInspect() {
       enabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
       visibleCount: members.filter((member) => member.dynamicReflectionVisible).length,
       meshCount: members.reduce((sum, member) => sum + (member.dynamicReflectionMeshCount || 0), 0),
+      ledMeshCount: members.reduce((sum, member) => sum + (member.dynamicReflectionLedMeshCount || 0), 0),
       maxOpacity: Number((members.length ? Math.max(...members.map((member) => member.dynamicReflectionOpacity || 0)) : 0).toFixed(3)),
+      bodyOpacity: Number((members.length ? Math.max(...members.map((member) => member.dynamicReflectionBodyOpacity || 0)) : 0).toFixed(3)),
+      ledOpacity: Number((members.length ? Math.max(...members.map((member) => member.dynamicReflectionLedOpacity || 0)) : 0).toFixed(3)),
       yScale: TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
     },
     build: {
@@ -9547,6 +9714,9 @@ function playTronRunnerAction(kind = 'run') {
   const reflectionActionName = tronRunnerParts.reflectionActionNames?.[kind] || tronRunnerParts.reflectionActionNames?.idle;
   const reflectionNext = reflectionActionName ? tronRunnerParts.reflectionActions?.[reflectionActionName] : null;
   tronRunnerParts.reflectionActiveAction = switchTronRunnerAction(reflectionNext, tronRunnerParts.reflectionActiveAction);
+  const reflectionLedActionName = tronRunnerParts.reflectionLedActionNames?.[kind] || tronRunnerParts.reflectionLedActionNames?.idle;
+  const reflectionLedNext = reflectionLedActionName ? tronRunnerParts.reflectionLedActions?.[reflectionLedActionName] : null;
+  tronRunnerParts.reflectionLedActiveAction = switchTronRunnerAction(reflectionLedNext, tronRunnerParts.reflectionLedActiveAction);
   tronRunnerState.clip = actionName || reflectionActionName || '';
   tronRunnerState.action = kind === 'run' ? 'Run' : kind === 'walk' ? 'Walk' : 'Idle';
 }
@@ -9591,8 +9761,11 @@ async function loadTronRunner() {
     model.rotation.y = Math.PI;
     tronRunnerParts.materials = [];
     tronRunnerParts.reflectionMaterials = [];
+    tronRunnerParts.reflectionBodyMaterials = [];
+    tronRunnerParts.reflectionLedMaterials = [];
     tronRunnerParts.realShadowCasterCount = 0;
     tronRunnerParts.dynamicReflectionMeshCount = 0;
+    tronRunnerParts.dynamicReflectionLedMeshCount = 0;
     tronRunnerParts.revealScan = null;
     model.traverse((obj) => {
       if (!obj.isMesh) return;
@@ -9611,8 +9784,11 @@ async function loadTronRunner() {
 
     let reflectionGroup = null;
     let reflectionModel = null;
+    let reflectionLedModel = null;
     let reflectionMixer = null;
+    let reflectionLedMixer = null;
     let reflectionActionSet = { actions: {}, actionNames: null };
+    let reflectionLedActionSet = { actions: {}, actionNames: null };
     if (reflectionGltf?.scene) {
       reflectionGroup = new THREE.Group();
       reflectionGroup.name = 'tron-runner-dynamic-reflection';
@@ -9622,21 +9798,40 @@ async function loadTronRunner() {
       reflectionModel = reflectionGltf.scene;
       reflectionModel.name = 'soldier-rigged-runner-city-reflection';
       reflectionModel.rotation.y = Math.PI;
+      fitTronRunnerModel(reflectionModel);
+      reflectionLedModel = cloneRunnerSkeleton
+        ? cloneRunnerSkeleton(reflectionModel)
+        : reflectionModel.clone(true);
+      reflectionLedModel.name = 'soldier-rigged-runner-city-reflection-led';
       reflectionModel.traverse((obj) => {
         if (!obj.isMesh) return;
         obj.frustumCulled = false;
         obj.castShadow = false;
         obj.receiveShadow = false;
-        obj.renderOrder = 2;
-        obj.material = makeTronRunnerReflectionMaterial();
+        obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_BODY_RENDER_ORDER;
+        obj.material = makeTronRunnerReflectionBodyMaterial();
         tronRunnerParts.reflectionMaterials.push(obj.material);
+        tronRunnerParts.reflectionBodyMaterials.push(obj.material);
         tronRunnerParts.dynamicReflectionMeshCount += 1;
       });
-      fitTronRunnerModel(reflectionModel);
+      reflectionLedModel.traverse((obj) => {
+        if (!obj.isMesh) return;
+        obj.frustumCulled = false;
+        obj.castShadow = false;
+        obj.receiveShadow = false;
+        obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_LED_RENDER_ORDER;
+        obj.material = makeTronRunnerReflectionLedMaterial();
+        tronRunnerParts.reflectionMaterials.push(obj.material);
+        tronRunnerParts.reflectionLedMaterials.push(obj.material);
+        tronRunnerParts.dynamicReflectionLedMeshCount += 1;
+      });
       reflectionGroup.add(reflectionModel);
+      reflectionGroup.add(reflectionLedModel);
       tronRunnerWalker.add(reflectionGroup);
       reflectionMixer = new THREE.AnimationMixer(reflectionModel);
+      reflectionLedMixer = new THREE.AnimationMixer(reflectionLedModel);
       reflectionActionSet = makeTronRunnerActionSet(reflectionGltf, reflectionMixer);
+      reflectionLedActionSet = makeTronRunnerActionSet(reflectionGltf, reflectionLedMixer);
     }
 
     const groundShadow = new THREE.Mesh(new THREE.CircleGeometry(1.15, 48), tronRunnerShadowMat);
@@ -9670,10 +9865,15 @@ async function loadTronRunner() {
     tronRunnerParts.realShadowReceiver = realShadowReceiver;
     tronRunnerParts.reflectionGroup = reflectionGroup;
     tronRunnerParts.reflectionModel = reflectionModel;
+    tronRunnerParts.reflectionLedModel = reflectionLedModel;
     tronRunnerParts.reflectionMixer = reflectionMixer;
+    tronRunnerParts.reflectionLedMixer = reflectionLedMixer;
     tronRunnerParts.reflectionActions = reflectionActionSet.actions;
+    tronRunnerParts.reflectionLedActions = reflectionLedActionSet.actions;
     tronRunnerParts.reflectionActionNames = reflectionActionSet.actionNames;
+    tronRunnerParts.reflectionLedActionNames = reflectionLedActionSet.actionNames;
     tronRunnerParts.reflectionActiveAction = null;
+    tronRunnerParts.reflectionLedActiveAction = null;
     tronRunnerParts.realShadowLight = tronRunnerRealShadowLight;
     tronRunnerParts.realShadowTarget = tronRunnerRealShadowTarget;
     tronRunnerParts.revealScan = revealScan;
@@ -9740,6 +9940,7 @@ function updateTronRunner(dt) {
   tronRunnerWalker.rotation.set(0, tronRunnerYaw, 0);
   tronRunnerParts.mixer?.update(dt);
   tronRunnerParts.reflectionMixer?.update(dt);
+  tronRunnerParts.reflectionLedMixer?.update(dt);
   updateTronRunnerAutonomyFootsteps(movedDistance, dt);
   updateTronRunnerAutonomyState(route, movedDistance, collision);
   updateTronRunnerRealShadowRig();
@@ -9810,9 +10011,12 @@ function tronRunnerInspect() {
       enabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
       visible: Boolean(tronRunnerParts.reflectionGroup?.visible),
       opacity: Number((tronRunnerState.dynamicReflectionOpacity ?? 0).toFixed(3)),
+      bodyOpacity: Number((tronRunnerState.dynamicReflectionBodyOpacity ?? 0).toFixed(3)),
+      ledOpacity: Number((tronRunnerState.dynamicReflectionLedOpacity ?? 0).toFixed(3)),
       surface: tronRunnerState.dynamicReflectionSurface,
       meshCount: tronRunnerParts.dynamicReflectionMeshCount,
-      animated: Boolean(tronRunnerParts.reflectionMixer),
+      ledMeshCount: tronRunnerParts.dynamicReflectionLedMeshCount,
+      animated: Boolean(tronRunnerParts.reflectionMixer && tronRunnerParts.reflectionLedMixer),
       yScale: TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
     },
     suitColorHex: runnerMaterial?.color?.getHexString?.() ?? null,
