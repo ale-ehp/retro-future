@@ -1874,8 +1874,8 @@ function triggerBackspaceDroneIntro(source = 'backspace') {
   if (!backspaceIntroTriggered) {
     backspaceIntroTriggered = true;
     cameraCollisionUnlockedByBackspace = true;
-    startCityRevealWireTimer();
   }
+  startCityRevealWireTimer();
   startDroneIntroFlight(source);
 }
 
@@ -7454,7 +7454,7 @@ const TRON_RUNNER_CROWD_COLLISION_RADIUS = 1.1;
 const TRON_RUNNER_CROWD_SIDEWALK_EDGE_INSET = 3.2;
 const TRON_RUNNER_CROWD_BUILDING_CLEARANCE = 6.2;
 const TRON_RUNNER_CROWD_SPEED_SCALE = 0.72;
-const TRON_RUNNER_CROWD_ROUTE_RECORD_SPREAD = 4;
+const TRON_RUNNER_CROWD_ROUTE_RECORD_SPREAD = TRON_RUNNER_CROWD_COUNT;
 const TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED = true;
 const TRON_RUNNER_CROWD_AVOIDANCE_ENABLED = true;
 const TRON_RUNNER_CROWD_AVOIDANCE_RADIUS = 5.2;
@@ -8702,6 +8702,25 @@ function resolveTronRunnerCrowdCollision(member, point) {
   return collided;
 }
 
+function tronRunnerCrowdBuildingCollisionDiagnostic(member) {
+  const record = member.route?.record;
+  const collider = record?.collider;
+  if (!collider) {
+    return { colliding: false, correction: 0 };
+  }
+  const point = {
+    x: member.group.position.x,
+    z: member.group.position.z,
+  };
+  const beforeX = point.x;
+  const beforeZ = point.z;
+  const colliding = resolveTronRunnerRoundedCollider(point, collider, TRON_RUNNER_CROWD_COLLISION_RADIUS);
+  return {
+    colliding,
+    correction: colliding ? Math.hypot(point.x - beforeX, point.z - beforeZ) : 0,
+  };
+}
+
 function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, now) {
   member.avoidanceNeighbors = 0;
   member.avoidanceOverlap = 0;
@@ -8845,6 +8864,7 @@ function tronRunnerCrowdInspect() {
   const members = tronRunnerCrowd.map((member) => {
     tronRunnerCrowdBox.setFromObject(member.group);
     tronRunnerCrowdBox.getSize(tronRunnerCrowdSize);
+    const buildingCollision = tronRunnerCrowdBuildingCollisionDiagnostic(member);
     const heightFromRoad = member.group.position.y - roadTileTopY();
     const targetHeight = TRON_RUNNER_TARGET_HEIGHT * member.group.scale.y;
     return {
@@ -8866,6 +8886,8 @@ function tronRunnerCrowdInspect() {
       lodDistance: Number((member.lodDistance ?? 0).toFixed(1)),
       avoidanceNeighbors: member.avoidanceNeighbors ?? 0,
       avoidanceOverlap: Number((member.avoidanceOverlap ?? 0).toFixed(3)),
+      buildingCollision: buildingCollision.colliding,
+      buildingCollisionCorrection: Number(buildingCollision.correction.toFixed(3)),
       waypointIndex: member.waypointIndex ?? 0,
       distanceWalked: Number((member.distanceWalked ?? 0).toFixed(2)),
       lastMovedDistance: Number((member.lastMovedDistance ?? 0).toFixed(4)),
@@ -8898,6 +8920,8 @@ function tronRunnerCrowdInspect() {
     movingMembers: members.filter((member) => member.recentlyMoved).length,
     collisionEnabled: TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
     collisionCount: members.reduce((sum, member) => sum + member.collisionCount, 0),
+    buildingCollisionMembers: members.filter((member) => member.buildingCollision).length,
+    maxBuildingCollisionCorrection: Number((members.length ? Math.max(...members.map((member) => member.buildingCollisionCorrection)) : 0).toFixed(3)),
     requestedCount: TRON_RUNNER_CROWD_COUNT,
     cloneSource: 'runner-post-fit-model',
     skeletonClone: Boolean(cloneRunnerSkeleton),
@@ -10714,7 +10738,7 @@ function updateCityRevealWireframe(now) {
   }
   if (cityRevealComplete) return;
   if (cityRevealWaitingForVisibleFrame) {
-    cityRevealStartedAt = now;
+    cityRevealStartedAt = Number.isFinite(now) && now > 0 ? now : performance.now() || 1;
     cityRevealWaitingForVisibleFrame = false;
     cityRevealSweepProgress = 0;
     cityRevealBackplateRevealFactor = 1;
@@ -13877,6 +13901,7 @@ bootSceneWithFinalDefaults().then(() => {
     fpsAccum = 0;
     fpsFrames = 0;
     startCityRevealWireframe();
+    if (backspaceIntroTriggered) startCityRevealWireTimer();
     tick(now);
     loader.classList.add('hidden');
   });
