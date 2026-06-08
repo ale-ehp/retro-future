@@ -1596,7 +1596,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'h
 renderer.setPixelRatio(activePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.localClippingEnabled = true;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = false;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -7437,7 +7437,7 @@ const TRON_RUNNER_SHADOW_CYAN_COLOR = new THREE.Color(0x031a1f);
 const TRON_RUNNER_LIGHTING_MODE = 'self-lit-material';
 const TRON_RUNNER_GROUND_SHADOW_ENABLED = true;
 const TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY = 0.28;
-const TRON_RUNNER_REAL_SHADOW_ENABLED = true;
+const TRON_RUNNER_REAL_SHADOW_ENABLED = false;
 const TRON_RUNNER_REAL_SHADOW_LAYER = 4;
 const TRON_RUNNER_REAL_SHADOW_MAP_SIZE = 1024;
 const TRON_RUNNER_REAL_SHADOW_CAMERA_SIZE = 18;
@@ -10017,7 +10017,7 @@ async function loadTronRunner() {
       obj.castShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
       obj.receiveShadow = false;
       obj.layers.enable(TRON_RUNNER_REAL_SHADOW_LAYER);
-      tronRunnerParts.realShadowCasterCount += 1;
+      if (TRON_RUNNER_REAL_SHADOW_ENABLED) tronRunnerParts.realShadowCasterCount += 1;
       obj.material = tronRunnerSuitMat.clone();
       tronRunnerParts.materials.push(obj.material);
     });
