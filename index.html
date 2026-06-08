@@ -1699,8 +1699,6 @@ let dragCandidate = false;
 let unlockedMouseLookActive = false;
 let autoMouseLookPrimed = false;
 let lastX = 0, lastY = 0;
-let lastMouseClientX = Number.NaN;
-let lastMouseClientY = Number.NaN;
 let dragStartX = 0, dragStartY = 0;
 let suppressNextPointerLockMove = false;
 let pointerLockLookEnabledAt = 0;
@@ -2018,28 +2016,6 @@ function updatePointerLockHint() {
     : 'mouse disabled until reveal complete';
 }
 
-function rememberMouseClientPosition(event) {
-  if (!event || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
-  lastMouseClientX = event.clientX;
-  lastMouseClientY = event.clientY;
-}
-
-function primeAutoMouseLookFromLatestPosition() {
-  if (!isMouseLookEnabled() || pointerLocked || unlockedMouseLookActive) return;
-  if (!Number.isFinite(lastMouseClientX) || !Number.isFinite(lastMouseClientY)) return;
-  const rect = lockEl.getBoundingClientRect();
-  if (
-    lastMouseClientX < rect.left ||
-    lastMouseClientX > rect.right ||
-    lastMouseClientY < rect.top ||
-    lastMouseClientY > rect.bottom
-  ) return;
-  lastX = lastMouseClientX;
-  lastY = lastMouseClientY;
-  autoMouseLookPrimed = true;
-  updatePointerLockHint();
-}
-
 function stopMouseLookInput() {
   dragging = false;
   dragCandidate = false;
@@ -2101,8 +2077,7 @@ document.addEventListener('pointerlockchange', () => {
   updatePointerLockHint();
 });
 
-document.addEventListener('mousemove', (e) => {
-  rememberMouseClientPosition(e);
+window.addEventListener('mousemove', (e) => {
   if (!isMouseLookEnabled()) {
     stopMouseLookInput();
     return;
@@ -2166,7 +2141,7 @@ document.addEventListener('mousemove', (e) => {
     pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
     applyCameraLook();
   }
-}, true);
+});
 // fallback drag-rotate when pointer lock unavailable / declined
 lockEl.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
@@ -12288,7 +12263,6 @@ function startCityRevealWireframe() {
     cityRevealBackplateRevealFactor = 0;
     setCityRevealRoadGridAlphaFactor(0);
     setCityRevealWireAlpha(0);
-    primeAutoMouseLookFromLatestPosition();
     updatePointerLockHint();
     return;
   }
@@ -12317,7 +12291,6 @@ function updateCityRevealWireframe(now) {
     cityRevealBackplateRevealFactor = 0;
     setCityRevealRoadGridAlphaFactor(0);
     setCityRevealWireAlpha(0);
-    primeAutoMouseLookFromLatestPosition();
     updatePointerLockHint();
     return;
   }
@@ -12349,7 +12322,6 @@ function updateCityRevealWireframe(now) {
     setCityRevealSweepFront(cityRevealSweepEndZ);
     setCityRevealWireAlpha(0);
     cityRevealComplete = true;
-    primeAutoMouseLookFromLatestPosition();
     updatePointerLockHint();
   }
 }
