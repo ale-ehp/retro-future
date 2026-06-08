@@ -1697,6 +1697,7 @@ let pointerLocked = false;
 let dragging = false;
 let dragCandidate = false;
 let unlockedMouseLookActive = false;
+let autoMouseLookPrimed = false;
 let lastX = 0, lastY = 0;
 let dragStartX = 0, dragStartY = 0;
 let suppressNextPointerLockMove = false;
@@ -2019,6 +2020,7 @@ function stopMouseLookInput() {
   dragging = false;
   dragCandidate = false;
   unlockedMouseLookActive = false;
+  autoMouseLookPrimed = false;
   suppressNextPointerLockMove = false;
   ignoredPointerLookMoves = 0;
   if (document.pointerLockElement === lockEl) {
@@ -2085,6 +2087,21 @@ window.addEventListener('mousemove', (e) => {
     pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
     applyCameraLook();
   } else if (unlockedMouseLookActive) {
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    if (Math.abs(dx) <= 0.001 && Math.abs(dy) <= 0.001) return;
+    yaw   -= dx * 0.0035 * mouseSensitivityScale;
+    pitch -= dy * 0.0035 * mouseSensitivityScale;
+    pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
+    applyCameraLook();
+  } else if (e.target === lockEl && !dragCandidate && !dragging) {
+    if (!autoMouseLookPrimed) {
+      autoMouseLookPrimed = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      return;
+    }
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
     lastX = e.clientX; lastY = e.clientY;
@@ -15184,6 +15201,7 @@ window.__tronInspect = () => ({
   },
   pointerLocked,
   unlockedMouseLookActive,
+  autoMouseLookPrimed,
   footsteps: window.__tronFootstepInspect?.(),
   welcomePanelMotion: { ...welcomeWindowMotionState },
   backspaceIntroTriggered,
