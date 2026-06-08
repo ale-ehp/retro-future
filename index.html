@@ -43,6 +43,7 @@
   #welcome-window-overlay.is-dismissed {
     opacity: 0;
     visibility: hidden;
+    pointer-events: none;
   }
   .welcome-window {
     --welcome-base-x: 400px;
@@ -158,6 +159,11 @@
     }
     .welcome-body {
       padding: 30px 30px 32px;
+    }
+  }
+  @media (hover: none), (pointer: coarse) {
+    #welcome-window-overlay {
+      pointer-events: auto;
     }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -960,7 +966,7 @@
       <p class="welcome-copy">Sei dentro il cervello di avstudio.ai
 qui puoi esplorare liberamente i reparti.
 ti auguriamo un esperienza illuminante.</p>
-      <div class="welcome-action"><span>Premi</span><span class="welcome-key">[Spazio]</span></div>
+      <div class="welcome-action"><span>Premi</span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="[Touch]">[Spazio]</span></div>
     </div>
   </article>
 </div>
@@ -1675,6 +1681,8 @@ let cameraMinHeight = 1.8;
 let viewRoll = 0;
 const welcomeWindowOverlay = document.getElementById('welcome-window-overlay');
 const welcomeWindowPanel = welcomeWindowOverlay?.querySelector('.welcome-window');
+const welcomeWindowKeyLabel = welcomeWindowOverlay?.querySelector('.welcome-key');
+const welcomeWindowTouchQuery = window.matchMedia('(hover: none), (pointer: coarse)');
 const welcomeWindowMotionAllowed = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 let welcomeWindowMotionFrame = 0;
 let welcomeWindowMotionNext = null;
@@ -1700,6 +1708,25 @@ function dismissWelcomeWindow() {
 
 function welcomeWindowVisible() {
   return Boolean(welcomeWindowOverlay && !welcomeWindowDismissed);
+}
+
+function welcomeWindowUsesTouchPrompt() {
+  return Boolean(welcomeWindowTouchQuery.matches || navigator.maxTouchPoints > 0);
+}
+
+function applyWelcomeWindowInputMode() {
+  if (!welcomeWindowKeyLabel) return;
+  welcomeWindowKeyLabel.textContent = welcomeWindowUsesTouchPrompt()
+    ? (welcomeWindowKeyLabel.dataset.touchLabel || '[Touch]')
+    : (welcomeWindowKeyLabel.dataset.desktopLabel || '[Spazio]');
+}
+
+function triggerWelcomeWindowTouch(event) {
+  if (!welcomeWindowVisible()) return;
+  if (event.type !== 'touchstart' && event.pointerType !== 'touch' && !welcomeWindowUsesTouchPrompt()) return;
+  event.preventDefault?.();
+  ensureFootstepAudioReady();
+  triggerBackspaceDroneIntro('welcome-touch');
 }
 
 function applyWelcomeWindowMotion() {
@@ -1768,6 +1795,14 @@ function setupWelcomeWindowMotion() {
   window.addEventListener('blur', resetWelcomeWindowMotion);
 }
 setupWelcomeWindowMotion();
+applyWelcomeWindowInputMode();
+if (typeof welcomeWindowTouchQuery.addEventListener === 'function') {
+  welcomeWindowTouchQuery.addEventListener('change', applyWelcomeWindowInputMode);
+} else {
+  welcomeWindowTouchQuery.addListener?.(applyWelcomeWindowInputMode);
+}
+welcomeWindowOverlay?.addEventListener('pointerdown', triggerWelcomeWindowTouch, { passive: false });
+welcomeWindowOverlay?.addEventListener('touchstart', triggerWelcomeWindowTouch, { passive: false });
 
 function applyCameraLook() {
   camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, viewRoll, 'YXZ'));
@@ -5277,6 +5312,7 @@ const CITY_REVEAL_MAIN_LED_LAYER = 2;
 const mainBuildingVerticalRevealOverlayObjects = new Set();
 let mainBuildingVerticalRevealOverlayLayerActive = false;
 const CITY_REVEAL_MAIN_LED_VISIBLE_DELAY_MS = 3000;
+const CITY_REVEAL_MAIN_LED_OVERLAY_COMPLETE_PROGRESS = 0.999;
 const cityRevealMainLedDepthMat = new THREE.MeshBasicMaterial({
   colorWrite: false,
   depthWrite: true,
@@ -6166,6 +6202,7 @@ function cityRevealMainLedRevealElapsedMs(now = performance.now()) {
 function isCityRevealMainLedRevealOverlayActive(now = performance.now()) {
   return isCityRevealRealRevealActive()
     && cityRevealMainLedRevealElapsedMs(now) > 0
+    && mainFacadeVerticalRevealProgress() < CITY_REVEAL_MAIN_LED_OVERLAY_COMPLETE_PROGRESS
     && mainBuildingVerticalRevealOverlayObjects.size > 0;
 }
 
@@ -14371,6 +14408,11 @@ window.__tronInspect = () => ({
   cityRevealMainLedRevealDelayMs: CITY_REVEAL_MAIN_LED_VISIBLE_DELAY_MS,
   cityRevealMainLedRevealElapsedMs: cityRevealMainLedRevealElapsedMs(),
   cityRevealMainLedRevealReady: isCityRevealMainLedRevealOverlayActive(),
+  cityRevealMainLedRevealOptimization: {
+    skipCompletedOverlay: true,
+    completeProgress: CITY_REVEAL_MAIN_LED_OVERLAY_COMPLETE_PROGRESS,
+    currentProgress: Number(mainFacadeVerticalRevealProgress().toFixed(4)),
+  },
   cityRevealMainLedOverlayMode: cityRevealMainLedDepthProxyLastMode,
   cityRevealMainLedDepthProxyObjects: cityRevealMainLedDepthProxyObjects.length,
   cityRevealMainLedDepthProxyVisibleObjects: cityRevealMainLedDepthProxyVisibleCount,
