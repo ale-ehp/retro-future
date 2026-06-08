@@ -10575,6 +10575,15 @@ const cityRevealWireObjects = [];
 const cityRevealRoadGridObjects = [];
 const cityRevealRoadFadeObjects = [];
 const cityRevealSolidObjects = [];
+const cityRevealWireCullObjects = [];
+const cityRevealWireCullStats = {
+  total: 0,
+  visible: 0,
+  hidden: 0,
+  wireVisible: 0,
+  solidVisible: 0,
+  roadFadeVisible: 0,
+};
 const cityRevealRealClipPlane = new THREE.Plane(CITY_REVEAL_SWEEP_NORMAL.clone(), -cityRevealFrontZ);
 const CITY_REVEAL_REAL_PREWARM_TARGET_SIZE = 4;
 let cityRevealRealPrewarmTarget = null;
@@ -10825,9 +10834,11 @@ function translateCityRevealObjectBounds(object, zOffset, yOffset = 0) {
 function addCityWireLineSegments(points, material = cityRevealWireMat) {
   const line = new THREE.LineSegments(pointsToWireGeometry(points), material);
   line.frustumCulled = false;
+  line.userData.cityRevealCullKind = 'wire';
   setCityRevealObjectBoundsFromPoints(line, points);
   cityRevealWireGroup.add(line);
   cityRevealWireObjects.push(line);
+  cityRevealWireCullObjects.push(line);
   return line;
 }
 
@@ -10848,9 +10859,11 @@ function addCityWireBox(width, height, depth, x, y, z, material = cityRevealWire
   );
   line.position.set(x, y, z);
   line.frustumCulled = false;
+  line.userData.cityRevealCullKind = 'wire';
   setCityRevealObjectBoxBounds(line, height, depth, y, z);
   cityRevealWireGroup.add(line);
   cityRevealWireObjects.push(line);
+  cityRevealWireCullObjects.push(line);
   return line;
 }
 
@@ -10858,10 +10871,12 @@ function addCityWireSolidBox(width, height, depth, x, y, z, role = 'solid') {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), cityRevealSolidMat);
   mesh.position.set(x, y, z);
   mesh.frustumCulled = false;
+  mesh.userData.cityRevealCullKind = 'solid';
   mesh.userData.cityRevealRole = role;
   setCityRevealObjectBoxBounds(mesh, height, depth, y, z);
   cityRevealWireGroup.add(mesh);
   cityRevealSolidObjects.push(mesh);
+  cityRevealWireCullObjects.push(mesh);
   return mesh;
 }
 
@@ -10885,10 +10900,12 @@ function addCityWireRoadFadeBox(width, height, depth, x, y, z, bandIndex) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), cityRevealRoadFadeMaterial(bandIndex));
   mesh.position.set(x, y, z);
   mesh.frustumCulled = false;
+  mesh.userData.cityRevealCullKind = 'road-fade';
   mesh.userData.cityRevealRole = 'road-fade';
   setCityRevealObjectBoxBounds(mesh, height, depth, y, z);
   cityRevealWireGroup.add(mesh);
   cityRevealRoadFadeObjects.push(mesh);
+  cityRevealWireCullObjects.push(mesh);
   return mesh;
 }
 
@@ -11166,6 +11183,13 @@ function clearCityRevealWire() {
   cityRevealRoadGridObjects.length = 0;
   cityRevealRoadFadeObjects.length = 0;
   cityRevealSolidObjects.length = 0;
+  cityRevealWireCullObjects.length = 0;
+  cityRevealWireCullStats.total = 0;
+  cityRevealWireCullStats.visible = 0;
+  cityRevealWireCullStats.hidden = 0;
+  cityRevealWireCullStats.wireVisible = 0;
+  cityRevealWireCullStats.solidVisible = 0;
+  cityRevealWireCullStats.roadFadeVisible = 0;
   cityRevealRoadGridSkippedPerimeterSegments = 0;
 }
 
@@ -11212,6 +11236,7 @@ function setCityRevealSweepFront(frontZ) {
   cityRevealFrontZ = Number.isFinite(frontZ) ? frontZ : cityRevealSweepEndZ;
   cityRevealRealClipPlane.normal.copy(CITY_REVEAL_SWEEP_NORMAL);
   cityRevealRealClipPlane.constant = -cityRevealFrontZ * CITY_REVEAL_SWEEP_NORMAL.z;
+  updateCityRevealWireObjectCulling();
 }
 
 function cityRevealMainBuildingSlowZone() {
@@ -11374,6 +11399,38 @@ function cityRevealEstimatedVisibleObjects() {
   }).length;
 }
 
+function cityRevealObjectStillWireVisible(object) {
+  if (!object) return false;
+  const minSweep = object.userData.cityRevealMinSweep
+    ?? object.userData.cityRevealSweep
+    ?? cityRevealSweepValueAt(object.userData.cityRevealMinZ ?? object.position.z, object.position.y);
+  if (!Number.isFinite(minSweep)) return true;
+  return minSweep < cityRevealFrontZ;
+}
+
+function updateCityRevealWireObjectCulling() {
+  const stats = cityRevealWireCullStats;
+  stats.total = cityRevealWireCullObjects.length;
+  stats.visible = 0;
+  stats.hidden = 0;
+  stats.wireVisible = 0;
+  stats.solidVisible = 0;
+  stats.roadFadeVisible = 0;
+  const groupVisible = cityRevealWireAlpha > 0.002 && cityRevealWireGroup.visible;
+  for (const object of cityRevealWireCullObjects) {
+    const visible = groupVisible && cityRevealObjectStillWireVisible(object);
+    object.visible = visible;
+    if (visible) {
+      stats.visible++;
+      if (object.userData.cityRevealCullKind === 'solid') stats.solidVisible++;
+      else if (object.userData.cityRevealCullKind === 'road-fade') stats.roadFadeVisible++;
+      else stats.wireVisible++;
+    } else {
+      stats.hidden++;
+    }
+  }
+}
+
 function createCityRevealProfileBucket() {
   return {
     frames: 0,
@@ -11460,6 +11517,9 @@ function cityRevealProfileSceneSnapshot() {
       realRevealActive: isCityRevealRealRevealActive(),
       mainLedRevealActive: isCityRevealMainLedRevealOverlayActive(),
       visibleWireObjects: cityRevealEstimatedVisibleObjects(),
+      renderedWireObjects: cityRevealWireCullStats.visible,
+      hiddenWireObjects: cityRevealWireCullStats.hidden,
+      wireCull: { ...cityRevealWireCullStats },
       totalWireObjects: cityRevealWireObjects.length,
       solidObjects: cityRevealSolidObjects.length,
       mainLedOverlayObjects: mainBuildingVerticalRevealOverlayObjects.size,
@@ -11654,9 +11714,11 @@ function buildCityRevealWireframe() {
     edge.frustumCulled = false;
     cityRevealBoundsBox.setFromObject(spec.mesh);
     setCityRevealObjectBoundsFromBox(edge, cityRevealBoundsBox);
+    edge.userData.cityRevealCullKind = 'wire';
     edge.userData.cityRevealRole = spec.edgeRole === 'main-building' ? 'main-led-wire' : `${spec.edgeRole || 'edge'}-led-wire`;
     cityRevealWireGroup.add(edge);
     cityRevealWireObjects.push(edge);
+    cityRevealWireCullObjects.push(edge);
   }
   refreshCityRevealSweepBounds();
 }
@@ -11677,6 +11739,7 @@ function setCityRevealWireAlpha(alpha) {
   }
   cityRevealWireGroup.visible = cityRevealWireAlpha > 0.002;
   cityRevealRoadGridGroup.visible = cityRevealWireAlpha > 0.002;
+  updateCityRevealWireObjectCulling();
 }
 
 function setCityRevealRoadGridAlphaFactor(factor) {
