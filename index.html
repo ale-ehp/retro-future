@@ -1696,6 +1696,7 @@ const droneIntroFlight = {
 let pointerLocked = false;
 let dragging = false;
 let dragCandidate = false;
+let unlockedMouseLookActive = false;
 let lastX = 0, lastY = 0;
 let dragStartX = 0, dragStartY = 0;
 let suppressNextPointerLockMove = false;
@@ -2010,13 +2011,14 @@ function updatePointerLockHint() {
     return;
   }
   lockHint.textContent = isMouseLookEnabled()
-    ? (pointerLocked ? 'pointer locked · ESC to release' : 'click canvas to lock')
+    ? (pointerLocked || unlockedMouseLookActive ? 'mouse look active · ESC to release' : 'click canvas to lock')
     : 'mouse disabled until reveal complete';
 }
 
 function stopMouseLookInput() {
   dragging = false;
   dragCandidate = false;
+  unlockedMouseLookActive = false;
   suppressNextPointerLockMove = false;
   ignoredPointerLookMoves = 0;
   if (document.pointerLockElement === lockEl) {
@@ -2038,6 +2040,9 @@ lockEl.addEventListener('click', (e) => {
   if (!pointerLocked) {
     dragging = false;
     dragCandidate = false;
+    unlockedMouseLookActive = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
     pointerLockLookEnabledAt = performance.now() + POINTER_LOCK_SETTLE_MS;
     try {
       const lockRequest = lockEl.requestPointerLock?.();
@@ -2051,10 +2056,11 @@ document.addEventListener('pointerlockchange', () => {
   if (pointerLocked) {
     dragging = false;
     dragCandidate = false;
+    unlockedMouseLookActive = false;
     suppressPointerLook(POINTER_LOCK_SETTLE_MS, 8);
     pointerLockLookEnabledAt = performance.now() + POINTER_LOCK_SETTLE_MS;
   }
-  lockEl.classList.toggle('dragging', pointerLocked);
+  lockEl.classList.toggle('dragging', pointerLocked || unlockedMouseLookActive);
   updatePointerLockHint();
 });
 
@@ -2076,6 +2082,15 @@ window.addEventListener('mousemove', (e) => {
     }
     yaw   -= e.movementX * 0.0022 * mouseSensitivityScale;
     pitch -= e.movementY * 0.0022 * mouseSensitivityScale;
+    pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
+    applyCameraLook();
+  } else if (unlockedMouseLookActive) {
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    if (Math.abs(dx) <= 0.001 && Math.abs(dy) <= 0.001) return;
+    yaw   -= dx * 0.0035 * mouseSensitivityScale;
+    pitch -= dy * 0.0035 * mouseSensitivityScale;
     pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
     applyCameraLook();
   } else if (dragCandidate || dragging) {
@@ -2108,6 +2123,7 @@ lockEl.addEventListener('mousedown', (e) => {
   clearVerticalMovementState();
   suppressPointerLook();
   if (pointerLocked) return;
+  unlockedMouseLookActive = false;
   // A tiny drag activates rotate-fallback when browser pointer lock is unavailable,
   // declined, or not yet engaged after the click gesture.
   dragCandidate = true;
@@ -2119,6 +2135,12 @@ window.addEventListener('mouseup', () => {
   if (pointerLocked) suppressPointerLook(180, 3);
   dragging = false;
   dragCandidate = false;
+});
+document.addEventListener('mousedown', (e) => {
+  if (e.target === lockEl) return;
+  unlockedMouseLookActive = false;
+  lockEl.classList.toggle('dragging', pointerLocked);
+  updatePointerLockHint();
 });
 
 // touch fallback (mobile)
@@ -2158,6 +2180,10 @@ function isTextEditingTarget(target) {
 
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
+  if (e.code === 'Escape') {
+    stopMouseLookInput();
+    return;
+  }
   if (e.code === 'Space' && welcomeWindowVisible() && !isTextEditingTarget(e.target)) {
     e.preventDefault();
     ensureFootstepAudioReady();
@@ -15157,6 +15183,7 @@ window.__tronInspect = () => ({
     basePadTextureRepeat: Number(controlEls.basePadTextureRepeat.value),
   },
   pointerLocked,
+  unlockedMouseLookActive,
   footsteps: window.__tronFootstepInspect?.(),
   welcomePanelMotion: { ...welcomeWindowMotionState },
   backspaceIntroTriggered,
