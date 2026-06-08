@@ -800,7 +800,7 @@
       <div class="control-box">
         <div class="control-section">Strada</div>
         <label class="control-row"><span class="control-head"><span>Riflesso strada</span><output id="road-reflect-val">1.15</output></span><input id="road-reflect" type="range" min="0" max="2.5" step="0.01" value="1.15" /></label>
-        <label class="control-row"><span class="control-head"><span>Riflesso palazzi</span><output id="road-building-reflect-val">0.35</output></span><input id="road-building-reflect" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+        <label class="control-row"><span class="control-head"><span>Palazzi strada</span><output id="road-building-reflect-val">0.35</output></span><input id="road-building-reflect" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
         <label class="control-row"><span class="control-head"><span>Metalness strada</span><output id="road-metalness-val">0.88</output></span><input id="road-metalness" type="range" min="0" max="1" step="0.01" value="0.88" /></label>
         <label class="control-row"><span class="control-head"><span>Roughness strada</span><output id="road-roughness-val">0.16</output></span><input id="road-roughness" type="range" min="0.01" max="1" step="0.01" value="0.16" /></label>
         <label class="control-row"><span class="control-head"><span>Normal strada</span><output id="road-normal-val">0.00</output></span><input id="road-normal" type="range" min="0" max="2.5" step="0.01" value="0" /></label>
@@ -810,6 +810,7 @@
       <div class="control-box">
         <div class="control-section">Sidewalk</div>
         <label class="control-row"><span class="control-head"><span>Riflesso sidewalk</span><output id="base-pad-reflect-val">0.88</output></span><input id="base-pad-reflect" type="range" min="0" max="3.5" step="0.01" value="0.88" /></label>
+        <label class="control-row"><span class="control-head"><span>Palazzi sidewalk</span><output id="sidewalk-building-reflect-val">0.35</output></span><input id="sidewalk-building-reflect" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
         <label class="control-row"><span class="control-head"><span>Metalness sidewalk</span><output id="base-pad-metalness-val">0.08</output></span><input id="base-pad-metalness" type="range" min="0" max="1" step="0.01" value="0.08" /></label>
         <label class="control-row"><span class="control-head"><span>Roughness sidewalk</span><output id="base-pad-roughness-val">0.18</output></span><input id="base-pad-roughness" type="range" min="0.01" max="1" step="0.01" value="0.18" /></label>
         <label class="control-row"><span class="control-head"><span>Normal sidewalk</span><output id="base-pad-normal-val">0.00</output></span><input id="base-pad-normal" type="range" min="0" max="2.5" step="0.01" value="0" /></label>
@@ -1292,6 +1293,8 @@ const controlEls = {
   basePadRoughnessVal: document.getElementById('base-pad-roughness-val'),
   basePadReflect: document.getElementById('base-pad-reflect'),
   basePadReflectVal: document.getElementById('base-pad-reflect-val'),
+  sidewalkBuildingReflect: document.getElementById('sidewalk-building-reflect'),
+  sidewalkBuildingReflectVal: document.getElementById('sidewalk-building-reflect-val'),
   basePadEmissive: document.getElementById('base-pad-emissive'),
   basePadEmissiveVal: document.getElementById('base-pad-emissive-val'),
   basePadBevelSize: document.getElementById('base-pad-bevel-size'),
@@ -3180,6 +3183,7 @@ const roadReflectionEnvTargets = ROAD_BUILDING_REFLECTION_LEVELS.map((level) => 
   target: makeReflectionEnvTarget(256, 128, level),
 }));
 let roadBuildingReflection = 0.35;
+let sidewalkBuildingReflection = 0.35;
 function getRoadReflectionEnvMap(buildingReflection = roadBuildingReflection) {
   return getRoadReflectionEnvEntry(buildingReflection).target.texture;
 }
@@ -5485,7 +5489,7 @@ const basePadSurfaceMat = new THREE.MeshStandardMaterial({
   color: basePadSurfaceBaseColor,
   metalness: 0.08,
   roughness: 0.18,
-  envMap: reflectionEnvMap,
+  envMap: getRoadReflectionEnvMap(sidewalkBuildingReflection),
   envMapIntensity: 0.88,
   emissive: basePadSurfaceEmissiveColor,
   emissiveIntensity: 0.035,
@@ -13406,6 +13410,7 @@ const BASE_PAD_MATERIAL_FAST_CONTROL_IDS = new Set([
   'base-pad-metalness',
   'base-pad-roughness',
   'base-pad-reflect',
+  'sidewalk-building-reflect',
   'base-pad-emissive',
   'base-pad-flat-shading',
   'base-pad-border-opacity',
@@ -13776,6 +13781,7 @@ function applyBasePadMaterialControlsFromUI() {
   basePadMetalness = Number(controlEls.basePadMetalness.value);
   basePadRoughness = Number(controlEls.basePadRoughness.value);
   basePadReflect = Number(controlEls.basePadReflect.value);
+  sidewalkBuildingReflection = Number(controlEls.sidewalkBuildingReflect.value);
   basePadEmissive = Number(controlEls.basePadEmissive.value);
   basePadFlatShading = controlEls.basePadFlatShading.value === 'on';
   basePadBorderOpacity = Number(controlEls.basePadBorderOpacity.value);
@@ -13790,6 +13796,7 @@ function applyBasePadMaterialControlsFromUI() {
   basePadSurfaceMat.color.copy(tunedColor(basePadSurfaceBaseColor, basePadHue, basePadSaturation, basePadBrightness * lightResponse.surface));
   basePadSurfaceMat.metalness = basePadMetalness;
   basePadSurfaceMat.roughness = basePadRoughness;
+  basePadSurfaceMat.envMap = getRoadReflectionEnvMap(sidewalkBuildingReflection);
   basePadSurfaceMat.envMapIntensity = basePadReflect * lightResponse.reflection;
   basePadSurfaceMat.emissive.copy(tunedColor(basePadSurfaceEmissiveColor, basePadHue, Math.max(0.4, basePadSaturation), 1));
   basePadSurfaceMat.emissiveIntensity = basePadEmissive * lightResponse.emissive + lightResponse.floorFill * 0.35;
@@ -13807,6 +13814,7 @@ function applyBasePadMaterialControlsFromUI() {
   controlEls.basePadMetalnessVal.textContent = basePadMetalness.toFixed(2);
   controlEls.basePadRoughnessVal.textContent = basePadRoughness.toFixed(2);
   controlEls.basePadReflectVal.textContent = basePadReflect.toFixed(2);
+  controlEls.sidewalkBuildingReflectVal.textContent = sidewalkBuildingReflection.toFixed(2);
   controlEls.basePadEmissiveVal.textContent = basePadEmissive.toFixed(3);
   controlEls.basePadFlatShadingVal.textContent = basePadFlatShading ? 'on' : 'off';
   controlEls.basePadBorderOpacityVal.textContent = basePadBorderOpacity.toFixed(2);
@@ -13943,6 +13951,7 @@ function applyLiveControls() {
   const nextBasePadMetalness = Number(controlEls.basePadMetalness.value);
   const nextBasePadRoughness = Number(controlEls.basePadRoughness.value);
   const nextBasePadReflect = Number(controlEls.basePadReflect.value);
+  const nextSidewalkBuildingReflect = Number(controlEls.sidewalkBuildingReflect.value);
   const nextBasePadEmissive = Number(controlEls.basePadEmissive.value);
   const nextBasePadBevelSize = Number(controlEls.basePadBevelSize.value);
   const nextBasePadBevelSegments = Number(controlEls.basePadBevelSegments.value);
@@ -14139,6 +14148,7 @@ function applyLiveControls() {
   basePadMetalness = nextBasePadMetalness;
   basePadRoughness = nextBasePadRoughness;
   basePadReflect = nextBasePadReflect;
+  sidewalkBuildingReflection = nextSidewalkBuildingReflect;
   basePadEmissive = nextBasePadEmissive;
   basePadBevelSize = nextBasePadBevelSize;
   basePadBevelSegments = nextBasePadBevelSegments;
@@ -14262,6 +14272,7 @@ function applyLiveControls() {
   basePadSurfaceMat.color.copy(tunedColor(basePadSurfaceBaseColor, basePadHue, basePadSaturation, basePadBrightness * lightResponse.surface));
   basePadSurfaceMat.metalness = basePadMetalness;
   basePadSurfaceMat.roughness = basePadRoughness;
+  basePadSurfaceMat.envMap = getRoadReflectionEnvMap(sidewalkBuildingReflection);
   basePadSurfaceMat.envMapIntensity = basePadReflect * lightResponse.reflection;
   basePadSurfaceMat.emissive.copy(tunedColor(basePadSurfaceEmissiveColor, basePadHue, Math.max(0.4, basePadSaturation), 1));
   basePadSurfaceMat.emissiveIntensity = basePadEmissive * lightResponse.emissive + lightResponse.floorFill * 0.35;
@@ -14394,6 +14405,7 @@ function applyLiveControls() {
   controlEls.basePadMetalnessVal.textContent = nextBasePadMetalness.toFixed(2);
   controlEls.basePadRoughnessVal.textContent = nextBasePadRoughness.toFixed(2);
   controlEls.basePadReflectVal.textContent = nextBasePadReflect.toFixed(2);
+  controlEls.sidewalkBuildingReflectVal.textContent = nextSidewalkBuildingReflect.toFixed(2);
   controlEls.basePadEmissiveVal.textContent = nextBasePadEmissive.toFixed(3);
   controlEls.basePadBevelSizeVal.textContent = nextBasePadBevelSize.toFixed(2);
   controlEls.basePadBevelSegmentsVal.textContent = nextBasePadBevelSegments.toFixed(0);
@@ -14687,6 +14699,7 @@ window.__tronInspect = () => ({
     roadRoughness: Number(controlEls.roadRoughness.value),
     roadNormal: Number(controlEls.roadNormal.value),
     basePadReflect: Number(controlEls.basePadReflect.value),
+    sidewalkBuildingReflect: Number(controlEls.sidewalkBuildingReflect.value),
     basePadMetalness: Number(controlEls.basePadMetalness.value),
     basePadRoughness: Number(controlEls.basePadRoughness.value),
     basePadNormal: Number(controlEls.basePadNormal.value),
