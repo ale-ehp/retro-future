@@ -1043,6 +1043,11 @@ const MIN_DYNAMIC_QUALITY_SCALE = 0.25;
 const BLOOM_RESOLUTION_CAP = 0.30;
 const BLOOM_BYPASS_STRENGTH = 0.015;
 const MIN_BLOOM_TARGET_SIZE = 96;
+const MOBILE_PERFORMANCE_QUERY = '(max-width: 760px), (hover: none), (pointer: coarse)';
+const MOBILE_PERFORMANCE_RENDER_SCALE_CAP = 0.75;
+const MOBILE_PERFORMANCE_PIXEL_RATIO_CAP = 1;
+const MOBILE_PERFORMANCE_BLOOM_SCALE_CAP = 0.18;
+const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
 let activePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO);
 let requestedPixelRatio = MAX_RENDER_PIXEL_RATIO;
 let manualRenderScale = 0.65;
@@ -11771,7 +11776,7 @@ function renderCityRevealCompositeFrame() {
 // ---------- post (bloom) ----------
 function resizeBloomTargets() {
   if (!bloomPass) return;
-  const requestedScale = Math.min(requestedBloomResolutionScale, BLOOM_RESOLUTION_CAP);
+  const requestedScale = Math.min(effectiveBloomScaleForDevice(requestedBloomResolutionScale), BLOOM_RESOLUTION_CAP);
   bloomResolutionScale = Math.max(MIN_DYNAMIC_BLOOM_SCALE, requestedScale * dynamicQualityScale);
   const width = Math.max(MIN_BLOOM_TARGET_SIZE, Math.round(window.innerWidth * activePixelRatio * bloomResolutionScale));
   const height = Math.max(MIN_BLOOM_TARGET_SIZE, Math.round(window.innerHeight * activePixelRatio * bloomResolutionScale));
@@ -11878,14 +11883,54 @@ function isBloomPassActive() {
   return Boolean(bloomPass?.enabled && (bloomPass.strength ?? 0) > BLOOM_BYPASS_STRENGTH);
 }
 
+function mobilePerformanceProfileActive() {
+  const touchPoints = Number.isFinite(navigator.maxTouchPoints) ? navigator.maxTouchPoints : 0;
+  return Boolean(mobilePerformanceQuery.matches || touchPoints > 0 || window.innerWidth <= 760);
+}
+
+function effectiveRenderScaleForDevice(baseScale = manualRenderScale) {
+  return mobilePerformanceProfileActive()
+    ? Math.min(baseScale, MOBILE_PERFORMANCE_RENDER_SCALE_CAP)
+    : baseScale;
+}
+
+function effectivePixelRatioForDevice(basePixelRatio = requestedPixelRatio) {
+  return mobilePerformanceProfileActive()
+    ? Math.min(basePixelRatio, MOBILE_PERFORMANCE_PIXEL_RATIO_CAP)
+    : basePixelRatio;
+}
+
+function effectiveBloomScaleForDevice(baseScale = requestedBloomResolutionScale) {
+  return mobilePerformanceProfileActive()
+    ? Math.min(baseScale, MOBILE_PERFORMANCE_BLOOM_SCALE_CAP)
+    : baseScale;
+}
+
+function mobilePerformanceProfileInspect() {
+  const active = mobilePerformanceProfileActive();
+  return {
+    active,
+    mode: active ? 'mobile-touch' : 'desktop',
+    query: MOBILE_PERFORMANCE_QUERY,
+    renderScaleCap: MOBILE_PERFORMANCE_RENDER_SCALE_CAP,
+    pixelRatioCap: MOBILE_PERFORMANCE_PIXEL_RATIO_CAP,
+    bloomScaleCap: MOBILE_PERFORMANCE_BLOOM_SCALE_CAP,
+    effectiveRenderScale: effectiveRenderScaleForDevice(manualRenderScale),
+    effectivePixelRatioRequest: effectivePixelRatioForDevice(requestedPixelRatio),
+    effectiveBloomScaleRequest: effectiveBloomScaleForDevice(requestedBloomResolutionScale),
+  };
+}
+
 function shouldUseComposer() {
   if (!composer || !postEnabled) return false;
   return Boolean(isBloomPassActive() || fxaaPass?.enabled || (cityRevealWireframeEnabled && cityRevealWireAlpha > 0.002));
 }
 
 function applyRenderResolution(requestedPixelRatio) {
-  const requested = Number.isFinite(requestedPixelRatio) ? requestedPixelRatio : MAX_RENDER_PIXEL_RATIO;
-  const dynamicPixelRatio = Math.max(MIN_DYNAMIC_PIXEL_RATIO, requested * manualRenderScale * dynamicQualityScale);
+  const requestedBase = Number.isFinite(requestedPixelRatio) ? requestedPixelRatio : MAX_RENDER_PIXEL_RATIO;
+  const requested = effectivePixelRatioForDevice(requestedBase);
+  const renderScale = effectiveRenderScaleForDevice(manualRenderScale);
+  const dynamicPixelRatio = Math.max(MIN_DYNAMIC_PIXEL_RATIO, requested * renderScale * dynamicQualityScale);
   activePixelRatio = Math.min(window.devicePixelRatio || 1, dynamicPixelRatio, MAX_RENDER_PIXEL_RATIO);
   if (Math.abs(activePixelRatio - lastAppliedRendererPixelRatio) > 0.0001) {
     renderer.setPixelRatio(activePixelRatio);
@@ -14541,6 +14586,7 @@ window.__tronInspect = () => ({
     manualRenderScale,
     requestedPixelRatio,
     activePixelRatio,
+    mobileProfile: mobilePerformanceProfileInspect(),
   },
   wireframeFx: {
     enabled: cityRevealWireframeEnabled,
@@ -14588,6 +14634,7 @@ window.__tronPerfInspect = () => ({
   antialiasMode,
   bloomResolutionScale,
   bloomResolutionCap: BLOOM_RESOLUTION_CAP,
+  mobileProfile: mobilePerformanceProfileInspect(),
   wireframeFx: {
     enabled: cityRevealWireframeEnabled,
     delayMs: cityRevealDelayMs,
