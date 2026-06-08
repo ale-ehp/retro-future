@@ -5422,6 +5422,12 @@ const sideBuildingEdgeBatch = {
   enabled: true,
 };
 const BUILDING_REFLECTION_ENABLED = true;
+const BUILDING_REFLECTION_MAX_HEIGHT_RATIO = 0.3;
+const BUILDING_REFLECTION_FADE_BANDS = Object.freeze([
+  { start: 0.00, end: 0.10, opacity: 1.00 },
+  { start: 0.10, end: 0.20, opacity: 0.52 },
+  { start: 0.20, end: BUILDING_REFLECTION_MAX_HEIGHT_RATIO, opacity: 0.18 },
+]);
 const BUILDING_REFLECTION_Y_SCALE = 0.34;
 const BUILDING_REFLECTION_ROAD_BODY_MAX_OPACITY = 0.16;
 const BUILDING_REFLECTION_ROAD_LED_MAX_OPACITY = 0.22;
@@ -5453,6 +5459,11 @@ const buildingReflectionState = {
   roadLedInstances: 0,
   sidewalkBodyInstances: 0,
   sidewalkLedInstances: 0,
+  reflectedLedSources: 0,
+  excludedLedInstances: 0,
+  bridgeLedInstances: 0,
+  maxHeightRatio: BUILDING_REFLECTION_MAX_HEIGHT_RATIO,
+  fadeBands: BUILDING_REFLECTION_FADE_BANDS.length,
   roadBodyOpacity: 0,
   roadLedOpacity: 0,
   sidewalkBodyOpacity: 0,
@@ -5464,6 +5475,12 @@ const buildingReflectionMeshes = {
   roadLed: null,
   sidewalkBody: null,
   sidewalkLed: null,
+};
+const buildingReflectionBandMeshes = {
+  roadBody: [],
+  roadLed: [],
+  sidewalkBody: [],
+  sidewalkLed: [],
 };
 const basePadLedBatch = {
   mesh: null,
@@ -7041,6 +7058,18 @@ function createBuildingReflectionMesh(kind, count) {
   return mesh;
 }
 
+function ensureBuildingReflectionBandMeshes(key, kind, count) {
+  const meshes = buildingReflectionBandMeshes[key];
+  for (let i = 0; i < BUILDING_REFLECTION_FADE_BANDS.length; i++) {
+    if (!meshes[i]) {
+      meshes[i] = createBuildingReflectionMesh(kind, count);
+      meshes[i].material.userData.buildingReflectionFadeOpacity = BUILDING_REFLECTION_FADE_BANDS[i].opacity;
+    }
+  }
+  buildingReflectionMeshes[key] = meshes[0] || null;
+  return meshes;
+}
+
 function buildingReflectionBodySources(includeBridges = false) {
   const sources = [];
   for (const record of [...sideBuildingRecords, ...mainBuildingRecords]) {
@@ -7081,10 +7110,10 @@ function ensureBuildingReflectionMeshes() {
   const roadBodyCount = buildingReflectionBodySources(true).length;
   const sidewalkBodyCount = buildingReflectionBodySources(false).length;
   const ledCount = buildingReflectionLedSourceCount();
-  if (!buildingReflectionMeshes.roadBody) buildingReflectionMeshes.roadBody = createBuildingReflectionMesh('body', roadBodyCount);
-  if (!buildingReflectionMeshes.sidewalkBody) buildingReflectionMeshes.sidewalkBody = createBuildingReflectionMesh('body', sidewalkBodyCount);
-  if (!buildingReflectionMeshes.roadLed) buildingReflectionMeshes.roadLed = createBuildingReflectionMesh('led', ledCount);
-  if (!buildingReflectionMeshes.sidewalkLed) buildingReflectionMeshes.sidewalkLed = createBuildingReflectionMesh('led', ledCount);
+  ensureBuildingReflectionBandMeshes('roadBody', 'body', roadBodyCount);
+  ensureBuildingReflectionBandMeshes('sidewalkBody', 'body', sidewalkBodyCount);
+  ensureBuildingReflectionBandMeshes('roadLed', 'led', ledCount);
+  ensureBuildingReflectionBandMeshes('sidewalkLed', 'led', ledCount);
 }
 
 function mirroredBuildingReflectionMatrix(target, sourceMatrix, planeY, yScale = BUILDING_REFLECTION_Y_SCALE) {
@@ -7097,64 +7126,188 @@ function mirroredBuildingReflectionMatrix(target, sourceMatrix, planeY, yScale =
 }
 
 function setBuildingReflectionBodyInstances(mesh, sources, planeMode = 'road') {
-  if (!mesh) return 0;
+  const meshes = Array.isArray(mesh) ? mesh : [mesh].filter(Boolean);
+  if (!meshes.length) return 0;
   const roadPlaneY = roadTileTopY() + 0.045;
-  let index = 0;
+  const counts = meshes.map(() => 0);
   for (const source of sources) {
     if (![source.width, source.height, source.depth].every((value) => Number.isFinite(value) && value > 0.001)) continue;
     const planeY = planeMode === 'sidewalk' ? (source.planeY ?? sidewalkMinSurfaceY()) + 0.035 : roadPlaneY;
-    buildingReflectionSourcePosition.set(source.x, source.y + source.height * 0.5, source.z);
-    buildingReflectionSourceQuaternion.identity();
-    buildingReflectionSourceScale.set(source.width, source.height, source.depth);
-    buildingReflectionSourceMatrix.compose(
-      buildingReflectionSourcePosition,
-      buildingReflectionSourceQuaternion,
-      buildingReflectionSourceScale
-    );
-    mesh.setMatrixAt(index, mirroredBuildingReflectionMatrix(buildingReflectionOutputMatrix, buildingReflectionSourceMatrix, planeY));
-    index++;
+    BUILDING_REFLECTION_FADE_BANDS.forEach((band, bandIndex) => {
+      const bandHeight = source.height * (band.end - band.start);
+      if (bandHeight <= 0.001 || !meshes[bandIndex]) return;
+      buildingReflectionSourcePosition.set(source.x, source.y + source.height * band.start + bandHeight * 0.5, source.z);
+      buildingReflectionSourceQuaternion.identity();
+      buildingReflectionSourceScale.set(source.width, bandHeight, source.depth);
+      buildingReflectionSourceMatrix.compose(
+        buildingReflectionSourcePosition,
+        buildingReflectionSourceQuaternion,
+        buildingReflectionSourceScale
+      );
+      meshes[bandIndex].setMatrixAt(
+        counts[bandIndex],
+        mirroredBuildingReflectionMatrix(buildingReflectionOutputMatrix, buildingReflectionSourceMatrix, planeY)
+      );
+      counts[bandIndex]++;
+    });
   }
-  mesh.count = index;
-  mesh.instanceMatrix.needsUpdate = true;
-  return index;
+  meshes.forEach((bandMesh, bandIndex) => {
+    if (!bandMesh) return;
+    bandMesh.count = counts[bandIndex] || 0;
+    bandMesh.instanceMatrix.needsUpdate = true;
+  });
+  return counts.reduce((sum, count) => sum + count, 0);
 }
 
 function setBuildingReflectionLedInstance(mesh, index, sourceMatrix, planeY) {
   mesh.setMatrixAt(index, mirroredBuildingReflectionMatrix(buildingReflectionOutputMatrix, sourceMatrix, planeY));
 }
 
-function setBuildingReflectionEdgeLedInstances(mesh, index, planeY) {
-  for (const spec of edgeStripSpecs) {
-    if (spec.edgeRole === 'side-building' && sideBuildingEdgeBatch.mesh && spec.instanceId >= 0) {
-      sideBuildingEdgeBatch.mesh.getMatrixAt(spec.instanceId, buildingReflectionSourceMatrix);
-      setBuildingReflectionLedInstance(mesh, index, buildingReflectionSourceMatrix, planeY);
-      index++;
-      continue;
-    }
-    if (!spec.mesh?.visible) continue;
-    const geometryParams = spec.mesh.geometry?.parameters || {};
-    spec.mesh.updateWorldMatrix(true, false);
-    buildingReflectionSourcePosition.setFromMatrixPosition(spec.mesh.matrixWorld);
-    buildingReflectionSourceQuaternion.setFromRotationMatrix(spec.mesh.matrixWorld);
-    buildingReflectionSourceScale.set(
-      Math.max(0.001, geometryParams.width ?? spec.mesh.scale.x ?? 1),
-      Math.max(0.001, geometryParams.height ?? spec.mesh.scale.y ?? 1),
-      Math.max(0.001, geometryParams.depth ?? spec.mesh.scale.z ?? 1)
-    );
-    buildingReflectionSourceMatrix.compose(
-      buildingReflectionSourcePosition,
-      buildingReflectionSourceQuaternion,
-      buildingReflectionSourceScale
-    );
-    setBuildingReflectionLedInstance(mesh, index, buildingReflectionSourceMatrix, planeY);
-    index++;
+function buildingReflectionSourceRecordForSpec(spec) {
+  if (spec.parent) {
+    return [...sideBuildingRecords, ...mainBuildingRecords].find((record) => record.mesh === spec.parent) || null;
   }
-  return index;
+  if (spec.edgeRole === 'main-building') return mainBuildingRecords[0] || null;
+  if (spec.edgeRole !== 'side-building') return null;
+  const centerZ = spec.center?.[1];
+  return sideBuildingRecords.find((record) => Math.abs(record.zFactor * SIDE_BUILDING_SPACING - centerZ) < 0.1 && Math.sign(record.mesh.position.x) === Math.sign(spec.center?.[0] || 1)) || null;
 }
 
-function setBuildingReflectionFacadeLedInstances(mesh, index, planeY) {
+function buildingReflectionRecordBounds(record) {
+  if (!record?.collider) return null;
+  return {
+    baseY: record.collider.y,
+    height: record.collider.h,
+  };
+}
+
+function buildingReflectionMatrixSegment(sourceMatrix, axis = 'z') {
+  buildingReflectionSourceMatrix.copy(sourceMatrix).decompose(
+    buildingReflectionSourcePosition,
+    buildingReflectionSourceQuaternion,
+    buildingReflectionSourceScale
+  );
+  const direction = new THREE.Vector3(axis === 'x' ? 1 : 0, 0, axis === 'z' ? 1 : 0)
+    .applyQuaternion(buildingReflectionSourceQuaternion)
+    .normalize();
+  const length = Math.max(0.001, axis === 'x' ? buildingReflectionSourceScale.x : buildingReflectionSourceScale.z);
+  const half = length * 0.5;
+  return {
+    p1: [
+      buildingReflectionSourcePosition.x - direction.x * half,
+      buildingReflectionSourcePosition.y - direction.y * half,
+      buildingReflectionSourcePosition.z - direction.z * half,
+    ],
+    p2: [
+      buildingReflectionSourcePosition.x + direction.x * half,
+      buildingReflectionSourcePosition.y + direction.y * half,
+      buildingReflectionSourcePosition.z + direction.z * half,
+    ],
+    thickness: Math.max(0.001, Math.min(buildingReflectionSourceScale.x, buildingReflectionSourceScale.y)),
+  };
+}
+
+function clippedBuildingReflectionSegmentByY(p1, p2, minY, maxY) {
+  const y1 = p1[1];
+  const y2 = p2[1];
+  if (![y1, y2, minY, maxY].every(Number.isFinite) || maxY <= minY) return null;
+  const dy = y2 - y1;
+  if (Math.abs(dy) <= 0.0001) {
+    if (y1 < minY - 0.0001 || y1 > maxY + 0.0001) return null;
+    return [[...p1], [...p2]];
+  }
+  const tA = (minY - y1) / dy;
+  const tB = (maxY - y1) / dy;
+  const t0 = Math.max(0, Math.min(tA, tB));
+  const t1 = Math.min(1, Math.max(tA, tB));
+  if (t1 <= t0 + 0.0001) return null;
+  const pointAt = (t) => [
+    p1[0] + (p2[0] - p1[0]) * t,
+    p1[1] + dy * t,
+    p1[2] + (p2[2] - p1[2]) * t,
+  ];
+  return [pointAt(t0), pointAt(t1)];
+}
+
+function composeBuildingReflectionStripMatrix(target, p1, p2, thickness) {
+  const v1 = new THREE.Vector3(...p1);
+  const v2 = new THREE.Vector3(...p2);
+  const length = v1.distanceTo(v2);
+  if (length <= 0.001) return false;
+  const direction = v2.clone().sub(v1).normalize();
+  buildingReflectionSourcePosition.copy(v1).add(v2).multiplyScalar(0.5);
+  buildingReflectionSourceQuaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+  buildingReflectionSourceScale.set(Math.max(0.001, thickness), Math.max(0.001, thickness), length);
+  target.compose(buildingReflectionSourcePosition, buildingReflectionSourceQuaternion, buildingReflectionSourceScale);
+  return true;
+}
+
+function addBuildingReflectionLedSegment(meshes, counts, p1, p2, thickness, planeY, bounds) {
+  if (!bounds || !meshes.length) return 0;
+  let added = 0;
+  BUILDING_REFLECTION_FADE_BANDS.forEach((band, bandIndex) => {
+    const mesh = meshes[bandIndex];
+    if (!mesh) return;
+    const minY = bounds.baseY + bounds.height * band.start;
+    const maxY = bounds.baseY + bounds.height * band.end;
+    const segment = clippedBuildingReflectionSegmentByY(p1, p2, minY, maxY);
+    if (!segment) return;
+    if (!composeBuildingReflectionStripMatrix(buildingReflectionSourceMatrix, segment[0], segment[1], thickness)) return;
+    setBuildingReflectionLedInstance(mesh, counts[bandIndex], buildingReflectionSourceMatrix, planeY);
+    counts[bandIndex]++;
+    added++;
+  });
+  return added;
+}
+
+function buildingReflectionEdgeSegment(spec) {
+  if (spec.edgeRole === 'side-building' && sideBuildingEdgeBatch.mesh && spec.instanceId >= 0) {
+    sideBuildingEdgeBatch.mesh.getMatrixAt(spec.instanceId, buildingReflectionSourceMatrix);
+    return buildingReflectionMatrixSegment(buildingReflectionSourceMatrix, 'z');
+  }
+  if (!spec.mesh?.visible) return null;
+  spec.mesh.updateWorldMatrix(true, false);
+  return buildingReflectionMatrixSegment(spec.mesh.matrixWorld, 'z');
+}
+
+function setBuildingReflectionEdgeLedInstances(meshes, counts, planeY, stats) {
+  for (const spec of edgeStripSpecs) {
+    stats.sourceCount++;
+    if (spec.edgeRole === 'bridge') {
+      stats.excludedSources++;
+      continue;
+    }
+    if (spec.edgeBand === 'high') {
+      stats.excludedSources++;
+      continue;
+    }
+    const record = buildingReflectionSourceRecordForSpec(spec);
+    const bounds = buildingReflectionRecordBounds(record);
+    const segment = buildingReflectionEdgeSegment(spec);
+    if (!bounds || !segment) {
+      stats.excludedSources++;
+      continue;
+    }
+    const added = addBuildingReflectionLedSegment(meshes, counts, segment.p1, segment.p2, segment.thickness, planeY, bounds);
+    if (added > 0) stats.reflectedSources++;
+    else stats.excludedSources++;
+  }
+}
+
+function setBuildingReflectionFacadeLedInstances(meshes, counts, planeY, stats) {
   for (const spec of facadeStripPositionSpecs) {
     if (spec.batchKind !== 'led') continue;
+    stats.sourceCount++;
+    if (spec.edgeRole !== 'side-building' && spec.edgeRole !== 'main-building') {
+      stats.excludedSources++;
+      continue;
+    }
+    const record = buildingReflectionSourceRecordForSpec(spec);
+    const bounds = buildingReflectionRecordBounds(record);
+    if (!bounds) {
+      stats.excludedSources++;
+      continue;
+    }
     const transform = facadeStripDynamicTransform(spec);
     const position = facadeStripWorldPosition(
       transform.basePosition,
@@ -7177,23 +7330,31 @@ function setBuildingReflectionFacadeLedInstances(mesh, index, planeY) {
     } else {
       buildingReflectionSourceMatrix.copy(buildingReflectionFacadeLocalMatrix);
     }
-    setBuildingReflectionLedInstance(mesh, index, buildingReflectionSourceMatrix, planeY);
-    index++;
+    const segment = buildingReflectionMatrixSegment(buildingReflectionSourceMatrix, spec.face === 'z' ? 'x' : 'z');
+    const added = addBuildingReflectionLedSegment(meshes, counts, segment.p1, segment.p2, segment.thickness, planeY, bounds);
+    if (added > 0) stats.reflectedSources++;
+    else stats.excludedSources++;
   }
-  return index;
 }
 
-function setBuildingReflectionLedInstances(mesh, planeMode = 'road') {
-  if (!mesh) return 0;
+function setBuildingReflectionLedInstances(meshes, planeMode = 'road') {
+  if (!meshes?.length) return { instances: 0, sourceCount: 0, reflectedSources: 0, excludedSources: 0, bridgeLedInstances: 0 };
   const planeY = planeMode === 'sidewalk'
     ? sidewalkMinSurfaceY() + 0.05
     : roadTileTopY() + 0.045;
-  let index = 0;
-  index = setBuildingReflectionEdgeLedInstances(mesh, index, planeY);
-  index = setBuildingReflectionFacadeLedInstances(mesh, index, planeY);
-  mesh.count = index;
-  mesh.instanceMatrix.needsUpdate = true;
-  return index;
+  const counts = meshes.map(() => 0);
+  const stats = { sourceCount: 0, reflectedSources: 0, excludedSources: 0, bridgeLedInstances: 0 };
+  setBuildingReflectionEdgeLedInstances(meshes, counts, planeY, stats);
+  setBuildingReflectionFacadeLedInstances(meshes, counts, planeY, stats);
+  meshes.forEach((mesh, bandIndex) => {
+    if (!mesh) return;
+    mesh.count = counts[bandIndex] || 0;
+    mesh.instanceMatrix.needsUpdate = true;
+  });
+  return {
+    ...stats,
+    instances: counts.reduce((sum, count) => sum + count, 0),
+  };
 }
 
 function markBuildingReflectionDirty() {
@@ -7206,12 +7367,17 @@ function syncBuildingReflectionProxies(force = false) {
   ensureBuildingReflectionMeshes();
   const roadSources = buildingReflectionBodySources(true);
   const sidewalkSources = buildingReflectionBodySources(false);
-  buildingReflectionState.roadBodyInstances = setBuildingReflectionBodyInstances(buildingReflectionMeshes.roadBody, roadSources, 'road');
-  buildingReflectionState.sidewalkBodyInstances = setBuildingReflectionBodyInstances(buildingReflectionMeshes.sidewalkBody, sidewalkSources, 'sidewalk');
-  buildingReflectionState.roadLedInstances = setBuildingReflectionLedInstances(buildingReflectionMeshes.roadLed, 'road');
-  buildingReflectionState.sidewalkLedInstances = setBuildingReflectionLedInstances(buildingReflectionMeshes.sidewalkLed, 'sidewalk');
+  buildingReflectionState.roadBodyInstances = setBuildingReflectionBodyInstances(buildingReflectionBandMeshes.roadBody, roadSources, 'road');
+  buildingReflectionState.sidewalkBodyInstances = setBuildingReflectionBodyInstances(buildingReflectionBandMeshes.sidewalkBody, sidewalkSources, 'sidewalk');
+  const roadLedStats = setBuildingReflectionLedInstances(buildingReflectionBandMeshes.roadLed, 'road');
+  const sidewalkLedStats = setBuildingReflectionLedInstances(buildingReflectionBandMeshes.sidewalkLed, 'sidewalk');
+  buildingReflectionState.roadLedInstances = roadLedStats.instances;
+  buildingReflectionState.sidewalkLedInstances = sidewalkLedStats.instances;
   buildingReflectionState.bodyInstances = buildingReflectionState.roadBodyInstances + buildingReflectionState.sidewalkBodyInstances;
   buildingReflectionState.ledInstances = buildingReflectionState.roadLedInstances + buildingReflectionState.sidewalkLedInstances;
+  buildingReflectionState.reflectedLedSources = roadLedStats.reflectedSources;
+  buildingReflectionState.excludedLedInstances = roadLedStats.excludedSources;
+  buildingReflectionState.bridgeLedInstances = roadLedStats.bridgeLedInstances;
   buildingReflectionState.built = true;
   buildingReflectionState.dirty = false;
   updateBuildingReflectionVisibility();
@@ -7234,14 +7400,15 @@ function updateBuildingReflectionVisibility() {
   buildingReflectionState.sidewalkLedOpacity = sidewalkAmount * BUILDING_REFLECTION_SIDEWALK_LED_MAX_OPACITY * revealFactor;
   const apply = (mesh, opacity) => {
     if (!mesh?.material) return;
-    mesh.material.opacity = opacity;
+    const bandOpacity = mesh.material.userData.buildingReflectionFadeOpacity ?? 1;
+    mesh.material.opacity = opacity * bandOpacity;
     mesh.visible = BUILDING_REFLECTION_ENABLED && opacity > 0.002 && mesh.count > 0;
     mesh.material.needsUpdate = true;
   };
-  apply(buildingReflectionMeshes.roadBody, buildingReflectionState.roadBodyOpacity);
-  apply(buildingReflectionMeshes.roadLed, buildingReflectionState.roadLedOpacity);
-  apply(buildingReflectionMeshes.sidewalkBody, buildingReflectionState.sidewalkBodyOpacity);
-  apply(buildingReflectionMeshes.sidewalkLed, buildingReflectionState.sidewalkLedOpacity);
+  buildingReflectionBandMeshes.roadBody.forEach((mesh) => apply(mesh, buildingReflectionState.roadBodyOpacity));
+  buildingReflectionBandMeshes.roadLed.forEach((mesh) => apply(mesh, buildingReflectionState.roadLedOpacity));
+  buildingReflectionBandMeshes.sidewalkBody.forEach((mesh) => apply(mesh, buildingReflectionState.sidewalkBodyOpacity));
+  buildingReflectionBandMeshes.sidewalkLed.forEach((mesh) => apply(mesh, buildingReflectionState.sidewalkLedOpacity));
   buildingReflectionGroup.visible = BUILDING_REFLECTION_ENABLED && revealFactor > 0.002;
 }
 
@@ -7251,10 +7418,10 @@ function buildingReflectionInspect() {
     roadControl: roadBuildingReflection,
     sidewalkControl: sidewalkBuildingReflection,
     meshes: {
-      roadBody: Boolean(buildingReflectionMeshes.roadBody),
-      roadLed: Boolean(buildingReflectionMeshes.roadLed),
-      sidewalkBody: Boolean(buildingReflectionMeshes.sidewalkBody),
-      sidewalkLed: Boolean(buildingReflectionMeshes.sidewalkLed),
+      roadBody: buildingReflectionBandMeshes.roadBody.filter(Boolean).length,
+      roadLed: buildingReflectionBandMeshes.roadLed.filter(Boolean).length,
+      sidewalkBody: buildingReflectionBandMeshes.sidewalkBody.filter(Boolean).length,
+      sidewalkLed: buildingReflectionBandMeshes.sidewalkLed.filter(Boolean).length,
     },
   };
 }
