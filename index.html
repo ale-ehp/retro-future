@@ -2012,7 +2012,7 @@ function updatePointerLockHint() {
     return;
   }
   lockHint.textContent = isMouseLookEnabled()
-    ? (pointerLocked || unlockedMouseLookActive ? 'mouse look active · ESC to release' : 'click canvas to lock')
+    ? (pointerLocked || unlockedMouseLookActive || autoMouseLookPrimed ? 'mouse look active · ESC to release' : 'mouse look active')
     : 'mouse disabled until reveal complete';
 }
 
@@ -2029,6 +2029,17 @@ function stopMouseLookInput() {
   pointerLocked = false;
   lockEl.classList.remove('dragging');
   updatePointerLockHint();
+}
+
+function isMouseLookSurfaceEvent(event) {
+  if (!event || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
+  const target = event.target;
+  if (target?.closest?.('#hud-controls, #settings-toggle, #welcome-window-overlay')) return false;
+  const rect = lockEl.getBoundingClientRect();
+  return event.clientX >= rect.left
+    && event.clientX <= rect.right
+    && event.clientY >= rect.top
+    && event.clientY <= rect.bottom;
 }
 
 lockEl.addEventListener('click', (e) => {
@@ -2095,7 +2106,7 @@ window.addEventListener('mousemove', (e) => {
     pitch -= dy * 0.0035 * mouseSensitivityScale;
     pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
     applyCameraLook();
-  } else if (e.target === lockEl && !dragCandidate && !dragging) {
+  } else if (isMouseLookSurfaceEvent(e) && !dragCandidate && !dragging) {
     if (!autoMouseLookPrimed) {
       autoMouseLookPrimed = true;
       lastX = e.clientX;
@@ -2110,6 +2121,8 @@ window.addEventListener('mousemove', (e) => {
     pitch -= dy * 0.0035 * mouseSensitivityScale;
     pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
     applyCameraLook();
+  } else if (autoMouseLookPrimed) {
+    autoMouseLookPrimed = false;
   } else if (dragCandidate || dragging) {
     if (!dragging) {
       const totalDx = e.clientX - dragStartX;
