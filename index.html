@@ -140,6 +140,12 @@
     line-height: 1.25;
     letter-spacing: 0.02em;
   }
+  .welcome-action.is-touch-prompt {
+    gap: 0;
+  }
+  .welcome-action.is-touch-prompt .welcome-action-prefix {
+    display: none;
+  }
   .welcome-key {
     display: inline-flex;
     align-items: center;
@@ -482,7 +488,7 @@
   <div><span class="tag">DEMO</span> &mdash; Boulevard map in cubemap style</div>
   <div class="rule"></div>
   <div><span class="tag">WASD</span> move &middot; <span class="tag">Q/E</span> down/up &middot; <span class="tag">Shift</span> sprint</div>
-  <div><span class="tag">Mouse</span> look &middot; <span class="tag">H</span> reset height &middot; <span class="tag">P</span> save spawn &middot; <span class="dim" id="lock-hint">click canvas to lock</span></div>
+  <div><span class="tag" id="look-input-label">Mouse</span> look &middot; <span class="tag">H</span> reset height &middot; <span class="tag">P</span> save spawn &middot; <span class="dim" id="lock-hint">click canvas to lock</span></div>
   <div>FPS: <span id="fps">--</span> &nbsp; FOV: <span id="fov">70</span>&deg;</div>
 </div>
 
@@ -966,7 +972,7 @@
       <p class="welcome-copy">Sei dentro il cervello di avstudio.ai
 qui puoi esplorare liberamente i reparti.
 ti auguriamo un esperienza illuminante.</p>
-      <div class="welcome-action"><span>Premi</span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="[Touch]">[Spazio]</span></div>
+      <div class="welcome-action"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Tocca">[Spazio]</span></div>
     </div>
   </article>
 </div>
@@ -1681,8 +1687,11 @@ let cameraMinHeight = 1.8;
 let viewRoll = 0;
 const welcomeWindowOverlay = document.getElementById('welcome-window-overlay');
 const welcomeWindowPanel = welcomeWindowOverlay?.querySelector('.welcome-window');
+const welcomeWindowAction = welcomeWindowOverlay?.querySelector('.welcome-action');
+const welcomeWindowActionPrefix = welcomeWindowOverlay?.querySelector('.welcome-action-prefix');
 const welcomeWindowKeyLabel = welcomeWindowOverlay?.querySelector('.welcome-key');
 const welcomeWindowTouchQuery = window.matchMedia('(hover: none), (pointer: coarse)');
+const welcomeWindowMobileQuery = window.matchMedia('(max-width: 760px)');
 const welcomeWindowMotionAllowed = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 let welcomeWindowMotionFrame = 0;
 let welcomeWindowMotionNext = null;
@@ -1711,14 +1720,20 @@ function welcomeWindowVisible() {
 }
 
 function welcomeWindowUsesTouchPrompt() {
-  return Boolean(welcomeWindowTouchQuery.matches || navigator.maxTouchPoints > 0);
+  return Boolean(welcomeWindowTouchQuery.matches || welcomeWindowMobileQuery.matches || navigator.maxTouchPoints > 0);
 }
 
 function applyWelcomeWindowInputMode() {
   if (!welcomeWindowKeyLabel) return;
-  welcomeWindowKeyLabel.textContent = welcomeWindowUsesTouchPrompt()
+  const touchPrompt = welcomeWindowUsesTouchPrompt();
+  welcomeWindowAction?.classList.toggle('is-touch-prompt', touchPrompt);
+  if (welcomeWindowActionPrefix) welcomeWindowActionPrefix.textContent = touchPrompt ? '' : 'Premi ';
+  welcomeWindowKeyLabel.textContent = touchPrompt
     ? (welcomeWindowKeyLabel.dataset.touchLabel || '[Touch]')
     : (welcomeWindowKeyLabel.dataset.desktopLabel || '[Spazio]');
+  const lookInputLabel = document.getElementById('look-input-label');
+  if (lookInputLabel) lookInputLabel.textContent = touchPrompt ? 'Touch' : 'Mouse';
+  updatePointerLockHint();
 }
 
 function triggerWelcomeWindowTouch(event) {
@@ -1798,8 +1813,10 @@ setupWelcomeWindowMotion();
 applyWelcomeWindowInputMode();
 if (typeof welcomeWindowTouchQuery.addEventListener === 'function') {
   welcomeWindowTouchQuery.addEventListener('change', applyWelcomeWindowInputMode);
+  welcomeWindowMobileQuery.addEventListener('change', applyWelcomeWindowInputMode);
 } else {
   welcomeWindowTouchQuery.addListener?.(applyWelcomeWindowInputMode);
+  welcomeWindowMobileQuery.addListener?.(applyWelcomeWindowInputMode);
 }
 welcomeWindowOverlay?.addEventListener('pointerdown', triggerWelcomeWindowTouch, { passive: false });
 welcomeWindowOverlay?.addEventListener('touchstart', triggerWelcomeWindowTouch, { passive: false });
@@ -1966,6 +1983,12 @@ function isMouseLookEnabled() {
 function updatePointerLockHint() {
   const lockHint = document.getElementById('lock-hint');
   if (!lockHint) return;
+  if (welcomeWindowUsesTouchPrompt()) {
+    lockHint.textContent = isMouseLookEnabled()
+      ? 'trascina per guardare'
+      : 'touch attivo dopo il reveal';
+    return;
+  }
   lockHint.textContent = isMouseLookEnabled()
     ? (pointerLocked ? 'pointer locked · ESC to release' : 'click canvas to lock')
     : 'mouse disabled until reveal complete';
