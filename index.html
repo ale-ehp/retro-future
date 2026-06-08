@@ -2108,8 +2108,8 @@ lockEl.addEventListener('mousedown', (e) => {
   clearVerticalMovementState();
   suppressPointerLook();
   if (pointerLocked) return;
-  if (typeof lockEl.requestPointerLock === 'function') return;
-  // a tiny drag activates rotate-fallback in case lock isn't engaged
+  // A tiny drag activates rotate-fallback when browser pointer lock is unavailable,
+  // declined, or not yet engaged after the click gesture.
   dragCandidate = true;
   dragging = false;
   dragStartX = lastX = e.clientX;
@@ -5448,7 +5448,6 @@ const buildingReflectionScaleMatrix = new THREE.Matrix4();
 const buildingReflectionSourcePosition = new THREE.Vector3();
 const buildingReflectionSourceQuaternion = new THREE.Quaternion();
 const buildingReflectionSourceScale = new THREE.Vector3();
-const buildingReflectionFacadeLocalMatrix = new THREE.Matrix4();
 const buildingReflectionState = {
   enabled: BUILDING_REFLECTION_ENABLED,
   built: false,
@@ -5460,6 +5459,8 @@ const buildingReflectionState = {
   sidewalkBodyInstances: 0,
   sidewalkLedInstances: 0,
   reflectedLedSources: 0,
+  reflectedFacadeLedSources: 0,
+  lowPerimeterLedSources: 0,
   excludedLedInstances: 0,
   bridgeLedInstances: 0,
   maxHeightRatio: BUILDING_REFLECTION_MAX_HEIGHT_RATIO,
@@ -7277,7 +7278,7 @@ function setBuildingReflectionEdgeLedInstances(meshes, counts, planeY, stats) {
       stats.excludedSources++;
       continue;
     }
-    if (spec.edgeBand === 'high') {
+    if (spec.edgeBand !== 'low') {
       stats.excludedSources++;
       continue;
     }
@@ -7289,7 +7290,10 @@ function setBuildingReflectionEdgeLedInstances(meshes, counts, planeY, stats) {
       continue;
     }
     const added = addBuildingReflectionLedSegment(meshes, counts, segment.p1, segment.p2, segment.thickness, planeY, bounds);
-    if (added > 0) stats.reflectedSources++;
+    if (added > 0) {
+      stats.reflectedSources++;
+      stats.lowPerimeterSources++;
+    }
     else stats.excludedSources++;
   }
 }
@@ -7298,52 +7302,17 @@ function setBuildingReflectionFacadeLedInstances(meshes, counts, planeY, stats) 
   for (const spec of facadeStripPositionSpecs) {
     if (spec.batchKind !== 'led') continue;
     stats.sourceCount++;
-    if (spec.edgeRole !== 'side-building' && spec.edgeRole !== 'main-building') {
-      stats.excludedSources++;
-      continue;
-    }
-    const record = buildingReflectionSourceRecordForSpec(spec);
-    const bounds = buildingReflectionRecordBounds(record);
-    if (!bounds) {
-      stats.excludedSources++;
-      continue;
-    }
-    const transform = facadeStripDynamicTransform(spec);
-    const position = facadeStripWorldPosition(
-      transform.basePosition,
-      spec.w,
-      spec.d,
-      spec.face,
-      spec.sign,
-      transform.depth,
-      spec.edgeRole,
-      sideBuildingWidthScale,
-      sideBuildingDepthScale,
-      mainBuildingWidthScale,
-      mainBuildingDepthScale,
-      facadeSegmentNormalOffset(spec)
-    );
-    buildingReflectionFacadeLocalMatrix.compose(position, transform.quaternion, transform.scale);
-    if (spec.parent?.matrixWorld) {
-      spec.parent.updateWorldMatrix(true, false);
-      buildingReflectionSourceMatrix.multiplyMatrices(spec.parent.matrixWorld, buildingReflectionFacadeLocalMatrix);
-    } else {
-      buildingReflectionSourceMatrix.copy(buildingReflectionFacadeLocalMatrix);
-    }
-    const segment = buildingReflectionMatrixSegment(buildingReflectionSourceMatrix, spec.face === 'z' ? 'x' : 'z');
-    const added = addBuildingReflectionLedSegment(meshes, counts, segment.p1, segment.p2, segment.thickness, planeY, bounds);
-    if (added > 0) stats.reflectedSources++;
-    else stats.excludedSources++;
+    stats.excludedSources++;
   }
 }
 
 function setBuildingReflectionLedInstances(meshes, planeMode = 'road') {
-  if (!meshes?.length) return { instances: 0, sourceCount: 0, reflectedSources: 0, excludedSources: 0, bridgeLedInstances: 0 };
+  if (!meshes?.length) return { instances: 0, sourceCount: 0, reflectedSources: 0, reflectedFacadeSources: 0, lowPerimeterSources: 0, excludedSources: 0, bridgeLedInstances: 0 };
   const planeY = planeMode === 'sidewalk'
     ? sidewalkMinSurfaceY() + 0.05
     : roadTileTopY() + 0.045;
   const counts = meshes.map(() => 0);
-  const stats = { sourceCount: 0, reflectedSources: 0, excludedSources: 0, bridgeLedInstances: 0 };
+  const stats = { sourceCount: 0, reflectedSources: 0, reflectedFacadeSources: 0, lowPerimeterSources: 0, excludedSources: 0, bridgeLedInstances: 0 };
   setBuildingReflectionEdgeLedInstances(meshes, counts, planeY, stats);
   setBuildingReflectionFacadeLedInstances(meshes, counts, planeY, stats);
   meshes.forEach((mesh, bandIndex) => {
@@ -7376,6 +7345,8 @@ function syncBuildingReflectionProxies(force = false) {
   buildingReflectionState.bodyInstances = buildingReflectionState.roadBodyInstances + buildingReflectionState.sidewalkBodyInstances;
   buildingReflectionState.ledInstances = buildingReflectionState.roadLedInstances + buildingReflectionState.sidewalkLedInstances;
   buildingReflectionState.reflectedLedSources = roadLedStats.reflectedSources;
+  buildingReflectionState.reflectedFacadeLedSources = roadLedStats.reflectedFacadeSources;
+  buildingReflectionState.lowPerimeterLedSources = roadLedStats.lowPerimeterSources;
   buildingReflectionState.excludedLedInstances = roadLedStats.excludedSources;
   buildingReflectionState.bridgeLedInstances = roadLedStats.bridgeLedInstances;
   buildingReflectionState.built = true;
@@ -7395,9 +7366,13 @@ function updateBuildingReflectionVisibility() {
   const sidewalkAmount = THREE.MathUtils.clamp(sidewalkBuildingReflection, 0, 1);
   buildingReflectionState.revealFactor = revealFactor;
   buildingReflectionState.roadBodyOpacity = roadAmount * BUILDING_REFLECTION_ROAD_BODY_MAX_OPACITY * revealFactor;
-  buildingReflectionState.roadLedOpacity = roadAmount * BUILDING_REFLECTION_ROAD_LED_MAX_OPACITY * revealFactor;
+  buildingReflectionState.roadLedOpacity = buildingReflectionState.roadLedInstances > 0
+    ? roadAmount * BUILDING_REFLECTION_ROAD_LED_MAX_OPACITY * revealFactor
+    : 0;
   buildingReflectionState.sidewalkBodyOpacity = sidewalkAmount * BUILDING_REFLECTION_SIDEWALK_BODY_MAX_OPACITY * revealFactor;
-  buildingReflectionState.sidewalkLedOpacity = sidewalkAmount * BUILDING_REFLECTION_SIDEWALK_LED_MAX_OPACITY * revealFactor;
+  buildingReflectionState.sidewalkLedOpacity = buildingReflectionState.sidewalkLedInstances > 0
+    ? sidewalkAmount * BUILDING_REFLECTION_SIDEWALK_LED_MAX_OPACITY * revealFactor
+    : 0;
   const apply = (mesh, opacity) => {
     if (!mesh?.material) return;
     const bandOpacity = mesh.material.userData.buildingReflectionFadeOpacity ?? 1;
