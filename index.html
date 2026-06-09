@@ -10811,6 +10811,7 @@ const CITY_REVEAL_ROAD_PERIMETER_EPS = 0.05;
 const CITY_REVEAL_SIDEWALK_WIRE_ROAD_CLEARANCE = 0.08;
 const CITY_REVEAL_ROAD_SOLID_BACKING_ENABLED = false;
 const CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED = false;
+const CITY_REVEAL_MAIN_BUILDING_LED_WIREFRAME_ENABLED = false;
 const CITY_REVEAL_MAIN_BUILDING_SLOW_SPEED = 0.5;
 const cityRevealRoadFadeMaterials = [];
 const cityRevealRoadGridFadeMaterials = new Map();
@@ -11907,6 +11908,9 @@ function buildCityRevealWireframe() {
     addCityWireSolidBox(boxWidth, boxHeight, boxDepth, record.mesh.position.x, boxY, record.mesh.position.z, 'bridge-solid');
   }
   for (const spec of edgeStripSpecs) {
+    if (spec.edgeRole === 'main-building' && !CITY_REVEAL_MAIN_BUILDING_LED_WIREFRAME_ENABLED) {
+      continue;
+    }
     if (spec.edgeRole === 'bridge') {
       addCityWireStripCenterline(spec, cityRevealWireDimMat);
       continue;
@@ -14993,6 +14997,8 @@ window.__tronInspect = () => ({
   cityRevealVisibleObjects: cityRevealEstimatedVisibleObjects(),
   cityRevealWireObjects: cityRevealWireObjects.length,
   cityRevealSolidObjects: cityRevealSolidObjects.length,
+  cityRevealMainBuildingLedWireObjects: cityRevealWireObjects.filter((object) => object.userData.cityRevealRole === 'main-led-wire').length,
+  cityRevealMainBuildingLedWireEnabled: CITY_REVEAL_MAIN_BUILDING_LED_WIREFRAME_ENABLED,
   cityRevealBridgeSolidObjects: cityRevealSolidObjects.filter((object) => object.userData.cityRevealRole === 'bridge-solid').length,
   cityRevealBridgeLedWireObjects: cityRevealWireObjects.filter((object) => object.userData.cityRevealRole === 'bridge-led-wire').length,
   cityRevealRoadSolidObjects: cityRevealSolidObjects.filter((object) => object.userData.cityRevealRole === 'road-solid').length,
