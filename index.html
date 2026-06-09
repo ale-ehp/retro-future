@@ -10809,6 +10809,8 @@ const CITY_REVEAL_ROAD_GRID_PROCEDURAL = true;
 const CITY_REVEAL_ROAD_GRID_FADE_BANDS = 10;
 const CITY_REVEAL_ROAD_PERIMETER_EPS = 0.05;
 const CITY_REVEAL_SIDEWALK_WIRE_ROAD_CLEARANCE = 0.08;
+const CITY_REVEAL_ROAD_SOLID_BACKING_ENABLED = false;
+const CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED = false;
 const CITY_REVEAL_MAIN_BUILDING_SLOW_SPEED = 0.5;
 const cityRevealRoadFadeMaterials = [];
 const cityRevealRoadGridFadeMaterials = new Map();
@@ -11846,7 +11848,9 @@ function cityRevealProfileInspect() {
 function buildCityRevealWireframe() {
   clearCityRevealWire();
   const roadY = roadTileTopY() + 0.18;
-  addCityWireSolidBox(dynamicRoadSurfaceWidth, 0.12, dynamicRoadLength, 0, roadY - 0.03, dynamicRoadCenter, 'road-solid');
+  if (CITY_REVEAL_ROAD_SOLID_BACKING_ENABLED) {
+    addCityWireSolidBox(dynamicRoadSurfaceWidth, 0.12, dynamicRoadLength, 0, roadY - 0.03, dynamicRoadCenter, 'road-solid');
+  }
   addCityRevealRoadFade(roadY);
   addCityWireBox(dynamicRoadSurfaceWidth, 0.08, dynamicRoadLength, 0, roadY, dynamicRoadCenter, cityRevealWireDimMat);
   addCityRevealRoadGrid(roadY);
@@ -11863,8 +11867,10 @@ function buildCityRevealWireframe() {
     const padZ = pad?.border?.position?.z ?? record.collider.z;
     const padY = cityRevealSidewalkWireY(pad?.topY, roadY);
     addCityWireLoop(pad?.hitPolygon, padY, padX, padZ, cityRevealWireCoreMat);
-    addCityWireLoopDensity(pad?.hitPolygon, padY, padX, padZ, cityRevealWireDimMat);
-    if (pad?.innerHitPolygon?.length) {
+    if (CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED) {
+      addCityWireLoopDensity(pad?.hitPolygon, padY, padX, padZ, cityRevealWireDimMat);
+    }
+    if (CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED && pad?.innerHitPolygon?.length) {
       const innerY = cityRevealSidewalkWireY(pad.innerTopY ?? pad.topY, roadY);
       addCityWireLoop(pad.innerHitPolygon, innerY, pad.border.position.x, pad.border.position.z, cityRevealWireDimMat);
       addCityWireLoopDensity(pad.innerHitPolygon, innerY, pad.border.position.x, pad.border.position.z, cityRevealWireDimMat);
@@ -11883,8 +11889,10 @@ function buildCityRevealWireframe() {
     const padZ = pad?.border?.position?.z ?? record.collider.z;
     const padY = cityRevealSidewalkWireY(pad?.topY, roadY);
     addCityWireLoop(pad?.hitPolygon, padY, padX, padZ, cityRevealWireCoreMat);
-    addCityWireLoopDensity(pad?.hitPolygon, padY, padX, padZ, cityRevealWireDimMat);
-    if (pad?.innerHitPolygon?.length) {
+    if (CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED) {
+      addCityWireLoopDensity(pad?.hitPolygon, padY, padX, padZ, cityRevealWireDimMat);
+    }
+    if (CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED && pad?.innerHitPolygon?.length) {
       const innerY = cityRevealSidewalkWireY(pad.innerTopY ?? pad.topY, roadY);
       addCityWireLoop(pad.innerHitPolygon, innerY, pad.border.position.x, pad.border.position.z, cityRevealWireDimMat);
       addCityWireLoopDensity(pad.innerHitPolygon, innerY, pad.border.position.x, pad.border.position.z, cityRevealWireDimMat);
@@ -12027,8 +12035,8 @@ function renderCityRevealWireframe() {
     renderer.render(cityRevealOverlayScene, cityRevealOverlayCamera);
     renderer.clearDepth();
   }
-  renderer.render(cityRevealWireScene, camera);
   renderer.render(cityRevealRoadGridScene, camera);
+  renderer.render(cityRevealWireScene, camera);
   renderer.autoClear = previousAutoClear;
 }
 
@@ -12246,8 +12254,8 @@ function renderCityRevealCompositeFrame() {
   renderCityRevealSkyBase();
   renderer.autoClear = false;
   if (isCityRevealBackplateActive()) renderer.render(cityRevealOverlayScene, cityRevealOverlayCamera);
-  renderer.render(cityRevealWireScene, camera);
   renderer.render(cityRevealRoadGridScene, camera);
+  renderer.render(cityRevealWireScene, camera);
   const realRevealActive = isCityRevealRealRevealActive();
   if (realRevealActive) {
     renderer.clearDepth();
@@ -12332,8 +12340,8 @@ function rebuildComposer() {
   syncCityRevealComposerPasses();
   composer.addPass(cityRevealSkyPass);
   composer.addPass(cityRevealOverlayPass);
-  composer.addPass(cityRevealWirePass);
   composer.addPass(cityRevealRoadGridPass);
+  composer.addPass(cityRevealWirePass);
   composer.addPass(cityRevealWireFxaaPass);
   composer.addPass(cityRevealScenePass);
   composer.addPass(cityRevealMainLedRevealPass);
@@ -15042,7 +15050,7 @@ window.__tronInspect = () => ({
   cityRevealRoadGridDepthTest: cityRevealRoadGridMat.depthTest,
   cityRevealRoadGridBaseOpacity: cityRevealRoadGridMat.userData.baseOpacity,
   cityRevealRoadGridRenderOrder: CITY_REVEAL_ROAD_GRID_RENDER_ORDER,
-  cityRevealRoadGridLayerOrder: 'below-real-city',
+  cityRevealRoadGridLayerOrder: 'below-wire-buildings',
   cityRevealRoadGridMode: CITY_REVEAL_ROAD_GRID_PROCEDURAL ? 'procedural-extended-wire-grid' : 'extended-wire-grid',
   cityRevealRoadGridAlphaFactor,
   cityRevealRoadSolidFadeEnabled: CITY_REVEAL_ROAD_SOLID_FADE_ENABLED,
@@ -15067,6 +15075,8 @@ window.__tronInspect = () => ({
       halfFar: cityRevealRoadGridFadeAt(0, bounds.roadMaxZ + bounds.fadeWidth * 0.5, bounds),
     };
   })(),
+  cityRevealRoadSolidBackingEnabled: CITY_REVEAL_ROAD_SOLID_BACKING_ENABLED,
+  cityRevealSidewalkInternalLinesEnabled: CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED,
   cityRevealDensityObjects: cityRevealWireObjects.filter((object) => object.userData.cityRevealRole === 'wire-density').length,
   fx: {
     performanceMode,
