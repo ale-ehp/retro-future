@@ -13,8 +13,79 @@
   html,body { margin:0; padding:0; background:#000; color:#cdf6ff; height:100%;
               font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; overflow:hidden; }
   #app { position:fixed; inset:0; }
-  canvas { display:block; cursor: grab; }
-  canvas.dragging { cursor: grabbing; }
+  canvas {
+    display:block;
+    cursor: none;
+  }
+  #tron-disc-cursor {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 80;
+    width: 33px;
+    height: 33px;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translate3d(-100px, -100px, 0) translate(-50%, -50%) rotate(0deg);
+    transition: none;
+    will-change: transform, opacity;
+    contain: layout paint style;
+  }
+  #tron-disc-cursor::before,
+  #tron-disc-cursor::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+  }
+  #tron-disc-cursor::before {
+    background:
+      radial-gradient(circle at 50% 50%, transparent 0 29%, rgba(0, 15, 18, 0.96) 30% 45%, transparent 46%),
+      conic-gradient(from 0deg,
+        rgba(97, 247, 255, 0.98) 0deg 32deg,
+        rgba(97, 247, 255, 0.20) 32deg 54deg,
+        transparent 54deg 93deg,
+        rgba(210, 255, 255, 0.98) 93deg 102deg,
+        transparent 102deg 181deg,
+        rgba(97, 247, 255, 0.98) 181deg 213deg,
+        rgba(97, 247, 255, 0.18) 213deg 236deg,
+        transparent 236deg 292deg,
+        rgba(210, 255, 255, 0.98) 292deg 302deg,
+        transparent 302deg 360deg);
+    -webkit-mask: radial-gradient(circle, transparent 0 34%, #000 35% 57%, transparent 58%);
+    mask: radial-gradient(circle, transparent 0 34%, #000 35% 57%, transparent 58%);
+    filter: drop-shadow(0 0 5px rgba(70, 244, 255, 0.95)) drop-shadow(0 0 11px rgba(33, 205, 224, 0.62));
+  }
+  #tron-disc-cursor::after {
+    inset: 6px;
+    border: 1.4px solid rgba(62, 246, 255, 0.92);
+    border-left-color: rgba(62, 246, 255, 0.14);
+    border-bottom-color: rgba(62, 246, 255, 0.28);
+    box-shadow:
+      0 0 5px rgba(70, 244, 255, 0.9),
+      inset 0 0 6px rgba(70, 244, 255, 0.56);
+  }
+  #tron-disc-cursor .disc-core {
+    position: absolute;
+    inset: 12.5px;
+    border-radius: 50%;
+    border: 1px solid rgba(218, 255, 255, 0.94);
+    box-shadow: 0 0 5px rgba(76, 245, 255, 0.9);
+  }
+  body.tron-disc-cursor-visible #tron-disc-cursor {
+    opacity: 1;
+    visibility: visible;
+  }
+  body.mouse-look-engaged #tron-disc-cursor,
+  #tron-disc-cursor.is-hidden {
+    opacity: 0 !important;
+    visibility: hidden !important;
+  }
+  @media (hover: none), (pointer: coarse) {
+    #tron-disc-cursor { display: none; }
+    canvas { cursor: auto; }
+  }
   .hud {
     position:fixed; pointer-events:none;
     background: rgba(2,9,11,0.55);
@@ -800,7 +871,7 @@
       <div class="control-box">
         <div class="control-section">Strada</div>
         <label class="control-row"><span class="control-head"><span>Riflesso strada</span><output id="road-reflect-val">1.15</output></span><input id="road-reflect" type="range" min="0" max="2.5" step="0.01" value="1.15" /></label>
-        <label class="control-row"><span class="control-head"><span>Palazzi strada</span><output id="road-building-reflect-val">0.35</output></span><input id="road-building-reflect" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+        <label class="control-row"><span class="control-head"><span>Riflesso palazzi</span><output id="road-building-reflect-val">0.35</output></span><input id="road-building-reflect" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
         <label class="control-row"><span class="control-head"><span>Metalness strada</span><output id="road-metalness-val">0.88</output></span><input id="road-metalness" type="range" min="0" max="1" step="0.01" value="0.88" /></label>
         <label class="control-row"><span class="control-head"><span>Roughness strada</span><output id="road-roughness-val">0.16</output></span><input id="road-roughness" type="range" min="0.01" max="1" step="0.01" value="0.16" /></label>
         <label class="control-row"><span class="control-head"><span>Normal strada</span><output id="road-normal-val">0.00</output></span><input id="road-normal" type="range" min="0" max="2.5" step="0.01" value="0" /></label>
@@ -810,7 +881,6 @@
       <div class="control-box">
         <div class="control-section">Sidewalk</div>
         <label class="control-row"><span class="control-head"><span>Riflesso sidewalk</span><output id="base-pad-reflect-val">0.88</output></span><input id="base-pad-reflect" type="range" min="0" max="3.5" step="0.01" value="0.88" /></label>
-        <label class="control-row"><span class="control-head"><span>Palazzi sidewalk</span><output id="sidewalk-building-reflect-val">0.35</output></span><input id="sidewalk-building-reflect" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
         <label class="control-row"><span class="control-head"><span>Metalness sidewalk</span><output id="base-pad-metalness-val">0.08</output></span><input id="base-pad-metalness" type="range" min="0" max="1" step="0.01" value="0.08" /></label>
         <label class="control-row"><span class="control-head"><span>Roughness sidewalk</span><output id="base-pad-roughness-val">0.18</output></span><input id="base-pad-roughness" type="range" min="0.01" max="1" step="0.01" value="0.18" /></label>
         <label class="control-row"><span class="control-head"><span>Normal sidewalk</span><output id="base-pad-normal-val">0.00</output></span><input id="base-pad-normal" type="range" min="0" max="2.5" step="0.01" value="0" /></label>
@@ -977,6 +1047,8 @@ ti auguriamo un esperienza illuminante.</p>
     </div>
   </article>
 </div>
+
+<div id="tron-disc-cursor" aria-hidden="true"><span class="disc-core"></span></div>
 
 <div id="fixed-led-values" hidden aria-hidden="true"><input id="base-pad-led-brightness" type="hidden" value="0.79"><span id="base-pad-led-brightness-val" hidden></span><input id="base-pad-led-thickness" type="hidden" value="0.34"><span id="base-pad-led-thickness-val" hidden></span><input id="base-pad-led-offset" type="hidden" value="0.25"><span id="base-pad-led-offset-val" hidden></span><input id="base-pad-led-hue" type="hidden" value="0"><span id="base-pad-led-hue-val" hidden></span><input id="led-brightness" type="hidden" value="0.79"><span id="led-brightness-val" hidden></span><input id="led-thickness" type="hidden" value="0.9"><span id="led-thickness-val" hidden></span><input id="led-distance" type="hidden" value="-14.65"><span id="led-distance-val" hidden></span><input id="building-horizontal-led-distance" type="hidden" value="2.85"><span id="building-horizontal-led-distance-val" hidden></span><input id="building-horizontal-led-thickness" type="hidden" value="2.04"><span id="building-horizontal-led-thickness-val" hidden></span><input id="building-horizontal-led-radius" type="hidden" value="1.15"><span id="building-horizontal-led-radius-val" hidden></span><input id="led-hue" type="hidden" value="0"><span id="led-hue-val" hidden></span><input id="building-low-led-offset" type="hidden" value="1.15"><span id="building-low-led-offset-val" hidden></span><input id="building-high-led-offset" type="hidden" value="0.65"><span id="building-high-led-offset-val" hidden></span><input id="building-vertical-led-length" type="hidden" value="1.03"><span id="building-vertical-led-length-val" hidden></span><input id="building-vertical-led-y" type="hidden" value="-24.5"><span id="building-vertical-led-y-val" hidden></span><input id="building-low-led-y" type="hidden" value="1"><span id="building-low-led-y-val" hidden></span><input id="building-high-led-y" type="hidden" value="-17"><span id="building-high-led-y-val" hidden></span><input id="building-facade-led-normal" type="hidden" value="0.2"><span id="building-facade-led-normal-val" hidden></span><input id="building-facade-led-x" type="hidden" value="0"><span id="building-facade-led-x-val" hidden></span><input id="building-facade-led-y" type="hidden" value="0"><span id="building-facade-led-y-val" hidden></span><input id="building-facade-led-z" type="hidden" value="0"><span id="building-facade-led-z-val" hidden></span><input id="bridge-low-led-offset" type="hidden" value="14.6"><span id="bridge-low-led-offset-val" hidden></span><input id="bridge-high-led-offset" type="hidden" value="12.55"><span id="bridge-high-led-offset-val" hidden></span><input id="main-building-led-brightness" type="hidden" value="0.56"><span id="main-building-led-brightness-val" hidden></span><input id="main-building-led-thickness" type="hidden" value="0.9"><span id="main-building-led-thickness-val" hidden></span><input id="main-building-led-distance" type="hidden" value="-14.65"><span id="main-building-led-distance-val" hidden></span><input id="main-building-horizontal-led-distance" type="hidden" value="2.85"><span id="main-building-horizontal-led-distance-val" hidden></span><input id="main-building-horizontal-led-thickness" type="hidden" value="2.04"><span id="main-building-horizontal-led-thickness-val" hidden></span><input id="main-building-horizontal-led-radius" type="hidden" value="1.15"><span id="main-building-horizontal-led-radius-val" hidden></span><input id="main-building-led-hue" type="hidden" value="-144"><span id="main-building-led-hue-val" hidden></span><input id="main-building-low-led-offset" type="hidden" value="1.15"><span id="main-building-low-led-offset-val" hidden></span><input id="main-building-high-led-offset" type="hidden" value="0.65"><span id="main-building-high-led-offset-val" hidden></span><input id="main-building-vertical-led-length" type="hidden" value="1.03"><span id="main-building-vertical-led-length-val" hidden></span><input id="main-building-vertical-led-y" type="hidden" value="-24.5"><span id="main-building-vertical-led-y-val" hidden></span><input id="main-building-low-led-y" type="hidden" value="1"><span id="main-building-low-led-y-val" hidden></span><input id="main-building-high-led-y" type="hidden" value="-17"><span id="main-building-high-led-y-val" hidden></span><div id="bridge-controls" hidden><input id="bridge-0-visible" type="checkbox" checked hidden><span id="bridge-0-visible-val" hidden></span><input id="bridge-0-x-offset" type="hidden" value="-3.5"><span id="bridge-0-x-offset-val" hidden></span><input id="bridge-0-z-offset" type="hidden" value="13"><span id="bridge-0-z-offset-val" hidden></span><input id="bridge-0-y-offset" type="hidden" value="66.5"><span id="bridge-0-y-offset-val" hidden></span><input id="bridge-0-span-scale" type="hidden" value="1.21"><span id="bridge-0-span-scale-val" hidden></span><input id="bridge-0-height-scale" type="hidden" value="1.05"><span id="bridge-0-height-scale-val" hidden></span><input id="bridge-0-depth-scale" type="hidden" value="1"><span id="bridge-0-depth-scale-val" hidden></span><input id="bridge-0-low-led-offset" type="hidden" value="0"><span id="bridge-0-low-led-offset-val" hidden></span><input id="bridge-0-high-led-offset" type="hidden" value="0"><span id="bridge-0-high-led-offset-val" hidden></span><input id="bridge-1-visible" type="checkbox" checked hidden><span id="bridge-1-visible-val" hidden></span><input id="bridge-1-x-offset" type="hidden" value="0"><span id="bridge-1-x-offset-val" hidden></span><input id="bridge-1-z-offset" type="hidden" value="9.5"><span id="bridge-1-z-offset-val" hidden></span><input id="bridge-1-y-offset" type="hidden" value="74"><span id="bridge-1-y-offset-val" hidden></span><input id="bridge-1-span-scale" type="hidden" value="1.26"><span id="bridge-1-span-scale-val" hidden></span><input id="bridge-1-height-scale" type="hidden" value="0.9"><span id="bridge-1-height-scale-val" hidden></span><input id="bridge-1-depth-scale" type="hidden" value="0.87"><span id="bridge-1-depth-scale-val" hidden></span><input id="bridge-1-low-led-offset" type="hidden" value="0"><span id="bridge-1-low-led-offset-val" hidden></span><input id="bridge-1-high-led-offset" type="hidden" value="0"><span id="bridge-1-high-led-offset-val" hidden></span><input id="bridge-2-visible" type="checkbox" checked hidden><span id="bridge-2-visible-val" hidden></span><input id="bridge-2-x-offset" type="hidden" value="0"><span id="bridge-2-x-offset-val" hidden></span><input id="bridge-2-z-offset" type="hidden" value="10.5"><span id="bridge-2-z-offset-val" hidden></span><input id="bridge-2-y-offset" type="hidden" value="17"><span id="bridge-2-y-offset-val" hidden></span><input id="bridge-2-span-scale" type="hidden" value="1.19"><span id="bridge-2-span-scale-val" hidden></span><input id="bridge-2-height-scale" type="hidden" value="1.32"><span id="bridge-2-height-scale-val" hidden></span><input id="bridge-2-depth-scale" type="hidden" value="0.96"><span id="bridge-2-depth-scale-val" hidden></span><input id="bridge-2-low-led-offset" type="hidden" value="0"><span id="bridge-2-low-led-offset-val" hidden></span><input id="bridge-2-high-led-offset" type="hidden" value="0"><span id="bridge-2-high-led-offset-val" hidden></span><input id="bridge-3-visible" type="checkbox" checked hidden><span id="bridge-3-visible-val" hidden></span><input id="bridge-3-x-offset" type="hidden" value="-1"><span id="bridge-3-x-offset-val" hidden></span><input id="bridge-3-z-offset" type="hidden" value="-0.5"><span id="bridge-3-z-offset-val" hidden></span><input id="bridge-3-y-offset" type="hidden" value="66"><span id="bridge-3-y-offset-val" hidden></span><input id="bridge-3-span-scale" type="hidden" value="0.87"><span id="bridge-3-span-scale-val" hidden></span><input id="bridge-3-height-scale" type="hidden" value="1.02"><span id="bridge-3-height-scale-val" hidden></span><input id="bridge-3-depth-scale" type="hidden" value="1.37"><span id="bridge-3-depth-scale-val" hidden></span><input id="bridge-3-low-led-offset" type="hidden" value="-0.05"><span id="bridge-3-low-led-offset-val" hidden></span><input id="bridge-3-high-led-offset" type="hidden" value="0"><span id="bridge-3-high-led-offset-val" hidden></span></div></div>
 <script type="importmap">
@@ -1293,8 +1365,6 @@ const controlEls = {
   basePadRoughnessVal: document.getElementById('base-pad-roughness-val'),
   basePadReflect: document.getElementById('base-pad-reflect'),
   basePadReflectVal: document.getElementById('base-pad-reflect-val'),
-  sidewalkBuildingReflect: document.getElementById('sidewalk-building-reflect'),
-  sidewalkBuildingReflectVal: document.getElementById('sidewalk-building-reflect-val'),
   basePadEmissive: document.getElementById('base-pad-emissive'),
   basePadEmissiveVal: document.getElementById('base-pad-emissive-val'),
   basePadBevelSize: document.getElementById('base-pad-bevel-size'),
@@ -1697,7 +1767,6 @@ let pointerLocked = false;
 let dragging = false;
 let dragCandidate = false;
 let unlockedMouseLookActive = false;
-let autoMouseLookPrimed = false;
 let lastX = 0, lastY = 0;
 let dragStartX = 0, dragStartY = 0;
 let suppressNextPointerLockMove = false;
@@ -1712,6 +1781,7 @@ const welcomeWindowPanel = welcomeWindowOverlay?.querySelector('.welcome-window'
 const welcomeWindowAction = welcomeWindowOverlay?.querySelector('.welcome-action');
 const welcomeWindowActionPrefix = welcomeWindowOverlay?.querySelector('.welcome-action-prefix');
 const welcomeWindowKeyLabel = welcomeWindowOverlay?.querySelector('.welcome-key');
+const tronDiscCursor = document.getElementById('tron-disc-cursor');
 const welcomeWindowTouchQuery = window.matchMedia('(hover: none), (pointer: coarse)');
 const welcomeWindowMobileQuery = window.matchMedia('(max-width: 760px)');
 const welcomeWindowMotionAllowed = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1851,6 +1921,92 @@ const lockEl = renderer.domElement;
 const DRAG_ACTIVATE_PX = 4;
 const POINTER_LOCK_SETTLE_MS = 220;
 const POINTER_CLICK_SUPPRESS_MS = 420;
+const TRON_DISC_CURSOR_IDLE_SPIN = 78;
+const TRON_DISC_CURSOR_MAX_SPIN = 2850;
+const TRON_DISC_CURSOR_SPEED_GAIN = 1.28;
+const tronDiscCursorState = {
+  x: -100,
+  y: -100,
+  lastX: Number.NaN,
+  lastY: Number.NaN,
+  lastAt: 0,
+  pointerInside: false,
+  visible: false,
+  speed: 0,
+  rotationDeg: 0,
+  spinDegPerSec: TRON_DISC_CURSOR_IDLE_SPIN,
+  targetSpinDegPerSec: TRON_DISC_CURSOR_IDLE_SPIN,
+};
+
+function isTronDiscCursorSurfaceEvent(event) {
+  if (!tronDiscCursor || !event || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
+  const target = event.target;
+  if (target?.closest?.('#hud-controls, #settings-toggle')) return false;
+  const rect = lockEl.getBoundingClientRect();
+  return event.clientX >= rect.left
+    && event.clientX <= rect.right
+    && event.clientY >= rect.top
+    && event.clientY <= rect.bottom;
+}
+
+function setTronDiscCursorVisible(visible) {
+  const shouldShow = Boolean(visible && !pointerLocked && !unlockedMouseLookActive);
+  tronDiscCursorState.visible = shouldShow;
+  document.body.classList.toggle('tron-disc-cursor-visible', shouldShow);
+  tronDiscCursor?.classList.toggle('is-hidden', !shouldShow);
+  if (tronDiscCursor) {
+    tronDiscCursor.style.opacity = shouldShow ? '1' : '0';
+    tronDiscCursor.style.visibility = shouldShow ? 'visible' : 'hidden';
+  }
+}
+
+function handleTronDiscCursorMove(event) {
+  if (!tronDiscCursor) return;
+  const inside = isTronDiscCursorSurfaceEvent(event);
+  tronDiscCursorState.pointerInside = inside;
+  if (!inside) {
+    setTronDiscCursorVisible(false);
+    return;
+  }
+  const now = performance.now();
+  const dtMs = Math.max(1, now - (tronDiscCursorState.lastAt || now));
+  const hasLast = Number.isFinite(tronDiscCursorState.lastX) && Number.isFinite(tronDiscCursorState.lastY);
+  const dx = hasLast ? event.clientX - tronDiscCursorState.lastX : 0;
+  const dy = hasLast ? event.clientY - tronDiscCursorState.lastY : 0;
+  const speed = Math.hypot(dx, dy) / dtMs * 1000;
+  tronDiscCursorState.x = event.clientX;
+  tronDiscCursorState.y = event.clientY;
+  tronDiscCursorState.lastX = event.clientX;
+  tronDiscCursorState.lastY = event.clientY;
+  tronDiscCursorState.lastAt = now;
+  tronDiscCursorState.speed = speed;
+  tronDiscCursorState.targetSpinDegPerSec = THREE.MathUtils.clamp(
+    TRON_DISC_CURSOR_IDLE_SPIN + speed * TRON_DISC_CURSOR_SPEED_GAIN,
+    TRON_DISC_CURSOR_IDLE_SPIN,
+    TRON_DISC_CURSOR_MAX_SPIN
+  );
+  setTronDiscCursorVisible(true);
+}
+
+function updateTronDiscCursor(dt) {
+  if (!tronDiscCursor) return;
+  const spinDecay = Math.min(1, dt * 2.8);
+  const spinEase = Math.min(1, dt * 12);
+  const restingTarget = tronDiscCursorState.visible ? TRON_DISC_CURSOR_IDLE_SPIN : 0;
+  tronDiscCursorState.targetSpinDegPerSec = THREE.MathUtils.lerp(
+    tronDiscCursorState.targetSpinDegPerSec,
+    restingTarget,
+    spinDecay
+  );
+  tronDiscCursorState.spinDegPerSec = THREE.MathUtils.lerp(
+    tronDiscCursorState.spinDegPerSec,
+    tronDiscCursorState.targetSpinDegPerSec,
+    spinEase
+  );
+  tronDiscCursorState.rotationDeg = (tronDiscCursorState.rotationDeg + tronDiscCursorState.spinDegPerSec * dt) % 360;
+  tronDiscCursor.style.transform = `translate3d(${tronDiscCursorState.x}px, ${tronDiscCursorState.y}px, 0) translate(-50%, -50%) rotate(${tronDiscCursorState.rotationDeg.toFixed(2)}deg)`;
+}
+
 function clearVerticalMovementState() {
   keys.KeyE = false;
   keys.Space = false;
@@ -2012,34 +2168,28 @@ function updatePointerLockHint() {
     return;
   }
   lockHint.textContent = isMouseLookEnabled()
-    ? (pointerLocked || unlockedMouseLookActive || autoMouseLookPrimed ? 'mouse look active · ESC to release' : 'mouse look active')
+    ? (pointerLocked || unlockedMouseLookActive ? 'mouse look active · ESC to release' : 'click canvas to lock')
     : 'mouse disabled until reveal complete';
+}
+
+function syncMouseLookCursorState() {
+  document.body.classList.toggle('mouse-look-engaged', pointerLocked || unlockedMouseLookActive);
+  lockEl.classList.toggle('dragging', pointerLocked || unlockedMouseLookActive);
+  setTronDiscCursorVisible(tronDiscCursorState.pointerInside);
 }
 
 function stopMouseLookInput() {
   dragging = false;
   dragCandidate = false;
   unlockedMouseLookActive = false;
-  autoMouseLookPrimed = false;
   suppressNextPointerLockMove = false;
   ignoredPointerLookMoves = 0;
   if (document.pointerLockElement === lockEl) {
     try { document.exitPointerLock?.(); } catch (_) {}
   }
   pointerLocked = false;
-  lockEl.classList.remove('dragging');
+  syncMouseLookCursorState();
   updatePointerLockHint();
-}
-
-function isMouseLookSurfaceEvent(event) {
-  if (!event || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
-  const target = event.target;
-  if (target?.closest?.('#hud-controls, #settings-toggle, #welcome-window-overlay')) return false;
-  const rect = lockEl.getBoundingClientRect();
-  return event.clientX >= rect.left
-    && event.clientX <= rect.right
-    && event.clientY >= rect.top
-    && event.clientY <= rect.bottom;
 }
 
 lockEl.addEventListener('click', (e) => {
@@ -2057,6 +2207,8 @@ lockEl.addEventListener('click', (e) => {
     lastX = e.clientX;
     lastY = e.clientY;
     pointerLockLookEnabledAt = performance.now() + POINTER_LOCK_SETTLE_MS;
+    syncMouseLookCursorState();
+    updatePointerLockHint();
     try {
       const lockRequest = lockEl.requestPointerLock?.();
       lockRequest?.catch?.(() => {});
@@ -2073,11 +2225,12 @@ document.addEventListener('pointerlockchange', () => {
     suppressPointerLook(POINTER_LOCK_SETTLE_MS, 8);
     pointerLockLookEnabledAt = performance.now() + POINTER_LOCK_SETTLE_MS;
   }
-  lockEl.classList.toggle('dragging', pointerLocked || unlockedMouseLookActive);
+  syncMouseLookCursorState();
   updatePointerLockHint();
 });
 
 window.addEventListener('mousemove', (e) => {
+  handleTronDiscCursorMove(e);
   if (!isMouseLookEnabled()) {
     stopMouseLookInput();
     return;
@@ -2106,23 +2259,6 @@ window.addEventListener('mousemove', (e) => {
     pitch -= dy * 0.0035 * mouseSensitivityScale;
     pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
     applyCameraLook();
-  } else if (isMouseLookSurfaceEvent(e) && !dragCandidate && !dragging) {
-    if (!autoMouseLookPrimed) {
-      autoMouseLookPrimed = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
-      return;
-    }
-    const dx = e.clientX - lastX;
-    const dy = e.clientY - lastY;
-    lastX = e.clientX; lastY = e.clientY;
-    if (Math.abs(dx) <= 0.001 && Math.abs(dy) <= 0.001) return;
-    yaw   -= dx * 0.0035 * mouseSensitivityScale;
-    pitch -= dy * 0.0035 * mouseSensitivityScale;
-    pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
-    applyCameraLook();
-  } else if (autoMouseLookPrimed) {
-    autoMouseLookPrimed = false;
   } else if (dragCandidate || dragging) {
     if (!dragging) {
       const totalDx = e.clientX - dragStartX;
@@ -2142,6 +2278,8 @@ window.addEventListener('mousemove', (e) => {
     applyCameraLook();
   }
 });
+document.addEventListener('pointerleave', () => setTronDiscCursorVisible(false), { passive: true });
+window.addEventListener('blur', () => setTronDiscCursorVisible(false));
 // fallback drag-rotate when pointer lock unavailable / declined
 lockEl.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
@@ -2169,7 +2307,7 @@ window.addEventListener('mouseup', () => {
 document.addEventListener('mousedown', (e) => {
   if (e.target === lockEl) return;
   unlockedMouseLookActive = false;
-  lockEl.classList.toggle('dragging', pointerLocked);
+  syncMouseLookCursorState();
   updatePointerLockHint();
 });
 
@@ -3239,7 +3377,6 @@ const roadReflectionEnvTargets = ROAD_BUILDING_REFLECTION_LEVELS.map((level) => 
   target: makeReflectionEnvTarget(256, 128, level),
 }));
 let roadBuildingReflection = 0.35;
-let sidewalkBuildingReflection = 0.35;
 function getRoadReflectionEnvMap(buildingReflection = roadBuildingReflection) {
   return getRoadReflectionEnvEntry(buildingReflection).target.texture;
 }
@@ -5477,68 +5614,6 @@ const sideBuildingEdgeBatch = {
   material: null,
   enabled: true,
 };
-const BUILDING_REFLECTION_ENABLED = true;
-const BUILDING_REFLECTION_MAX_HEIGHT_RATIO = 0.3;
-const BUILDING_REFLECTION_FADE_BANDS = Object.freeze([
-  { start: 0.00, end: 0.10, opacity: 1.00 },
-  { start: 0.10, end: 0.20, opacity: 0.52 },
-  { start: 0.20, end: BUILDING_REFLECTION_MAX_HEIGHT_RATIO, opacity: 0.18 },
-]);
-const BUILDING_REFLECTION_Y_SCALE = 0.34;
-const BUILDING_REFLECTION_ROAD_BODY_MAX_OPACITY = 0.16;
-const BUILDING_REFLECTION_ROAD_LED_MAX_OPACITY = 0.22;
-const BUILDING_REFLECTION_SIDEWALK_BODY_MAX_OPACITY = 0.13;
-const BUILDING_REFLECTION_SIDEWALK_LED_MAX_OPACITY = 0.18;
-const BUILDING_REFLECTION_BODY_RENDER_ORDER = 1;
-const BUILDING_REFLECTION_LED_RENDER_ORDER = 2;
-const buildingReflectionGroup = new THREE.Group();
-buildingReflectionGroup.name = 'building-reflection-proxies';
-scene.add(buildingReflectionGroup);
-const buildingReflectionUnitGeometry = new THREE.BoxGeometry(1, 1, 1);
-const buildingReflectionSourceMatrix = new THREE.Matrix4();
-const buildingReflectionOutputMatrix = new THREE.Matrix4();
-const buildingReflectionMirrorMatrix = new THREE.Matrix4();
-const buildingReflectionTranslateA = new THREE.Matrix4();
-const buildingReflectionTranslateB = new THREE.Matrix4();
-const buildingReflectionScaleMatrix = new THREE.Matrix4();
-const buildingReflectionSourcePosition = new THREE.Vector3();
-const buildingReflectionSourceQuaternion = new THREE.Quaternion();
-const buildingReflectionSourceScale = new THREE.Vector3();
-const buildingReflectionState = {
-  enabled: BUILDING_REFLECTION_ENABLED,
-  built: false,
-  dirty: true,
-  bodyInstances: 0,
-  ledInstances: 0,
-  roadBodyInstances: 0,
-  roadLedInstances: 0,
-  sidewalkBodyInstances: 0,
-  sidewalkLedInstances: 0,
-  reflectedLedSources: 0,
-  reflectedFacadeLedSources: 0,
-  lowPerimeterLedSources: 0,
-  excludedLedInstances: 0,
-  bridgeLedInstances: 0,
-  maxHeightRatio: BUILDING_REFLECTION_MAX_HEIGHT_RATIO,
-  fadeBands: BUILDING_REFLECTION_FADE_BANDS.length,
-  roadBodyOpacity: 0,
-  roadLedOpacity: 0,
-  sidewalkBodyOpacity: 0,
-  sidewalkLedOpacity: 0,
-  revealFactor: 0,
-};
-const buildingReflectionMeshes = {
-  roadBody: null,
-  roadLed: null,
-  sidewalkBody: null,
-  sidewalkLed: null,
-};
-const buildingReflectionBandMeshes = {
-  roadBody: [],
-  roadLed: [],
-  sidewalkBody: [],
-  sidewalkLed: [],
-};
 const basePadLedBatch = {
   mesh: null,
   material: null,
@@ -5607,7 +5682,7 @@ const basePadSurfaceMat = new THREE.MeshStandardMaterial({
   color: basePadSurfaceBaseColor,
   metalness: 0.08,
   roughness: 0.18,
-  envMap: getRoadReflectionEnvMap(sidewalkBuildingReflection),
+  envMap: reflectionEnvMap,
   envMapIntensity: 0.88,
   emissive: basePadSurfaceEmissiveColor,
   emissiveIntensity: 0.035,
@@ -7074,387 +7149,6 @@ function buildSideBuildingEdgeBatch(group) {
   sideBuildingEdgeBatch.mesh = mesh;
   sideBuildingEdgeBatch.material = material;
   group.add(mesh);
-}
-
-function createBuildingReflectionBodyMaterial() {
-  return new THREE.MeshBasicMaterial({
-    color: 0x051a1f,
-    blending: THREE.NormalBlending,
-    depthTest: false,
-    depthWrite: false,
-    opacity: 0,
-    side: THREE.DoubleSide,
-    toneMapped: false,
-    transparent: true,
-  });
-}
-
-function createBuildingReflectionLedMaterial() {
-  return new THREE.MeshBasicMaterial({
-    color: PAL.tealLight,
-    blending: THREE.AdditiveBlending,
-    depthTest: false,
-    depthWrite: false,
-    opacity: 0,
-    side: THREE.DoubleSide,
-    toneMapped: false,
-    transparent: true,
-  });
-}
-
-function createBuildingReflectionMesh(kind, count) {
-  const material = kind === 'led' ? createBuildingReflectionLedMaterial() : createBuildingReflectionBodyMaterial();
-  const mesh = new THREE.InstancedMesh(buildingReflectionUnitGeometry, material, Math.max(1, count));
-  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  mesh.frustumCulled = false;
-  mesh.renderOrder = kind === 'led'
-    ? BUILDING_REFLECTION_LED_RENDER_ORDER
-    : BUILDING_REFLECTION_BODY_RENDER_ORDER;
-  mesh.count = 0;
-  buildingReflectionGroup.add(mesh);
-  return mesh;
-}
-
-function ensureBuildingReflectionBandMeshes(key, kind, count) {
-  const meshes = buildingReflectionBandMeshes[key];
-  for (let i = 0; i < BUILDING_REFLECTION_FADE_BANDS.length; i++) {
-    if (!meshes[i]) {
-      meshes[i] = createBuildingReflectionMesh(kind, count);
-      meshes[i].material.userData.buildingReflectionFadeOpacity = BUILDING_REFLECTION_FADE_BANDS[i].opacity;
-    }
-  }
-  buildingReflectionMeshes[key] = meshes[0] || null;
-  return meshes;
-}
-
-function buildingReflectionBodySources(includeBridges = false) {
-  const sources = [];
-  for (const record of [...sideBuildingRecords, ...mainBuildingRecords]) {
-    const collider = record.collider;
-    if (!collider || record.mesh?.visible === false) continue;
-    sources.push({
-      x: collider.x,
-      y: collider.y,
-      z: collider.z,
-      width: collider.hw * 2,
-      height: collider.h,
-      depth: collider.hd * 2,
-      planeY: record.basePad?.topY ?? sidewalkMinSurfaceY(),
-    });
-  }
-  if (includeBridges) {
-    for (const record of bridgeRecords) {
-      if (!record.mesh?.visible) continue;
-      sources.push({
-        x: record.mesh.position.x,
-        y: record.mesh.position.y,
-        z: record.mesh.position.z,
-        width: record.baseWidth * record.mesh.scale.x,
-        height: record.baseHeight * record.mesh.scale.y,
-        depth: record.baseDepth * record.mesh.scale.z,
-        planeY: sidewalkMinSurfaceY(),
-      });
-    }
-  }
-  return sources;
-}
-
-function buildingReflectionLedSourceCount() {
-  return edgeStripSpecs.length + facadeStripPositionSpecs.filter((spec) => spec.batchKind === 'led').length;
-}
-
-function ensureBuildingReflectionMeshes() {
-  const roadBodyCount = buildingReflectionBodySources(true).length;
-  const sidewalkBodyCount = buildingReflectionBodySources(false).length;
-  const ledCount = buildingReflectionLedSourceCount();
-  ensureBuildingReflectionBandMeshes('roadBody', 'body', roadBodyCount);
-  ensureBuildingReflectionBandMeshes('sidewalkBody', 'body', sidewalkBodyCount);
-  ensureBuildingReflectionBandMeshes('roadLed', 'led', ledCount);
-  ensureBuildingReflectionBandMeshes('sidewalkLed', 'led', ledCount);
-}
-
-function mirroredBuildingReflectionMatrix(target, sourceMatrix, planeY, yScale = BUILDING_REFLECTION_Y_SCALE) {
-  buildingReflectionMirrorMatrix
-    .copy(buildingReflectionTranslateA.makeTranslation(0, planeY, 0))
-    .multiply(buildingReflectionScaleMatrix.makeScale(1, -Math.max(0.01, yScale), 1))
-    .multiply(buildingReflectionTranslateB.makeTranslation(0, -planeY, 0));
-  target.copy(buildingReflectionMirrorMatrix).multiply(sourceMatrix);
-  return target;
-}
-
-function setBuildingReflectionBodyInstances(mesh, sources, planeMode = 'road') {
-  const meshes = Array.isArray(mesh) ? mesh : [mesh].filter(Boolean);
-  if (!meshes.length) return 0;
-  const roadPlaneY = roadTileTopY() + 0.045;
-  const counts = meshes.map(() => 0);
-  for (const source of sources) {
-    if (![source.width, source.height, source.depth].every((value) => Number.isFinite(value) && value > 0.001)) continue;
-    const planeY = planeMode === 'sidewalk' ? (source.planeY ?? sidewalkMinSurfaceY()) + 0.035 : roadPlaneY;
-    BUILDING_REFLECTION_FADE_BANDS.forEach((band, bandIndex) => {
-      const bandHeight = source.height * (band.end - band.start);
-      if (bandHeight <= 0.001 || !meshes[bandIndex]) return;
-      buildingReflectionSourcePosition.set(source.x, source.y + source.height * band.start + bandHeight * 0.5, source.z);
-      buildingReflectionSourceQuaternion.identity();
-      buildingReflectionSourceScale.set(source.width, bandHeight, source.depth);
-      buildingReflectionSourceMatrix.compose(
-        buildingReflectionSourcePosition,
-        buildingReflectionSourceQuaternion,
-        buildingReflectionSourceScale
-      );
-      meshes[bandIndex].setMatrixAt(
-        counts[bandIndex],
-        mirroredBuildingReflectionMatrix(buildingReflectionOutputMatrix, buildingReflectionSourceMatrix, planeY)
-      );
-      counts[bandIndex]++;
-    });
-  }
-  meshes.forEach((bandMesh, bandIndex) => {
-    if (!bandMesh) return;
-    bandMesh.count = counts[bandIndex] || 0;
-    bandMesh.instanceMatrix.needsUpdate = true;
-  });
-  return counts.reduce((sum, count) => sum + count, 0);
-}
-
-function setBuildingReflectionLedInstance(mesh, index, sourceMatrix, planeY) {
-  mesh.setMatrixAt(index, mirroredBuildingReflectionMatrix(buildingReflectionOutputMatrix, sourceMatrix, planeY));
-}
-
-function buildingReflectionSourceRecordForSpec(spec) {
-  if (spec.parent) {
-    return [...sideBuildingRecords, ...mainBuildingRecords].find((record) => record.mesh === spec.parent) || null;
-  }
-  if (spec.edgeRole === 'main-building') return mainBuildingRecords[0] || null;
-  if (spec.edgeRole !== 'side-building') return null;
-  const centerZ = spec.center?.[1];
-  return sideBuildingRecords.find((record) => Math.abs(record.zFactor * SIDE_BUILDING_SPACING - centerZ) < 0.1 && Math.sign(record.mesh.position.x) === Math.sign(spec.center?.[0] || 1)) || null;
-}
-
-function buildingReflectionRecordBounds(record) {
-  if (!record?.collider) return null;
-  return {
-    baseY: record.collider.y,
-    height: record.collider.h,
-  };
-}
-
-function buildingReflectionMatrixSegment(sourceMatrix, axis = 'z') {
-  buildingReflectionSourceMatrix.copy(sourceMatrix).decompose(
-    buildingReflectionSourcePosition,
-    buildingReflectionSourceQuaternion,
-    buildingReflectionSourceScale
-  );
-  const direction = new THREE.Vector3(axis === 'x' ? 1 : 0, 0, axis === 'z' ? 1 : 0)
-    .applyQuaternion(buildingReflectionSourceQuaternion)
-    .normalize();
-  const length = Math.max(0.001, axis === 'x' ? buildingReflectionSourceScale.x : buildingReflectionSourceScale.z);
-  const half = length * 0.5;
-  return {
-    p1: [
-      buildingReflectionSourcePosition.x - direction.x * half,
-      buildingReflectionSourcePosition.y - direction.y * half,
-      buildingReflectionSourcePosition.z - direction.z * half,
-    ],
-    p2: [
-      buildingReflectionSourcePosition.x + direction.x * half,
-      buildingReflectionSourcePosition.y + direction.y * half,
-      buildingReflectionSourcePosition.z + direction.z * half,
-    ],
-    thickness: Math.max(0.001, Math.min(buildingReflectionSourceScale.x, buildingReflectionSourceScale.y)),
-  };
-}
-
-function clippedBuildingReflectionSegmentByY(p1, p2, minY, maxY) {
-  const y1 = p1[1];
-  const y2 = p2[1];
-  if (![y1, y2, minY, maxY].every(Number.isFinite) || maxY <= minY) return null;
-  const dy = y2 - y1;
-  if (Math.abs(dy) <= 0.0001) {
-    if (y1 < minY - 0.0001 || y1 > maxY + 0.0001) return null;
-    return [[...p1], [...p2]];
-  }
-  const tA = (minY - y1) / dy;
-  const tB = (maxY - y1) / dy;
-  const t0 = Math.max(0, Math.min(tA, tB));
-  const t1 = Math.min(1, Math.max(tA, tB));
-  if (t1 <= t0 + 0.0001) return null;
-  const pointAt = (t) => [
-    p1[0] + (p2[0] - p1[0]) * t,
-    p1[1] + dy * t,
-    p1[2] + (p2[2] - p1[2]) * t,
-  ];
-  return [pointAt(t0), pointAt(t1)];
-}
-
-function composeBuildingReflectionStripMatrix(target, p1, p2, thickness) {
-  const v1 = new THREE.Vector3(...p1);
-  const v2 = new THREE.Vector3(...p2);
-  const length = v1.distanceTo(v2);
-  if (length <= 0.001) return false;
-  const direction = v2.clone().sub(v1).normalize();
-  buildingReflectionSourcePosition.copy(v1).add(v2).multiplyScalar(0.5);
-  buildingReflectionSourceQuaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
-  buildingReflectionSourceScale.set(Math.max(0.001, thickness), Math.max(0.001, thickness), length);
-  target.compose(buildingReflectionSourcePosition, buildingReflectionSourceQuaternion, buildingReflectionSourceScale);
-  return true;
-}
-
-function addBuildingReflectionLedSegment(meshes, counts, p1, p2, thickness, planeY, bounds) {
-  if (!bounds || !meshes.length) return 0;
-  let added = 0;
-  BUILDING_REFLECTION_FADE_BANDS.forEach((band, bandIndex) => {
-    const mesh = meshes[bandIndex];
-    if (!mesh) return;
-    const minY = bounds.baseY + bounds.height * band.start;
-    const maxY = bounds.baseY + bounds.height * band.end;
-    const segment = clippedBuildingReflectionSegmentByY(p1, p2, minY, maxY);
-    if (!segment) return;
-    if (!composeBuildingReflectionStripMatrix(buildingReflectionSourceMatrix, segment[0], segment[1], thickness)) return;
-    setBuildingReflectionLedInstance(mesh, counts[bandIndex], buildingReflectionSourceMatrix, planeY);
-    counts[bandIndex]++;
-    added++;
-  });
-  return added;
-}
-
-function buildingReflectionEdgeSegment(spec) {
-  if (spec.edgeRole === 'side-building' && sideBuildingEdgeBatch.mesh && spec.instanceId >= 0) {
-    sideBuildingEdgeBatch.mesh.getMatrixAt(spec.instanceId, buildingReflectionSourceMatrix);
-    return buildingReflectionMatrixSegment(buildingReflectionSourceMatrix, 'z');
-  }
-  if (!spec.mesh?.visible) return null;
-  spec.mesh.updateWorldMatrix(true, false);
-  return buildingReflectionMatrixSegment(spec.mesh.matrixWorld, 'z');
-}
-
-function setBuildingReflectionEdgeLedInstances(meshes, counts, planeY, stats) {
-  for (const spec of edgeStripSpecs) {
-    stats.sourceCount++;
-    if (spec.edgeRole === 'bridge') {
-      stats.excludedSources++;
-      continue;
-    }
-    if (spec.edgeBand !== 'low') {
-      stats.excludedSources++;
-      continue;
-    }
-    const record = buildingReflectionSourceRecordForSpec(spec);
-    const bounds = buildingReflectionRecordBounds(record);
-    const segment = buildingReflectionEdgeSegment(spec);
-    if (!bounds || !segment) {
-      stats.excludedSources++;
-      continue;
-    }
-    const added = addBuildingReflectionLedSegment(meshes, counts, segment.p1, segment.p2, segment.thickness, planeY, bounds);
-    if (added > 0) {
-      stats.reflectedSources++;
-      stats.lowPerimeterSources++;
-    }
-    else stats.excludedSources++;
-  }
-}
-
-function setBuildingReflectionFacadeLedInstances(meshes, counts, planeY, stats) {
-  for (const spec of facadeStripPositionSpecs) {
-    if (spec.batchKind !== 'led') continue;
-    stats.sourceCount++;
-    stats.excludedSources++;
-  }
-}
-
-function setBuildingReflectionLedInstances(meshes, planeMode = 'road') {
-  if (!meshes?.length) return { instances: 0, sourceCount: 0, reflectedSources: 0, reflectedFacadeSources: 0, lowPerimeterSources: 0, excludedSources: 0, bridgeLedInstances: 0 };
-  const planeY = planeMode === 'sidewalk'
-    ? sidewalkMinSurfaceY() + 0.05
-    : roadTileTopY() + 0.045;
-  const counts = meshes.map(() => 0);
-  const stats = { sourceCount: 0, reflectedSources: 0, reflectedFacadeSources: 0, lowPerimeterSources: 0, excludedSources: 0, bridgeLedInstances: 0 };
-  setBuildingReflectionEdgeLedInstances(meshes, counts, planeY, stats);
-  setBuildingReflectionFacadeLedInstances(meshes, counts, planeY, stats);
-  meshes.forEach((mesh, bandIndex) => {
-    if (!mesh) return;
-    mesh.count = counts[bandIndex] || 0;
-    mesh.instanceMatrix.needsUpdate = true;
-  });
-  return {
-    ...stats,
-    instances: counts.reduce((sum, count) => sum + count, 0),
-  };
-}
-
-function markBuildingReflectionDirty() {
-  buildingReflectionState.dirty = true;
-}
-
-function syncBuildingReflectionProxies(force = false) {
-  if (!BUILDING_REFLECTION_ENABLED) return;
-  if (!force && !buildingReflectionState.dirty) return;
-  ensureBuildingReflectionMeshes();
-  const roadSources = buildingReflectionBodySources(true);
-  const sidewalkSources = buildingReflectionBodySources(false);
-  buildingReflectionState.roadBodyInstances = setBuildingReflectionBodyInstances(buildingReflectionBandMeshes.roadBody, roadSources, 'road');
-  buildingReflectionState.sidewalkBodyInstances = setBuildingReflectionBodyInstances(buildingReflectionBandMeshes.sidewalkBody, sidewalkSources, 'sidewalk');
-  const roadLedStats = setBuildingReflectionLedInstances(buildingReflectionBandMeshes.roadLed, 'road');
-  const sidewalkLedStats = setBuildingReflectionLedInstances(buildingReflectionBandMeshes.sidewalkLed, 'sidewalk');
-  buildingReflectionState.roadLedInstances = roadLedStats.instances;
-  buildingReflectionState.sidewalkLedInstances = sidewalkLedStats.instances;
-  buildingReflectionState.bodyInstances = buildingReflectionState.roadBodyInstances + buildingReflectionState.sidewalkBodyInstances;
-  buildingReflectionState.ledInstances = buildingReflectionState.roadLedInstances + buildingReflectionState.sidewalkLedInstances;
-  buildingReflectionState.reflectedLedSources = roadLedStats.reflectedSources;
-  buildingReflectionState.reflectedFacadeLedSources = roadLedStats.reflectedFacadeSources;
-  buildingReflectionState.lowPerimeterLedSources = roadLedStats.lowPerimeterSources;
-  buildingReflectionState.excludedLedInstances = roadLedStats.excludedSources;
-  buildingReflectionState.bridgeLedInstances = roadLedStats.bridgeLedInstances;
-  buildingReflectionState.built = true;
-  buildingReflectionState.dirty = false;
-  updateBuildingReflectionVisibility();
-}
-
-function buildingReflectionRevealFactor() {
-  if (!cityRevealWireframeEnabled || cityRevealComplete) return 1;
-  if (!cityRevealStartedAt) return 0;
-  return THREE.MathUtils.clamp(cityRevealSweepProgress, 0, 1);
-}
-
-function updateBuildingReflectionVisibility() {
-  const revealFactor = buildingReflectionRevealFactor();
-  const roadAmount = THREE.MathUtils.clamp(roadBuildingReflection, 0, 1);
-  const sidewalkAmount = THREE.MathUtils.clamp(sidewalkBuildingReflection, 0, 1);
-  buildingReflectionState.revealFactor = revealFactor;
-  buildingReflectionState.roadBodyOpacity = roadAmount * BUILDING_REFLECTION_ROAD_BODY_MAX_OPACITY * revealFactor;
-  buildingReflectionState.roadLedOpacity = buildingReflectionState.roadLedInstances > 0
-    ? roadAmount * BUILDING_REFLECTION_ROAD_LED_MAX_OPACITY * revealFactor
-    : 0;
-  buildingReflectionState.sidewalkBodyOpacity = sidewalkAmount * BUILDING_REFLECTION_SIDEWALK_BODY_MAX_OPACITY * revealFactor;
-  buildingReflectionState.sidewalkLedOpacity = buildingReflectionState.sidewalkLedInstances > 0
-    ? sidewalkAmount * BUILDING_REFLECTION_SIDEWALK_LED_MAX_OPACITY * revealFactor
-    : 0;
-  const apply = (mesh, opacity) => {
-    if (!mesh?.material) return;
-    const bandOpacity = mesh.material.userData.buildingReflectionFadeOpacity ?? 1;
-    mesh.material.opacity = opacity * bandOpacity;
-    mesh.visible = BUILDING_REFLECTION_ENABLED && opacity > 0.002 && mesh.count > 0;
-    mesh.material.needsUpdate = true;
-  };
-  buildingReflectionBandMeshes.roadBody.forEach((mesh) => apply(mesh, buildingReflectionState.roadBodyOpacity));
-  buildingReflectionBandMeshes.roadLed.forEach((mesh) => apply(mesh, buildingReflectionState.roadLedOpacity));
-  buildingReflectionBandMeshes.sidewalkBody.forEach((mesh) => apply(mesh, buildingReflectionState.sidewalkBodyOpacity));
-  buildingReflectionBandMeshes.sidewalkLed.forEach((mesh) => apply(mesh, buildingReflectionState.sidewalkLedOpacity));
-  buildingReflectionGroup.visible = BUILDING_REFLECTION_ENABLED && revealFactor > 0.002;
-}
-
-function buildingReflectionInspect() {
-  return {
-    ...buildingReflectionState,
-    roadControl: roadBuildingReflection,
-    sidewalkControl: sidewalkBuildingReflection,
-    meshes: {
-      roadBody: buildingReflectionBandMeshes.roadBody.filter(Boolean).length,
-      roadLed: buildingReflectionBandMeshes.roadLed.filter(Boolean).length,
-      sidewalkBody: buildingReflectionBandMeshes.sidewalkBody.filter(Boolean).length,
-      sidewalkLed: buildingReflectionBandMeshes.sidewalkLed.filter(Boolean).length,
-    },
-  };
 }
 
 function ensureBasePadLedBatchCapacity(count) {
@@ -11042,8 +10736,6 @@ function addPortalFrame(z) {
 }
 
 [-144, -48, 48, 144].forEach((z) => addPortalFrame(z));
-markBuildingReflectionDirty();
-syncBuildingReflectionProxies(true);
 
 // (Ground rungs / spine strips removed — replaced by roadEdge tubes + clean median above)
 
@@ -13911,7 +13603,6 @@ const BASE_PAD_MATERIAL_FAST_CONTROL_IDS = new Set([
   'base-pad-metalness',
   'base-pad-roughness',
   'base-pad-reflect',
-  'sidewalk-building-reflect',
   'base-pad-emissive',
   'base-pad-flat-shading',
   'base-pad-border-opacity',
@@ -14225,7 +13916,6 @@ function applyRoadMaterialControlsFromUI() {
     material.normalScale.set(roadNormal, roadNormal);
     setHexRoadMaterialGlow(material, hexInstanceGlow, hexTileDisplayBaseColor);
   });
-  updateBuildingReflectionVisibility();
   controlEls.roadNormalVal.textContent = roadNormal.toFixed(2);
   controlEls.roadLightVal.textContent = roadLight.toFixed(2);
   controlEls.roadReflectVal.textContent = roadReflect.toFixed(2);
@@ -14257,7 +13947,6 @@ function applyBuildingMaterialControlsFromUI() {
   updateBuildingMaterials(sideBuildingMaterials, PAL.buildingSkin, sideBuildingBrightness, sideBuildingHue, sideBuildingMetalness, sideBuildingRoughness, sideBuildingReflect, sideBuildingEmissive, lightResponse);
   updateBuildingMaterials(bridgeMaterials, PAL.buildingSkin, sideBuildingBrightness, sideBuildingHue, sideBuildingMetalness, sideBuildingRoughness, sideBuildingReflect, sideBuildingEmissive, lightResponse);
   updateBuildingMaterials(mainBuildingMaterials, PAL.mainSkin, mainBuildingBrightness, mainBuildingHue, mainBuildingMetalness, mainBuildingRoughness, mainBuildingReflect, mainBuildingEmissive, lightResponse, mainBuildingSaturation);
-  updateBuildingReflectionVisibility();
   controlEls.sideBuildingBrightnessVal.textContent = sideBuildingBrightness.toFixed(2);
   controlEls.sideBuildingHueVal.textContent = sideBuildingHue.toFixed(0);
   controlEls.sideBuildingMetalnessVal.textContent = sideBuildingMetalness.toFixed(2);
@@ -14284,7 +13973,6 @@ function applyBasePadMaterialControlsFromUI() {
   basePadMetalness = Number(controlEls.basePadMetalness.value);
   basePadRoughness = Number(controlEls.basePadRoughness.value);
   basePadReflect = Number(controlEls.basePadReflect.value);
-  sidewalkBuildingReflection = Number(controlEls.sidewalkBuildingReflect.value);
   basePadEmissive = Number(controlEls.basePadEmissive.value);
   basePadFlatShading = controlEls.basePadFlatShading.value === 'on';
   basePadBorderOpacity = Number(controlEls.basePadBorderOpacity.value);
@@ -14299,7 +13987,6 @@ function applyBasePadMaterialControlsFromUI() {
   basePadSurfaceMat.color.copy(tunedColor(basePadSurfaceBaseColor, basePadHue, basePadSaturation, basePadBrightness * lightResponse.surface));
   basePadSurfaceMat.metalness = basePadMetalness;
   basePadSurfaceMat.roughness = basePadRoughness;
-  basePadSurfaceMat.envMap = getRoadReflectionEnvMap(sidewalkBuildingReflection);
   basePadSurfaceMat.envMapIntensity = basePadReflect * lightResponse.reflection;
   basePadSurfaceMat.emissive.copy(tunedColor(basePadSurfaceEmissiveColor, basePadHue, Math.max(0.4, basePadSaturation), 1));
   basePadSurfaceMat.emissiveIntensity = basePadEmissive * lightResponse.emissive + lightResponse.floorFill * 0.35;
@@ -14307,7 +13994,6 @@ function applyBasePadMaterialControlsFromUI() {
   basePadSurfaceMat.needsUpdate = true;
   buildingBasePadBorderMat.opacity = basePadBorderOpacity;
   buildingBasePadBorderMat.color.copy(tunedColor(basePadBorderBaseColor, basePadHue, Math.max(0.4, basePadSaturation), basePadBorderBrightness));
-  updateBuildingReflectionVisibility();
   controlEls.basePadTextureModeVal.textContent = basePadTextureMode;
   controlEls.basePadTextureRepeatVal.textContent = `${basePadTextureRepeat.toFixed(2)}x`;
   controlEls.basePadTextureRotationVal.textContent = basePadTextureRotation.toFixed(0);
@@ -14318,7 +14004,6 @@ function applyBasePadMaterialControlsFromUI() {
   controlEls.basePadMetalnessVal.textContent = basePadMetalness.toFixed(2);
   controlEls.basePadRoughnessVal.textContent = basePadRoughness.toFixed(2);
   controlEls.basePadReflectVal.textContent = basePadReflect.toFixed(2);
-  controlEls.sidewalkBuildingReflectVal.textContent = sidewalkBuildingReflection.toFixed(2);
   controlEls.basePadEmissiveVal.textContent = basePadEmissive.toFixed(3);
   controlEls.basePadFlatShadingVal.textContent = basePadFlatShading ? 'on' : 'off';
   controlEls.basePadBorderOpacityVal.textContent = basePadBorderOpacity.toFixed(2);
@@ -14455,7 +14140,6 @@ function applyLiveControls() {
   const nextBasePadMetalness = Number(controlEls.basePadMetalness.value);
   const nextBasePadRoughness = Number(controlEls.basePadRoughness.value);
   const nextBasePadReflect = Number(controlEls.basePadReflect.value);
-  const nextSidewalkBuildingReflect = Number(controlEls.sidewalkBuildingReflect.value);
   const nextBasePadEmissive = Number(controlEls.basePadEmissive.value);
   const nextBasePadBevelSize = Number(controlEls.basePadBevelSize.value);
   const nextBasePadBevelSegments = Number(controlEls.basePadBevelSegments.value);
@@ -14652,7 +14336,6 @@ function applyLiveControls() {
   basePadMetalness = nextBasePadMetalness;
   basePadRoughness = nextBasePadRoughness;
   basePadReflect = nextBasePadReflect;
-  sidewalkBuildingReflection = nextSidewalkBuildingReflect;
   basePadEmissive = nextBasePadEmissive;
   basePadBevelSize = nextBasePadBevelSize;
   basePadBevelSegments = nextBasePadBevelSegments;
@@ -14776,7 +14459,6 @@ function applyLiveControls() {
   basePadSurfaceMat.color.copy(tunedColor(basePadSurfaceBaseColor, basePadHue, basePadSaturation, basePadBrightness * lightResponse.surface));
   basePadSurfaceMat.metalness = basePadMetalness;
   basePadSurfaceMat.roughness = basePadRoughness;
-  basePadSurfaceMat.envMap = getRoadReflectionEnvMap(sidewalkBuildingReflection);
   basePadSurfaceMat.envMapIntensity = basePadReflect * lightResponse.reflection;
   basePadSurfaceMat.emissive.copy(tunedColor(basePadSurfaceEmissiveColor, basePadHue, Math.max(0.4, basePadSaturation), 1));
   basePadSurfaceMat.emissiveIntensity = basePadEmissive * lightResponse.emissive + lightResponse.floorFill * 0.35;
@@ -14818,8 +14500,6 @@ function applyLiveControls() {
   updateBasePadLedStrips(basePadLedBrightness, basePadLedThickness, basePadLedOffset, basePadLedHue);
   updateBuildingScale(sideBuildingMeshes, sideBuildingColliders, sideBuildingScale);
   updateBuildingScale(mainBuildingMeshes, mainBuildingColliders, mainBuildingScale);
-  markBuildingReflectionDirty();
-  syncBuildingReflectionProxies(true);
   updateBasePadHexInfluence();
   refreshRoadTileInstances();
 
@@ -14911,7 +14591,6 @@ function applyLiveControls() {
   controlEls.basePadMetalnessVal.textContent = nextBasePadMetalness.toFixed(2);
   controlEls.basePadRoughnessVal.textContent = nextBasePadRoughness.toFixed(2);
   controlEls.basePadReflectVal.textContent = nextBasePadReflect.toFixed(2);
-  controlEls.sidewalkBuildingReflectVal.textContent = nextSidewalkBuildingReflect.toFixed(2);
   controlEls.basePadEmissiveVal.textContent = nextBasePadEmissive.toFixed(3);
   controlEls.basePadBevelSizeVal.textContent = nextBasePadBevelSize.toFixed(2);
   controlEls.basePadBevelSegmentsVal.textContent = nextBasePadBevelSegments.toFixed(0);
@@ -15198,7 +14877,6 @@ window.__tronInspect = () => ({
   })),
   tronRunner: tronRunnerInspect(),
   tronRunnerCrowd: tronRunnerCrowdInspect(),
-  buildingReflections: buildingReflectionInspect(),
   surfaceReflections: {
     roadReflect: Number(controlEls.roadReflect.value),
     roadBuildingReflect: Number(controlEls.roadBuildingReflect.value),
@@ -15206,7 +14884,6 @@ window.__tronInspect = () => ({
     roadRoughness: Number(controlEls.roadRoughness.value),
     roadNormal: Number(controlEls.roadNormal.value),
     basePadReflect: Number(controlEls.basePadReflect.value),
-    sidewalkBuildingReflect: Number(controlEls.sidewalkBuildingReflect.value),
     basePadMetalness: Number(controlEls.basePadMetalness.value),
     basePadRoughness: Number(controlEls.basePadRoughness.value),
     basePadNormal: Number(controlEls.basePadNormal.value),
@@ -15214,7 +14891,15 @@ window.__tronInspect = () => ({
   },
   pointerLocked,
   unlockedMouseLookActive,
-  autoMouseLookPrimed,
+  tronDiscCursor: {
+    visible: tronDiscCursorState.visible,
+    pointerInside: tronDiscCursorState.pointerInside,
+    x: Number(tronDiscCursorState.x.toFixed(1)),
+    y: Number(tronDiscCursorState.y.toFixed(1)),
+    speed: Number(tronDiscCursorState.speed.toFixed(1)),
+    spinDegPerSec: Number(tronDiscCursorState.spinDegPerSec.toFixed(1)),
+    targetSpinDegPerSec: Number(tronDiscCursorState.targetSpinDegPerSec.toFixed(1)),
+  },
   footsteps: window.__tronFootstepInspect?.(),
   welcomePanelMotion: { ...welcomeWindowMotionState },
   backspaceIntroTriggered,
@@ -15494,6 +15179,7 @@ function tick(now) {
   requestAnimationFrame(tick);
   const frameStartedAt = performance.now();
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  updateTronDiscCursor(dt);
   fpsAccum += dt; fpsFrames++;
   if (now - fpsLast > 500) {
     const measuredFps = fpsFrames / fpsAccum;
@@ -15527,8 +15213,6 @@ function tick(now) {
   updateCityRevealWireframe(now);
   updateTronRunnerReveal(now);
   updateMainFacadeVerticalReveal();
-  if (buildingReflectionState.dirty) syncBuildingReflectionProxies();
-  else updateBuildingReflectionVisibility();
   const renderStartedAt = performance.now();
   const captureRevealRenderInfo = cityRevealStartedAt > 0 || cityRevealProfileState.running;
   const previousRendererInfoAutoReset = renderer.info.autoReset;
