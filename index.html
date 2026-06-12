@@ -6584,6 +6584,10 @@ const sideBuildingEdgeBatch = {
   material: null,
   enabled: true,
 };
+const sideHorizontalLedRingBatches = {
+  low: { mesh: null, material: null, specs: [], geometryKey: '', count: 0 },
+  high: { mesh: null, material: null, specs: [], geometryKey: '', count: 0 },
+};
 const basePadLedBatch = {
   mesh: null,
   material: null,
@@ -6635,6 +6639,10 @@ let sideDoorGlassMat = null;
 let sideDoorLedMat = null;
 let sideDoorLedTexture = null;
 let sideDoorLedPlaneGeometry = null;
+const sideHorizontalLedRingMatrix = new THREE.Matrix4();
+const sideHorizontalLedRingPosition = new THREE.Vector3();
+const sideHorizontalLedRingQuaternion = new THREE.Quaternion();
+const sideHorizontalLedRingScale = new THREE.Vector3(1, 1, 1);
 const FACADE_LED_WORLD_OUTSET = SIDE_DOOR_FIXED.faceOffset;
 const FACADE_LED_SURFACE_EPS = 0.04;
 const MAIN_BUILDING_LED_SURFACE_EPS = 0.16;
@@ -7343,17 +7351,110 @@ function updateHorizontalLedLoopSegments(spec, width, depth, chamfer, distance, 
   spec.segmentCount = points.length;
 }
 
+function sideHorizontalLedRingBatchForBand(edgeBand = 'low') {
+  return edgeBand === 'high' ? sideHorizontalLedRingBatches.high : sideHorizontalLedRingBatches.low;
+}
+
+function getSideHorizontalLedRingMaterial(batch, color = PAL.tealLight) {
+  if (batch.material) return batch.material;
+  batch.material = new THREE.MeshBasicMaterial({
+    color,
+    toneMapped: false,
+    depthWrite: true,
+    side: THREE.DoubleSide,
+  });
+  return batch.material;
+}
+
+function sideHorizontalLedRingGeometryKey(width, depth, chamfer, distance, stripWidth, radiusScale) {
+  return [
+    width,
+    depth,
+    chamfer,
+    distance,
+    stripWidth,
+    radiusScale,
+  ].map((value) => Number(value).toFixed(3)).join(':');
+}
+
+function updateSideHorizontalLedRingBatchGeometry(batch, width, depth, chamfer, distance, stripWidth, radiusScale) {
+  if (!batch.mesh) return;
+  const key = sideHorizontalLedRingGeometryKey(width, depth, chamfer, distance, stripWidth, radiusScale);
+  if (batch.geometryKey === key) return;
+  const nextGeometry = makeHorizontalLedRingGeometry(width, depth, chamfer, distance, stripWidth, radiusScale);
+  batch.mesh.geometry.dispose();
+  batch.mesh.geometry = nextGeometry;
+  batch.geometryKey = key;
+}
+
+function buildSideHorizontalLedRingBatches(group) {
+  for (const batch of Object.values(sideHorizontalLedRingBatches)) {
+    if (!batch.specs.length || batch.mesh) continue;
+    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), getSideHorizontalLedRingMaterial(batch), batch.specs.length);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.frustumCulled = true;
+    mesh.renderOrder = 8;
+    mesh.count = batch.specs.length;
+    batch.mesh = mesh;
+    batch.count = batch.specs.length;
+    group.add(mesh);
+  }
+}
+
+function buildingLedBatchInspect() {
+  const sideRingBatches = Object.entries(sideHorizontalLedRingBatches).map(([band, batch]) => ({
+    band,
+    specs: batch.specs.length,
+    meshReady: Boolean(batch.mesh),
+    visible: Boolean(batch.mesh?.visible),
+    count: batch.mesh?.count ?? 0,
+    frustumCulled: Boolean(batch.mesh?.frustumCulled),
+    geometryKey: batch.geometryKey,
+  }));
+  const sideRingSpecCount = sideRingBatches.reduce((sum, batch) => sum + batch.specs, 0);
+  const sideRingDrawObjects = sideRingBatches.filter((batch) => batch.meshReady).length;
+  return {
+    sideEdgeBatch: {
+      count: sideBuildingEdgeBatch.mesh?.count ?? 0,
+      visible: Boolean(sideBuildingEdgeBatch.mesh?.visible),
+      frustumCulled: Boolean(sideBuildingEdgeBatch.mesh?.frustumCulled),
+    },
+    sideHorizontalRings: {
+      batched: true,
+      specCount: sideRingSpecCount,
+      drawObjects: sideRingDrawObjects,
+      previousDrawObjects: sideRingSpecCount,
+      savedDrawObjects: Math.max(0, sideRingSpecCount - sideRingDrawObjects),
+      batches: sideRingBatches,
+    },
+    facade: {
+      ledSpecs: facadeLedSourceSegmentCount,
+      housingSpecs: facadeHousingSourceSegmentCount,
+      batches: facadeLedSpecs.filter((spec) => spec.batch).length,
+    },
+    basePadLedBatch: {
+      count: basePadLedBatch.count,
+      visible: Boolean(basePadLedBatch.mesh?.visible),
+      frustumCulled: Boolean(basePadLedBatch.mesh?.frustumCulled),
+    },
+  };
+}
+
 function addHorizontalBuildingLedRing(group, w, d, x, y, z, color, options, chamfer, distance = 0) {
   const segmentMode = options.edgeRole === 'main-building';
+  const sideBatchMode = options.edgeRole === 'side-building';
+  const sideBatch = sideBatchMode ? sideHorizontalLedRingBatchForBand(options.edgeBand) : null;
   const material = segmentMode
     ? createFacadeLedMaterial(color)
+    : sideBatchMode
+      ? getSideHorizontalLedRingMaterial(sideBatch, color)
     : new THREE.MeshBasicMaterial({
       color,
       toneMapped: false,
       depthWrite: true,
       side: THREE.DoubleSide,
     });
-  const mesh = segmentMode ? null : new THREE.Mesh(makeHorizontalLedRingGeometry(w, d, chamfer, distance, edgeStripThickness, 1), material);
+  const mesh = segmentMode || sideBatchMode ? null : new THREE.Mesh(makeHorizontalLedRingGeometry(w, d, chamfer, distance, edgeStripThickness, 1), material);
   const segmentGroup = segmentMode ? new THREE.Group() : null;
   if (mesh) {
     const height = mesh.geometry.userData.ledHeight || Math.max(0.03, edgeStripThickness * 0.34);
@@ -7378,6 +7479,12 @@ function addHorizontalBuildingLedRing(group, w, d, x, y, z, color, options, cham
     baseColor: new THREE.Color(color),
   };
   horizontalBuildingLedRings.push(spec);
+  if (sideBatchMode && sideBatch) {
+    spec.batchRecord = sideBatch;
+    spec.batchInstanceId = sideBatch.specs.length;
+    sideBatch.specs.push(spec);
+    return new THREE.Object3D();
+  }
   if (segmentMode) {
     group.add(segmentGroup);
     updateHorizontalLedLoopSegments(spec, w, d, chamfer, distance, edgeStripThickness, 1, x, y, z);
@@ -8618,6 +8725,7 @@ laneZ.forEach((z, idx) => {
   buildSideBuilding( SIDE_X, z, h);
 });
 buildSideBuildingEdgeBatch(overlayGroup);
+buildSideHorizontalLedRingBatches(overlayGroup);
 
 // Main hero — z=-301, base 100, h=230
 {
@@ -16920,6 +17028,7 @@ function updateFacadeLedRibbons(brightness, hueDeg, mainBrightness, mainHueDeg) 
 function updateHorizontalBuildingLedRings(brightness, hueDeg, mainBrightness, mainHueDeg, horizontalDistance, mainHorizontalDistance, horizontalThickness, mainHorizontalThickness, horizontalRadius, mainHorizontalRadius, buildingLowOffset, buildingHighOffset, mainLowOffset, mainHighOffset, buildingLowY, buildingHighY, mainLowY, mainHighY, sideScale, mainScale, nextSideWidthScale, nextSideDepthScale, nextMainWidthScale, nextMainDepthScale, nextSideSpacingScale, nextStreetEdgeWidth) {
   const ledColor = tunedColor(new THREE.Color(PAL.tealLight), hueDeg, 1, brightness);
   const mainLedColor = tunedColor(new THREE.Color(PAL.tealLight), mainHueDeg, 1, mainBrightness);
+  const changedSideRingBatches = new Set();
   for (const spec of horizontalBuildingLedRings) {
     const isMainBuilding = spec.edgeRole === 'main-building';
     const widthScale = isMainBuilding ? nextMainWidthScale : nextSideWidthScale;
@@ -16946,6 +17055,23 @@ function updateHorizontalBuildingLedRings(brightness, hueDeg, mainBrightness, ma
       if (spec.segmentMesh) spec.segmentMesh.visible = visible;
       continue;
     }
+    if (spec.batchRecord?.mesh) {
+      const batch = spec.batchRecord;
+      updateSideHorizontalLedRingBatchGeometry(batch, width, depth, chamfer, bandDistance, stripWidth, radiusScale);
+      const ledHeight = batch.mesh.geometry.userData.ledHeight || Math.max(0.03, stripWidth * 0.34);
+      sideHorizontalLedRingPosition.set(
+        currentCenter[0],
+        buildingYOffset + spec.baseY * heightScale + yOffset - ledHeight * 0.5,
+        currentCenter[1]
+      );
+      sideHorizontalLedRingMatrix.compose(sideHorizontalLedRingPosition, sideHorizontalLedRingQuaternion, sideHorizontalLedRingScale);
+      batch.mesh.setMatrixAt(spec.batchInstanceId, sideHorizontalLedRingMatrix);
+      batch.material.color.copy(ledColor);
+      batch.mesh.count = batch.count;
+      batch.mesh.visible = brightness > 0.001 && stripWidth > 0.01 && batch.count > 0;
+      changedSideRingBatches.add(batch);
+      continue;
+    }
     const nextGeometry = makeHorizontalLedRingGeometry(width, depth, chamfer, bandDistance, stripWidth, radiusScale);
     const ledHeight = nextGeometry.userData.ledHeight || Math.max(0.03, stripWidth * 0.34);
     spec.mesh.geometry.dispose();
@@ -16953,6 +17079,10 @@ function updateHorizontalBuildingLedRings(brightness, hueDeg, mainBrightness, ma
     spec.mesh.position.set(currentCenter[0], buildingYOffset + spec.baseY * heightScale + yOffset - ledHeight * 0.5, currentCenter[1]);
     spec.material.color.copy(isMainBuilding ? mainLedColor : ledColor);
     spec.mesh.visible = (isMainBuilding ? mainBrightness : brightness) > 0.001 && stripWidth > 0.01;
+  }
+  for (const batch of changedSideRingBatches) {
+    batch.mesh.instanceMatrix.needsUpdate = true;
+    refreshCullingBounds(batch.mesh);
   }
 }
 
@@ -19576,6 +19706,7 @@ window.__tronInspect = () => ({
     backplate: cityRevealBackplateOpacityScale,
   },
   hexRoad: hexRoadInspect(),
+  buildingLedBatches: buildingLedBatchInspect(),
   fxLed: {
     mainFacade: {
       brightness: mainBuildingFacadeLedBrightness,
@@ -19638,6 +19769,7 @@ window.__tronPerfInspect = () => ({
   hexUpdateEnabled,
   hexTiles: hexRoadTiles.length,
   hexRoad: hexRoadInspect(),
+  buildingLedBatches: buildingLedBatchInspect(),
   recoveringHexTiles: recoveringHexTiles.size,
   boundaryErrorPulse,
   boundaryErrorTextureAge: boundaryErrorTextureLastAge,
