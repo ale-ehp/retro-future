@@ -11938,6 +11938,7 @@ function buildCityRevealWireframe() {
 }
 
 function setCityRevealWireAlpha(alpha) {
+  const wasCullActive = cityRevealWireAlpha > 0.002 && cityRevealWireGroup.visible;
   cityRevealWireAlpha = cityRevealWireframeEnabled ? alpha : 0;
   cityRevealBackplateMat.opacity = cityRevealWireAlpha * cityRevealBackplateOpacityScale * cityRevealBackplateRevealFactor * CITY_REVEAL_MAX_SKY_BACKPLATE_OPACITY;
   cityRevealBackplate.visible = cityRevealBackplateMat.opacity > 0.002;
@@ -11953,7 +11954,8 @@ function setCityRevealWireAlpha(alpha) {
   }
   cityRevealWireGroup.visible = cityRevealWireAlpha > 0.002;
   cityRevealRoadGridGroup.visible = cityRevealWireAlpha > 0.002;
-  updateCityRevealWireObjectCulling();
+  const isCullActive = cityRevealWireAlpha > 0.002 && cityRevealWireGroup.visible;
+  if (wasCullActive !== isCullActive) updateCityRevealWireObjectCulling();
 }
 
 function setCityRevealRoadGridAlphaFactor(factor) {
