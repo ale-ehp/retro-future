@@ -7730,6 +7730,8 @@ const TRON_RUNNER_CROWD_TARGET_FPS = 45;
 const TRON_RUNNER_CROWD_UPDATE_INTERVAL = 1 / TRON_RUNNER_CROWD_TARGET_FPS;
 const TRON_RUNNER_CROWD_MAX_ACCUMULATED_DT = 0.12;
 const TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE = 1;
+const TRON_RUNNER_CROWD_REFLECTION_BUDGET_FPS = 15;
+const TRON_RUNNER_CROWD_REFLECTION_BUDGET_INTERVAL = 1 / TRON_RUNNER_CROWD_REFLECTION_BUDGET_FPS;
 const TRON_RUNNER_REVEAL_ENABLED = true;
 const TRON_RUNNER_REVEAL_DURATION_MS = 700;
 const TRON_RUNNER_REVEAL_SCAN_RADIUS = 1.35;
@@ -8316,6 +8318,7 @@ let tronRunnerRevealRawProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
 let tronRunnerRevealActive = false;
 let tronRunnerRevealComplete = !TRON_RUNNER_REVEAL_ENABLED;
 let tronRunnerCrowdAccumulatedDt = 0;
+let tronRunnerCrowdReflectionBudgetAccumulatedDt = Number.POSITIVE_INFINITY;
 const tronRunnerCrowd = [];
 const tronRunnerCrowdBox = new THREE.Box3();
 const tronRunnerCrowdSize = new THREE.Vector3();
@@ -9004,7 +9007,7 @@ function tronRunnerCrowdLodStride(member) {
   return 4;
 }
 
-function updateTronRunnerCrowdReflectionBudget() {
+function clearTronRunnerCrowdReflectionBudget() {
   tronRunnerCrowdRuntimeStats.activeReflectionCount = 0;
   tronRunnerCrowdRuntimeStats.reflectionCandidateCount = 0;
   for (const member of tronRunnerCrowd) {
@@ -9012,24 +9015,52 @@ function updateTronRunnerCrowdReflectionBudget() {
     member.dynamicReflectionRank = null;
     member.dynamicReflectionDistance = Number.POSITIVE_INFINITY;
   }
-  if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED || !tronRunnerCrowdGroup.visible) return;
-  const candidates = tronRunnerCrowd
-    .filter((member) => member.group.visible && member.reflectionGroup)
-    .map((member) => {
-      const distance = camera.position.distanceTo(member.group.position);
-      member.dynamicReflectionDistance = distance;
-      return { member, distance };
-    })
-    .sort((a, b) => a.distance - b.distance);
-  tronRunnerCrowdRuntimeStats.reflectionCandidateCount = candidates.length;
-  candidates.slice(0, TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE).forEach(({ member }, rank) => {
+}
+
+function updateTronRunnerCrowdReflectionBudget(dt = TRON_RUNNER_CROWD_UPDATE_INTERVAL, force = false) {
+  if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED || !tronRunnerCrowdGroup.visible) {
+    clearTronRunnerCrowdReflectionBudget();
+    tronRunnerCrowdReflectionBudgetAccumulatedDt = Number.POSITIVE_INFINITY;
+    return true;
+  }
+  tronRunnerCrowdReflectionBudgetAccumulatedDt = Math.min(
+    1,
+    tronRunnerCrowdReflectionBudgetAccumulatedDt + Math.max(0, dt)
+  );
+  if (!force && tronRunnerCrowdReflectionBudgetAccumulatedDt < TRON_RUNNER_CROWD_REFLECTION_BUDGET_INTERVAL) {
+    return false;
+  }
+  tronRunnerCrowdReflectionBudgetAccumulatedDt = 0;
+  clearTronRunnerCrowdReflectionBudget();
+  const maxActive = Math.max(0, TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE);
+  const candidates = [];
+  for (const member of tronRunnerCrowd) {
+    if (!member.group.visible || !member.reflectionGroup) continue;
+    const distance = camera.position.distanceTo(member.group.position);
+    member.dynamicReflectionDistance = distance;
+    tronRunnerCrowdRuntimeStats.reflectionCandidateCount += 1;
+    if (maxActive <= 0) continue;
+    if (candidates.length < maxActive) {
+      candidates.push({ member, distance });
+      continue;
+    }
+    let farthestIndex = 0;
+    let farthestDistance = candidates[0].distance;
+    for (let index = 1; index < candidates.length; index += 1) {
+      if (candidates[index].distance > farthestDistance) {
+        farthestDistance = candidates[index].distance;
+        farthestIndex = index;
+      }
+    }
+    if (distance < farthestDistance) candidates[farthestIndex] = { member, distance };
+  }
+  candidates.sort((a, b) => a.distance - b.distance);
+  candidates.forEach(({ member }, rank) => {
     member.dynamicReflectionBudgetActive = true;
     member.dynamicReflectionRank = rank + 1;
   });
-  tronRunnerCrowdRuntimeStats.activeReflectionCount = Math.min(
-    TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE,
-    candidates.length
-  );
+  tronRunnerCrowdRuntimeStats.activeReflectionCount = candidates.length;
+  return true;
 }
 
 function setTronRunnerCrowdState(member, state, now, durationMs = 0) {
@@ -9274,6 +9305,13 @@ function updateTronRunnerCrowdReflection(member) {
     budgetActive &&
     bodyOpacity > 0.005
   );
+  const unchanged = (
+    member.dynamicReflectionVisible === visible &&
+    Math.abs((member.dynamicReflectionBodyOpacity ?? 0) - bodyOpacity) <= 0.0005 &&
+    Math.abs((member.dynamicReflectionLedOpacity ?? 0) - ledOpacity) <= 0.0005 &&
+    (!group || group.visible === visible)
+  );
+  if (unchanged) return false;
   if (group) {
     group.visible = visible;
     group.position.y = TRON_RUNNER_DYNAMIC_REFLECTION_Y;
@@ -9291,6 +9329,7 @@ function updateTronRunnerCrowdReflection(member) {
   member.dynamicReflectionOpacity = bodyOpacity;
   member.dynamicReflectionBodyOpacity = bodyOpacity;
   member.dynamicReflectionLedOpacity = ledOpacity;
+  return true;
 }
 
 function tronRunnerCrowdRoadFacingStart(route, index, fallback) {
@@ -9658,7 +9697,7 @@ function updateTronRunnerCrowd(dt) {
   tronRunnerCrowdRuntimeStats.avoidancePairs = 0;
   tronRunnerCrowdRuntimeStats.maxAvoidanceOverlap = 0;
   updateTronRunnerCrowdCulling();
-  updateTronRunnerCrowdReflectionBudget();
+  const reflectionBudgetUpdated = updateTronRunnerCrowdReflectionBudget(step);
   prepareTronRunnerCrowdSpatialGrid();
   for (const member of tronRunnerCrowd) {
     const nextEffectiveAnimationSpeed = tronRunnerState.effectiveAnimationSpeed * (member.animationScaleOffset ?? 1);
@@ -9676,7 +9715,7 @@ function updateTronRunnerCrowd(dt) {
     const shouldUpdate = member.lodStride <= 1 || ((tronRunnerCrowdRuntimeStats.frame + member.index) % member.lodStride === 0);
     if (!shouldUpdate) {
       member.lastMovedDistance = 0;
-      if (!renderCulled) updateTronRunnerCrowdReflection(member);
+      if (!renderCulled && reflectionBudgetUpdated) updateTronRunnerCrowdReflection(member);
       continue;
     }
     if (!renderCulled) member.mixer?.update(member.mixerDt);
@@ -9828,6 +9867,8 @@ function tronRunnerCrowdInspect() {
       enabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
       mode: 'mesh-clone',
       maxActive: TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE,
+      budgetFps: TRON_RUNNER_CROWD_REFLECTION_BUDGET_FPS,
+      budgetIntervalMs: Number((TRON_RUNNER_CROWD_REFLECTION_BUDGET_INTERVAL * 1000).toFixed(2)),
       budgetActiveCount: tronRunnerCrowdRuntimeStats.activeReflectionCount,
       candidateCount: tronRunnerCrowdRuntimeStats.reflectionCandidateCount,
       visibleCount: members.filter((member) => member.dynamicReflectionVisible).length,
