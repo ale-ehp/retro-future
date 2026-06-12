@@ -10812,6 +10812,9 @@ const cityRevealRoadFadeMaterials = [];
 const cityRevealRoadGridFadeMaterials = new Map();
 let cityRevealRoadGridAlphaFactor = 1;
 let cityRevealRoadGridSkippedPerimeterSegments = 0;
+let cityRevealWireMaterialAlphaCache = NaN;
+let cityRevealWireMaterialOpacityScaleCache = NaN;
+let cityRevealWireMaterialRoadGridAlphaFactorCache = NaN;
 const cityRevealSolidMat = new THREE.MeshBasicMaterial({
   color: 0x000000,
   transparent: true,
@@ -10824,6 +10827,12 @@ const cityRevealSolidMat = new THREE.MeshBasicMaterial({
   polygonOffsetUnits: 1,
 });
 
+function invalidateCityRevealWireMaterialCache() {
+  cityRevealWireMaterialAlphaCache = NaN;
+  cityRevealWireMaterialOpacityScaleCache = NaN;
+  cityRevealWireMaterialRoadGridAlphaFactorCache = NaN;
+}
+
 function registerCityRevealWireMaterial(material, baseOpacity) {
   material.transparent = true;
   material.opacity = baseOpacity;
@@ -10833,6 +10842,7 @@ function registerCityRevealWireMaterial(material, baseOpacity) {
   material.userData.baseOpacity = baseOpacity;
   material.userData.defaultBaseOpacity = baseOpacity;
   cityRevealWireMaterials.push(material);
+  invalidateCityRevealWireMaterialCache();
   return material;
 }
 
@@ -11386,6 +11396,7 @@ function clearCityRevealWire() {
   cityRevealWireCullStats.solidVisible = 0;
   cityRevealWireCullStats.roadFadeVisible = 0;
   cityRevealRoadGridSkippedPerimeterSegments = 0;
+  invalidateCityRevealWireMaterialCache();
 }
 
 function cityRevealRoadSolidTopY() {
@@ -11428,10 +11439,13 @@ function cityRevealFrontForProgress(progress) {
 }
 
 function setCityRevealSweepFront(frontZ) {
+  const previousFrontZ = cityRevealFrontZ;
   cityRevealFrontZ = Number.isFinite(frontZ) ? frontZ : cityRevealSweepEndZ;
   cityRevealRealClipPlane.normal.copy(CITY_REVEAL_SWEEP_NORMAL);
   cityRevealRealClipPlane.constant = -cityRevealFrontZ * CITY_REVEAL_SWEEP_NORMAL.z;
-  updateCityRevealWireObjectCulling();
+  const frontChanged = !Number.isFinite(previousFrontZ) || Math.abs(previousFrontZ - cityRevealFrontZ) > 0.0001;
+  const cullListChanged = cityRevealWireCullStats.total !== cityRevealWireCullObjects.length;
+  if (frontChanged || cullListChanged) updateCityRevealWireObjectCulling();
 }
 
 function cityRevealMainBuildingSlowZone() {
@@ -11939,21 +11953,31 @@ function buildCityRevealWireframe() {
 
 function setCityRevealWireAlpha(alpha) {
   const wasCullActive = cityRevealWireAlpha > 0.002 && cityRevealWireGroup.visible;
-  cityRevealWireAlpha = cityRevealWireframeEnabled ? alpha : 0;
+  const nextWireAlpha = cityRevealWireframeEnabled ? alpha : 0;
+  const materialStateChanged =
+    nextWireAlpha !== cityRevealWireMaterialAlphaCache ||
+    cityRevealWireOpacityScale !== cityRevealWireMaterialOpacityScaleCache ||
+    cityRevealRoadGridAlphaFactor !== cityRevealWireMaterialRoadGridAlphaFactorCache;
+  cityRevealWireAlpha = nextWireAlpha;
   cityRevealBackplateMat.opacity = cityRevealWireAlpha * cityRevealBackplateOpacityScale * cityRevealBackplateRevealFactor * CITY_REVEAL_MAX_SKY_BACKPLATE_OPACITY;
   cityRevealBackplate.visible = cityRevealBackplateMat.opacity > 0.002;
-  cityRevealSolidMat.opacity = cityRevealWireAlpha;
-  cityRevealSolidMat.visible = cityRevealWireAlpha > 0.002;
-  for (const material of cityRevealWireMaterials) {
-    const roadGridFactor = material.userData.cityRevealRoadGridMaterial ? cityRevealRoadGridAlphaFactor : 1;
-    material.opacity = material.userData.baseOpacity * cityRevealWireOpacityScale * cityRevealWireAlpha * roadGridFactor;
-    material.visible = material.opacity > 0.002;
-    if (material.userData.cityRevealRoadGridShaderMaterial && material.uniforms?.uOpacity) {
-      material.uniforms.uOpacity.value = material.opacity;
+  if (materialStateChanged) {
+    cityRevealSolidMat.opacity = cityRevealWireAlpha;
+    cityRevealSolidMat.visible = cityRevealWireAlpha > 0.002;
+    for (const material of cityRevealWireMaterials) {
+      const roadGridFactor = material.userData.cityRevealRoadGridMaterial ? cityRevealRoadGridAlphaFactor : 1;
+      material.opacity = material.userData.baseOpacity * cityRevealWireOpacityScale * cityRevealWireAlpha * roadGridFactor;
+      material.visible = material.opacity > 0.002;
+      if (material.userData.cityRevealRoadGridShaderMaterial && material.uniforms?.uOpacity) {
+        material.uniforms.uOpacity.value = material.opacity;
+      }
     }
+    cityRevealWireGroup.visible = cityRevealWireAlpha > 0.002;
+    cityRevealRoadGridGroup.visible = cityRevealWireAlpha > 0.002;
+    cityRevealWireMaterialAlphaCache = cityRevealWireAlpha;
+    cityRevealWireMaterialOpacityScaleCache = cityRevealWireOpacityScale;
+    cityRevealWireMaterialRoadGridAlphaFactorCache = cityRevealRoadGridAlphaFactor;
   }
-  cityRevealWireGroup.visible = cityRevealWireAlpha > 0.002;
-  cityRevealRoadGridGroup.visible = cityRevealWireAlpha > 0.002;
   const isCullActive = cityRevealWireAlpha > 0.002 && cityRevealWireGroup.visible;
   if (wasCullActive !== isCullActive) updateCityRevealWireObjectCulling();
 }
