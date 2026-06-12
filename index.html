@@ -10364,6 +10364,9 @@ const TRON_RUNNER_CROWD_TARGET_FPS = 45;
 const TRON_RUNNER_CROWD_UPDATE_INTERVAL = 1 / TRON_RUNNER_CROWD_TARGET_FPS;
 const TRON_RUNNER_CROWD_MAX_ACCUMULATED_DT = 0.12;
 const TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE = 3;
+const TRON_RUNNER_CROWD_REFLECTION_NEAR_DISTANCE = 240;
+const TRON_RUNNER_CROWD_REFLECTION_MIN_FPS = 50;
+const TRON_RUNNER_CROWD_REFLECTION_REVEAL_ENABLED = false;
 const TRON_RUNNER_REVEAL_ENABLED = true;
 const TRON_RUNNER_REVEAL_DURATION_MS = 1400;
 const TRON_RUNNER_REVEAL_SCAN_RADIUS = 2.7;
@@ -10391,13 +10394,6 @@ const TRON_RUNNER_CROWD_EXCLUDED_CIVICS = new Set([TRON_RUNNER_IDLE_CHARACTER_CI
 const TRON_RUNNER_CROWD_SCALE_LOCK = 0.55;
 const TRON_RUNNER_CROWD_GROUND_OFFSET = TRON_RUNNER_GROUND_OFFSET;
 const TRON_RUNNER_CROWD_PATH_MODE = 'sidewalk-building-loops';
-const TRON_RUNNER_CROWD_ROUTE_STYLE_CYCLE = [
-  'single-building-loop',
-  'side-street-lateral',
-  'single-building-loop',
-  'side-street-lateral',
-  TRON_RUNNER_CROWD_PATH_MODE,
-];
 const TRON_RUNNER_CROWD_COLLISIONS_ENABLED = true;
 const TRON_RUNNER_CROWD_REACH_RADIUS = 0.85;
 const TRON_RUNNER_CROWD_COLLISION_RADIUS = 1.1;
@@ -10420,8 +10416,8 @@ const TRON_RUNNER_CROWD_DEADLOCK_MOVE_EPS = 0.018;
 const TRON_RUNNER_CROWD_DEADLOCK_NUDGE = 3.4;
 const TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE = 190;
 const TRON_RUNNER_CROWD_LOD_MID_DISTANCE = 520;
-const TRON_RUNNER_CROWD_CULLING_ENABLED = false;
-const TRON_RUNNER_CROWD_CULL_DISTANCE = 1500;
+const TRON_RUNNER_CROWD_CULLING_ENABLED = true;
+const TRON_RUNNER_CROWD_CULL_DISTANCE = 900;
 const TRON_RUNNER_CROWD_CULL_RADIUS = 24;
 const TRON_RUNNER_CROWD_CULLED_LOD_STRIDE = 12;
 const TRON_MAIN_PLAYER_BODY_ENABLED = false;
@@ -11467,12 +11463,15 @@ const tronRunnerCrowdRuntimeStats = {
   lastStepDt: 0,
   activeReflectionCount: 0,
   reflectionCandidateCount: 0,
+  reflectionBudgetLimit: 0,
+  reflectionDistanceSkippedCount: 0,
   cullingVisibleCount: 0,
   cullingHiddenCount: 0,
   cullingDistanceHiddenCount: 0,
   cullingFrustumHiddenCount: 0,
   cullingMinDistance: 0,
   cullingMaxDistance: 0,
+  performanceFreezeFrameCount: 0,
 };
 const tronRunnerBeatPulseState = {
   value: 0,
@@ -12698,6 +12697,9 @@ function tronRunnerCrowdGridKey(cx, cz) {
 function prepareTronRunnerCrowdSpatialGrid() {
   tronRunnerCrowdSpatialGrid.clear();
   for (const member of tronRunnerCrowd) {
+    if (TRON_RUNNER_CROWD_CULLING_ENABLED && member.cullingVisible === false && member.cullingDistance > TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE) {
+      continue;
+    }
     const cx = tronRunnerCrowdGridCoord(member.group.position.x);
     const cz = tronRunnerCrowdGridCoord(member.group.position.z);
     const key = tronRunnerCrowdGridKey(cx, cz);
@@ -12735,12 +12737,20 @@ function tronRunnerCrowdLodStride(member) {
 function updateTronRunnerCrowdReflectionBudget() {
   tronRunnerCrowdRuntimeStats.activeReflectionCount = 0;
   tronRunnerCrowdRuntimeStats.reflectionCandidateCount = 0;
+  tronRunnerCrowdRuntimeStats.reflectionBudgetLimit = 0;
+  tronRunnerCrowdRuntimeStats.reflectionDistanceSkippedCount = 0;
   for (const member of tronRunnerCrowd) {
     member.dynamicReflectionBudgetActive = false;
     member.dynamicReflectionRank = null;
     member.dynamicReflectionDistance = Number.POSITIVE_INFINITY;
   }
   if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED || !tronRunnerCrowdGroup.visible) return;
+  if (!TRON_RUNNER_CROWD_REFLECTION_REVEAL_ENABLED && isCityRevealPerformanceCritical()) return;
+  let budgetLimit = TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE;
+  if (latestMeasuredFps > 0 && latestMeasuredFps < 42) budgetLimit = 0;
+  else if (latestMeasuredFps > 0 && latestMeasuredFps < TRON_RUNNER_CROWD_REFLECTION_MIN_FPS) budgetLimit = Math.max(1, budgetLimit - 1);
+  tronRunnerCrowdRuntimeStats.reflectionBudgetLimit = budgetLimit;
+  if (budgetLimit <= 0) return;
   const candidates = tronRunnerCrowd
     .filter((member) => member.group.visible && member.reflectionGroup)
     .map((member) => {
@@ -12748,14 +12758,19 @@ function updateTronRunnerCrowdReflectionBudget() {
       member.dynamicReflectionDistance = distance;
       return { member, distance };
     })
+    .filter(({ distance }) => {
+      const nearEnough = distance <= TRON_RUNNER_CROWD_REFLECTION_NEAR_DISTANCE;
+      if (!nearEnough) tronRunnerCrowdRuntimeStats.reflectionDistanceSkippedCount += 1;
+      return nearEnough;
+    })
     .sort((a, b) => a.distance - b.distance);
   tronRunnerCrowdRuntimeStats.reflectionCandidateCount = candidates.length;
-  candidates.slice(0, TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE).forEach(({ member }, rank) => {
+  candidates.slice(0, budgetLimit).forEach(({ member }, rank) => {
     member.dynamicReflectionBudgetActive = true;
     member.dynamicReflectionRank = rank + 1;
   });
   tronRunnerCrowdRuntimeStats.activeReflectionCount = Math.min(
-    TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE,
+    budgetLimit,
     candidates.length
   );
 }
@@ -12792,6 +12807,7 @@ function clearTronRunnerCrowd() {
   tronRunnerCrowdBuildStats.startedAt = 0;
   tronRunnerCrowdBuildStats.durationMs = 0;
   tronRunnerCrowdBuildStats.lastChunkMs = 0;
+  tronRunnerCrowdRuntimeStats.performanceFreezeFrameCount = 0;
 }
 
 function clearTronRunnerIdleCharacter() {
@@ -13262,13 +13278,17 @@ function updateTronRunnerCrowdReflection(member) {
   }
   for (const material of bodyMaterials) {
     material.userData.tronRunnerBaseOpacity = bodyOpacity;
-    material.opacity = bodyOpacity;
-    material.needsUpdate = true;
+    if (Math.abs((material.opacity ?? 0) - bodyOpacity) > 0.002) {
+      material.opacity = bodyOpacity;
+      material.needsUpdate = true;
+    }
   }
   for (const material of ledMaterials) {
     material.userData.tronRunnerBaseOpacity = ledOpacity;
-    material.opacity = ledOpacity;
-    material.needsUpdate = true;
+    if (Math.abs((material.opacity ?? 0) - ledOpacity) > 0.002) {
+      material.opacity = ledOpacity;
+      material.needsUpdate = true;
+    }
   }
   member.dynamicReflectionVisible = visible;
   member.dynamicReflectionOpacity = bodyOpacity;
@@ -13957,6 +13977,10 @@ function tronRunnerCrowdInspect() {
       enabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
       mode: 'mesh-clone',
       maxActive: TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE,
+      budgetLimit: tronRunnerCrowdRuntimeStats.reflectionBudgetLimit,
+      nearDistance: TRON_RUNNER_CROWD_REFLECTION_NEAR_DISTANCE,
+      minFps: TRON_RUNNER_CROWD_REFLECTION_MIN_FPS,
+      distanceSkippedCount: tronRunnerCrowdRuntimeStats.reflectionDistanceSkippedCount,
       budgetActiveCount: tronRunnerCrowdRuntimeStats.activeReflectionCount,
       candidateCount: tronRunnerCrowdRuntimeStats.reflectionCandidateCount,
       visibleCount: members.filter((member) => member.dynamicReflectionVisible).length,
@@ -14005,6 +14029,7 @@ function tronRunnerCrowdInspect() {
       updateIntervalMs: Number((TRON_RUNNER_CROWD_UPDATE_INTERVAL * 1000).toFixed(2)),
       updateCount: tronRunnerCrowdRuntimeStats.updateCount,
       skippedFrameCount: tronRunnerCrowdRuntimeStats.skippedFrameCount,
+      performanceFreezeFrameCount: tronRunnerCrowdRuntimeStats.performanceFreezeFrameCount,
       lastStepMs: Number((tronRunnerCrowdRuntimeStats.lastStepDt * 1000).toFixed(2)),
       stateCounts,
       lastThinkMs: Number(tronRunnerCrowdRuntimeStats.lastThinkMs.toFixed(3)),
@@ -14562,9 +14587,10 @@ async function loadTronRunner() {
   tronRunnerAutonomy.lastFootstepSyncSource = 'walk-cycle';
   updateTronRunnerAutonomyState(route);
   try {
+    const sourceReflectionNeeded = TRON_RUNNER_SOURCE_CHARACTER_VISIBLE && TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED;
     const [gltf, reflectionGltf] = await Promise.all([
       loadTronRunnerGltf(),
-      TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED ? loadTronRunnerGltf() : Promise.resolve(null),
+      sourceReflectionNeeded ? loadTronRunnerGltf() : Promise.resolve(null),
     ]);
     tronRunnerWalker.clear();
     const model = gltf.scene;
@@ -16260,6 +16286,18 @@ function isCityRevealRealRevealActive() {
     && !cityRevealComplete;
 }
 
+function isCityRevealPerformanceCritical() {
+  return Boolean(
+    cityRevealWireframeEnabled &&
+    !cityRevealComplete &&
+    (cityRevealWaitingForVisibleFrame || cityRevealStartedAt > 0)
+  );
+}
+
+function shouldUpdateTronRunnerSourceCharacter() {
+  return Boolean(TRON_RUNNER_SOURCE_CHARACTER_VISIBLE || TRON_MAIN_PLAYER_BODY_ENABLED);
+}
+
 function syncCityRevealSkyDome() {
   cityRevealSkyScene.background = scene.background || skyDisplayColor;
   cityRevealSkyDome.visible = domeMesh.visible;
@@ -17262,6 +17300,20 @@ function mountFxCategoryPanels() {
     'aa-mode',
     'pixel-ratio',
   ]);
+  const performanceTarget = document.getElementById('performance-fx-controls');
+  if (performanceTarget && !document.getElementById('performance-diagnostics')) {
+    const section = document.createElement('div');
+    section.className = 'control-section';
+    section.textContent = 'Diagnostica live';
+    performanceTarget.appendChild(section);
+    performanceDiagnosticsEl = document.createElement('div');
+    performanceDiagnosticsEl.id = 'performance-diagnostics';
+    performanceDiagnosticsEl.className = 'control-value';
+    performanceDiagnosticsEl.style.whiteSpace = 'normal';
+    performanceDiagnosticsEl.style.lineHeight = '1.45';
+    performanceDiagnosticsEl.textContent = 'FPS --';
+    performanceTarget.appendChild(performanceDiagnosticsEl);
+  }
 
   appendRows('atmosphere-fx-controls', [
     'ambient-light',
@@ -19078,6 +19130,7 @@ function applyLiveControls() {
 }
 
 renderBridgeControls();
+let performanceDiagnosticsEl = null;
 mountFxCategoryPanels();
 function mountSideFacadeLedControls() {
   function mountExistingRange(target, inputId, outputId, label, min, max, step) {
@@ -19522,6 +19575,7 @@ window.__tronPerfInspect = () => ({
   recoveringHexTiles: recoveringHexTiles.size,
   boundaryErrorPulse,
   boundaryErrorTextureAge: boundaryErrorTextureLastAge,
+  liveDiagnostics: performanceDiagnosticsSummary(),
   render: { ...renderer.info.render },
   memory: { ...renderer.info.memory },
 });
@@ -19544,6 +19598,40 @@ window.addEventListener('resize', () => {
 let last = performance.now();
 let fpsAccum = 0, fpsFrames = 0, fpsLast = last;
 let startPositionLabelLast = 0;
+let latestMeasuredFps = 0;
+
+function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
+  const eq = labEqualizerState || {};
+  return {
+    fps: Number.isFinite(measuredFps) ? Number(measuredFps.toFixed(1)) : 0,
+    renderScale: Number(activePixelRatio.toFixed(2)),
+    qualityScale: Number(dynamicQualityScale.toFixed(2)),
+    crowdVisible: tronRunnerCrowdRuntimeStats.cullingVisibleCount,
+    crowdHidden: tronRunnerCrowdRuntimeStats.cullingHiddenCount,
+    crowdThinkMs: Number(tronRunnerCrowdRuntimeStats.lastThinkMs.toFixed(2)),
+    reflections: tronRunnerCrowdRuntimeStats.activeReflectionCount,
+    reflectionBudget: tronRunnerCrowdRuntimeStats.reflectionBudgetLimit,
+    eqAnalyserFps: eq.analyserFps || 0,
+    eqTextureFps: eq.textureFps || 0,
+    revealFreezeFrames: tronRunnerCrowdRuntimeStats.performanceFreezeFrameCount,
+  };
+}
+
+function updatePerformanceDiagnostics(measuredFps = latestMeasuredFps) {
+  if (!performanceDiagnosticsEl) return;
+  const stats = performanceDiagnosticsSummary(measuredFps);
+  performanceDiagnosticsEl.textContent = [
+    `FPS ${stats.fps.toFixed(1)}`,
+    `render ${stats.renderScale.toFixed(2)}x`,
+    `qualita ${stats.qualityScale.toFixed(2)}`,
+    `crowd ${stats.crowdVisible}/${tronRunnerCrowd.length}`,
+    `hidden ${stats.crowdHidden}`,
+    `think ${stats.crowdThinkMs.toFixed(2)}ms`,
+    `riflessi ${stats.reflections}/${stats.reflectionBudget}`,
+    `eq ${stats.eqAnalyserFps}Hz/${stats.eqTextureFps}Hz`,
+  ].join(' | ');
+}
+
 function tick(now) {
   requestAnimationFrame(tick);
   const frameStartedAt = performance.now();
@@ -19552,25 +19640,32 @@ function tick(now) {
   fpsAccum += dt; fpsFrames++;
   if (now - fpsLast > 500) {
     const measuredFps = fpsFrames / fpsAccum;
+    latestMeasuredFps = measuredFps;
     fpsEl.textContent = measuredFps.toFixed(0);
+    updatePerformanceDiagnostics(measuredFps);
     tunePerformanceBudget(measuredFps);
     fpsAccum = 0; fpsFrames = 0; fpsLast = now;
   }
   removeViewMotionOffset();
   const droneIntroWasActive = updateDroneIntroFlight(now);
   if (!droneIntroWasActive) applyMovement(dt);
-  stepHexRoadTiles(dt);
-  updateRoadBoundaryPulse(dt);
-  secondaryEffectFrame++;
-  const updateSecondaryEffects = secondaryEffectFrame % SECONDARY_EFFECT_UPDATE_STRIDE === 0;
-  boundaryErrorAccumulatedDt = Math.min(0.12, boundaryErrorAccumulatedDt + dt);
-  if (updateSecondaryEffects || boundaryErrorPulse > 0.98 || boundaryErrorOldWallMesh.visible) {
-    updateBoundaryError(boundaryErrorAccumulatedDt);
-    boundaryErrorAccumulatedDt = 0;
+  const revealPerformanceCritical = isCityRevealPerformanceCritical();
+  if (!revealPerformanceCritical) {
+    stepHexRoadTiles(dt);
+    updateRoadBoundaryPulse(dt);
+    secondaryEffectFrame++;
+    const updateSecondaryEffects = secondaryEffectFrame % SECONDARY_EFFECT_UPDATE_STRIDE === 0;
+    boundaryErrorAccumulatedDt = Math.min(0.12, boundaryErrorAccumulatedDt + dt);
+    if (updateSecondaryEffects || boundaryErrorPulse > 0.98 || boundaryErrorOldWallMesh.visible) {
+      updateBoundaryError(boundaryErrorAccumulatedDt);
+      boundaryErrorAccumulatedDt = 0;
+    }
+    updateWalkSimulation(dt);
+    if (shouldUpdateTronRunnerSourceCharacter()) updateTronRunner(dt);
+    updateTronRunnerCrowd(dt);
+  } else {
+    tronRunnerCrowdRuntimeStats.performanceFreezeFrameCount += 1;
   }
-  updateWalkSimulation(dt);
-  updateTronRunner(dt);
-  updateTronRunnerCrowd(dt);
   if (now - startPositionLabelLast > 180) {
     updateStartPositionLiveLabel();
     startPositionLabelLast = now;
@@ -19578,15 +19673,20 @@ function tick(now) {
   applyViewMotionOffset();
   domeMesh.position.copy(camera.position);
   if (domeMesh.visible) domeMat.uniforms.uTime.value = now * 0.001 * SKY_ANIMATION_SPEED;
-  updateCityDepartmentBoards(now);
-  updateCityRoleBoard();
-  flushHexTileBatchUploads();
+  if (!revealPerformanceCritical) {
+    updateCityDepartmentBoards(now);
+    updateCityRoleBoard();
+    flushHexTileBatchUploads();
+  }
   updateCityRevealWireframe(now);
-  updateLabEqualizer(now, dt);
-  updateTronRunnerReveal(now);
-  updateTronRunnerBeatPulse();
-  updateTronMainPlayerBody(dt);
-  updateMainFacadeVerticalReveal();
+  const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
+  if (!postRevealPerformanceCritical) {
+    updateLabEqualizer(now, dt);
+    updateTronRunnerReveal(now);
+    updateTronRunnerBeatPulse();
+    updateTronMainPlayerBody(dt);
+    updateMainFacadeVerticalReveal();
+  }
   const renderStartedAt = performance.now();
   const captureRevealRenderInfo = cityRevealStartedAt > 0 || cityRevealProfileState.running;
   const previousRendererInfoAutoReset = renderer.info.autoReset;
