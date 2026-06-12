@@ -9522,6 +9522,13 @@ const LAB_EQUALIZER_WORLD_HEIGHT = LAB_EQUALIZER_BOARD_HEIGHT * LAB_EQUALIZER_SC
 const LAB_EQUALIZER_CANVAS_WIDTH = 768;
 const LAB_EQUALIZER_CANVAS_HEIGHT = 384;
 const LAB_EQUALIZER_TEXTURE_INTERVAL_MS = 1000 / 12;
+const LAB_EQUALIZER_AUDIO_SAMPLE_INTERVAL_MS = 1000 / 30;
+const LAB_EQUALIZER_OFFSCREEN_SAMPLE_INTERVAL_MS = 1000 / 12;
+const LAB_EQUALIZER_IDLE_SAMPLE_INTERVAL_MS = 250;
+const LAB_EQUALIZER_OFFSCREEN_TEXTURE_INTERVAL_MS = 1000 / 4;
+const LAB_EQUALIZER_VISIBILITY_INTERVAL_MS = 1000 / 12;
+const LAB_EQUALIZER_POSE_INTERVAL_MS = 250;
+const LAB_EQUALIZER_GRAPH_INTERVAL_MS = 500;
 const LAB_EQUALIZER_START_WALL_OFFSET_Z = GRID_BLOCK * 3;
 const LAB_EQUALIZER_START_WALL_INSET_Y = 6;
 const LAB_EQUALIZER_VERTICAL_OFFSET = 50;
@@ -9531,12 +9538,17 @@ const LAB_EQUALIZER_PEAK_HOLD_SECONDS = 0.14;
 const LAB_EQUALIZER_PEAK_MIN_FALL_ROWS_PER_SEC = 1.8;
 const LAB_EQUALIZER_PEAK_MAX_FALL_ROWS_PER_SEC = 52;
 const LAB_EQUALIZER_BASS_BAND_COUNT = 4;
+const LAB_EQUALIZER_VISIBILITY_RADIUS = Math.hypot(LAB_EQUALIZER_WORLD_WIDTH, LAB_EQUALIZER_WORLD_HEIGHT) * 0.55;
 const labEqualizerGroup = new THREE.Group();
 labEqualizerGroup.name = 'real-demo-phosphor-audio-equalizer';
 const labEqualizerLevels = Array.from({ length: LAB_EQUALIZER_BAR_COUNT }, () => 0);
 const labEqualizerPeaks = Array.from({ length: LAB_EQUALIZER_BAR_COUNT }, () => 0);
 const labEqualizerPeakHoldTimers = Array.from({ length: LAB_EQUALIZER_BAR_COUNT }, () => 0);
 const labEqualizerConnectedSources = new WeakSet();
+const labEqualizerFrustumMatrix = new THREE.Matrix4();
+const labEqualizerFrustum = new THREE.Frustum();
+const labEqualizerVisibilitySphere = new THREE.Sphere(new THREE.Vector3(), LAB_EQUALIZER_VISIBILITY_RADIUS);
+const labEqualizerWorldPosition = new THREE.Vector3();
 let labEqualizerCanvas = null;
 let labEqualizerCtx = null;
 let labEqualizerTexture = null;
@@ -9549,6 +9561,11 @@ let labEqualizerAnalyser = null;
 let labEqualizerFrequencyData = null;
 let labEqualizerStartedAt = 0;
 let labEqualizerLastTextureAt = -Infinity;
+let labEqualizerLastGraphEnsureAt = -Infinity;
+let labEqualizerLastPoseAt = -Infinity;
+let labEqualizerLastVisibilityAt = -Infinity;
+let labEqualizerLastSampleAt = -Infinity;
+let labEqualizerAccumulatedDt = 0;
 let labEqualizerBassEnvelope = 0;
 let labEqualizerBassPulse = 0;
 let labEqualizerActivatedAfterReveal = false;
@@ -9575,6 +9592,14 @@ const labEqualizerState = {
   bassEnergy: 0,
   beatPulse: 0,
   textureFree: false,
+  visibleInCamera: false,
+  sampleIntervalMs: 0,
+  textureIntervalMs: 0,
+  analyserFps: 0,
+  textureFps: 0,
+  sampleCount: 0,
+  textureUpdateCount: 0,
+  skippedFrames: 0,
   bars: LAB_EQUALIZER_BAR_COUNT,
   segmentRows: LAB_EQUALIZER_SEGMENT_ROWS,
   canvasWidth: LAB_EQUALIZER_CANVAS_WIDTH,
@@ -9685,6 +9710,14 @@ function ensureLabEqualizerAudioGraph() {
   return labEqualizerState.ready;
 }
 
+function ensureLabEqualizerAudioGraphIfNeeded(now, force = false) {
+  if (!force && now - labEqualizerLastGraphEnsureAt < LAB_EQUALIZER_GRAPH_INTERVAL_MS) {
+    return Boolean(labEqualizerAnalyser && labEqualizerFrequencyData);
+  }
+  labEqualizerLastGraphEnsureAt = now;
+  return ensureLabEqualizerAudioGraph();
+}
+
 async function startLabEqualizerAudio() {
   if (!ensureLabEqualizerAudioGraph()) return false;
   try {
@@ -9781,6 +9814,41 @@ function syncLabEqualizerPose() {
     z: labEqualizerGroup.position.z,
   };
   labEqualizerState.yaw = labEqualizerGroup.rotation.y;
+}
+
+function syncLabEqualizerPoseIfNeeded(now, force = false) {
+  if (!force && now - labEqualizerLastPoseAt < LAB_EQUALIZER_POSE_INTERVAL_MS) return;
+  labEqualizerLastPoseAt = now;
+  syncLabEqualizerPose();
+}
+
+function updateLabEqualizerVisibility(now, force = false) {
+  if (!labEqualizerState.enabled) {
+    labEqualizerState.visibleInCamera = false;
+    return false;
+  }
+  if (!force && now - labEqualizerLastVisibilityAt < LAB_EQUALIZER_VISIBILITY_INTERVAL_MS) {
+    return labEqualizerState.visibleInCamera;
+  }
+  labEqualizerLastVisibilityAt = now;
+  camera.updateMatrixWorld();
+  labEqualizerGroup.updateMatrixWorld();
+  labEqualizerFrustumMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  labEqualizerFrustum.setFromProjectionMatrix(labEqualizerFrustumMatrix);
+  labEqualizerGroup.getWorldPosition(labEqualizerWorldPosition);
+  labEqualizerVisibilitySphere.center.copy(labEqualizerWorldPosition);
+  labEqualizerState.visibleInCamera = labEqualizerFrustum.intersectsSphere(labEqualizerVisibilitySphere);
+  return labEqualizerState.visibleInCamera;
+}
+
+function labEqualizerSampleIntervalMs() {
+  if (!labEqualizerState.playing) return LAB_EQUALIZER_IDLE_SAMPLE_INTERVAL_MS;
+  return labEqualizerState.visibleInCamera ? LAB_EQUALIZER_AUDIO_SAMPLE_INTERVAL_MS : LAB_EQUALIZER_OFFSCREEN_SAMPLE_INTERVAL_MS;
+}
+
+function labEqualizerTextureIntervalMs() {
+  if (!labEqualizerState.playing) return 1000;
+  return labEqualizerState.visibleInCamera ? LAB_EQUALIZER_TEXTURE_INTERVAL_MS : LAB_EQUALIZER_OFFSCREEN_TEXTURE_INTERVAL_MS;
 }
 
 function addLabEqualizerFrame(group, width, height, z = 0.48) {
@@ -10044,7 +10112,7 @@ function buildLabEqualizer() {
   const panel = new THREE.Mesh(new THREE.PlaneGeometry(LAB_EQUALIZER_BOARD_WIDTH, LAB_EQUALIZER_BOARD_HEIGHT), labEqualizerPanelMat);
   panel.name = 'real-demo-phosphor-equalizer-panel';
   panel.renderOrder = 40;
-  panel.frustumCulled = false;
+  panel.frustumCulled = true;
   labEqualizerGroup.add(panel);
   addLabEqualizerFrame(labEqualizerGroup, LAB_EQUALIZER_BOARD_WIDTH, LAB_EQUALIZER_BOARD_HEIGHT, 0.48);
   labEqualizerDisplayMesh = new THREE.Mesh(
@@ -10054,7 +10122,7 @@ function buildLabEqualizer() {
   labEqualizerDisplayMesh.name = 'real-demo-equalizer-canvas';
   labEqualizerDisplayMesh.position.z = 0.54;
   labEqualizerDisplayMesh.renderOrder = 46;
-  labEqualizerDisplayMesh.frustumCulled = false;
+  labEqualizerDisplayMesh.frustumCulled = true;
   labEqualizerGroup.add(labEqualizerDisplayMesh);
   scene.add(labEqualizerGroup);
   labEqualizerState.boardChildren = labEqualizerGroup.children.length;
@@ -10066,7 +10134,7 @@ function buildLabEqualizer() {
 function activateLabEqualizerAfterReveal() {
   if (!LAB_EQUALIZER_ENABLED || labEqualizerActivatedAfterReveal || !cityRevealComplete) return false;
   buildLabEqualizer();
-  ensureLabEqualizerAudioGraph();
+  ensureLabEqualizerAudioGraphIfNeeded(performance.now(), true);
   labEqualizerActivatedAfterReveal = true;
   labEqualizerStartedAt = performance.now();
   return true;
@@ -10076,9 +10144,25 @@ function updateLabEqualizer(now, dt) {
   if (!cityRevealComplete) return;
   activateLabEqualizerAfterReveal();
   if (!labEqualizerState.enabled) return;
-  syncLabEqualizerPose();
-  ensureLabEqualizerAudioGraph();
+  syncLabEqualizerPoseIfNeeded(now);
+  updateLabEqualizerVisibility(now);
+  ensureLabEqualizerAudioGraphIfNeeded(now);
   labEqualizerState.playing = Boolean(tronSoundtrack.playing);
+
+  const sampleInterval = labEqualizerSampleIntervalMs();
+  labEqualizerState.sampleIntervalMs = Number(sampleInterval.toFixed(1));
+  labEqualizerAccumulatedDt += dt;
+  if (now - labEqualizerLastSampleAt < sampleInterval) {
+    labEqualizerState.skippedFrames += 1;
+    return;
+  }
+  const sampleElapsedMs = Number.isFinite(labEqualizerLastSampleAt) ? now - labEqualizerLastSampleAt : sampleInterval;
+  const sampleDt = THREE.MathUtils.clamp(labEqualizerAccumulatedDt || dt, 0.001, 0.18);
+  labEqualizerLastSampleAt = now;
+  labEqualizerAccumulatedDt = 0;
+  labEqualizerState.sampleCount += 1;
+  labEqualizerState.analyserFps = Number((1000 / Math.max(1, sampleElapsedMs)).toFixed(1));
+
   if (labEqualizerAnalyser && labEqualizerFrequencyData && labEqualizerState.playing) {
     labEqualizerAnalyser.getByteFrequencyData(labEqualizerFrequencyData);
   }
@@ -10089,8 +10173,8 @@ function updateLabEqualizer(now, dt) {
   const peakFallRowsPerSecond = labEqualizerPeakFallRowsPerSecond();
   for (let index = 0; index < LAB_EQUALIZER_BAR_COUNT; index += 1) {
     const target = labEqualizerBandLevel(index, now);
-    const attack = 1 - Math.exp(-dt * 30);
-    const release = 1 - Math.exp(-dt * 10);
+    const attack = 1 - Math.exp(-sampleDt * 30);
+    const release = 1 - Math.exp(-sampleDt * 10);
     const smooth = target > labEqualizerLevels[index] ? attack : release;
     labEqualizerLevels[index] += (target - labEqualizerLevels[index]) * smooth;
     const level = THREE.MathUtils.clamp(labEqualizerLevels[index], 0, 1);
@@ -10102,10 +10186,10 @@ function updateLabEqualizer(now, dt) {
       labEqualizerPeaks[index] = incomingPeakRows;
       labEqualizerPeakHoldTimers[index] = LAB_EQUALIZER_PEAK_HOLD_SECONDS;
     } else if (labEqualizerPeakHoldTimers[index] > 0) {
-      labEqualizerPeakHoldTimers[index] = Math.max(0, labEqualizerPeakHoldTimers[index] - dt);
+      labEqualizerPeakHoldTimers[index] = Math.max(0, labEqualizerPeakHoldTimers[index] - sampleDt);
       labEqualizerPeaks[index] = currentPeakRows;
     } else {
-      labEqualizerPeaks[index] = Math.max(activeRows, currentPeakRows - peakFallRowsPerSecond * dt);
+      labEqualizerPeaks[index] = Math.max(activeRows, currentPeakRows - peakFallRowsPerSecond * sampleDt);
     }
     levelSum += level;
     peakLevel = Math.max(peakLevel, level);
@@ -10119,13 +10203,17 @@ function updateLabEqualizer(now, dt) {
   labEqualizerState.averageLevel = levelSum / LAB_EQUALIZER_BAR_COUNT;
   labEqualizerState.peakLevel = peakLevel;
   labEqualizerState.bassEnergy = bassEnergy;
-  labEqualizerState.beatPulse = labEqualizerBeatPulse(bassEnergy, dt);
+  labEqualizerState.beatPulse = labEqualizerBeatPulse(bassEnergy, sampleDt);
   if (labEqualizerPanelMat) labEqualizerPanelMat.opacity = 0.84 + peakLevel * 0.10;
   if (labEqualizerDisplayMat) labEqualizerDisplayMat.opacity = 0.94 + peakLevel * 0.06;
-  const textureInterval = labEqualizerState.playing ? LAB_EQUALIZER_TEXTURE_INTERVAL_MS : 1000;
+  const textureInterval = labEqualizerTextureIntervalMs();
+  labEqualizerState.textureIntervalMs = Number(textureInterval.toFixed(1));
   if (now - labEqualizerLastTextureAt >= textureInterval) {
     drawLabEqualizerCanvas(now, labEqualizerState.averageLevel, peakLevel, labEqualizerState.beatPulse);
+    const textureElapsedMs = Number.isFinite(labEqualizerLastTextureAt) ? now - labEqualizerLastTextureAt : textureInterval;
     labEqualizerLastTextureAt = now;
+    labEqualizerState.textureUpdateCount += 1;
+    labEqualizerState.textureFps = Number((1000 / Math.max(1, textureElapsedMs)).toFixed(1));
   }
 }
 
