@@ -6594,8 +6594,10 @@ const basePadLedBatch = {
   capacity: 0,
   count: 0,
   sceneVisible: true,
+  batches: [],
 };
 const BASE_PAD_LED_RENDER_ORDER = 12;
+const basePadLedUnitGeometry = new THREE.BoxGeometry(1, 1, 1);
 let ledDistance = 0;
 let mainBuildingCollisionPadding = 7.4;
 let buildingHorizontalLedDistance = 0;
@@ -7413,6 +7415,18 @@ function buildingLedBatchInspect() {
   }));
   const sideRingSpecCount = sideRingBatches.reduce((sum, batch) => sum + batch.specs, 0);
   const sideRingDrawObjects = sideRingBatches.filter((batch) => batch.meshReady).length;
+  const basePadBatches = basePadLedBatch.batches.map((batch, index) => ({
+    index,
+    count: batch.mesh?.count ?? 0,
+    capacity: batch.capacity,
+    visible: Boolean(batch.mesh?.visible),
+    frustumCulled: Boolean(batch.mesh?.frustumCulled),
+    x: batch.record?.mesh?.position.x ?? null,
+    z: batch.record?.mesh?.position.z ?? null,
+  }));
+  const basePadBatchCount = basePadBatches.length;
+  const basePadVisibleCount = basePadBatches.filter((batch) => batch.visible).length;
+  const basePadFrustumCulledCount = basePadBatches.filter((batch) => batch.frustumCulled).length;
   return {
     sideEdgeBatch: {
       count: sideBuildingEdgeBatch.mesh?.count ?? 0,
@@ -7435,7 +7449,16 @@ function buildingLedBatchInspect() {
     basePadLedBatch: {
       count: basePadLedBatch.count,
       visible: Boolean(basePadLedBatch.mesh?.visible),
-      frustumCulled: Boolean(basePadLedBatch.mesh?.frustumCulled),
+      frustumCulled: basePadBatchCount > 0 && basePadFrustumCulledCount === basePadBatchCount,
+    },
+    basePadLedBatches: {
+      splitByPad: true,
+      batchCount: basePadBatchCount,
+      visibleBatchCount: basePadVisibleCount,
+      frustumCulledCount: basePadFrustumCulledCount,
+      totalSegments: basePadLedBatch.count,
+      previousDrawObjects: basePadBatchCount > 0 ? 1 : 0,
+      batches: basePadBatches,
     },
   };
 }
@@ -8228,59 +8251,84 @@ function buildSideBuildingEdgeBatch(group) {
   group.add(mesh);
 }
 
-function ensureBasePadLedBatchCapacity(count) {
+function ensureBasePadLedMaterial() {
+  if (basePadLedBatch.material) return basePadLedBatch.material;
+  basePadLedBatch.material = new THREE.MeshBasicMaterial({
+    color: PAL.tealLight,
+    toneMapped: false,
+    depthWrite: true,
+    // Draw sidewalk LEDs after the fake runner reflection so the reflection
+    // cannot visually sit on top of the LED strips.
+    transparent: true,
+    opacity: 1,
+  });
+  return basePadLedBatch.material;
+}
+
+function basePadLedSegmentCountForRecord(record) {
+  let count = 0;
+  const points = record.basePad?.hitPolygon;
+  if (points?.length > 1) count += points.length;
+  const innerPoints = record.basePad?.innerHitPolygon;
+  if (basePadCurbEnabled && innerPoints?.length > 1) count += innerPoints.length;
+  return count;
+}
+
+function ensureBasePadLedBatchForRecord(record, count) {
   const needed = Math.max(1, count);
-  if (basePadLedBatch.mesh && basePadLedBatch.capacity >= needed) return;
-  if (!basePadLedBatch.material) {
-    basePadLedBatch.material = new THREE.MeshBasicMaterial({
-      color: PAL.tealLight,
-      toneMapped: false,
-      depthWrite: true,
-      // Draw sidewalk LEDs after the fake runner reflection so the reflection
-      // cannot visually sit on top of the LED strips.
-      transparent: true,
-      opacity: 1,
-    });
+  let batch = record.basePadLedBatch || null;
+  if (batch?.mesh && batch.capacity >= needed) return batch;
+
+  if (batch?.mesh) {
+    overlayGroup.remove(batch.mesh);
+    const index = basePadLedBatch.batches.indexOf(batch);
+    if (index >= 0) basePadLedBatch.batches.splice(index, 1);
   }
-  if (basePadLedBatch.mesh) {
-    overlayGroup.remove(basePadLedBatch.mesh);
-    basePadLedBatch.mesh.geometry.dispose();
-  }
+
   const capacity = Math.max(needed, Math.ceil(needed * 1.25));
-  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), basePadLedBatch.material, capacity);
+  const mesh = new THREE.InstancedMesh(basePadLedUnitGeometry, ensureBasePadLedMaterial(), capacity);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  mesh.frustumCulled = false;
+  mesh.frustumCulled = true;
   mesh.renderOrder = BASE_PAD_LED_RENDER_ORDER;
-  basePadLedBatch.mesh = mesh;
-  basePadLedBatch.capacity = capacity;
+  batch = { mesh, capacity, count: 0, record };
+  record.basePadLedBatch = batch;
+  basePadLedBatch.batches.push(batch);
   overlayGroup.add(mesh);
+  return batch;
+}
+
+function syncBasePadLedBatchAggregate() {
+  basePadLedBatch.count = basePadLedBatch.batches.reduce((sum, batch) => sum + batch.count, 0);
+  basePadLedBatch.capacity = basePadLedBatch.batches.reduce((sum, batch) => sum + batch.capacity, 0);
+  basePadLedBatch.mesh = basePadLedBatch.batches.length === 1 ? basePadLedBatch.batches[0].mesh : null;
 }
 
 function basePadLedSegmentCount() {
   let count = 0;
   for (const record of [...sideBuildingRecords, ...mainBuildingRecords]) {
-    const points = record.basePad?.hitPolygon;
-    if (points?.length > 1) count += points.length;
-    const innerPoints = record.basePad?.innerHitPolygon;
-    if (basePadCurbEnabled && innerPoints?.length > 1) count += innerPoints.length;
+    count += basePadLedSegmentCountForRecord(record);
   }
   return count;
 }
 
 function updateBasePadLedStrips(brightness, thickness, offset, hueDeg) {
-  const segmentCount = basePadLedSegmentCount();
-  ensureBasePadLedBatchCapacity(segmentCount);
-  const mesh = basePadLedBatch.mesh;
-  const material = basePadLedBatch.material;
+  const material = ensureBasePadLedMaterial();
   material.color.copy(tunedColor(new THREE.Color(PAL.tealLight), hueDeg, 1, brightness));
 
-  let index = 0;
   for (const record of [...sideBuildingRecords, ...mainBuildingRecords]) {
     const pad = record.basePad;
     const points = pad?.hitPolygon;
-    if (!points?.length) continue;
+    const batch = ensureBasePadLedBatchForRecord(record, basePadLedSegmentCountForRecord(record));
+    const mesh = batch.mesh;
+    if (!points?.length) {
+      batch.count = 0;
+      mesh.count = 0;
+      mesh.visible = false;
+      continue;
+    }
     const baseX = pad.border.position.x;
     const baseZ = pad.border.position.z;
+    let index = 0;
     const addPadLoop = (loopPoints, loopTopY) => {
       const stripY = loopTopY + Math.max(0.01, thickness * 0.5) + 0.006;
       const orientation = polygonSignedArea(loopPoints) >= 0 ? 1 : -1;
@@ -8302,13 +8350,14 @@ function updateBasePadLedStrips(brightness, thickness, offset, hueDeg) {
     if (basePadCurbEnabled && pad.innerHitPolygon?.length) {
       addPadLoop(pad.innerHitPolygon, pad.innerTopY ?? pad.topY ?? DEFAULT_BASE_PAD_Y);
     }
-  }
 
-  basePadLedBatch.count = index;
-  mesh.count = index;
-  mesh.visible = basePadLedBatch.sceneVisible && index > 0 && brightness > 0.001;
-  mesh.instanceMatrix.needsUpdate = true;
-  refreshCullingBounds(mesh);
+    batch.count = index;
+    mesh.count = index;
+    mesh.visible = basePadLedBatch.sceneVisible && record.mesh.visible !== false && index > 0 && brightness > 0.001;
+    mesh.instanceMatrix.needsUpdate = true;
+    refreshCullingBounds(mesh);
+  }
+  syncBasePadLedBatchAggregate();
 }
 
 function addBuildingEdges(group, w, h, d, x, y, z, color = PAL.tealLight, bevelPadding = 0, edgeRole = 'global', edgeMeta = {}) {
@@ -19615,9 +19664,12 @@ window.__tronInspect = () => ({
       pad.border,
       pad.innerBorder,
     ].filter(Boolean));
+    const basePadLedRenderableBatches = basePadLedBatch.batches.filter((batch) => batch.mesh);
+    const basePadLedCullingEnabledCount = basePadLedRenderableBatches.filter((batch) => batch.mesh.frustumCulled).length;
+    const basePadLedVisibleBatchCount = basePadLedRenderableBatches.filter((batch) => batch.mesh.visible).length;
     const sidewalkCullingEnabledCount =
       sidewalkObjects.filter((object) => object.frustumCulled).length +
-      (basePadLedBatch.mesh?.frustumCulled ? 1 : 0) +
+      basePadLedCullingEnabledCount +
       (basePadHexClipMesh.frustumCulled ? 1 : 0);
     return {
       pads: pads.length,
@@ -19632,8 +19684,10 @@ window.__tronInspect = () => ({
       sidewalkRenderableObjects: sidewalkObjects.length,
       sidewalkCullingDisabled: sidewalkCullingEnabledCount === 0,
       sidewalkCullingEnabledCount,
-      basePadLedBatchFrustumCulled: Boolean(basePadLedBatch.mesh?.frustumCulled),
-      basePadLedBatchRenderOrder: basePadLedBatch.mesh?.renderOrder ?? null,
+      basePadLedBatchFrustumCulled: basePadLedRenderableBatches.length > 0 && basePadLedCullingEnabledCount === basePadLedRenderableBatches.length,
+      basePadLedBatchObjects: basePadLedRenderableBatches.length,
+      basePadLedBatchVisibleObjects: basePadLedVisibleBatchCount,
+      basePadLedBatchRenderOrder: basePadLedRenderableBatches[0]?.mesh?.renderOrder ?? null,
       basePadLedBatchTransparent: Boolean(basePadLedBatch.material?.transparent),
       basePadLedBatchDepthWrite: Boolean(basePadLedBatch.material?.depthWrite),
       basePadLedBatchDepthTest: Boolean(basePadLedBatch.material?.depthTest),
