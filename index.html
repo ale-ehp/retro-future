@@ -11551,6 +11551,16 @@ function mainFacadeVerticalRevealProgress() {
 
 function updateMainFacadeVerticalReveal() {
   if (!mainFacadeVerticalRevealLedMaterial && !mainBuildingEdgeVerticalRevealLedMaterial) return;
+  const revealMaterialsDisabled =
+    (!mainFacadeVerticalRevealLedMaterial || mainFacadeVerticalRevealLedMaterial.userData.mainFacadeRevealEnabled === 0) &&
+    (!mainBuildingEdgeVerticalRevealLedMaterial || mainBuildingEdgeVerticalRevealLedMaterial.userData.mainFacadeRevealEnabled === 0);
+  if (
+    cityRevealComplete &&
+    mainFacadeVerticalRevealState.progress >= 1 &&
+    !mainFacadeVerticalRevealState.enabled &&
+    !mainFacadeVerticalRevealState.active &&
+    revealMaterialsDisabled
+  ) return;
   const bounds = mainFacadeVerticalRevealLedBounds();
   if (!bounds) {
     mainFacadeVerticalRevealState.enabled = false;
