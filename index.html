@@ -11610,12 +11610,7 @@ function refreshCityRevealSweepBounds() {
 
 function cityRevealEstimatedVisibleObjects() {
   if (!cityRevealWireframeEnabled || cityRevealWireAlpha <= 0.002 || !cityRevealWireGroup.visible) return 0;
-  return cityRevealWireGroup.children.filter((object) => {
-    const minSweep = object.userData.cityRevealMinSweep
-      ?? object.userData.cityRevealSweep
-      ?? cityRevealSweepValueAt(object.userData.cityRevealMinZ ?? object.position.z, object.position.y);
-    return Number.isFinite(minSweep) && minSweep < cityRevealFrontZ;
-  }).length;
+  return cityRevealWireCullStats.visible;
 }
 
 function cityRevealObjectStillWireVisible(object) {
@@ -11688,6 +11683,18 @@ function countVisibleRenderables(root) {
   return result;
 }
 
+function cityRevealWireRenderablesSnapshot() {
+  return {
+    total: cityRevealWireCullStats.total,
+    visible: cityRevealWireCullStats.visible,
+    hidden: cityRevealWireCullStats.hidden,
+    mesh: cityRevealWireCullStats.solidVisible + cityRevealWireCullStats.roadFadeVisible,
+    line: cityRevealWireCullStats.wireVisible,
+    points: 0,
+    instanced: 0,
+  };
+}
+
 function cityRevealComposerPassProfile() {
   const passes = {
     sky: Boolean(cityRevealSkyPass?.enabled),
@@ -11724,7 +11731,7 @@ function cityRevealProfileSceneSnapshot() {
     pipeline: cityRevealComposerPassProfile(),
     renderables: {
       scene: countVisibleRenderables(scene),
-      wire: countVisibleRenderables(cityRevealWireGroup),
+      wire: cityRevealWireRenderablesSnapshot(),
       roadGrid: countVisibleRenderables(cityRevealRoadGridGroup),
       mainLedDepth: countVisibleRenderables(cityRevealMainLedDepthGroup),
     },
