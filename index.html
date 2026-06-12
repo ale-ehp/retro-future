@@ -8536,7 +8536,6 @@ function applyTronRunnerRevealVisuals() {
     const baseOpacity = baseMaterialOpacity(groundShadow.material, groundShadow.material.opacity);
     groundShadow.visible = TRON_RUNNER_GROUND_SHADOW_ENABLED && baseOpacity * visibleFactor > 0.002;
     groundShadow.material.opacity = baseOpacity * visibleFactor;
-    groundShadow.material.needsUpdate = true;
   }
 
   const realShadowReceiver = tronRunnerParts.realShadowReceiver;
@@ -8544,7 +8543,6 @@ function applyTronRunnerRevealVisuals() {
     const baseOpacity = baseMaterialOpacity(realShadowReceiver.material, realShadowReceiver.material.opacity);
     realShadowReceiver.visible = baseOpacity * visibleFactor > 0.002;
     realShadowReceiver.material.opacity = baseOpacity * visibleFactor;
-    realShadowReceiver.material.needsUpdate = true;
     tronRunnerState.realShadowOpacity = baseOpacity * visibleFactor;
   }
 
@@ -8559,7 +8557,6 @@ function applyTronRunnerRevealVisuals() {
   for (const material of tronRunnerParts.reflectionMaterials || []) {
     const baseOpacity = baseMaterialOpacity(material, material.opacity);
     material.opacity = baseOpacity * reflectionFactor;
-    material.needsUpdate = true;
   }
   tronRunnerState.dynamicReflectionOpacity *= reflectionFactor;
   tronRunnerState.dynamicReflectionBodyOpacity *= reflectionFactor;
@@ -8577,7 +8574,6 @@ function applyTronRunnerRevealVisuals() {
       object.material.opacity = scanPulse * (object.name.includes('core')
         ? TRON_RUNNER_REVEAL_SCAN_CORE_OPACITY
         : TRON_RUNNER_REVEAL_SCAN_OUTER_OPACITY);
-      object.material.needsUpdate = true;
     });
   }
 
@@ -8807,12 +8803,10 @@ function updateTronRunnerDynamicReflection() {
   for (const material of bodyMaterials) {
     material.userData.tronRunnerBaseOpacity = bodyOpacity;
     material.opacity = bodyOpacity;
-    material.needsUpdate = true;
   }
   for (const material of ledMaterials) {
     material.userData.tronRunnerBaseOpacity = ledOpacity;
     material.opacity = ledOpacity;
-    material.needsUpdate = true;
   }
   tronRunnerState.dynamicReflectionVisible = visible;
   tronRunnerState.dynamicReflectionOpacity = bodyOpacity;
@@ -9292,12 +9286,10 @@ function updateTronRunnerCrowdReflection(member) {
   for (const material of bodyMaterials) {
     material.userData.tronRunnerBaseOpacity = bodyOpacity;
     material.opacity = bodyOpacity;
-    material.needsUpdate = true;
   }
   for (const material of ledMaterials) {
     material.userData.tronRunnerBaseOpacity = ledOpacity;
     material.opacity = ledOpacity;
-    material.needsUpdate = true;
   }
   member.dynamicReflectionVisible = visible;
   member.dynamicReflectionOpacity = bodyOpacity;
