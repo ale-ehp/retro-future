@@ -9002,6 +9002,10 @@ function nearbyTronRunnerCrowdMembers(x, z) {
   return members;
 }
 
+function tronRunnerCrowdCullingActive() {
+  return Boolean(TRON_RUNNER_CROWD_CULLING_ENABLED && tronRunnerRevealComplete);
+}
+
 function tronRunnerCrowdLodStride(member) {
   const distance = camera.position.distanceTo(member.group.position);
   member.lodDistance = distance;
@@ -9107,7 +9111,7 @@ function syncTronRunnerCrowdVisibility() {
       if (changed || memberChanged) updateTronRunnerCrowdReflection(member);
       continue;
     }
-    if (!TRON_RUNNER_CROWD_CULLING_ENABLED) {
+    if (!tronRunnerCrowdCullingActive()) {
       const memberChanged = member.group.visible !== true;
       member.group.visible = true;
       member.cullingVisible = true;
@@ -9126,7 +9130,7 @@ function updateTronRunnerCrowdCulling() {
   tronRunnerCrowdRuntimeStats.cullingMaxDistance = 0;
   if (!tronRunnerCrowdGroup.visible || !tronRunnerCrowd.length) return;
 
-  if (!TRON_RUNNER_CROWD_CULLING_ENABLED) {
+  if (!tronRunnerCrowdCullingActive()) {
     tronRunnerCrowdRuntimeStats.cullingVisibleCount = tronRunnerCrowd.length;
     for (const member of tronRunnerCrowd) {
       member.cullingDistance = camera.position.distanceTo(member.group.position);
@@ -9677,20 +9681,18 @@ function updateTronRunnerCrowd(dt) {
       member.lastEffectiveAnimationSpeed = nextEffectiveAnimationSpeed;
     }
     member.speed = tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (member.speedScaleOffset ?? 1);
-    const cullingHidden = TRON_RUNNER_CROWD_CULLING_ENABLED && member.cullingVisible === false;
-    member.lodStride = cullingHidden
-      ? TRON_RUNNER_CROWD_CULLED_LOD_STRIDE
-      : (TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED ? tronRunnerCrowdLodStride(member) : 1);
-    member.lodDt = Math.min(cullingHidden ? 0.34 : 0.14, (member.lodDt || 0) + step);
+    const renderCulled = tronRunnerCrowdCullingActive() && member.cullingVisible === false;
+    member.lodStride = TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED ? tronRunnerCrowdLodStride(member) : 1;
+    member.lodDt = Math.min(0.14, (member.lodDt || 0) + step);
     member.mixerDt = Math.min(0.14, (member.mixerDt || 0) + step);
     const shouldUpdate = member.lodStride <= 1 || ((tronRunnerCrowdRuntimeStats.frame + member.index) % member.lodStride === 0);
     if (!shouldUpdate) {
       member.lastMovedDistance = 0;
-      if (!cullingHidden) updateTronRunnerCrowdReflection(member);
+      if (!renderCulled) updateTronRunnerCrowdReflection(member);
       continue;
     }
-    if (!cullingHidden) member.mixer?.update(member.mixerDt);
-    if (!cullingHidden && member.dynamicReflectionBudgetActive) {
+    if (!renderCulled) member.mixer?.update(member.mixerDt);
+    if (!renderCulled && member.dynamicReflectionBudgetActive) {
       member.reflectionMixer?.update(member.mixerDt);
       member.reflectionLedMixer?.update(member.mixerDt);
     }
@@ -9699,7 +9701,7 @@ function updateTronRunnerCrowd(dt) {
     for (let stepIndex = 0; stepIndex < moveSubsteps; stepIndex += 1) {
       advanceTronRunnerCrowdMember(member, moveSubstepDt, now);
     }
-    if (!cullingHidden) updateTronRunnerCrowdReflection(member);
+    if (!renderCulled) updateTronRunnerCrowdReflection(member);
     member.mixerDt = 0;
     member.lodDt = 0;
   }
@@ -9850,6 +9852,7 @@ function tronRunnerCrowdInspect() {
     },
     culling: {
       enabled: TRON_RUNNER_CROWD_CULLING_ENABLED,
+      active: tronRunnerCrowdCullingActive(),
       maxDistance: TRON_RUNNER_CROWD_CULL_DISTANCE,
       radius: TRON_RUNNER_CROWD_CULL_RADIUS,
       culledLodStride: TRON_RUNNER_CROWD_CULLED_LOD_STRIDE,
