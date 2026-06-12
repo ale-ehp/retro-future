@@ -3854,6 +3854,7 @@ function updateHexRoadTiles(dt) {
     }
   }
   for (const tile of recoveringHexTiles) queueHexTileCandidate(tile);
+  hexRoadRuntimeStats.lastCandidateCount = hexTileCandidates.length;
 
   for (const tile of hexTileCandidates) {
     if (!tile.visible || tile.userData.visible === false) {
@@ -4749,11 +4750,19 @@ const basePadHexInstanceScale = new THREE.Vector3();
 const SIDEWALK_CURB_REVEAL = 0.14;
 const SIDEWALK_CURB_OVERLAP = 0.035;
 const HEX_TILE_BUCKET_SIZE = 64;
+const HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED = true;
+const HEX_ROAD_UPLOAD_BATCH_LIMIT = 10;
 const hexRoadTileBuckets = new Map();
 const recoveringHexTiles = new Set();
 const hexTileCandidates = [];
 let hexTileFrameId = 0;
 const dirtyHexTileBatches = new Map();
+const hexRoadRuntimeStats = {
+  lastCandidateCount: 0,
+  lastDirtyUploadCount: 0,
+  pendingDirtyBatches: 0,
+  uploadDeferredFrames: 0,
+};
 
 function roadTileTopY() {
   const maxRoadTileBaseY = 0.03;
@@ -4971,11 +4980,59 @@ function refreshCullingBounds(object) {
 
 function flushHexTileBatchUploads() {
   if (!dirtyHexTileBatches.size) return;
+  let uploaded = 0;
   for (const [batch, colorChanged] of dirtyHexTileBatches) {
     batch.instanceMatrix.needsUpdate = true;
     if (colorChanged && batch.instanceColor) batch.instanceColor.needsUpdate = true;
+    dirtyHexTileBatches.delete(batch);
+    uploaded += 1;
+    if (uploaded >= HEX_ROAD_UPLOAD_BATCH_LIMIT) break;
   }
-  dirtyHexTileBatches.clear();
+  hexRoadRuntimeStats.lastDirtyUploadCount = uploaded;
+  hexRoadRuntimeStats.pendingDirtyBatches = dirtyHexTileBatches.size;
+  if (dirtyHexTileBatches.size) hexRoadRuntimeStats.uploadDeferredFrames += 1;
+}
+
+function hexRoadBatchStats(batchRecords) {
+  const stats = {
+    totalBatches: batchRecords.length,
+    activeBatches: 0,
+    emptyBatches: 0,
+    hiddenBatches: 0,
+    activeInstances: 0,
+    capacityInstances: 0,
+    dirtyBatches: 0,
+  };
+  for (const record of batchRecords) {
+    const count = record.mesh?.count ?? 0;
+    stats.capacityInstances += record.tiles.length;
+    stats.activeInstances += count;
+    if (count > 0) stats.activeBatches += 1;
+    else stats.emptyBatches += 1;
+    if (record.mesh?.visible === false) stats.hiddenBatches += 1;
+    if (dirtyHexTileBatches.has(record.mesh)) stats.dirtyBatches += 1;
+  }
+  return stats;
+}
+
+function hexRoadInspect() {
+  return {
+    emptyBatchCulling: HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED,
+    uploadBatchLimit: HEX_ROAD_UPLOAD_BATCH_LIMIT,
+    buckets: hexRoadTileBuckets.size,
+    recoveringTiles: recoveringHexTiles.size,
+    candidatesLastStep: hexRoadRuntimeStats.lastCandidateCount,
+    uploadsLastFrame: hexRoadRuntimeStats.lastDirtyUploadCount,
+    pendingDirtyBatches: dirtyHexTileBatches.size,
+    uploadDeferredFrames: hexRoadRuntimeStats.uploadDeferredFrames,
+    interactive: hexRoadBatchStats(hexRoadTileBatches),
+    streetEdge: hexRoadBatchStats(streetEdgeHexTileBatches),
+    boundary: {
+      count: roadBoundaryHexCount,
+      capacity: roadBoundaryHexCapacity,
+      visible: Boolean(roadBoundaryHexBatch?.visible),
+    },
+  };
 }
 
 function setHexTileLayoutPosition(tile, sync = true) {
@@ -5049,8 +5106,15 @@ function compactHexTileBatch(batchRecord) {
     }
   }
   batchRecord.mesh.count = writeIndex;
+  if (HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED) {
+    batchRecord.mesh.visible = writeIndex > 0;
+  }
   refreshCullingBounds(batchRecord.mesh);
-  markHexTileBatchDirty(batchRecord.mesh, true);
+  if (writeIndex > 0) {
+    markHexTileBatchDirty(batchRecord.mesh, true);
+  } else {
+    dirtyHexTileBatches.delete(batchRecord.mesh);
+  }
 }
 
 function compactHexTileBatchesForTiles(tiles) {
@@ -19511,6 +19575,7 @@ window.__tronInspect = () => ({
     opacity: cityRevealWireOpacityScale,
     backplate: cityRevealBackplateOpacityScale,
   },
+  hexRoad: hexRoadInspect(),
   fxLed: {
     mainFacade: {
       brightness: mainBuildingFacadeLedBrightness,
@@ -19572,6 +19637,7 @@ window.__tronPerfInspect = () => ({
   },
   hexUpdateEnabled,
   hexTiles: hexRoadTiles.length,
+  hexRoad: hexRoadInspect(),
   recoveringHexTiles: recoveringHexTiles.size,
   boundaryErrorPulse,
   boundaryErrorTextureAge: boundaryErrorTextureLastAge,
