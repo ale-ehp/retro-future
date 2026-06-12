@@ -10815,6 +10815,19 @@ let cityRevealRoadGridSkippedPerimeterSegments = 0;
 let cityRevealWireMaterialAlphaCache = NaN;
 let cityRevealWireMaterialOpacityScaleCache = NaN;
 let cityRevealWireMaterialRoadGridAlphaFactorCache = NaN;
+let cityRevealMainBuildingSlowZoneCache = {
+  record: null,
+  mesh: null,
+  collider: null,
+  hd: NaN,
+  h: NaN,
+  y: NaN,
+  z: NaN,
+  baseD: NaN,
+  meshY: NaN,
+  meshZ: NaN,
+  zone: null,
+};
 const cityRevealSolidMat = new THREE.MeshBasicMaterial({
   color: 0x000000,
   transparent: true,
@@ -10831,6 +10844,13 @@ function invalidateCityRevealWireMaterialCache() {
   cityRevealWireMaterialAlphaCache = NaN;
   cityRevealWireMaterialOpacityScaleCache = NaN;
   cityRevealWireMaterialRoadGridAlphaFactorCache = NaN;
+}
+
+function invalidateCityRevealMainBuildingSlowZoneCache() {
+  cityRevealMainBuildingSlowZoneCache.record = null;
+  cityRevealMainBuildingSlowZoneCache.mesh = null;
+  cityRevealMainBuildingSlowZoneCache.collider = null;
+  cityRevealMainBuildingSlowZoneCache.zone = null;
 }
 
 function registerCityRevealWireMaterial(material, baseOpacity) {
@@ -11452,13 +11472,36 @@ function cityRevealMainBuildingSlowZone() {
   const record = mainBuildingRecords[0];
   const collider = record?.collider;
   if (!record?.mesh || !collider) return null;
+  const cache = cityRevealMainBuildingSlowZoneCache;
+  const hd = Number.isFinite(collider.hd) ? collider.hd : NaN;
+  const h = Number.isFinite(collider.h) ? collider.h : NaN;
+  const y = Number.isFinite(collider.y) ? collider.y : NaN;
+  const z = Number.isFinite(collider.z) ? collider.z : NaN;
+  const baseD = Number.isFinite(record.baseD) ? record.baseD : NaN;
+  const meshY = Number.isFinite(record.mesh.position.y) ? record.mesh.position.y : NaN;
+  const meshZ = Number.isFinite(record.mesh.position.z) ? record.mesh.position.z : NaN;
+  if (
+    cache.record === record &&
+    cache.mesh === record.mesh &&
+    cache.collider === collider &&
+    Object.is(cache.hd, hd) &&
+    Object.is(cache.h, h) &&
+    Object.is(cache.y, y) &&
+    Object.is(cache.z, z) &&
+    Object.is(cache.baseD, baseD) &&
+    Object.is(cache.meshY, meshY) &&
+    Object.is(cache.meshZ, meshZ)
+  ) return cache.zone;
   const boxDepth = Math.abs(Number.isFinite(collider.hd) ? collider.hd * 2 : record.baseD || MAIN_BUILDING_BASE);
   const boxHeight = Math.abs(Number.isFinite(collider.h) ? collider.h : 230);
   const centerY = (Number.isFinite(collider.y) ? collider.y : record.mesh.position.y || 0) + boxHeight * 0.5;
   const centerZ = Number.isFinite(collider.z) ? collider.z : record.mesh.position.z;
-  if (![boxDepth, boxHeight, centerY, centerZ].every(Number.isFinite) || boxDepth <= 0 || boxHeight <= 0) return null;
+  if (![boxDepth, boxHeight, centerY, centerZ].every(Number.isFinite) || boxDepth <= 0 || boxHeight <= 0) {
+    Object.assign(cache, { record, mesh: record.mesh, collider, hd, h, y, z, baseD, meshY, meshZ, zone: null });
+    return null;
+  }
   const bounds = cityRevealBoxSweepBounds(centerZ, boxDepth * 0.5, centerY, boxHeight * 0.5);
-  return {
+  const zone = {
     low: bounds.min,
     high: bounds.max,
     centerZ,
@@ -11466,6 +11509,8 @@ function cityRevealMainBuildingSlowZone() {
     depth: boxDepth,
     height: boxHeight,
   };
+  Object.assign(cache, { record, mesh: record.mesh, collider, hd, h, y, z, baseD, meshY, meshZ, zone });
+  return zone;
 }
 
 function cityRevealWarpProgressForMainBuilding(progress) {
@@ -12773,6 +12818,7 @@ function updateGroundLedMaterials(roadEdgeBrightness, medianBrightness, hueDeg) 
 function updateBuildingScale(meshes, colliders, scaleY) {
   for (const mesh of meshes) mesh.scale.y = scaleY;
   for (const collider of colliders) collider.h = collider.baseH * scaleY;
+  if (colliders === mainBuildingColliders) invalidateCityRevealMainBuildingSlowZoneCache();
 }
 
 function updateStreetEdgeTileBand(tiles, sign, width) {
@@ -12978,6 +13024,7 @@ function updateBuildingFootprints(nextSideWidthScale, nextSideDepthScale, nextMa
     record.collider.chamfer = (record.footprintChamfer || record.collider.baseChamfer || 0) * Math.min(nextMainWidthScale, nextMainDepthScale);
     updateBuildingBasePad(record, 0, nextMainZ, nextMainWidthScale, nextMainDepthScale, mainBuildingBasePadScale, mainBuildingBasePadXScale, mainBuildingBasePadZScale, mainBuildingBasePadY, mainBuildingBasePadThickness, mainBuildingBasePadCut, mainBuildingBasePadRadius);
   }
+  invalidateCityRevealMainBuildingSlowZoneCache();
   updateSideBuildingDoorTransforms();
 }
 
