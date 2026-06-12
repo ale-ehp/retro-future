@@ -556,11 +556,7 @@
 </div>
 
 <div id="hud-tl" class="hud">
-  <div><span class="tag">DEMO</span> &mdash; Boulevard map in cubemap style</div>
-  <div class="rule"></div>
-  <div><span class="tag">WASD</span> move &middot; <span class="tag">Q/E</span> down/up &middot; <span class="tag">Shift</span> sprint</div>
-  <div><span class="tag" id="look-input-label">Mouse</span> look &middot; <span class="tag">H</span> reset height &middot; <span class="tag">P</span> save spawn &middot; <span class="dim" id="lock-hint">click canvas to lock</span></div>
-  <div>FPS: <span id="fps">--</span> &nbsp; FOV: <span id="fov">70</span>&deg;</div>
+  <div>FPS: <span id="fps">--</span><span id="fov" hidden>70</span></div>
 </div>
 
 <button id="settings-toggle" type="button" aria-controls="hud-controls" aria-expanded="false">Settaggi</button>
@@ -1043,7 +1039,7 @@
       <p class="welcome-copy">Sei dentro il cervello di avstudio.ai
 qui puoi esplorare liberamente i reparti.
 ti auguriamo un esperienza illuminante.</p>
-      <div class="welcome-action"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Tocca">[Spazio]</span></div>
+      <div class="welcome-action"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></div>
     </div>
   </article>
 </div>
@@ -1821,7 +1817,7 @@ function applyWelcomeWindowInputMode() {
   welcomeWindowAction?.classList.toggle('is-touch-prompt', touchPrompt);
   if (welcomeWindowActionPrefix) welcomeWindowActionPrefix.textContent = touchPrompt ? '' : 'Premi ';
   welcomeWindowKeyLabel.textContent = touchPrompt
-    ? (welcomeWindowKeyLabel.dataset.touchLabel || '[Touch]')
+    ? (welcomeWindowKeyLabel.dataset.touchLabel || 'Clicca')
     : (welcomeWindowKeyLabel.dataset.desktopLabel || '[Spazio]');
   const lookInputLabel = document.getElementById('look-input-label');
   if (lookInputLabel) lookInputLabel.textContent = touchPrompt ? 'Touch' : 'Mouse';
