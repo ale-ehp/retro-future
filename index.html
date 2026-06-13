@@ -260,6 +260,75 @@
     color: rgba(205, 246, 255, 0.82);
     text-shadow: 0 0 8px rgba(98, 247, 255, 0.28);
   }
+  #mobile-movement-pad {
+    position: fixed;
+    left: max(18px, env(safe-area-inset-left));
+    bottom: max(18px, env(safe-area-inset-bottom));
+    z-index: 55;
+    width: 116px;
+    height: 116px;
+    border-radius: 50%;
+    border: 1px solid rgba(98, 247, 255, 0.34);
+    background:
+      radial-gradient(circle at 50% 50%, rgba(98, 247, 255, 0.10), rgba(3, 18, 22, 0.28) 58%, rgba(0, 0, 0, 0.38) 100%);
+    box-shadow:
+      0 0 18px rgba(98, 247, 255, 0.18),
+      inset 0 0 18px rgba(98, 247, 255, 0.08);
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translate3d(0, 8px, 0);
+    transition: opacity 160ms ease, visibility 160ms ease, transform 160ms ease;
+    contain: layout paint style;
+  }
+  #mobile-movement-pad::before,
+  #mobile-movement-pad::after {
+    content: "";
+    position: absolute;
+    inset: 18px;
+    border-radius: 50%;
+    border: 1px solid rgba(98, 247, 255, 0.18);
+  }
+  #mobile-movement-pad::after {
+    inset: 50%;
+    width: 1px;
+    height: 1px;
+    transform: translate(-50%, -50%);
+    border: 0;
+    box-shadow:
+      -38px 0 0 rgba(98, 247, 255, 0.22),
+      38px 0 0 rgba(98, 247, 255, 0.22),
+      0 -38px 0 rgba(98, 247, 255, 0.22),
+      0 38px 0 rgba(98, 247, 255, 0.22);
+  }
+  #mobile-movement-knob {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 1px solid rgba(232, 254, 255, 0.62);
+    background: rgba(98, 247, 255, 0.18);
+    box-shadow:
+      0 0 14px rgba(98, 247, 255, 0.48),
+      inset 0 0 10px rgba(232, 254, 255, 0.16);
+    transform: translate3d(-50%, -50%, 0);
+    pointer-events: none;
+    will-change: transform;
+  }
+  body.mobile-landscape #mobile-movement-pad {
+    opacity: 1;
+    visibility: visible;
+    transform: translate3d(0, 0, 0);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    #mobile-movement-pad {
+      display: none;
+    }
+  }
   @media (min-width: 861px) and (hover: hover) and (pointer: fine) {
     #mobile-performance-diagnostics {
       display: none;
@@ -572,6 +641,9 @@
 <div id="hud-tl" class="hud">
   <div>FPS: <span id="fps">--</span><span id="fov" hidden>70</span></div>
   <div id="mobile-performance-diagnostics" hidden></div>
+</div>
+<div id="mobile-movement-pad" aria-hidden="true">
+  <div id="mobile-movement-knob"></div>
 </div>
 
 <button id="settings-toggle" type="button" aria-controls="hud-controls" aria-expanded="false">Settaggi</button>
@@ -1229,6 +1301,8 @@ const boundaryErrorOverlay = document.getElementById('boundary-error-overlay');
 const fpsEl = document.getElementById('fps');
 const fovEl = document.getElementById('fov');
 const mobilePerformanceDiagnosticsEl = document.getElementById('mobile-performance-diagnostics');
+const mobileMovementPadEl = document.getElementById('mobile-movement-pad');
+const mobileMovementKnobEl = document.getElementById('mobile-movement-knob');
 const controlEls = {
   hexOffset: document.getElementById('hex-offset'),
   hexOffsetVal: document.getElementById('hex-offset-val'),
@@ -1856,6 +1930,7 @@ let dragging = false;
 let dragCandidate = false;
 let unlockedMouseLookActive = false;
 let lastX = 0, lastY = 0;
+let lookTouchIdentifier = null;
 let dragStartX = 0, dragStartY = 0;
 let suppressNextPointerLockMove = false;
 let pointerLockLookEnabledAt = 0;
@@ -1873,6 +1948,9 @@ const tronDiscCursor = document.getElementById('tron-disc-cursor');
 const welcomeWindowTouchQuery = window.matchMedia('(hover: none), (pointer: coarse)');
 const welcomeWindowMobileQuery = window.matchMedia('(max-width: 760px)');
 const welcomeWindowMotionAllowed = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const mobileLandscapeQuery = window.matchMedia('(orientation: landscape)');
+const MOBILE_MOVEMENT_PAD_RADIUS = 58;
+const MOBILE_MOVEMENT_PAD_DEADZONE = 0.12;
 let welcomeWindowMotionFrame = 0;
 let welcomeWindowMotionNext = null;
 let welcomeWindowMotionState = {
@@ -1886,6 +1964,26 @@ let welcomeWindowMotionState = {
   cursorY: '50.00',
 };
 let welcomeWindowDismissed = false;
+const mobileTouchControlsState = {
+  landscape: false,
+  fullscreen: {
+    supported: false,
+    active: false,
+    landscape: false,
+    lastAttemptSource: '',
+    lastAttemptAt: 0,
+    lastResult: 'idle',
+    lastError: '',
+  },
+  movement: {
+    enabled: false,
+    active: false,
+    pointerId: null,
+    x: 0,
+    z: 0,
+    magnitude: 0,
+  },
+};
 
 function dismissWelcomeWindow() {
   if (!welcomeWindowOverlay || welcomeWindowDismissed) return;
@@ -1901,6 +1999,126 @@ function welcomeWindowVisible() {
 
 function welcomeWindowUsesTouchPrompt() {
   return Boolean(welcomeWindowTouchQuery.matches || welcomeWindowMobileQuery.matches || navigator.maxTouchPoints > 0);
+}
+
+function isMobileLandscapeMode() {
+  return Boolean(mobilePerformanceProfileActive() && (mobileLandscapeQuery.matches || window.innerWidth > window.innerHeight));
+}
+
+function currentFullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function requestFullscreenSupported() {
+  const target = document.documentElement;
+  return Boolean(target.requestFullscreen || target.webkitRequestFullscreen);
+}
+
+function updateMobileTouchControlsState() {
+  const landscape = isMobileLandscapeMode();
+  mobileTouchControlsState.landscape = landscape;
+  mobileTouchControlsState.fullscreen.supported = requestFullscreenSupported();
+  mobileTouchControlsState.fullscreen.active = Boolean(currentFullscreenElement());
+  mobileTouchControlsState.fullscreen.landscape = landscape;
+  mobileTouchControlsState.movement.enabled = Boolean(landscape && mobileMovementPadEl);
+  document.body.classList.toggle('mobile-landscape', mobileTouchControlsState.movement.enabled);
+  if (!mobileTouchControlsState.movement.enabled) resetMobileMovementPad();
+  return mobileTouchControlsState;
+}
+
+function requestLandscapeFullscreen(source = 'auto') {
+  updateMobileTouchControlsState();
+  const fs = mobileTouchControlsState.fullscreen;
+  fs.lastAttemptSource = source;
+  fs.lastAttemptAt = performance.now();
+  fs.lastError = '';
+  if (!fs.landscape) {
+    fs.lastResult = 'skipped-not-landscape';
+    return Promise.resolve(false);
+  }
+  if (fs.active) {
+    fs.lastResult = 'already-fullscreen';
+    return Promise.resolve(true);
+  }
+  const target = document.documentElement;
+  const request = target.requestFullscreen || target.webkitRequestFullscreen;
+  if (!request) {
+    fs.lastResult = 'unsupported';
+    return Promise.resolve(false);
+  }
+  try {
+    const result = request.call(target);
+    if (result?.then) {
+      return result.then(() => {
+        fs.lastResult = 'entered';
+        updateMobileTouchControlsState();
+        return true;
+      }).catch((error) => {
+        fs.lastResult = 'blocked';
+        fs.lastError = error?.message || String(error);
+        updateMobileTouchControlsState();
+        return false;
+      });
+    }
+    fs.lastResult = 'requested';
+    updateMobileTouchControlsState();
+    return Promise.resolve(true);
+  } catch (error) {
+    fs.lastResult = 'blocked';
+    fs.lastError = error?.message || String(error);
+    updateMobileTouchControlsState();
+    return Promise.resolve(false);
+  }
+}
+
+function resetMobileMovementPad() {
+  mobileTouchControlsState.movement.active = false;
+  mobileTouchControlsState.movement.pointerId = null;
+  mobileTouchControlsState.movement.x = 0;
+  mobileTouchControlsState.movement.z = 0;
+  mobileTouchControlsState.movement.magnitude = 0;
+  if (mobileMovementKnobEl) {
+    mobileMovementKnobEl.style.transform = 'translate3d(-50%, -50%, 0)';
+  }
+}
+
+function updateMobileMovementPadFromPoint(clientX, clientY) {
+  if (!mobileMovementPadEl || !mobileMovementKnobEl) return;
+  const rect = mobileMovementPadEl.getBoundingClientRect();
+  const centerX = rect.left + rect.width * 0.5;
+  const centerY = rect.top + rect.height * 0.5;
+  const radius = Math.max(1, Math.min(rect.width, rect.height) * 0.5);
+  const rawX = (clientX - centerX) / radius;
+  const rawY = (clientY - centerY) / radius;
+  const length = Math.min(1, Math.hypot(rawX, rawY));
+  const deadzone = MOBILE_MOVEMENT_PAD_DEADZONE;
+  const normalized = length <= deadzone ? 0 : (length - deadzone) / (1 - deadzone);
+  const unitX = length > 0 ? rawX / length : 0;
+  const unitY = length > 0 ? rawY / length : 0;
+  const x = unitX * normalized;
+  const y = unitY * normalized;
+  mobileTouchControlsState.movement.x = x;
+  mobileTouchControlsState.movement.z = y;
+  mobileTouchControlsState.movement.magnitude = normalized;
+  const knobX = x * MOBILE_MOVEMENT_PAD_RADIUS * 0.54;
+  const knobY = y * MOBILE_MOVEMENT_PAD_RADIUS * 0.54;
+  mobileMovementKnobEl.style.transform = `translate3d(calc(-50% + ${knobX.toFixed(1)}px), calc(-50% + ${knobY.toFixed(1)}px), 0)`;
+}
+
+function mobileTouchControlsInspect() {
+  updateMobileTouchControlsState();
+  return {
+    landscape: mobileTouchControlsState.landscape,
+    fullscreen: { ...mobileTouchControlsState.fullscreen },
+    movement: {
+      ...mobileTouchControlsState.movement,
+      pointerId: mobileTouchControlsState.movement.pointerId,
+      x: Number(mobileTouchControlsState.movement.x.toFixed(3)),
+      z: Number(mobileTouchControlsState.movement.z.toFixed(3)),
+      magnitude: Number(mobileTouchControlsState.movement.magnitude.toFixed(3)),
+    },
+    resolution: performanceDiagnosticsCanvasSummary(),
+  };
 }
 
 function applyWelcomeWindowInputMode() {
@@ -2291,6 +2509,7 @@ function syncMouseLookCursorState() {
 function stopMouseLookInput() {
   dragging = false;
   dragCandidate = false;
+  lookTouchIdentifier = null;
   unlockedMouseLookActive = false;
   suppressNextPointerLockMove = false;
   ignoredPointerLookMoves = 0;
@@ -2421,23 +2640,99 @@ document.addEventListener('mousedown', (e) => {
   updatePointerLockHint();
 });
 
+function isMobileMovementControlTarget(target) {
+  return Boolean(target?.closest?.('#mobile-movement-pad'));
+}
+
+mobileMovementPadEl?.addEventListener('pointerdown', (event) => {
+  updateMobileTouchControlsState();
+  if (!mobileTouchControlsState.movement.enabled) return;
+  event.preventDefault();
+  requestLandscapeFullscreen('movement-pad');
+  mobileTouchControlsState.movement.active = true;
+  mobileTouchControlsState.movement.pointerId = event.pointerId;
+  mobileMovementPadEl.setPointerCapture?.(event.pointerId);
+  updateMobileMovementPadFromPoint(event.clientX, event.clientY);
+}, { passive: false });
+
+mobileMovementPadEl?.addEventListener('pointermove', (event) => {
+  if (!mobileTouchControlsState.movement.active || mobileTouchControlsState.movement.pointerId !== event.pointerId) return;
+  event.preventDefault();
+  updateMobileMovementPadFromPoint(event.clientX, event.clientY);
+}, { passive: false });
+
+function releaseMobileMovementPointer(event) {
+  if (mobileTouchControlsState.movement.pointerId !== null && event?.pointerId !== mobileTouchControlsState.movement.pointerId) return;
+  resetMobileMovementPad();
+}
+
+mobileMovementPadEl?.addEventListener('pointerup', releaseMobileMovementPointer);
+mobileMovementPadEl?.addEventListener('pointercancel', releaseMobileMovementPointer);
+window.addEventListener('blur', resetMobileMovementPad);
+
+function scheduleMobileLandscapeRefresh(source = 'resize') {
+  window.requestAnimationFrame(() => {
+    updateMobileTouchControlsState();
+    requestLandscapeFullscreen(source);
+    applyViewportResize();
+  });
+}
+
+window.addEventListener('orientationchange', () => scheduleMobileLandscapeRefresh('orientationchange'));
+window.addEventListener('resize', () => updateMobileTouchControlsState());
+document.addEventListener('fullscreenchange', updateMobileTouchControlsState);
+document.addEventListener('webkitfullscreenchange', updateMobileTouchControlsState);
+window.addEventListener('pointerdown', (event) => {
+  if (isMobileMovementControlTarget(event.target)) return;
+  if (isMobileLandscapeMode()) requestLandscapeFullscreen('page-pointerdown');
+}, { passive: true });
+updateMobileTouchControlsState();
+
 // touch fallback (mobile)
 lockEl.addEventListener('touchstart', (e) => {
   if (!isMouseLookEnabled()) {
     stopMouseLookInput();
     return;
   }
-  if (e.touches.length !== 1) return;
-  dragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+  if (lookTouchIdentifier !== null) return;
+  const touch = Array.from(e.changedTouches).find((item) => !isMobileMovementControlTarget(item.target)) || e.changedTouches[0];
+  if (!touch) return;
+  requestLandscapeFullscreen('look-touch');
+  lookTouchIdentifier = touch.identifier;
+  dragging = true;
+  lastX = touch.clientX;
+  lastY = touch.clientY;
 }, { passive: true });
-window.addEventListener('touchend', () => { dragging = false; });
+window.addEventListener('touchend', (e) => {
+  if (lookTouchIdentifier === null) {
+    dragging = false;
+    return;
+  }
+  const ended = Array.from(e.changedTouches).some((touch) => touch.identifier === lookTouchIdentifier);
+  if (ended) {
+    dragging = false;
+    lookTouchIdentifier = null;
+  }
+});
+window.addEventListener('touchcancel', (e) => {
+  if (lookTouchIdentifier === null) {
+    dragging = false;
+    return;
+  }
+  const cancelled = Array.from(e.changedTouches).some((touch) => touch.identifier === lookTouchIdentifier);
+  if (cancelled) {
+    dragging = false;
+    lookTouchIdentifier = null;
+  }
+});
 window.addEventListener('touchmove', (e) => {
   if (!isMouseLookEnabled()) {
     stopMouseLookInput();
     return;
   }
-  if (!dragging || e.touches.length !== 1) return;
-  const t = e.touches[0];
+  if (!dragging || lookTouchIdentifier === null) return;
+  const t = Array.from(e.touches).find((touch) => touch.identifier === lookTouchIdentifier);
+  if (!t) return;
   const dx = t.clientX - lastX, dy = t.clientY - lastY;
   lastX = t.clientX; lastY = t.clientY;
   yaw   -= dx * 0.0035 * mouseSensitivityScale;
@@ -3788,6 +4083,10 @@ function applyMovement(dt) {
   if (keys['KeyS'] || keys['ArrowDown'])  mz += 1;
   if (keys['KeyA'] || keys['ArrowLeft'])  mx -= 1;
   if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
+  if (mobileTouchControlsState.movement.enabled && mobileTouchControlsState.movement.magnitude > 0) {
+    mx += mobileTouchControlsState.movement.x;
+    mz += mobileTouchControlsState.movement.z;
+  }
   if (keys['KeyE'] || keys['Space'])      my += 1;
   if (keys['KeyQ'] || keys['KeyC'])       my -= 1;
 
@@ -3800,7 +4099,7 @@ function applyMovement(dt) {
     const forwardIntent = mz < 0 ? Math.abs(mz) : 0;
     const backIntent = mz > 0 ? Math.abs(mz) : 0;
     const strafeIntent = Math.abs(mx);
-    const intentTotal = Math.max(1, forwardIntent + backIntent + strafeIntent);
+    const intentTotal = Math.max(0.0001, forwardIntent + backIntent + strafeIntent);
     movementForwardMix = forwardIntent / intentTotal;
     movementBackMix = backIntent / intentTotal;
     movementStrafeMix = strafeIntent / intentTotal;
@@ -3820,7 +4119,8 @@ function applyMovement(dt) {
       movementBackMix * backwardSpeedScale +
       movementStrafeMix * strafeSpeedScale;
     const diagonalScale = mx !== 0 && mz !== 0 ? diagonalSpeedScale : 1;
-    desiredVelocity.addScaledVector(moveVec, speed * directionSpeedScale * diagonalScale);
+    const analogScale = THREE.MathUtils.clamp(Math.hypot(mx, mz), 0, 1);
+    desiredVelocity.addScaledVector(moveVec, speed * directionSpeedScale * diagonalScale * analogScale);
   } else if (movementVelocity.lengthSq() < 0.0004) {
     movementForwardMix = 0;
     movementBackMix = 0;
@@ -20407,6 +20707,7 @@ window.__tronInspect = () => ({
     spinDegPerSec: Number(tronDiscCursorState.spinDegPerSec.toFixed(1)),
     targetSpinDegPerSec: Number(tronDiscCursorState.targetSpinDegPerSec.toFixed(1)),
   },
+  mobileTouchControls: mobileTouchControlsInspect(),
   footsteps: window.__tronFootstepInspect?.(),
   music: window.__tronMusicInspect?.(),
   equalizer: window.__labEqualizerInspect?.(),
