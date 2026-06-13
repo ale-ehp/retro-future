@@ -251,6 +251,20 @@
   }
   #hud-tl { top:14px; left:14px; }
   #hud-bl { bottom:14px; left:14px; }
+  #mobile-performance-diagnostics {
+    margin-top: 6px;
+    max-width: min(320px, calc(100vw - 28px));
+    white-space: pre-line;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.35;
+    color: rgba(205, 246, 255, 0.82);
+    text-shadow: 0 0 8px rgba(98, 247, 255, 0.28);
+  }
+  @media (min-width: 861px) and (hover: hover) and (pointer: fine) {
+    #mobile-performance-diagnostics {
+      display: none;
+    }
+  }
   #hud-controls {
     top:14px;
     right:14px;
@@ -557,6 +571,7 @@
 
 <div id="hud-tl" class="hud">
   <div>FPS: <span id="fps">--</span><span id="fov" hidden>70</span></div>
+  <div id="mobile-performance-diagnostics" hidden></div>
 </div>
 
 <button id="settings-toggle" type="button" aria-controls="hud-controls" aria-expanded="false">Settaggi</button>
@@ -1213,6 +1228,7 @@ const loader = document.getElementById('loader');
 const boundaryErrorOverlay = document.getElementById('boundary-error-overlay');
 const fpsEl = document.getElementById('fps');
 const fovEl = document.getElementById('fov');
+const mobilePerformanceDiagnosticsEl = document.getElementById('mobile-performance-diagnostics');
 const controlEls = {
   hexOffset: document.getElementById('hex-offset'),
   hexOffsetVal: document.getElementById('hex-offset-val'),
@@ -1748,6 +1764,12 @@ const controlEls = {
 };
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+const performanceDiagnosticsDrawingBufferSize = new THREE.Vector2();
+const performanceDiagnosticsTiming = {
+  frameMs: 0,
+  updateMs: 0,
+  renderMs: 0,
+};
 renderer.setPixelRatio(activePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.localClippingEnabled = true;
@@ -17584,9 +17606,27 @@ function isBloomPassActive() {
   return Boolean(bloomPass?.enabled && (bloomPass.strength ?? 0) > BLOOM_BYPASS_STRENGTH);
 }
 
-function mobilePerformanceProfileActive() {
+function mobilePerformanceProfileState() {
+  const mediaQueryMatches = Boolean(mobilePerformanceQuery.matches);
   const touchPoints = Number.isFinite(navigator.maxTouchPoints) ? navigator.maxTouchPoints : 0;
-  return Boolean(mobilePerformanceQuery.matches || touchPoints > 0 || window.innerWidth <= 760);
+  const touchActive = touchPoints > 0;
+  const widthActive = window.innerWidth <= 760;
+  const reasons = [];
+  if (mediaQueryMatches) reasons.push('media-query');
+  if (touchActive) reasons.push('touch');
+  if (widthActive) reasons.push('width');
+  return {
+    active: reasons.length > 0,
+    mediaQueryMatches,
+    touchPoints,
+    touchActive,
+    widthActive,
+    reasons,
+  };
+}
+
+function mobilePerformanceProfileActive() {
+  return mobilePerformanceProfileState().active;
 }
 
 function effectiveRenderScaleForDevice(baseScale = manualRenderScale) {
@@ -17608,11 +17648,18 @@ function effectiveBloomScaleForDevice(baseScale = requestedBloomResolutionScale)
 }
 
 function mobilePerformanceProfileInspect() {
-  const active = mobilePerformanceProfileActive();
+  const state = mobilePerformanceProfileState();
   return {
-    active,
-    mode: active ? 'mobile-touch' : 'desktop',
+    active: state.active,
+    mode: state.active ? 'mobile-touch' : 'desktop',
     query: MOBILE_PERFORMANCE_QUERY,
+    mediaQueryMatches: state.mediaQueryMatches,
+    touchPoints: state.touchPoints,
+    widthActive: state.widthActive,
+    activationReasons: state.reasons,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio || 1,
     renderScaleCap: MOBILE_PERFORMANCE_RENDER_SCALE_CAP,
     pixelRatioCap: MOBILE_PERFORMANCE_PIXEL_RATIO_CAP,
     bloomScaleCap: MOBILE_PERFORMANCE_BLOOM_SCALE_CAP,
@@ -20682,12 +20729,122 @@ let fpsAccum = 0, fpsFrames = 0, fpsLast = last;
 let startPositionLabelLast = 0;
 let latestMeasuredFps = 0;
 
+function performanceDiagnosticsTargetSizeFromKey(key) {
+  const match = String(key || '').match(/^(\d+)x(\d+)$/);
+  const width = match ? Number(match[1]) : 0;
+  const height = match ? Number(match[2]) : 0;
+  return {
+    width,
+    height,
+    pixels: width * height,
+    key: key || '',
+  };
+}
+
+function performanceDiagnosticsCanvasSummary() {
+  renderer.getDrawingBufferSize(performanceDiagnosticsDrawingBufferSize);
+  const canvas = renderer.domElement;
+  const width = performanceDiagnosticsDrawingBufferSize.x;
+  const height = performanceDiagnosticsDrawingBufferSize.y;
+  return {
+    viewport: `${window.innerWidth}x${window.innerHeight}`,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    canvasCssWidth: canvas.clientWidth || window.innerWidth,
+    canvasCssHeight: canvas.clientHeight || window.innerHeight,
+    canvasWidth: canvas.width,
+    canvasHeight: canvas.height,
+    drawingBufferWidth: width,
+    drawingBufferHeight: height,
+    canvasPixels: Math.round(width * height),
+  };
+}
+
+function performanceDiagnosticsPixelPipeline() {
+  const effectivePixelRatioRequest = effectivePixelRatioForDevice(requestedPixelRatio);
+  const effectiveRenderScale = effectiveRenderScaleForDevice(manualRenderScale);
+  const dynamicPixelRatioBeforeClamp = Math.max(
+    MIN_DYNAMIC_PIXEL_RATIO,
+    effectivePixelRatioRequest * effectiveRenderScale * dynamicQualityScale
+  );
+  return {
+    requestedPixelRatioRaw: Number(requestedPixelRatio.toFixed(2)),
+    effectivePixelRatioRequest: Number(effectivePixelRatioRequest.toFixed(2)),
+    manualRenderScaleRaw: Number(manualRenderScale.toFixed(2)),
+    effectiveRenderScale: Number(effectiveRenderScale.toFixed(2)),
+    dynamicPixelRatioBeforeClamp: Number(dynamicPixelRatioBeforeClamp.toFixed(3)),
+    activePixelRatio: Number(activePixelRatio.toFixed(3)),
+    minDynamicPixelRatio: MIN_DYNAMIC_PIXEL_RATIO,
+    maxRenderPixelRatio: MAX_RENDER_PIXEL_RATIO,
+  };
+}
+
+function performanceDiagnosticsComposerSummary() {
+  const profile = cityRevealComposerPassProfile();
+  const activePasses = Object.entries(profile.passes)
+    .filter(([, enabled]) => enabled)
+    .map(([name]) => name);
+  return {
+    active: profile.composer,
+    passCount: activePasses.length,
+    activePasses,
+    estimatedPasses: profile.estimatedPasses,
+  };
+}
+
 function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
   const eq = labEqualizerState || {};
+  const mobileProfile = mobilePerformanceProfileInspect();
+  const canvas = performanceDiagnosticsCanvasSummary();
+  const pixelPipeline = performanceDiagnosticsPixelPipeline();
+  const composerSummary = performanceDiagnosticsComposerSummary();
+  const renderInfo = renderer.info.render || {};
+  const memoryInfo = renderer.info.memory || {};
+  const bloomTarget = performanceDiagnosticsTargetSizeFromKey(lastBloomTargetKey);
+  const fxaaTarget = performanceDiagnosticsTargetSizeFromKey(lastFxaaTargetKey);
   return {
     fps: Number.isFinite(measuredFps) ? Number(measuredFps.toFixed(1)) : 0,
     renderScale: Number(activePixelRatio.toFixed(2)),
     qualityScale: Number(dynamicQualityScale.toFixed(2)),
+    viewport: canvas.viewport,
+    viewportWidth: canvas.viewportWidth,
+    viewportHeight: canvas.viewportHeight,
+    devicePixelRatio: Number((window.devicePixelRatio || 1).toFixed(2)),
+    requestedPixelRatio: Number(requestedPixelRatio.toFixed(2)),
+    manualRenderScale: Number(manualRenderScale.toFixed(2)),
+    mobileProfileActive: mobileProfile.active,
+    mobileProfileMode: mobileProfile.mode,
+    mobileActivationReasons: mobileProfile.activationReasons,
+    mobileMediaQueryMatches: mobileProfile.mediaQueryMatches,
+    mobileTouchPoints: mobileProfile.touchPoints,
+    mobileWidthActive: mobileProfile.widthActive,
+    canvasCssWidth: canvas.canvasCssWidth,
+    canvasCssHeight: canvas.canvasCssHeight,
+    canvasWidth: canvas.canvasWidth,
+    canvasHeight: canvas.canvasHeight,
+    drawingBufferWidth: canvas.drawingBufferWidth,
+    drawingBufferHeight: canvas.drawingBufferHeight,
+    canvasPixels: canvas.canvasPixels,
+    pixelPipeline,
+    composerActive: composerSummary.active,
+    composerPassCount: composerSummary.passCount,
+    composerActivePasses: composerSummary.activePasses,
+    composerEstimatedPasses: composerSummary.estimatedPasses,
+    bloomActive: isBloomPassActive(),
+    bloomResolutionScale: Number(bloomResolutionScale.toFixed(3)),
+    bloomTarget,
+    fxaaEnabled: Boolean(fxaaPass?.enabled),
+    fxaaTarget,
+    drawCalls: renderInfo.calls ?? 0,
+    triangles: renderInfo.triangles ?? 0,
+    lines: renderInfo.lines ?? 0,
+    points: renderInfo.points ?? 0,
+    geometries: memoryInfo.geometries ?? 0,
+    textures: memoryInfo.textures ?? 0,
+    programs: renderer.info.programs?.length ?? 0,
+    frameMs: Number(performanceDiagnosticsTiming.frameMs.toFixed(2)),
+    updateMs: Number(performanceDiagnosticsTiming.updateMs.toFixed(2)),
+    renderMs: Number(performanceDiagnosticsTiming.renderMs.toFixed(2)),
     crowdVisible: tronRunnerCrowdRuntimeStats.cullingVisibleCount,
     crowdHidden: tronRunnerCrowdRuntimeStats.cullingHiddenCount,
     crowdThinkMs: Number(tronRunnerCrowdRuntimeStats.lastThinkMs.toFixed(2)),
@@ -20700,18 +20857,39 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
 }
 
 function updatePerformanceDiagnostics(measuredFps = latestMeasuredFps) {
-  if (!performanceDiagnosticsEl) return;
   const stats = performanceDiagnosticsSummary(measuredFps);
-  performanceDiagnosticsEl.textContent = [
-    `FPS ${stats.fps.toFixed(1)}`,
-    `render ${stats.renderScale.toFixed(2)}x`,
-    `qualita ${stats.qualityScale.toFixed(2)}`,
-    `crowd ${stats.crowdVisible}/${tronRunnerCrowd.length}`,
-    `hidden ${stats.crowdHidden}`,
-    `think ${stats.crowdThinkMs.toFixed(2)}ms`,
-    `riflessi ${stats.reflections}/${stats.reflectionBudget}`,
-    `eq ${stats.eqAnalyserFps}Hz/${stats.eqTextureFps}Hz`,
-  ].join(' | ');
+  if (performanceDiagnosticsEl) {
+    performanceDiagnosticsEl.textContent = [
+      `FPS ${stats.fps.toFixed(1)}`,
+      `render ${stats.renderScale.toFixed(2)}x`,
+      `qualita ${stats.qualityScale.toFixed(2)}`,
+      `px ${Math.round(stats.canvasPixels / 1000)}k`,
+      `draw ${stats.drawCalls}`,
+      `tri ${Math.round(stats.triangles / 1000)}k`,
+      `frame ${stats.frameMs.toFixed(1)}ms`,
+      `render ${stats.renderMs.toFixed(1)}ms`,
+      `crowd ${stats.crowdVisible}/${tronRunnerCrowd.length}`,
+      `hidden ${stats.crowdHidden}`,
+      `think ${stats.crowdThinkMs.toFixed(2)}ms`,
+      `riflessi ${stats.reflections}/${stats.reflectionBudget}`,
+      `fx ${stats.composerActive ? stats.composerPassCount : 0}`,
+      `bloom ${stats.bloomActive ? stats.bloomTarget.key || 'on' : 'off'}`,
+      `eq ${stats.eqAnalyserFps}Hz/${stats.eqTextureFps}Hz`,
+    ].join(' | ');
+  }
+  if (mobilePerformanceDiagnosticsEl) {
+    mobilePerformanceDiagnosticsEl.hidden = !stats.mobileProfileActive;
+    if (stats.mobileProfileActive) {
+      mobilePerformanceDiagnosticsEl.textContent = [
+        `FPS ${stats.fps.toFixed(1)} | q ${stats.qualityScale.toFixed(2)} | pr ${stats.renderScale.toFixed(2)}`,
+        `${stats.viewport} dpr ${stats.devicePixelRatio} req ${stats.requestedPixelRatio} px ${Math.round(stats.canvasPixels / 1000)}k`,
+        `draw ${stats.drawCalls} tri ${Math.round(stats.triangles / 1000)}k tex ${stats.textures}`,
+        `fx ${stats.composerActive ? stats.composerPassCount : 0} bloom ${stats.bloomActive ? stats.bloomTarget.key || 'on' : 'off'} aa ${stats.fxaaEnabled ? 'on' : 'off'}`,
+        `crowd ${stats.crowdVisible}/${tronRunnerCrowd.length} refl ${stats.reflections}/${stats.reflectionBudget} freeze ${stats.revealFreezeFrames}`,
+        `frame ${stats.frameMs.toFixed(1)} update ${stats.updateMs.toFixed(1)} render ${stats.renderMs.toFixed(1)}ms`,
+      ].join('\n');
+    }
+  }
 }
 
 function tick(now) {
@@ -20780,12 +20958,15 @@ function tick(now) {
   const frameRenderInfo = captureRevealRenderInfo ? { ...renderer.info.render } : null;
   if (captureRevealRenderInfo) renderer.info.autoReset = previousRendererInfoAutoReset;
   const frameEndedAt = performance.now();
+  performanceDiagnosticsTiming.updateMs = renderStartedAt - frameStartedAt;
+  performanceDiagnosticsTiming.renderMs = frameEndedAt - renderStartedAt;
+  performanceDiagnosticsTiming.frameMs = frameEndedAt - frameStartedAt;
   recordCityRevealProfileFrame({
     now,
     dt,
-    updateMs: renderStartedAt - frameStartedAt,
-    renderMs: frameEndedAt - renderStartedAt,
-    frameMs: frameEndedAt - frameStartedAt,
+    updateMs: performanceDiagnosticsTiming.updateMs,
+    renderMs: performanceDiagnosticsTiming.renderMs,
+    frameMs: performanceDiagnosticsTiming.frameMs,
     renderInfo: frameRenderInfo,
   });
 }
