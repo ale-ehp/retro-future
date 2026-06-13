@@ -826,9 +826,9 @@
         <label class="control-row"><span class="control-head"><span>LED persona</span><output id="runner-led-brightness-val">2.60x</output></span><input id="runner-led-brightness" type="range" min="0" max="4" step="0.01" value="2.6" /></label>
         <label class="control-row"><span class="control-head"><span>Bloom persona</span><output id="runner-led-bloom-val">9.00x</output></span><input id="runner-led-bloom" type="range" min="0" max="12" step="0.01" value="9" /></label>
         <label class="control-row select-row"><span class="control-head"><span>Pulse BPM LED</span><output id="runner-beat-pulse-enabled-val">on</output></span><select id="runner-beat-pulse-enabled" class="control-select"><option value="on" selected>on</option><option value="off">off</option></select></label>
-        <label class="control-row"><span class="control-head"><span>BPM pulse</span><output id="runner-beat-pulse-bpm-val">64</output></span><input id="runner-beat-pulse-bpm" type="range" min="40" max="180" step="1" value="64" /></label>
+        <label class="control-row"><span class="control-head"><span>BPM pulse</span><output id="runner-beat-pulse-bpm-val">128</output></span><input id="runner-beat-pulse-bpm" type="range" min="40" max="180" step="1" value="128" /></label>
         <label class="control-row"><span class="control-head"><span>Offset pulse</span><output id="runner-beat-pulse-offset-val">0.00 s</output></span><input id="runner-beat-pulse-offset" type="range" min="-4" max="4" step="0.01" value="0" /></label>
-        <label class="control-row"><span class="control-head"><span>Intensita pulse</span><output id="runner-beat-pulse-intensity-val">0.80x</output></span><input id="runner-beat-pulse-intensity" type="range" min="0" max="3" step="0.01" value="0.8" /></label>
+        <label class="control-row"><span class="control-head"><span>Intensita pulse</span><output id="runner-beat-pulse-intensity-val">3.00x</output></span><input id="runner-beat-pulse-intensity" type="range" min="0" max="3" step="0.01" value="3" /></label>
         <label class="control-row"><span class="control-head"><span>Decay pulse</span><output id="runner-beat-pulse-decay-val">8.0</output></span><input id="runner-beat-pulse-decay" type="range" min="1" max="18" step="0.1" value="8" /></label>
         <label class="control-row"><span class="control-head"><span>Divisione beat</span><output id="runner-beat-pulse-division-val">1.00x</output></span><input id="runner-beat-pulse-division" type="range" min="0.25" max="4" step="0.25" value="1" /></label>
         <label class="control-row"><span class="control-head"><span>Riflesso corpo</span><output id="runner-material-reflect-val">0.06</output></span><input id="runner-material-reflect" type="range" min="0" max="2" step="0.01" value="0.06" /></label>
@@ -988,7 +988,7 @@
     <section class="control-panel" data-panel="wireframe-fx">
       <div class="control-section">Wireframe reveal</div>
       <label class="control-row select-row"><span class="control-head"><span>Wireframe reveal</span><output id="wireframe-enabled-val">on</output></span><select id="wireframe-enabled" class="control-select"><option value="on" selected>On</option><option value="off">Off</option></select></label>
-      <label class="control-row"><span class="control-head"><span>Attesa citta</span><output id="wireframe-delay-val">8.85 s</output></span><input id="wireframe-delay" type="range" min="0" max="12" step="0.05" value="8.85" /></label>
+      <label class="control-row"><span class="control-head"><span>Attesa citta</span><output id="wireframe-delay-val">8.80 s</output></span><input id="wireframe-delay" type="range" min="0" max="12" step="0.05" value="8.8" /></label>
       <label class="control-row"><span class="control-head"><span>Durata reveal</span><output id="wireframe-fade-val">3.0 s</output></span><input id="wireframe-fade" type="range" min="0.1" max="12" step="0.1" value="3" /></label>
       <label class="control-row"><span class="control-head"><span>Densita linee</span><output id="wireframe-density-val">2x</output></span><input id="wireframe-density" type="range" min="1" max="4" step="1" value="2" /></label>
       <label class="control-row"><span class="control-head"><span>Intensita linee</span><output id="wireframe-opacity-val">1.00</output></span><input id="wireframe-opacity" type="range" min="0" max="2" step="0.01" value="1" /></label>
@@ -1094,7 +1094,7 @@ ti auguriamo un esperienza illuminante.</p>
 <script type="module">
 import * as THREE from 'three';
 
-const CITY_REVEAL_DEFAULT_DELAY_MS = 8850;
+const CITY_REVEAL_DEFAULT_DELAY_MS = 8800;
 const CITY_REVEAL_DEFAULT_FADE_MS = 3000;
 const CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS = 0;
 const CITY_REVEAL_SWEEP_MARGIN_Z = 36;
@@ -10924,9 +10924,9 @@ const TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST = 1.77;
 const TRON_RUNNER_CHARACTER_LED_EMISSIVE_MAX = 1.76;
 const TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY = 1.62;
 const TRON_RUNNER_BEAT_PULSE_ENABLED = true;
-const TRON_RUNNER_BEAT_PULSE_BPM = 64;
+const TRON_RUNNER_BEAT_PULSE_BPM = 128;
 const TRON_RUNNER_BEAT_PULSE_OFFSET_SECONDS = 0;
-const TRON_RUNNER_BEAT_PULSE_INTENSITY = 0.8;
+const TRON_RUNNER_BEAT_PULSE_INTENSITY = 3;
 const TRON_RUNNER_BEAT_PULSE_DECAY = 8;
 const TRON_RUNNER_BEAT_PULSE_DIVISION = 1;
 const TRON_RUNNER_BEAT_PULSE_MAX_MULTIPLIER = 4;
