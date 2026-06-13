@@ -8936,6 +8936,7 @@ const CITY_DEPARTMENT_BOARD_TEXTURE_HEIGHT = 1024;
 const CITY_DEPARTMENT_BOARD_WIDTH = 21;
 const CITY_DEPARTMENT_BOARD_HEIGHT = 10.5;
 const CITY_DEPARTMENT_BOARD_INNER_SLIDE = 0.68;
+const CITY_DEPARTMENT_BOARD_REVEAL_EPS = 0.0015;
 const CITY_DEPARTMENT_BOARD_REVEAL_WITH_RUNNERS = true;
 const CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY = 0.46;
 const CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY = 0.96;
@@ -8958,6 +8959,14 @@ const CITY_DEPARTMENTS = Object.freeze([
 const cityDepartmentBoardState = {
   nextSwitchAt: 0,
   cycle: 0,
+  updateOptimized: true,
+  poseSyncs: 0,
+  poseSkips: 0,
+  revealWrites: 0,
+  revealSkips: 0,
+  lastPoseSignature: '',
+  lastRevealFactor: -1,
+  lastRevealVisible: null,
 };
 const cityDepartmentBoards = [];
 const cityDepartmentBoardPanelMat = new THREE.MeshStandardMaterial({
@@ -9185,6 +9194,33 @@ function syncCityDepartmentBoardPerimeterPose(board) {
   board.group.rotation.y = board.yaw;
 }
 
+function cityDepartmentBoardPoseSignature() {
+  const parts = [
+    cityDepartmentBoardBottomY().toFixed(3),
+    CITY_DEPARTMENT_BOARD_INNER_SLIDE.toFixed(4),
+    (playerSpawn?.z ?? camera.position.z ?? 0).toFixed(3),
+  ];
+  for (const board of cityDepartmentBoards) {
+    const record = board.record;
+    const pad = record?.basePad;
+    const polygon = pad?.hitPolygon || [];
+    const xs = polygon.map((point) => point[0]);
+    const zs = polygon.map((point) => point[1]);
+    parts.push(
+      board.civicNumberValue,
+      (record?.mesh?.position?.x ?? 0).toFixed(3),
+      (record?.mesh?.position?.z ?? 0).toFixed(3),
+      (pad?.border?.position?.x ?? 0).toFixed(3),
+      (pad?.border?.position?.z ?? 0).toFixed(3),
+      (xs.length ? Math.min(...xs) : 0).toFixed(3),
+      (xs.length ? Math.max(...xs) : 0).toFixed(3),
+      (zs.length ? Math.min(...zs) : 0).toFixed(3),
+      (zs.length ? Math.max(...zs) : 0).toFixed(3),
+    );
+  }
+  return parts.join('|');
+}
+
 function createCityDepartmentBoard(record, boardIndex = cityDepartmentBoards.length) {
   const textureResources = createCityDepartmentBoardTextureResources();
   const board = {
@@ -9267,7 +9303,14 @@ function buildCityDepartmentBoards() {
 
 function updateCityDepartmentBoards(now) {
   if (!cityDepartmentBoards.length) return;
-  for (const board of cityDepartmentBoards) syncCityDepartmentBoardPerimeterPose(board);
+  const poseSignature = cityDepartmentBoardPoseSignature();
+  if (poseSignature !== cityDepartmentBoardState.lastPoseSignature) {
+    cityDepartmentBoardState.lastPoseSignature = poseSignature;
+    cityDepartmentBoardState.poseSyncs += 1;
+    for (const board of cityDepartmentBoards) syncCityDepartmentBoardPerimeterPose(board);
+  } else {
+    cityDepartmentBoardState.poseSkips += 1;
+  }
   const revealFactor = cityDepartmentBoardRevealFactor();
   syncCityDepartmentBoardRevealVisibility(revealFactor);
   if (revealFactor <= 0.002) {
@@ -9320,14 +9363,26 @@ function cityDepartmentBoardRevealFactor() {
 function syncCityDepartmentBoardRevealVisibility(revealFactor = cityDepartmentBoardRevealFactor()) {
   const factor = THREE.MathUtils.clamp(revealFactor, 0, 1);
   const visible = Boolean(CITY_DEPARTMENT_BOARD_ENABLED && (factor > 0.002 || tronRunnerRevealActive));
+  if (
+    Math.abs(factor - cityDepartmentBoardState.lastRevealFactor) < CITY_DEPARTMENT_BOARD_REVEAL_EPS
+    && cityDepartmentBoardState.lastRevealVisible === visible
+  ) {
+    cityDepartmentBoardState.revealSkips += 1;
+    return;
+  }
+  cityDepartmentBoardState.lastRevealFactor = factor;
+  cityDepartmentBoardState.lastRevealVisible = visible;
   for (const board of cityDepartmentBoards) {
-    board.group.visible = visible;
+    if (board.group.visible !== visible) board.group.visible = visible;
     for (const material of board.revealMaterials) {
       const baseOpacity = Number.isFinite(material.userData.cityDepartmentBoardBaseOpacity)
         ? material.userData.cityDepartmentBoardBaseOpacity
         : material.opacity;
-      material.opacity = baseOpacity * factor;
+      const nextOpacity = baseOpacity * factor;
+      if (Math.abs((material.opacity ?? 0) - nextOpacity) < CITY_DEPARTMENT_BOARD_REVEAL_EPS) continue;
+      material.opacity = nextOpacity;
       material.needsUpdate = true;
+      cityDepartmentBoardState.revealWrites += 1;
     }
   }
 }
@@ -9360,6 +9415,15 @@ function cityDepartmentBoardInspect() {
     textureHeight: firstBoard?.canvas?.height ?? CITY_DEPARTMENT_BOARD_TEXTURE_HEIGHT * CITY_DEPARTMENT_BOARD_TEXTURE_SCALE,
     textureScale: CITY_DEPARTMENT_BOARD_TEXTURE_SCALE,
     textureMipmaps: firstBoard?.texture?.generateMipmaps ?? false,
+    updateOptimized: cityDepartmentBoardState.updateOptimized,
+    runtime: {
+      poseSyncs: cityDepartmentBoardState.poseSyncs,
+      poseSkips: cityDepartmentBoardState.poseSkips,
+      revealWrites: cityDepartmentBoardState.revealWrites,
+      revealSkips: cityDepartmentBoardState.revealSkips,
+      lastRevealFactor: Number(Math.max(0, cityDepartmentBoardState.lastRevealFactor).toFixed(3)),
+      lastRevealVisible: cityDepartmentBoardState.lastRevealVisible,
+    },
     boards: cityDepartmentBoards.map((board) => ({
       civicNumberValue: board.civicNumberValue,
       visible: Boolean(board.group.visible),
@@ -10826,6 +10890,7 @@ const TRON_RUNNER_CROWD_CULLING_ENABLED = true;
 const TRON_RUNNER_CROWD_CULL_DISTANCE = 900;
 const TRON_RUNNER_CROWD_CULL_RADIUS = 24;
 const TRON_RUNNER_CROWD_CULLED_LOD_STRIDE = 12;
+const TRON_RUNNER_CROWD_DISTANCE_CACHE_ENABLED = true;
 const TRON_MAIN_PLAYER_BODY_ENABLED = false;
 const TRON_MAIN_PLAYER_BODY_REVEAL_WITH_CHARACTERS = true;
 const TRON_MAIN_PLAYER_BODY_CAMERA_OFFSET = new THREE.Vector3(0, -0.02, -0.02);
@@ -11882,6 +11947,8 @@ const tronRunnerCrowdRuntimeStats = {
   cullingFrustumHiddenCount: 0,
   cullingMinDistance: 0,
   cullingMaxDistance: 0,
+  distanceCalculations: 0,
+  distanceReuses: 0,
   performanceFreezeFrameCount: 0,
 };
 const tronRunnerBeatPulseState = {
@@ -13157,6 +13224,27 @@ function tronRunnerCrowdGridKey(cx, cz) {
   return `${cx}:${cz}`;
 }
 
+function setTronRunnerCrowdFrameDistance(member, distance) {
+  member.cullingDistance = distance;
+  member.lodDistance = distance;
+  member.cullingDistanceFrame = tronRunnerCrowdRuntimeStats.frame;
+}
+
+function tronRunnerCrowdDistanceToCamera(member) {
+  if (
+    TRON_RUNNER_CROWD_DISTANCE_CACHE_ENABLED &&
+    member.cullingDistanceFrame === tronRunnerCrowdRuntimeStats.frame &&
+    Number.isFinite(member.cullingDistance)
+  ) {
+    tronRunnerCrowdRuntimeStats.distanceReuses += 1;
+    return member.cullingDistance;
+  }
+  const distance = camera.position.distanceTo(member.group.position);
+  tronRunnerCrowdRuntimeStats.distanceCalculations += 1;
+  setTronRunnerCrowdFrameDistance(member, distance);
+  return distance;
+}
+
 function prepareTronRunnerCrowdSpatialGrid() {
   tronRunnerCrowdSpatialGrid.clear();
   for (const member of tronRunnerCrowd) {
@@ -13190,7 +13278,7 @@ function nearbyTronRunnerCrowdMembers(x, z) {
 }
 
 function tronRunnerCrowdLodStride(member) {
-  const distance = camera.position.distanceTo(member.group.position);
+  const distance = tronRunnerCrowdDistanceToCamera(member);
   member.lodDistance = distance;
   if (distance <= TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE) return 1;
   if (distance <= TRON_RUNNER_CROWD_LOD_MID_DISTANCE) return 2;
@@ -13217,7 +13305,7 @@ function updateTronRunnerCrowdReflectionBudget() {
   const candidates = tronRunnerCrowd
     .filter((member) => member.group.visible && member.reflectionGroup)
     .map((member) => {
-      const distance = camera.position.distanceTo(member.group.position);
+      const distance = tronRunnerCrowdDistanceToCamera(member);
       member.dynamicReflectionDistance = distance;
       return { member, distance };
     })
@@ -13574,12 +13662,16 @@ function updateTronRunnerCrowdCulling() {
   tronRunnerCrowdRuntimeStats.cullingFrustumHiddenCount = 0;
   tronRunnerCrowdRuntimeStats.cullingMinDistance = 0;
   tronRunnerCrowdRuntimeStats.cullingMaxDistance = 0;
+  tronRunnerCrowdRuntimeStats.distanceCalculations = 0;
+  tronRunnerCrowdRuntimeStats.distanceReuses = 0;
   if (!tronRunnerCrowdGroup.visible || !tronRunnerCrowd.length) return;
 
   if (!TRON_RUNNER_CROWD_CULLING_ENABLED) {
     tronRunnerCrowdRuntimeStats.cullingVisibleCount = tronRunnerCrowd.length;
     for (const member of tronRunnerCrowd) {
       member.cullingDistance = camera.position.distanceTo(member.group.position);
+      tronRunnerCrowdRuntimeStats.distanceCalculations += 1;
+      setTronRunnerCrowdFrameDistance(member, member.cullingDistance);
       member.cullingInFrustum = true;
       member.cullingVisible = true;
       member.cullingReason = 'visible';
@@ -13599,6 +13691,7 @@ function updateTronRunnerCrowdCulling() {
   let maxDistance = 0;
   for (const member of tronRunnerCrowd) {
     const distance = camera.position.distanceTo(member.group.position);
+    tronRunnerCrowdRuntimeStats.distanceCalculations += 1;
     minDistance = Math.min(minDistance, distance);
     maxDistance = Math.max(maxDistance, distance);
     tronRunnerCrowdCullSphere.center.copy(member.group.position);
@@ -13607,8 +13700,7 @@ function updateTronRunnerCrowdCulling() {
     const inDistance = distance <= TRON_RUNNER_CROWD_CULL_DISTANCE;
     const inFrustum = tronRunnerCrowdCullFrustum.intersectsSphere(tronRunnerCrowdCullSphere);
     const visible = Boolean(member.baseVisible && inDistance && inFrustum);
-    member.cullingDistance = distance;
-    member.lodDistance = distance;
+    setTronRunnerCrowdFrameDistance(member, distance);
     member.cullingInFrustum = inFrustum;
     member.cullingVisible = visible;
     member.cullingReason = visible ? 'visible' : (!inDistance ? 'distance' : 'frustum');
@@ -14485,6 +14577,9 @@ function tronRunnerCrowdInspect() {
       spatialGridCell: TRON_RUNNER_CROWD_SPATIAL_CELL,
       gridCells: tronRunnerCrowdRuntimeStats.gridCells,
       lodEnabled: TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED,
+      distanceReuseEnabled: TRON_RUNNER_CROWD_DISTANCE_CACHE_ENABLED,
+      distanceCalculations: tronRunnerCrowdRuntimeStats.distanceCalculations,
+      distanceReuses: tronRunnerCrowdRuntimeStats.distanceReuses,
       lodNearDistance: TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE,
       lodMidDistance: TRON_RUNNER_CROWD_LOD_MID_DISTANCE,
       lodStrideCounts,
