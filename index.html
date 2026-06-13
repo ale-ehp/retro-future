@@ -10806,6 +10806,8 @@ const TRON_RUNNER_BEAT_PULSE_DIVISION = 1;
 const TRON_RUNNER_BEAT_PULSE_MAX_MULTIPLIER = 4;
 const TRON_RUNNER_BEAT_PULSE_AUDIO_KICK_ENABLED = true;
 const TRON_RUNNER_BEAT_PULSE_AUDIO_SAMPLE_MAX_AGE_MS = 360;
+const TRON_RUNNER_BEAT_PULSE_MATERIAL_SKIP_ENABLED = true;
+const TRON_RUNNER_BEAT_PULSE_MATERIAL_EPS = 0.0005;
 const TRON_RUNNER_SHADOW_COLOR = new THREE.Color(0x000305);
 const TRON_RUNNER_SHADOW_CYAN_COLOR = new THREE.Color(0x031a1f);
 const TRON_RUNNER_LIGHTING_MODE = 'self-lit-material';
@@ -11964,6 +11966,21 @@ const tronRunnerBeatPulseState = {
   analyserReady: false,
   sampleAgeMs: Infinity,
 };
+const tronRunnerBeatPulseRuntimeStats = {
+  materialUpdateOptimized: TRON_RUNNER_BEAT_PULSE_MATERIAL_SKIP_ENABLED,
+  materialPasses: 0,
+  materialSkips: 0,
+  materialCount: 0,
+  mainMaterialCount: 0,
+  crowdMaterialCount: 0,
+  baseRevision: 0,
+  lastAppliedMultiplier: NaN,
+  lastAppliedBeatIndex: -1,
+  lastAppliedActive: null,
+  lastAppliedSource: '',
+  lastAppliedMaterialCount: -1,
+  lastAppliedBaseRevision: -1,
+};
 
 function tronRunnerCharacterLedDefaultScale() {
   return TRON_RUNNER_CHARACTER_LED_BRIGHTNESS_MULTIPLIER * TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST;
@@ -12001,6 +12018,11 @@ function tronRunnerSetBeatPulseState(nextState) {
     sampleAgeMs: Number.isFinite(tronRunnerBeatPulseState.sampleAgeMs)
       ? Number(tronRunnerBeatPulseState.sampleAgeMs.toFixed(1))
       : null,
+    materialUpdateOptimized: tronRunnerBeatPulseRuntimeStats.materialUpdateOptimized,
+    materialPasses: tronRunnerBeatPulseRuntimeStats.materialPasses,
+    materialSkips: tronRunnerBeatPulseRuntimeStats.materialSkips,
+    materialCount: tronRunnerBeatPulseRuntimeStats.materialCount,
+    baseRevision: tronRunnerBeatPulseRuntimeStats.baseRevision,
   };
 }
 
@@ -12092,9 +12114,48 @@ function applyTronRunnerBeatPulseToMaterial(material, multiplier) {
   material.emissiveIntensity = next;
 }
 
+function tronRunnerBeatPulseMaterialCount() {
+  let crowdMaterialCount = 0;
+  for (const member of tronRunnerCrowd) {
+    crowdMaterialCount += member.materials?.length || 0;
+  }
+  tronRunnerBeatPulseRuntimeStats.mainMaterialCount = tronRunnerParts.materials.length;
+  tronRunnerBeatPulseRuntimeStats.crowdMaterialCount = crowdMaterialCount;
+  tronRunnerBeatPulseRuntimeStats.materialCount = tronRunnerParts.materials.length + crowdMaterialCount;
+  return tronRunnerBeatPulseRuntimeStats.materialCount;
+}
+
+function shouldSkipTronRunnerBeatPulseMaterialUpdate(nextState, materialCount) {
+  if (!TRON_RUNNER_BEAT_PULSE_MATERIAL_SKIP_ENABLED) return false;
+  const stats = tronRunnerBeatPulseRuntimeStats;
+  if (materialCount !== stats.lastAppliedMaterialCount) return false;
+  if (stats.baseRevision !== stats.lastAppliedBaseRevision) return false;
+  if (nextState.active !== stats.lastAppliedActive) return false;
+  if ((nextState.source || '') !== stats.lastAppliedSource) return false;
+  if (nextState.beatIndex !== stats.lastAppliedBeatIndex) return false;
+  return Math.abs(nextState.multiplier - stats.lastAppliedMultiplier) < TRON_RUNNER_BEAT_PULSE_MATERIAL_EPS;
+}
+
+function recordTronRunnerBeatPulseMaterialPass(nextState, materialCount) {
+  const stats = tronRunnerBeatPulseRuntimeStats;
+  stats.materialPasses += 1;
+  stats.lastAppliedMultiplier = nextState.multiplier;
+  stats.lastAppliedBeatIndex = nextState.beatIndex;
+  stats.lastAppliedActive = nextState.active;
+  stats.lastAppliedSource = nextState.source || '';
+  stats.lastAppliedMaterialCount = materialCount;
+  stats.lastAppliedBaseRevision = stats.baseRevision;
+}
+
 function updateTronRunnerBeatPulse() {
   const nextState = tronRunnerBeatPulseValue();
-  tronRunnerSetBeatPulseState(nextState);
+  const materialCount = tronRunnerBeatPulseMaterialCount();
+  if (shouldSkipTronRunnerBeatPulseMaterialUpdate(nextState, materialCount)) {
+    tronRunnerBeatPulseRuntimeStats.materialSkips += 1;
+    tronRunnerSetBeatPulseState(nextState);
+    return;
+  }
+  recordTronRunnerBeatPulseMaterialPass(nextState, materialCount);
   const multiplier = nextState.multiplier;
   for (const material of tronRunnerParts.materials) {
     applyTronRunnerBeatPulseToMaterial(material, multiplier);
@@ -12105,9 +12166,11 @@ function updateTronRunnerBeatPulse() {
       applyTronRunnerBeatPulseToMaterial(material, multiplier);
     }
   }
+  tronRunnerSetBeatPulseState(nextState);
 }
 
 function applyTronRunnerCrowdLedControls() {
+  tronRunnerBeatPulseRuntimeStats.baseRevision += 1;
   const emissiveIntensity = tronRunnerCrowdLedEmissiveIntensity();
   for (const member of tronRunnerCrowd) {
     const materials = member.materials?.length ? member.materials : [];
