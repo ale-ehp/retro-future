@@ -2651,7 +2651,7 @@ const TRON_SOUNDTRACK_CROSSFADE_SECONDS = 8;
 const TRON_SOUNDTRACK_INITIAL_START_SECONDS = 0;
 const TRON_SOUNDTRACK_LOOP_START_SECONDS = 30;
 const TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS = 0.12;
-const TRON_SOUNDTRACK_INTRO_FX_REVEAL_STOP_DELAY_MS = 800;
+const TRON_SOUNDTRACK_INTRO_FX_REVEAL_STOP_DELAY_MS = 300;
 const TRON_SOUNDTRACK_INTRO_FX_CURVE_SIZE = 4096;
 const TRON_SOUNDTRACK_INTRO_FX_WOBBLE_RATE_HZ = 7.5;
 const TRON_SOUNDTRACK_INTRO_FX_MAX_WOBBLE_DEPTH_HZ = 1600;
@@ -10932,6 +10932,9 @@ const TRON_RUNNER_BEAT_PULSE_DIVISION = 1;
 const TRON_RUNNER_BEAT_PULSE_MAX_MULTIPLIER = 4;
 const TRON_RUNNER_BEAT_PULSE_AUDIO_KICK_ENABLED = true;
 const TRON_RUNNER_BEAT_PULSE_AUDIO_SAMPLE_MAX_AGE_MS = 360;
+const TRON_RUNNER_BEAT_PULSE_LOW_BAND_ENABLED = true;
+const TRON_RUNNER_BEAT_PULSE_BASS_BODY_THRESHOLD = 0.32;
+const TRON_RUNNER_BEAT_PULSE_BASS_BODY_GAIN = 0.45;
 const TRON_RUNNER_BEAT_PULSE_MATERIAL_SKIP_ENABLED = true;
 const TRON_RUNNER_BEAT_PULSE_MATERIAL_EPS = 0.0005;
 const TRON_RUNNER_SHADOW_COLOR = new THREE.Color(0x000305);
@@ -11924,7 +11927,9 @@ const tronRunnerState = {
     active: false,
     source: 'bpm',
     kickPulse: 0,
+    bassPulse: 0,
     bassEnergy: 0,
+    lowBandDriven: false,
     analyserReady: false,
     sampleAgeMs: null,
   },
@@ -12095,7 +12100,9 @@ const tronRunnerBeatPulseState = {
   active: false,
   source: 'bpm',
   kickPulse: 0,
+  bassPulse: 0,
   bassEnergy: 0,
+  lowBandDriven: false,
   analyserReady: false,
   sampleAgeMs: Infinity,
 };
@@ -12146,7 +12153,9 @@ function tronRunnerSetBeatPulseState(nextState) {
     active: tronRunnerBeatPulseState.active,
     source: tronRunnerBeatPulseState.source || 'bpm',
     kickPulse: Number((tronRunnerBeatPulseState.kickPulse || 0).toFixed(3)),
+    bassPulse: Number((tronRunnerBeatPulseState.bassPulse || 0).toFixed(3)),
     bassEnergy: Number((tronRunnerBeatPulseState.bassEnergy || 0).toFixed(3)),
+    lowBandDriven: Boolean(tronRunnerBeatPulseState.lowBandDriven),
     analyserReady: Boolean(tronRunnerBeatPulseState.analyserReady),
     sampleAgeMs: Number.isFinite(tronRunnerBeatPulseState.sampleAgeMs)
       ? Number(tronRunnerBeatPulseState.sampleAgeMs.toFixed(1))
@@ -12176,7 +12185,9 @@ function tronRunnerBeatPulseValue(audioTime = tronRunnerSoundtrackTimeSeconds())
       active: false,
       source: 'inactive',
       kickPulse: 0,
+      bassPulse: 0,
       bassEnergy: 0,
+      lowBandDriven: false,
       analyserReady: Boolean(labEqualizerAnalyser),
       sampleAgeMs: Infinity,
     };
@@ -12191,7 +12202,12 @@ function tronRunnerBeatPulseValue(audioTime = tronRunnerSoundtrackTimeSeconds())
     && sampleAgeMs <= TRON_RUNNER_BEAT_PULSE_AUDIO_SAMPLE_MAX_AGE_MS
   );
   if (kickAvailable) {
-    const value = THREE.MathUtils.clamp(labEqualizerState.beatPulse, 0, 1);
+    const kickPulse = THREE.MathUtils.clamp(labEqualizerState.beatPulse, 0, 1);
+    const bassEnergy = THREE.MathUtils.clamp(labEqualizerState.bassEnergy, 0, 1);
+    const bassBody = TRON_RUNNER_BEAT_PULSE_LOW_BAND_ENABLED
+      ? Math.max(0, bassEnergy - TRON_RUNNER_BEAT_PULSE_BASS_BODY_THRESHOLD) * TRON_RUNNER_BEAT_PULSE_BASS_BODY_GAIN
+      : 0;
+    const value = THREE.MathUtils.clamp(kickPulse * 1.08 + bassBody, 0, 1);
     const multiplier = THREE.MathUtils.clamp(
       1 + value * Math.max(0, tronRunnerBeatPulseIntensity),
       1,
@@ -12204,9 +12220,11 @@ function tronRunnerBeatPulseValue(audioTime = tronRunnerSoundtrackTimeSeconds())
       beatIndex: labEqualizerState.sampleCount,
       audioTime,
       active: true,
-      source: 'audio-kick',
-      kickPulse: value,
-      bassEnergy: THREE.MathUtils.clamp(labEqualizerState.bassEnergy, 0, 1),
+      source: 'audio-bass-kick',
+      kickPulse,
+      bassPulse: value,
+      bassEnergy,
+      lowBandDriven: TRON_RUNNER_BEAT_PULSE_LOW_BAND_ENABLED,
       analyserReady,
       sampleAgeMs,
     };
@@ -12231,7 +12249,9 @@ function tronRunnerBeatPulseValue(audioTime = tronRunnerSoundtrackTimeSeconds())
     active: true,
     source: analyserReady ? 'bpm-stale-audio' : 'bpm-fallback',
     kickPulse: 0,
+    bassPulse: 0,
     bassEnergy: THREE.MathUtils.clamp(labEqualizerState.bassEnergy || 0, 0, 1),
+    lowBandDriven: false,
     analyserReady,
     sampleAgeMs,
   };
