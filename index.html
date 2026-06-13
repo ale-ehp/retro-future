@@ -2651,7 +2651,7 @@ const TRON_SOUNDTRACK_CROSSFADE_SECONDS = 8;
 const TRON_SOUNDTRACK_INITIAL_START_SECONDS = 0;
 const TRON_SOUNDTRACK_LOOP_START_SECONDS = 30;
 const TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS = 0.12;
-const TRON_SOUNDTRACK_INTRO_FX_REVEAL_STOP_DELAY_MS = 300;
+const TRON_SOUNDTRACK_INTRO_FX_REVEAL_STOP_DELAY_MS = 350;
 const TRON_SOUNDTRACK_INTRO_FX_CURVE_SIZE = 4096;
 const TRON_SOUNDTRACK_INTRO_FX_WOBBLE_RATE_HZ = 7.5;
 const TRON_SOUNDTRACK_INTRO_FX_MAX_WOBBLE_DEPTH_HZ = 1600;
@@ -10930,7 +10930,7 @@ const TRON_RUNNER_BEAT_PULSE_INTENSITY = 0.8;
 const TRON_RUNNER_BEAT_PULSE_DECAY = 8;
 const TRON_RUNNER_BEAT_PULSE_DIVISION = 1;
 const TRON_RUNNER_BEAT_PULSE_MAX_MULTIPLIER = 4;
-const TRON_RUNNER_BEAT_PULSE_AUDIO_KICK_ENABLED = true;
+const TRON_RUNNER_BEAT_PULSE_AUDIO_KICK_ENABLED = false;
 const TRON_RUNNER_BEAT_PULSE_AUDIO_SAMPLE_MAX_AGE_MS = 360;
 const TRON_RUNNER_BEAT_PULSE_LOW_BAND_ENABLED = true;
 const TRON_RUNNER_BEAT_PULSE_BASS_BODY_THRESHOLD = 0.32;
@@ -12247,7 +12247,7 @@ function tronRunnerBeatPulseValue(audioTime = tronRunnerSoundtrackTimeSeconds())
     beatIndex,
     audioTime,
     active: true,
-    source: analyserReady ? 'bpm-stale-audio' : 'bpm-fallback',
+    source: analyserReady ? 'bpm-clock' : 'bpm-fallback',
     kickPulse: 0,
     bassPulse: 0,
     bassEnergy: THREE.MathUtils.clamp(labEqualizerState.bassEnergy || 0, 0, 1),
