@@ -7427,6 +7427,29 @@ function buildingLedBatchInspect() {
   const basePadBatchCount = basePadBatches.length;
   const basePadVisibleCount = basePadBatches.filter((batch) => batch.visible).length;
   const basePadFrustumCulledCount = basePadBatches.filter((batch) => batch.frustumCulled).length;
+  const facadeStripBatches = [];
+  for (const parent of facadeStripBatchParents) {
+    const parentBatch = parent.userData.facadeStripBatch;
+    if (!parentBatch) continue;
+    for (const kind of ['housing', 'led']) {
+      const meshes = new Set(parentBatch[kind].map((spec) => spec.batchMesh).filter(Boolean));
+      for (const mesh of meshes) {
+        const specs = parentBatch[kind].filter((spec) => spec.batchMesh === mesh);
+        facadeStripBatches.push({
+          kind,
+          edgeRole: specs[0]?.edgeRole || 'unknown',
+          count: mesh.count ?? specs.length,
+          visible: Boolean(mesh.visible),
+          frustumCulled: Boolean(mesh.frustumCulled),
+          x: parent.position?.x ?? null,
+          z: parent.position?.z ?? null,
+        });
+      }
+    }
+  }
+  const facadeStripBatchCount = facadeStripBatches.length;
+  const facadeStripVisibleCount = facadeStripBatches.filter((batch) => batch.visible).length;
+  const facadeStripFrustumCulledCount = facadeStripBatches.filter((batch) => batch.frustumCulled).length;
   return {
     sideEdgeBatch: {
       count: sideBuildingEdgeBatch.mesh?.count ?? 0,
@@ -7445,6 +7468,10 @@ function buildingLedBatchInspect() {
       ledSpecs: facadeLedSourceSegmentCount,
       housingSpecs: facadeHousingSourceSegmentCount,
       batches: facadeLedSpecs.filter((spec) => spec.batch).length,
+      stripBatchCount: facadeStripBatchCount,
+      visibleStripBatchCount: facadeStripVisibleCount,
+      frustumCulledStripBatchCount: facadeStripFrustumCulledCount,
+      stripBatches: facadeStripBatches,
     },
     basePadLedBatch: {
       count: basePadLedBatch.count,
@@ -8635,7 +8662,7 @@ function addSideBuildingCivicNumberPlane(group, record, material, name, layer = 
     mesh.position.set(layer.x, layer.y, layer.z);
     mesh.renderOrder -= 1;
   }
-  mesh.frustumCulled = false;
+  mesh.frustumCulled = true;
   group.add(mesh);
   return mesh;
 }
@@ -19480,6 +19507,42 @@ async function bootSceneWithFinalDefaults() {
   scheduleDroneIntroAutoFlight();
 }
 
+function inspectSideBuildingCivicNumberCulling() {
+  let totalPlanes = 0;
+  let visiblePlanes = 0;
+  let frustumCulledPlanes = 0;
+  const groups = sideBuildingCivicNumberGroups.map((group) => {
+    let groupPlanes = 0;
+    let groupVisiblePlanes = 0;
+    let groupFrustumCulledPlanes = 0;
+    for (const child of group.children) {
+      if (!child.isMesh) continue;
+      groupPlanes++;
+      if (child.visible) groupVisiblePlanes++;
+      if (child.frustumCulled) groupFrustumCulledPlanes++;
+    }
+    totalPlanes += groupPlanes;
+    visiblePlanes += groupVisiblePlanes;
+    frustumCulledPlanes += groupFrustumCulledPlanes;
+    return {
+      value: group.userData.civicNumberValue,
+      planes: groupPlanes,
+      visiblePlanes: groupVisiblePlanes,
+      frustumCulledPlanes: groupFrustumCulledPlanes,
+      cullDisabledPlanes: groupPlanes - groupFrustumCulledPlanes,
+      visible: Boolean(group.visible),
+    };
+  });
+  return {
+    groups: groups.length,
+    totalPlanes,
+    visiblePlanes,
+    frustumCulledPlanes,
+    cullDisabledPlanes: totalPlanes - frustumCulledPlanes,
+    groupsDetail: groups,
+  };
+}
+
 window.__tronInspect = () => ({
   cameraX: camera.position.x,
   cameraY: camera.position.y,
@@ -19491,6 +19554,7 @@ window.__tronInspect = () => ({
   mouseLookEnabled: isMouseLookEnabled(),
   cityRevealProfile: cityRevealProfileInspect(),
   sideBuildingCivicNumberCount: sideBuildingCivicNumberGroups.length,
+  sideBuildingCivicNumberCulling: inspectSideBuildingCivicNumberCulling(),
   sideBuildingCivicNumbers: sideBuildingRecords.map((record) => ({
     value: record.civicNumberValue,
     visible: Boolean(record.civicNumberGroup?.visible),
