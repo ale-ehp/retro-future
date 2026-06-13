@@ -1,14 +1,22 @@
 {
-  "savedAt": "2026-06-07T13:57:39.280Z",
-  "source": "chrome-localStorage://Google Chrome/Default/http://127.0.0.1:60124",
+  "savedAt": "2026-06-10T06:02:17.784Z",
+  "source": "merged-all-defaults:/public/tecnologie/retro-future/",
   "chromeSavedAt": "2026-06-07T13:53:22.234Z",
   "spawn": {
     "x": 1021.9157138958009,
     "y": 591.0351224586902,
-    "z": 842.7866151854931,
+    "z": 866.7866151854931,
     "spawnYaw": 0.6598680604188623,
     "spawnPitch": -0.4052322239066757,
     "savedAt": "2026-06-02T20:37:56.883Z"
+  },
+  "landing": {
+    "x": 0,
+    "y": 4.1,
+    "z": 828.8697008214727,
+    "spawnYaw": 0,
+    "spawnPitch": 0.24349025257385304,
+    "savedAt": "2026-06-09T13:01:07.101Z"
   },
   "settings": {
     "hex-offset": -1.1,
@@ -267,7 +275,7 @@
     "sky-cloud-contrast": 1,
     "wireframe-enabled": "on",
     "wireframe-delay": 9,
-    "wireframe-fade": 6,
+    "wireframe-fade": 3,
     "wireframe-density": 2,
     "wireframe-opacity": 1,
     "wireframe-backplate": 0,
@@ -280,11 +288,11 @@
     "runner-floor-reflection-scale": 3,
     "runner-scale": 0.55,
     "runner-animation-speed": 0.82,
-    "runner-walk-speed": 3.2,
+    "runner-walk-speed": 3.95,
     "runner-stride-sync": 1,
     "runner-material-reflect": 1.9,
     "runner-material-metalness": 0,
-    "runner-material-roughness": 0.52,
+    "runner-material-roughness": 1,
     "runner-shadow-softness": 1.32,
     "runner-shadow-pulse": 0.08,
     "runner-shadow-cyan": 0,
@@ -293,7 +301,25 @@
     "runner-key-light-y": 3.1,
     "runner-key-light-z": 1.9,
     "runner-rim-light-x": 1.9,
-    "runner-fill-light-y": 0.9
+    "runner-fill-light-y": 0.9,
+    "runner-led-brightness": 3.5,
+    "runner-led-bloom": 6,
+    "runner-beat-pulse-enabled": "on",
+    "runner-beat-pulse-bpm": 107,
+    "runner-beat-pulse-offset": 0,
+    "runner-beat-pulse-intensity": 2,
+    "runner-beat-pulse-decay": 3,
+    "runner-beat-pulse-division": 1,
+    "music-fx-enabled": "on",
+    "music-fx-mix": 1,
+    "music-fx-crusher": 0.32,
+    "music-fx-bit-depth": 8,
+    "music-fx-highpass": 4000,
+    "music-fx-lowpass": 20000,
+    "music-fx-distortion": 0.16,
+    "music-fx-telephone": 0,
+    "music-fx-wobble": 0,
+    "music-fx-noise": 0
   },
   "chromeTabs": {
     "movementSavedAt": "2026-06-04T13:19:03.396Z",
@@ -303,21 +329,29 @@
     "bloomFxSavedAt": "2026-06-06T10:58:44.093Z",
     "performanceFxSavedAt": "2026-06-06T10:58:47.377Z",
     "wireframeFxSavedAt": "2026-06-01T13:00:27.146Z",
-    "characterSavedAt": "2026-06-06T10:59:14.811Z",
+    "characterSavedAt": "2026-06-10T06:02:17.784Z",
     "surfaceReflectionsSavedAt": "2026-06-07T13:53:22.234Z"
   },
   "characterPreset": {
-    "source": "chrome-localStorage://Google Chrome/Default/http://127.0.0.1:60124/tron-boulevard-tab:character",
-    "chromeSavedAt": "2026-06-06T07:24:29.673Z",
+    "source": "/public/tecnologie/retro-future/",
+    "chromeSavedAt": "2026-06-10T06:02:17.784Z",
     "settings": {
       "runner-body-light": 3,
       "runner-line-light": 3,
       "runner-key-light": 3,
       "runner-rim-light": 3,
       "runner-fill-light": 0,
+      "runner-led-brightness": 3.5,
+      "runner-led-bloom": 6,
+      "runner-beat-pulse-enabled": "on",
+      "runner-beat-pulse-bpm": 107,
+      "runner-beat-pulse-offset": 0,
+      "runner-beat-pulse-intensity": 2,
+      "runner-beat-pulse-decay": 3,
+      "runner-beat-pulse-division": 1,
       "runner-material-reflect": 1.9,
       "runner-material-metalness": 0,
-      "runner-material-roughness": 0.52,
+      "runner-material-roughness": 1,
       "runner-floor-reflection": 0.35,
       "runner-floor-reflection-scale": 3,
       "runner-shadow-softness": 1.32,
@@ -329,18 +363,18 @@
       "runner-key-light-z": 1.9,
       "runner-rim-light-x": 1.9,
       "runner-fill-light-y": 0.9,
-      "runner-scale": 0.65,
-      "runner-animation-speed": 1,
-      "runner-walk-speed": 2.8,
+      "runner-scale": 0.55,
+      "runner-animation-speed": 0.82,
+      "runner-walk-speed": 3.95,
       "runner-stride-sync": 1
     }
   },
   "characterLightingDefaults": {
-    "savedAt": "2026-06-06T07:24:29.673Z",
+    "savedAt": "2026-06-10T06:02:17.784Z",
     "settings": {
       "runner-material-reflect": 1.9,
       "runner-material-metalness": 0,
-      "runner-material-roughness": 0.52,
+      "runner-material-roughness": 1,
       "runner-shadow-softness": 1.32,
       "runner-shadow-pulse": 0.08,
       "runner-shadow-cyan": 0,
@@ -373,8 +407,8 @@
     },
     {
       "tab": "character",
-      "savedAt": "2026-06-06T10:59:14.811Z",
-      "settingsCount": 23
+      "savedAt": "2026-06-10T06:02:17.784Z",
+      "settingsCount": 31
     }
   ]
 }
