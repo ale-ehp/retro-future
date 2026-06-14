@@ -21627,7 +21627,7 @@ function tick(now) {
     updateMainFacadeVerticalReveal();
   }
   const renderStartedAt = performance.now();
-  const captureRevealRenderInfo = cityRevealStartedAt > 0 || cityRevealProfileState.running;
+  const captureRevealRenderInfo = cityRevealProfileShouldRun() || cityRevealProfileState.running;
   const previousRendererInfoAutoReset = renderer.info.autoReset;
   if (captureRevealRenderInfo) {
     renderer.info.autoReset = false;
