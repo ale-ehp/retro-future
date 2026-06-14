@@ -134,6 +134,11 @@
   .perf-live-bad .perf-live-value {
     color: #ff6e8f;
   }
+  .perf-live-spike .perf-live-value {
+    max-width: 176px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   @media (max-width: 760px), (hover: none), (pointer: coarse) {
     .hud {
       padding: 8px 10px;
@@ -695,6 +700,7 @@
     <div class="perf-live-row"><span>Frame</span><span id="perf-frame-ms" class="perf-live-value">--</span></div>
     <div class="perf-live-row"><span>CPU/Render</span><span id="perf-cpu-render-ms" class="perf-live-value">--</span></div>
     <div class="perf-live-row"><span>GPU</span><span id="perf-gpu-ms" class="perf-live-value">n/a</span></div>
+    <div class="perf-live-row perf-live-spike"><span>Spike</span><span id="perf-spike" class="perf-live-value">none</span></div>
     <div class="perf-live-row perf-live-extra-mobile"><span>Res</span><span id="perf-resolution" class="perf-live-value">--</span></div>
     <div class="perf-live-row perf-live-extra-mobile"><span>Pass/Draw</span><span id="perf-pass-draw" class="perf-live-value">--</span></div>
     <div class="perf-live-row perf-live-extra-mobile"><span>Tri/FX</span><span id="perf-tri-fx" class="perf-live-value">--</span></div>
@@ -1412,6 +1418,7 @@ const perfHeadroomEl = document.getElementById('perf-headroom');
 const perfFrameMsEl = document.getElementById('perf-frame-ms');
 const perfCpuRenderMsEl = document.getElementById('perf-cpu-render-ms');
 const perfGpuMsEl = document.getElementById('perf-gpu-ms');
+const perfSpikeEl = document.getElementById('perf-spike');
 const perfResolutionEl = document.getElementById('perf-resolution');
 const perfPassDrawEl = document.getElementById('perf-pass-draw');
 const perfTriFxEl = document.getElementById('perf-tri-fx');
@@ -1966,6 +1973,10 @@ const performanceDiagnosticsTiming = {
 };
 const PERFORMANCE_LIVE_METRIC_ALPHA = 0.12;
 const PERFORMANCE_LIVE_MIN_FRAME_MS = 0.001;
+const PERFORMANCE_SPIKE_FPS_THRESHOLD = 55;
+const PERFORMANCE_SPIKE_FRAME_MS_THRESHOLD = 22;
+const PERFORMANCE_SPIKE_MIN_INTERVAL_MS = 320;
+const PERFORMANCE_SPIKE_MAX_RECORDS = 12;
 const performanceLiveMetrics = {
   frameMsAvg: 0,
   updateMsAvg: 0,
@@ -1973,6 +1984,13 @@ const performanceLiveMetrics = {
   rafDtMsAvg: 0,
   targetHz: 60,
   targetMs: 1000 / 60,
+};
+const performanceSpikeState = {
+  count: 0,
+  lastLoggedAt: -Infinity,
+  last: null,
+  worst: null,
+  records: [],
 };
 renderer.setPixelRatio(activePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -21311,6 +21329,7 @@ window.__tronInspect = () => ({
 });
 window.__tronRunnerInspect = tronRunnerInspect;
 window.__tronRevealProfile = cityRevealProfileInspect;
+window.__tronSpikeInspect = performanceSpikeSummary;
 window.__tronCaptureLiveSpawn = captureLivePlayerSpawn;
 window.__tronApplyPlayerSpawn = applyPlayerSpawn;
 window.__tronPerfInspect = () => ({
@@ -21527,6 +21546,107 @@ function performanceLiveMetricsSummary() {
   };
 }
 
+function performanceSpikePhaseLabel() {
+  if (cityRevealWaitingForVisibleFrame) return 'wire-wait';
+  if (isCityRevealPerformanceCritical()) return 'reveal';
+  if (cityRevealComplete) return 'post';
+  if (cityRevealStartedAt > 0) return 'reveal-delay';
+  return 'pre';
+}
+
+function performanceSpikeBottleneckLabel({ rawRafDtMs, frameMs, updateMs, renderMs, liveMetrics }) {
+  if (liveMetrics?.presentationDropActive && rawRafDtMs > Math.max(frameMs, 1) * 1.25) return 'present';
+  if (gpuTimerState.supported && gpuTimerState.latestMs > Math.max(frameMs, updateMs, renderMs) * 1.15) return 'gpu';
+  if (renderMs > updateMs * 1.2 && renderMs > 8) return 'render';
+  if (updateMs > renderMs * 1.2 && updateMs > 8) return 'update';
+  if (frameMs > rawRafDtMs * 0.8) return 'main';
+  return liveMetrics?.bottleneck || 'mixed';
+}
+
+function performanceSpikePrimaryContext() {
+  if (isCityRevealPerformanceCritical()) return 'reveal';
+  if (isBloomPassActive()) return 'bloom';
+  if ((labEqualizerState?.textureFps || 0) > 0) return 'eq';
+  if ((tronRunnerCrowdRuntimeStats.cullingVisibleCount || 0) > 0) return 'crowd';
+  return 'scene';
+}
+
+function formatPerformanceSpikeLabel(spike) {
+  if (!spike) return 'none';
+  return `${spike.fps}fps ${spike.bottleneck}/${spike.context} ${spike.rafMs}ms`;
+}
+
+function performanceSpikeSummary() {
+  const recent = performanceSpikeState.records.map((spike) => ({
+    index: spike.index,
+    ageMs: Math.max(0, Math.round(performance.now() - spike.now)),
+    label: formatPerformanceSpikeLabel(spike),
+    ...spike,
+  }));
+  return {
+    count: performanceSpikeState.count,
+    last: performanceSpikeState.last,
+    worst: performanceSpikeState.worst,
+    lastLabel: formatPerformanceSpikeLabel(performanceSpikeState.last),
+    worstLabel: formatPerformanceSpikeLabel(performanceSpikeState.worst),
+    recent,
+  };
+}
+
+function recordPerformanceSpike({ now, rawRafDtMs, updateMs, renderMs, frameMs }) {
+  const instantaneousFps = rawRafDtMs > 0 ? 1000 / rawRafDtMs : 0;
+  const liveMetrics = performanceLiveMetricsSummary();
+  const slowFrame = rawRafDtMs >= PERFORMANCE_SPIKE_FRAME_MS_THRESHOLD ||
+    frameMs >= PERFORMANCE_SPIKE_FRAME_MS_THRESHOLD ||
+    (latestMeasuredFps > 0 && latestMeasuredFps < PERFORMANCE_SPIKE_FPS_THRESHOLD);
+  if (!slowFrame) return;
+  if (now - performanceSpikeState.lastLoggedAt < PERFORMANCE_SPIKE_MIN_INTERVAL_MS) return;
+
+  const renderInfo = renderer.info.render || {};
+  const memoryInfo = renderer.info.memory || {};
+  const spike = {
+    index: performanceSpikeState.count + 1,
+    now: performance.now(),
+    timelineMs: Math.round(now),
+    fps: Number((instantaneousFps || latestMeasuredFps || 0).toFixed(1)),
+    measuredFps: Number((latestMeasuredFps || 0).toFixed(1)),
+    rafMs: Number(rawRafDtMs.toFixed(1)),
+    frameMs: Number(frameMs.toFixed(1)),
+    updateMs: Number(updateMs.toFixed(1)),
+    renderMs: Number(renderMs.toFixed(1)),
+    gpuMs: gpuTimerState.latestMs > 0 ? Number(gpuTimerState.latestMs.toFixed(1)) : 0,
+    bottleneck: performanceSpikeBottleneckLabel({ rawRafDtMs, frameMs, updateMs, renderMs, liveMetrics }),
+    context: performanceSpikePrimaryContext(),
+    phase: performanceSpikePhaseLabel(),
+    composerPasses: cityRevealComposerPassProfile().estimatedPasses,
+    drawCalls: renderInfo.calls ?? 0,
+    trianglesK: Math.round((renderInfo.triangles ?? 0) / 1000),
+    lines: renderInfo.lines ?? 0,
+    textures: memoryInfo.textures ?? 0,
+    bloom: Boolean(isBloomPassActive()),
+    bloomTarget: lastBloomTargetKey || '',
+    fxaa: Boolean(fxaaPass?.enabled),
+    fsr: fsrUpscaleEnabled ? `${Math.round(fsrInternalScale * 100)}%` : 'off',
+    revealProgress: Number(cityRevealSweepProgress.toFixed(3)),
+    wireAlpha: Number(cityRevealWireAlpha.toFixed(3)),
+    crowdVisible: tronRunnerCrowdRuntimeStats.cullingVisibleCount,
+    crowdHidden: tronRunnerCrowdRuntimeStats.cullingHiddenCount,
+    reflections: tronRunnerCrowdRuntimeStats.activeReflectionCount,
+    eq: `${labEqualizerState?.analyserFps || 0}/${labEqualizerState?.textureFps || 0}`,
+  };
+
+  performanceSpikeState.count = spike.index;
+  performanceSpikeState.lastLoggedAt = now;
+  performanceSpikeState.last = spike;
+  if (!performanceSpikeState.worst || spike.rafMs > performanceSpikeState.worst.rafMs) {
+    performanceSpikeState.worst = spike;
+  }
+  performanceSpikeState.records.unshift(spike);
+  if (performanceSpikeState.records.length > PERFORMANCE_SPIKE_MAX_RECORDS) {
+    performanceSpikeState.records.length = PERFORMANCE_SPIKE_MAX_RECORDS;
+  }
+}
+
 function performanceDiagnosticsTargetSizeFromKey(key) {
   const match = String(key || '').match(/^(\d+)x(\d+)$/);
   const width = match ? Number(match[1]) : 0;
@@ -21620,6 +21740,7 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
   const bloomTarget = performanceDiagnosticsTargetSizeFromKey(lastBloomTargetKey);
   const fxaaTarget = performanceDiagnosticsTargetSizeFromKey(lastFxaaTargetKey);
   const fsrTarget = performanceDiagnosticsTargetSizeFromKey(lastFsrTargetKey);
+  const spikes = performanceSpikeSummary();
   return {
     fps: Number.isFinite(measuredFps) ? Number(measuredFps.toFixed(1)) : 0,
     renderScale: Number(activePixelRatio.toFixed(2)),
@@ -21701,6 +21822,12 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
     eqAnalyserFps: eq.analyserFps || 0,
     eqTextureFps: eq.textureFps || 0,
     revealFreezeFrames: tronRunnerCrowdRuntimeStats.performanceFreezeFrameCount,
+    spikeCount: spikes.count,
+    spikeLast: spikes.last,
+    spikeWorst: spikes.worst,
+    spikeLastLabel: spikes.lastLabel,
+    spikeWorstLabel: spikes.worstLabel,
+    spikeRecent: spikes.recent,
   };
 }
 
@@ -21732,6 +21859,11 @@ function updatePerformanceLiveOverlay(stats) {
   );
   setPerfLiveText(perfCpuRenderMsEl, `${stats.rollingUpdateMs.toFixed(1)} / ${stats.rollingRenderMs.toFixed(1)} ms`);
   setPerfLiveText(perfGpuMsEl, gpuText, stats.gpuTimerSupported ? '' : 'muted');
+  const lastSpikeAge = stats.spikeLast ? Math.max(0, performance.now() - stats.spikeLast.now) : Infinity;
+  const spikeState = !stats.spikeLast
+    ? 'muted'
+    : (lastSpikeAge < 2500 ? (stats.spikeLast.fps < 45 ? 'bad' : 'warn') : 'muted');
+  setPerfLiveText(perfSpikeEl, stats.spikeLastLabel || 'none', spikeState);
   setPerfLiveText(
     perfResolutionEl,
     `${stats.drawingBufferWidth}x${stats.drawingBufferHeight} ${stats.renderScale.toFixed(2)}x / post ${stats.composerPixelRatio.toFixed(2)}x`
@@ -21767,6 +21899,8 @@ function updatePerformanceDiagnostics(measuredFps = latestMeasuredFps) {
       `fx ${stats.composerActive ? stats.composerPassCount : 0}`,
       `bloom ${stats.bloomActive ? stats.bloomTarget.key || 'on' : 'off'}`,
       `eq ${stats.eqAnalyserFps}Hz/${stats.eqTextureFps}Hz`,
+      `spike ${stats.spikeLastLabel}`,
+      `worst ${stats.spikeWorstLabel}`,
     ].join(' | ');
   }
   if (mobilePerformanceDiagnosticsEl) {
@@ -21780,6 +21914,7 @@ function updatePerformanceDiagnostics(measuredFps = latestMeasuredFps) {
         `crowd ${stats.crowdVisible}/${tronRunnerCrowd.length} refl ${stats.reflections}/${stats.reflectionBudget} freeze ${stats.revealFreezeFrames}`,
         `frame ${stats.frameMs.toFixed(1)} update ${stats.updateMs.toFixed(1)} render ${stats.renderMs.toFixed(1)}ms`,
         `teo ${stats.theoreticalFps.toFixed(0)} work ${stats.workFps.toFixed(0)} head ${stats.headroomMultiplier.toFixed(2)}x gpu ${stats.gpuTimerSupported ? `${stats.gpuMs.toFixed(1)}ms` : 'n/a'} ${stats.bottleneck}`,
+        `spike ${stats.spikeLastLabel} worst ${stats.spikeWorstLabel}`,
       ].join('\n');
     }
   }
@@ -21788,7 +21923,8 @@ function updatePerformanceDiagnostics(measuredFps = latestMeasuredFps) {
 function tick(now) {
   requestAnimationFrame(tick);
   const frameStartedAt = performance.now();
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const rawRafDtMs = Math.max(0, now - last);
+  const dt = Math.min(0.05, rawRafDtMs / 1000); last = now;
   updateTronDiscCursor(dt);
   fpsAccum += dt; fpsFrames++;
   if (now - fpsLast > 500) {
@@ -21863,6 +21999,13 @@ function tick(now) {
   performanceDiagnosticsTiming.renderMs = frameEndedAt - renderStartedAt;
   performanceDiagnosticsTiming.frameMs = frameEndedAt - frameStartedAt;
   updatePerformanceLiveRollingMetrics(dt, performanceDiagnosticsTiming.frameMs, performanceDiagnosticsTiming.updateMs, performanceDiagnosticsTiming.renderMs);
+  recordPerformanceSpike({
+    now,
+    rawRafDtMs,
+    updateMs: performanceDiagnosticsTiming.updateMs,
+    renderMs: performanceDiagnosticsTiming.renderMs,
+    frameMs: performanceDiagnosticsTiming.frameMs,
+  });
   recordCityRevealProfileFrame({
     now,
     dt,
