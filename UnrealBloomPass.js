@@ -100,6 +100,9 @@ class UnrealBloomPass extends Pass {
 		this.renderTargetsVertical = [];
 		this.nMips = 5;
 		this.activeMips = this.nMips;
+		this.updateStride = 1;
+		this._frameIndex = 0;
+		this._hasCachedBloom = false;
 		let resx = Math.round( this.resolution.x / 2 );
 		let resy = Math.round( this.resolution.y / 2 );
 
@@ -252,6 +255,7 @@ class UnrealBloomPass extends Pass {
 	 */
 	setSize( width, height ) {
 
+		this._hasCachedBloom = false;
 		let resx = Math.round( width / 2 );
 		let resy = Math.round( height / 2 );
 
@@ -306,54 +310,63 @@ class UnrealBloomPass extends Pass {
 
 		}
 
-		// 1. Extract Bright Areas
+		const updateStride = Math.max( 1, Math.floor( this.updateStride || 1 ) );
+		const shouldUpdateBloom = ! this._hasCachedBloom || updateStride <= 1 || ( this._frameIndex % updateStride === 0 );
+		this._frameIndex ++;
 
-		this.highPassUniforms[ 'tDiffuse' ].value = readBuffer.texture;
-		this.highPassUniforms[ 'luminosityThreshold' ].value = this.threshold;
-		this._fsQuad.material = this.materialHighPassFilter;
+		if ( shouldUpdateBloom ) {
 
-		renderer.setRenderTarget( this.renderTargetBright );
-		renderer.clear();
-		this._fsQuad.render( renderer );
+			// 1. Extract Bright Areas
 
-		// 2. Blur All the mips progressively
+			this.highPassUniforms[ 'tDiffuse' ].value = readBuffer.texture;
+			this.highPassUniforms[ 'luminosityThreshold' ].value = this.threshold;
+			this._fsQuad.material = this.materialHighPassFilter;
 
-		let inputRenderTarget = this.renderTargetBright;
-		const activeMips = Math.max( 1, Math.min( this.nMips, Math.floor( this.activeMips || this.nMips ) ) );
-
-		for ( let i = 0; i < activeMips; i ++ ) {
-
-			this._fsQuad.material = this.separableBlurMaterials[ i ];
-
-			this.separableBlurMaterials[ i ].uniforms[ 'colorTexture' ].value = inputRenderTarget.texture;
-			this.separableBlurMaterials[ i ].uniforms[ 'direction' ].value = UnrealBloomPass.BlurDirectionX;
-			renderer.setRenderTarget( this.renderTargetsHorizontal[ i ] );
+			renderer.setRenderTarget( this.renderTargetBright );
 			renderer.clear();
 			this._fsQuad.render( renderer );
 
-			this.separableBlurMaterials[ i ].uniforms[ 'colorTexture' ].value = this.renderTargetsHorizontal[ i ].texture;
-			this.separableBlurMaterials[ i ].uniforms[ 'direction' ].value = UnrealBloomPass.BlurDirectionY;
-			renderer.setRenderTarget( this.renderTargetsVertical[ i ] );
+			// 2. Blur All the mips progressively
+
+			let inputRenderTarget = this.renderTargetBright;
+			const activeMips = Math.max( 1, Math.min( this.nMips, Math.floor( this.activeMips || this.nMips ) ) );
+
+			for ( let i = 0; i < activeMips; i ++ ) {
+
+				this._fsQuad.material = this.separableBlurMaterials[ i ];
+
+				this.separableBlurMaterials[ i ].uniforms[ 'colorTexture' ].value = inputRenderTarget.texture;
+				this.separableBlurMaterials[ i ].uniforms[ 'direction' ].value = UnrealBloomPass.BlurDirectionX;
+				renderer.setRenderTarget( this.renderTargetsHorizontal[ i ] );
+				renderer.clear();
+				this._fsQuad.render( renderer );
+
+				this.separableBlurMaterials[ i ].uniforms[ 'colorTexture' ].value = this.renderTargetsHorizontal[ i ].texture;
+				this.separableBlurMaterials[ i ].uniforms[ 'direction' ].value = UnrealBloomPass.BlurDirectionY;
+				renderer.setRenderTarget( this.renderTargetsVertical[ i ] );
+				renderer.clear();
+				this._fsQuad.render( renderer );
+
+				inputRenderTarget = this.renderTargetsVertical[ i ];
+
+			}
+
+			// Composite All the mips
+
+			this._fsQuad.material = this.compositeMaterial;
+			this.compositeMaterial.uniforms[ 'bloomStrength' ].value = this.strength;
+			this.compositeMaterial.uniforms[ 'bloomRadius' ].value = this.radius;
+			this.compositeMaterial.uniforms[ 'bloomTintColors' ].value = this.bloomTintColors;
+			for ( let i = 0; i < this.nMips; i ++ ) {
+				this.activeBloomFactors[ i ] = i < activeMips ? this.bloomFactors[ i ] : 0;
+			}
+
+			renderer.setRenderTarget( this.renderTargetsHorizontal[ 0 ] );
 			renderer.clear();
 			this._fsQuad.render( renderer );
-
-			inputRenderTarget = this.renderTargetsVertical[ i ];
+			this._hasCachedBloom = true;
 
 		}
-
-		// Composite All the mips
-
-		this._fsQuad.material = this.compositeMaterial;
-		this.compositeMaterial.uniforms[ 'bloomStrength' ].value = this.strength;
-		this.compositeMaterial.uniforms[ 'bloomRadius' ].value = this.radius;
-		this.compositeMaterial.uniforms[ 'bloomTintColors' ].value = this.bloomTintColors;
-		for ( let i = 0; i < this.nMips; i ++ ) {
-			this.activeBloomFactors[ i ] = i < activeMips ? this.bloomFactors[ i ] : 0;
-		}
-
-		renderer.setRenderTarget( this.renderTargetsHorizontal[ 0 ] );
-		renderer.clear();
-		this._fsQuad.render( renderer );
 
 		// Blend it additively over the input texture
 

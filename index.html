@@ -1306,6 +1306,9 @@ const MIN_DYNAMIC_BLOOM_SCALE = 0.10;
 const MIN_DYNAMIC_QUALITY_SCALE = 0.25;
 const BLOOM_RESOLUTION_CAP = 0.24;
 const BLOOM_OPTIMIZED_ACTIVE_MIPS = 3;
+const BLOOM_OPTIMIZED_UPDATE_STRIDE = 2;
+const BLOOM_TEMPORAL_MOVE_EPS_SQ = 0.0025;
+const BLOOM_TEMPORAL_ROTATE_EPS = 0.000003;
 const BLOOM_BYPASS_STRENGTH = 0.015;
 const MIN_BLOOM_TARGET_SIZE = 96;
 const CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP = 1.5;
@@ -18235,6 +18238,7 @@ function rebuildComposer() {
     0.68
   );
   bloomPass.activeMips = BLOOM_OPTIMIZED_ACTIVE_MIPS;
+  bloomPass.updateStride = BLOOM_OPTIMIZED_UPDATE_STRIDE;
   composer.addPass(bloomPass);
   fxaaPass = new FXAAPass();
   composer.addPass(fxaaPass);
@@ -18259,7 +18263,10 @@ function applyAntialiasControls(mode = antialiasMode) {
 
 function applyBloomEnabled(value = bloomEnabled) {
   bloomEnabled = value !== false && value !== 'off';
-  if (bloomPass) bloomPass.enabled = bloomEnabled;
+  if (bloomPass) {
+    bloomPass.enabled = bloomEnabled;
+    bloomPass._hasCachedBloom = false;
+  }
 }
 
 function isBloomPassActive() {
@@ -18268,6 +18275,49 @@ function isBloomPassActive() {
 
 function isBloomRevealBypassed() {
   return Boolean(bloomEnabled && bloomPass && !bloomPass.enabled && isCityRevealPerformanceCritical());
+}
+
+const bloomTemporalCameraPosition = new THREE.Vector3();
+const bloomTemporalCameraQuaternion = new THREE.Quaternion();
+let bloomTemporalPrimed = false;
+let bloomTemporalAppliedStride = 1;
+
+function invalidateBloomTemporalCache() {
+  if (bloomPass) bloomPass._hasCachedBloom = false;
+  bloomTemporalPrimed = false;
+  bloomTemporalAppliedStride = 1;
+}
+
+function syncBloomTemporalBudget() {
+  if (!bloomPass) return;
+  const active = Boolean(
+    bloomEnabled &&
+    postRevealPerfIsolationState.bloom &&
+    bloomPass.enabled &&
+    cityRevealComplete &&
+    !isCityRevealPerformanceCritical()
+  );
+  if (!active) {
+    bloomPass.updateStride = 1;
+    bloomTemporalAppliedStride = 1;
+    bloomTemporalPrimed = false;
+    return;
+  }
+  let cameraMoving = true;
+  if (bloomTemporalPrimed) {
+    const moved = camera.position.distanceToSquared(bloomTemporalCameraPosition) > BLOOM_TEMPORAL_MOVE_EPS_SQ;
+    const rotated = 1 - Math.abs(camera.quaternion.dot(bloomTemporalCameraQuaternion)) > BLOOM_TEMPORAL_ROTATE_EPS;
+    cameraMoving = moved || rotated || droneIntroFlight.active;
+  }
+  const nextStride = cameraMoving ? 1 : BLOOM_OPTIMIZED_UPDATE_STRIDE;
+  if (bloomPass.updateStride !== nextStride) {
+    bloomPass.updateStride = nextStride;
+    if (nextStride === 1) bloomPass._hasCachedBloom = false;
+  }
+  bloomTemporalAppliedStride = nextStride;
+  bloomTemporalCameraPosition.copy(camera.position);
+  bloomTemporalCameraQuaternion.copy(camera.quaternion);
+  bloomTemporalPrimed = true;
 }
 
 function mobilePerformanceProfileState() {
@@ -19813,6 +19863,7 @@ function applyPostControlsFromUI() {
     bloomPass.strength = bloomStrength;
     bloomPass.radius = bloomRadius;
     bloomPass.threshold = bloomThreshold;
+    invalidateBloomTemporalCache();
   }
   controlEls.renderResolutionVal.textContent = `${Math.round(nextRenderResolution * 100)}%`;
   controlEls.bloomVal.textContent = bloomStrength.toFixed(2);
@@ -20670,6 +20721,7 @@ function applyLiveControls() {
     bloomPass.strength = bloomStrength;
     bloomPass.radius = bloomRadius;
     bloomPass.threshold = bloomThreshold;
+    invalidateBloomTemporalCache();
   }
 
   controlEls.hexOffsetVal.textContent = formatOffsetLabel(offset);
@@ -21524,6 +21576,8 @@ window.__tronInspect = () => ({
     bloomThreshold: bloomPass?.threshold ?? 0,
     bloomResolutionScale,
     bloomActiveMips: bloomPass?.activeMips ?? 0,
+    bloomUpdateStride: bloomPass?.updateStride ?? 0,
+    bloomCacheReady: Boolean(bloomPass?._hasCachedBloom),
     bloomResolutionCap: BLOOM_RESOLUTION_CAP,
     manualRenderScale,
     requestedPixelRatio,
@@ -21585,6 +21639,9 @@ window.__tronPerfInspect = () => ({
   bloomResolutionScale,
   bloomResolutionCap: BLOOM_RESOLUTION_CAP,
   bloomActiveMips: bloomPass?.activeMips ?? 0,
+  bloomUpdateStride: bloomPass?.updateStride ?? 0,
+  bloomTemporalStride: bloomTemporalAppliedStride,
+  bloomCacheReady: Boolean(bloomPass?._hasCachedBloom),
   mobileProfile: mobilePerformanceProfileInspect(),
   wireframeFx: {
     enabled: cityRevealWireframeEnabled,
@@ -22251,6 +22308,7 @@ function tick(now) {
   syncCityRevealPerformanceProfile();
   const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
   if (bloomPass) bloomPass.enabled = bloomEnabled && postRevealPerfIsolationState.bloom && !postRevealPerformanceCritical;
+  syncBloomTemporalBudget();
   if (!postRevealPerformanceCritical) {
     if (postRevealPerfIsolationState.equalizer) {
       updateLabEqualizer(now, dt);
