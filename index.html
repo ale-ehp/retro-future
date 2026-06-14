@@ -1304,14 +1304,15 @@ const MAX_RENDER_PIXEL_RATIO = 1.5;
 const MIN_DYNAMIC_PIXEL_RATIO = 0.25;
 const MIN_DYNAMIC_BLOOM_SCALE = 0.10;
 const MIN_DYNAMIC_QUALITY_SCALE = 0.25;
-const BLOOM_RESOLUTION_CAP = 0.30;
+const BLOOM_RESOLUTION_CAP = 0.24;
+const BLOOM_OPTIMIZED_ACTIVE_MIPS = 3;
 const BLOOM_BYPASS_STRENGTH = 0.015;
 const MIN_BLOOM_TARGET_SIZE = 96;
 const CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP = 1.5;
 const MOBILE_PERFORMANCE_QUERY = '(max-width: 760px), (hover: none), (pointer: coarse)';
 const MOBILE_PERFORMANCE_RENDER_SCALE_CAP = 1;
 const MOBILE_PERFORMANCE_PIXEL_RATIO_CAP = 1.5;
-const MOBILE_PERFORMANCE_BLOOM_SCALE_CAP = 0.18;
+const MOBILE_PERFORMANCE_BLOOM_SCALE_CAP = 0.14;
 const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
 let activePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO);
 let requestedPixelRatio = MAX_RENDER_PIXEL_RATIO;
@@ -18233,6 +18234,7 @@ function rebuildComposer() {
     0.56,
     0.68
   );
+  bloomPass.activeMips = BLOOM_OPTIMIZED_ACTIVE_MIPS;
   composer.addPass(bloomPass);
   fxaaPass = new FXAAPass();
   composer.addPass(fxaaPass);
@@ -21521,6 +21523,8 @@ window.__tronInspect = () => ({
     bloomRadius: bloomPass?.radius ?? 0,
     bloomThreshold: bloomPass?.threshold ?? 0,
     bloomResolutionScale,
+    bloomActiveMips: bloomPass?.activeMips ?? 0,
+    bloomResolutionCap: BLOOM_RESOLUTION_CAP,
     manualRenderScale,
     requestedPixelRatio,
     activePixelRatio,
@@ -21580,6 +21584,7 @@ window.__tronPerfInspect = () => ({
   antialiasMode,
   bloomResolutionScale,
   bloomResolutionCap: BLOOM_RESOLUTION_CAP,
+  bloomActiveMips: bloomPass?.activeMips ?? 0,
   mobileProfile: mobilePerformanceProfileInspect(),
   wireframeFx: {
     enabled: cityRevealWireframeEnabled,

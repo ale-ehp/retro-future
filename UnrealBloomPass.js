@@ -99,6 +99,7 @@ class UnrealBloomPass extends Pass {
 		this.renderTargetsHorizontal = [];
 		this.renderTargetsVertical = [];
 		this.nMips = 5;
+		this.activeMips = this.nMips;
 		let resx = Math.round( this.resolution.x / 2 );
 		let resy = Math.round( this.resolution.y / 2 );
 
@@ -175,7 +176,9 @@ class UnrealBloomPass extends Pass {
 		this.compositeMaterial.uniforms[ 'bloomRadius' ].value = 0.1;
 
 		const bloomFactors = [ 1.0, 0.8, 0.6, 0.4, 0.2 ];
-		this.compositeMaterial.uniforms[ 'bloomFactors' ].value = bloomFactors;
+		this.bloomFactors = bloomFactors;
+		this.activeBloomFactors = bloomFactors.slice();
+		this.compositeMaterial.uniforms[ 'bloomFactors' ].value = this.activeBloomFactors;
 		this.bloomTintColors = [ new Vector3( 1, 1, 1 ), new Vector3( 1, 1, 1 ), new Vector3( 1, 1, 1 ), new Vector3( 1, 1, 1 ), new Vector3( 1, 1, 1 ) ];
 		this.compositeMaterial.uniforms[ 'bloomTintColors' ].value = this.bloomTintColors;
 
@@ -316,8 +319,9 @@ class UnrealBloomPass extends Pass {
 		// 2. Blur All the mips progressively
 
 		let inputRenderTarget = this.renderTargetBright;
+		const activeMips = Math.max( 1, Math.min( this.nMips, Math.floor( this.activeMips || this.nMips ) ) );
 
-		for ( let i = 0; i < this.nMips; i ++ ) {
+		for ( let i = 0; i < activeMips; i ++ ) {
 
 			this._fsQuad.material = this.separableBlurMaterials[ i ];
 
@@ -343,6 +347,9 @@ class UnrealBloomPass extends Pass {
 		this.compositeMaterial.uniforms[ 'bloomStrength' ].value = this.strength;
 		this.compositeMaterial.uniforms[ 'bloomRadius' ].value = this.radius;
 		this.compositeMaterial.uniforms[ 'bloomTintColors' ].value = this.bloomTintColors;
+		for ( let i = 0; i < this.nMips; i ++ ) {
+			this.activeBloomFactors[ i ] = i < activeMips ? this.bloomFactors[ i ] : 0;
+		}
 
 		renderer.setRenderTarget( this.renderTargetsHorizontal[ 0 ] );
 		renderer.clear();
