@@ -18014,6 +18014,10 @@ function isBloomPassActive() {
   return Boolean(bloomPass?.enabled && (bloomPass.strength ?? 0) > BLOOM_BYPASS_STRENGTH);
 }
 
+function isBloomRevealBypassed() {
+  return Boolean(bloomEnabled && bloomPass && !bloomPass.enabled && isCityRevealPerformanceCritical());
+}
+
 function mobilePerformanceProfileState() {
   const mediaQueryMatches = Boolean(mobilePerformanceQuery.matches);
   const touchPoints = Number.isFinite(navigator.maxTouchPoints) ? navigator.maxTouchPoints : 0;
@@ -21057,7 +21061,9 @@ window.__tronInspect = () => ({
     performanceMode,
     antialiasMode,
     fxaaEnabled: Boolean(fxaaPass?.enabled),
-    bloomEnabled: Boolean(bloomPass?.enabled),
+    bloomEnabled,
+    bloomPassEnabled: Boolean(bloomPass?.enabled),
+    bloomRevealBypassed: isBloomRevealBypassed(),
     bloomActive: isBloomPassActive(),
     bloomStrength: bloomPass?.strength ?? 0,
     bloomRadius: bloomPass?.radius ?? 0,
@@ -21113,7 +21119,9 @@ window.__tronPerfInspect = () => ({
   dynamicQualityScale,
   performanceMode,
   composerActive: shouldUseComposer(),
-  bloomEnabled: Boolean(bloomPass?.enabled),
+  bloomEnabled,
+  bloomPassEnabled: Boolean(bloomPass?.enabled),
+  bloomRevealBypassed: isBloomRevealBypassed(),
   bloomActive: isBloomPassActive(),
   fxaaEnabled: Boolean(fxaaPass?.enabled),
   antialiasMode,
@@ -21421,6 +21429,9 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
     composerPassCount: composerSummary.passCount,
     composerActivePasses: composerSummary.activePasses,
     composerEstimatedPasses: composerSummary.estimatedPasses,
+    bloomEnabled,
+    bloomPassEnabled: Boolean(bloomPass?.enabled),
+    bloomRevealBypassed: isBloomRevealBypassed(),
     bloomActive: isBloomPassActive(),
     bloomResolutionScale: Number(bloomResolutionScale.toFixed(3)),
     bloomTarget,
@@ -21593,6 +21604,7 @@ function tick(now) {
   updateCityRevealWireframe(now);
   syncCityRevealPerformanceProfile();
   const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
+  if (bloomPass) bloomPass.enabled = bloomEnabled && !postRevealPerformanceCritical;
   if (!postRevealPerformanceCritical) {
     updateLabEqualizer(now, dt);
     updateTronRunnerReveal(now);
