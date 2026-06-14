@@ -218,7 +218,7 @@
     "bloom-radius": 0,
     "bloom-threshold": 0.79,
     "bloom-quality": 1,
-    "pixel-ratio": 2,
+    "pixel-ratio": 1.5,
     "placement-enabled": "off",
     "placement-family": "0",
     "placement-variant": "0",

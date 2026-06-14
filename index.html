@@ -1181,7 +1181,7 @@
       <label class="control-row"><span class="control-head"><span>Bloom radius</span><output id="bloom-radius-val">0.56</output></span><input id="bloom-radius" type="range" min="0" max="1.5" step="0.01" value="0.56" /></label>
       <label class="control-row"><span class="control-head"><span>Bloom threshold</span><output id="bloom-threshold-val">0.68</output></span><input id="bloom-threshold" type="range" min="0" max="1" step="0.01" value="0.68" /></label>
       <label class="control-row"><span class="control-head"><span>Bloom quality</span><output id="bloom-quality-val">0.35</output></span><input id="bloom-quality" type="range" min="0.25" max="1" step="0.05" value="0.35" /></label>
-      <label class="control-row"><span class="control-head"><span>Pixel ratio</span><output id="pixel-ratio-val">2.00</output></span><input id="pixel-ratio" type="range" min="0.75" max="2" step="0.05" value="2" /></label>
+      <label class="control-row"><span class="control-head"><span>Pixel ratio</span><output id="pixel-ratio-val">1.50</output></span><input id="pixel-ratio" type="range" min="0.75" max="1.5" step="0.05" value="1.5" /></label>
       <div class="control-box" id="main-facade-led-controls">
         <div class="control-section">LED centrale mio palazzo</div>
       </div>
@@ -1289,17 +1289,17 @@ const MAX_HEX_ROAD_ACCUMULATED_DT = 0.1;
 let hexRoadUpdateFrame = 0;
 let hexRoadAccumulatedDt = 0;
 let usePost = false;
-const MAX_RENDER_PIXEL_RATIO = 2;
+const MAX_RENDER_PIXEL_RATIO = 1.5;
 const MIN_DYNAMIC_PIXEL_RATIO = 0.25;
 const MIN_DYNAMIC_BLOOM_SCALE = 0.10;
 const MIN_DYNAMIC_QUALITY_SCALE = 0.25;
 const BLOOM_RESOLUTION_CAP = 0.30;
 const BLOOM_BYPASS_STRENGTH = 0.015;
 const MIN_BLOOM_TARGET_SIZE = 96;
-const CITY_REVEAL_PRE_REVEAL_PIXEL_RATIO_CAP = 1;
+const CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP = 1.5;
 const MOBILE_PERFORMANCE_QUERY = '(max-width: 760px), (hover: none), (pointer: coarse)';
 const MOBILE_PERFORMANCE_RENDER_SCALE_CAP = 1;
-const MOBILE_PERFORMANCE_PIXEL_RATIO_CAP = 2;
+const MOBILE_PERFORMANCE_PIXEL_RATIO_CAP = 1.5;
 const MOBILE_PERFORMANCE_BLOOM_SCALE_CAP = 0.18;
 const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
 let activePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO);
@@ -1316,7 +1316,7 @@ let lastAppliedRendererPixelRatio = -1;
 let lastAppliedComposerPixelRatio = -1;
 let lastBloomTargetKey = '';
 let lastFxaaTargetKey = '';
-let cityRevealPreRevealPerformanceProfileActive = false;
+let cityRevealPerformanceProfileActive = false;
 let secondaryEffectFrame = 0;
 let boundaryErrorAccumulatedDt = 0;
 const SECONDARY_EFFECT_UPDATE_STRIDE = 2;
@@ -18043,23 +18043,22 @@ function effectiveRenderScaleForDevice(baseScale = manualRenderScale) {
     : baseScale;
 }
 
-function cityRevealPreRevealPerformanceWindowActive() {
+function cityRevealPerformanceWindowActive() {
   return Boolean(
     cityRevealWireframeEnabled &&
     cityRevealWireAlpha > 0.002 &&
-    !cityRevealComplete &&
-    !isCityRevealRealRevealActive()
+    !cityRevealComplete
   );
 }
 
-function shouldUseCityRevealPreRevealPerformanceProfile() {
-  return cityRevealPreRevealPerformanceWindowActive() && !mobilePerformanceProfileActive();
+function shouldUseCityRevealPerformanceProfile() {
+  return cityRevealPerformanceWindowActive() && !mobilePerformanceProfileActive();
 }
 
-function syncCityRevealPreRevealPerformanceProfile() {
-  const next = shouldUseCityRevealPreRevealPerformanceProfile();
-  if (next === cityRevealPreRevealPerformanceProfileActive) return;
-  cityRevealPreRevealPerformanceProfileActive = next;
+function syncCityRevealPerformanceProfile() {
+  const next = shouldUseCityRevealPerformanceProfile();
+  if (next === cityRevealPerformanceProfileActive) return;
+  cityRevealPerformanceProfileActive = next;
   applyRenderResolution(requestedPixelRatio);
 }
 
@@ -18091,8 +18090,10 @@ function mobilePerformanceProfileInspect() {
     renderScaleCap: MOBILE_PERFORMANCE_RENDER_SCALE_CAP,
     pixelRatioCap: MOBILE_PERFORMANCE_PIXEL_RATIO_CAP,
     bloomScaleCap: MOBILE_PERFORMANCE_BLOOM_SCALE_CAP,
-    preRevealPixelRatioCap: CITY_REVEAL_PRE_REVEAL_PIXEL_RATIO_CAP,
-    preRevealPerformanceActive: cityRevealPreRevealPerformanceProfileActive,
+    preRevealPixelRatioCap: CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP,
+    preRevealPerformanceActive: cityRevealPerformanceProfileActive,
+    revealPixelRatioCap: CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP,
+    revealPerformanceActive: cityRevealPerformanceProfileActive,
     effectiveRenderScale: effectiveRenderScaleForDevice(manualRenderScale),
     effectivePixelRatioRequest: effectivePixelRatioForDevice(requestedPixelRatio),
     effectiveBloomScaleRequest: effectiveBloomScaleForDevice(requestedBloomResolutionScale),
@@ -18109,14 +18110,14 @@ function applyRenderResolution(requestedPixelRatio) {
   const requested = effectivePixelRatioForDevice(requestedBase);
   const renderScale = effectiveRenderScaleForDevice(manualRenderScale);
   const dynamicPixelRatio = Math.max(MIN_DYNAMIC_PIXEL_RATIO, requested * renderScale * dynamicQualityScale);
-  const preRevealPixelRatioCap = cityRevealPreRevealPerformanceProfileActive
-    ? CITY_REVEAL_PRE_REVEAL_PIXEL_RATIO_CAP
+  const revealPixelRatioCap = cityRevealPerformanceProfileActive
+    ? CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP
     : MAX_RENDER_PIXEL_RATIO;
   activePixelRatio = Math.min(
     window.devicePixelRatio || 1,
     dynamicPixelRatio,
     MAX_RENDER_PIXEL_RATIO,
-    preRevealPixelRatioCap
+    revealPixelRatioCap
   );
   if (Math.abs(activePixelRatio - lastAppliedRendererPixelRatio) > 0.0001) {
     renderer.setPixelRatio(activePixelRatio);
@@ -19507,7 +19508,8 @@ function applyPostControlsFromUI() {
   const bloomRadius = Number(controlEls.bloomRadius.value);
   const bloomThreshold = Number(controlEls.bloomThreshold.value);
   const bloomQuality = Number(controlEls.bloomQuality.value);
-  const pixelRatio = Number(controlEls.pixelRatio.value);
+  const pixelRatio = Math.min(Number(controlEls.pixelRatio.value) || MAX_RENDER_PIXEL_RATIO, MAX_RENDER_PIXEL_RATIO);
+  controlEls.pixelRatio.value = pixelRatio.toFixed(2);
   const previousPerformanceMode = performanceMode;
   performanceMode = nextPerformanceMode;
   manualRenderScale = nextRenderResolution;
@@ -20136,7 +20138,8 @@ function applyLiveControls() {
   const bloomRadius = Number(controlEls.bloomRadius.value);
   const bloomThreshold = Number(controlEls.bloomThreshold.value);
   const bloomQuality = Number(controlEls.bloomQuality.value);
-  const pixelRatio = Number(controlEls.pixelRatio.value);
+  const pixelRatio = Math.min(Number(controlEls.pixelRatio.value) || MAX_RENDER_PIXEL_RATIO, MAX_RENDER_PIXEL_RATIO);
+  controlEls.pixelRatio.value = pixelRatio.toFixed(2);
   const previousPerformanceMode = performanceMode;
 
   hexPassOffset = offset;
@@ -21345,8 +21348,8 @@ function performanceDiagnosticsPixelPipeline() {
     MIN_DYNAMIC_PIXEL_RATIO,
     effectivePixelRatioRequest * effectiveRenderScale * dynamicQualityScale
   );
-  const preRevealPixelRatioCap = cityRevealPreRevealPerformanceProfileActive
-    ? CITY_REVEAL_PRE_REVEAL_PIXEL_RATIO_CAP
+  const revealPixelRatioCap = cityRevealPerformanceProfileActive
+    ? CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP
     : MAX_RENDER_PIXEL_RATIO;
   return {
     requestedPixelRatioRaw: Number(requestedPixelRatio.toFixed(2)),
@@ -21354,12 +21357,15 @@ function performanceDiagnosticsPixelPipeline() {
     manualRenderScaleRaw: Number(manualRenderScale.toFixed(2)),
     effectiveRenderScale: Number(effectiveRenderScale.toFixed(2)),
     dynamicPixelRatioBeforeClamp: Number(dynamicPixelRatioBeforeClamp.toFixed(3)),
-    dynamicPixelRatioAfterPreRevealCap: Number(Math.min(dynamicPixelRatioBeforeClamp, preRevealPixelRatioCap).toFixed(3)),
+    dynamicPixelRatioAfterPreRevealCap: Number(Math.min(dynamicPixelRatioBeforeClamp, revealPixelRatioCap).toFixed(3)),
+    dynamicPixelRatioAfterRevealCap: Number(Math.min(dynamicPixelRatioBeforeClamp, revealPixelRatioCap).toFixed(3)),
     activePixelRatio: Number(activePixelRatio.toFixed(3)),
     minDynamicPixelRatio: MIN_DYNAMIC_PIXEL_RATIO,
     maxRenderPixelRatio: MAX_RENDER_PIXEL_RATIO,
-    preRevealPerformanceActive: cityRevealPreRevealPerformanceProfileActive,
-    preRevealPixelRatioCap,
+    preRevealPerformanceActive: cityRevealPerformanceProfileActive,
+    preRevealPixelRatioCap: revealPixelRatioCap,
+    revealPerformanceActive: cityRevealPerformanceProfileActive,
+    revealPixelRatioCap,
   };
 }
 
@@ -21512,7 +21518,7 @@ function updatePerformanceDiagnostics(measuredFps = latestMeasuredFps) {
       `tri ${Math.round(stats.triangles / 1000)}k`,
       `frame ${stats.frameMs.toFixed(1)}ms`,
       `render ${stats.renderMs.toFixed(1)}ms`,
-      `preReveal ${stats.pixelPipeline.preRevealPerformanceActive ? 'on' : 'off'}`,
+      `revealCap ${stats.pixelPipeline.revealPerformanceActive ? 'on' : 'off'}`,
       `crowd ${stats.crowdVisible}/${tronRunnerCrowd.length}`,
       `hidden ${stats.crowdHidden}`,
       `think ${stats.crowdThinkMs.toFixed(2)}ms`,
@@ -21585,7 +21591,7 @@ function tick(now) {
     flushHexTileBatchUploads();
   }
   updateCityRevealWireframe(now);
-  syncCityRevealPreRevealPerformanceProfile();
+  syncCityRevealPerformanceProfile();
   const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
   if (!postRevealPerformanceCritical) {
     updateLabEqualizer(now, dt);
