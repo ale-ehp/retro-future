@@ -1182,6 +1182,9 @@
       <label class="control-row"><span class="control-head"><span>Bloom threshold</span><output id="bloom-threshold-val">0.68</output></span><input id="bloom-threshold" type="range" min="0" max="1" step="0.01" value="0.68" /></label>
       <label class="control-row"><span class="control-head"><span>Bloom quality</span><output id="bloom-quality-val">0.35</output></span><input id="bloom-quality" type="range" min="0.25" max="1" step="0.05" value="0.35" /></label>
       <label class="control-row"><span class="control-head"><span>Pixel ratio</span><output id="pixel-ratio-val">1.50</output></span><input id="pixel-ratio" type="range" min="0.75" max="1.5" step="0.05" value="1.5" /></label>
+      <label class="control-row select-row"><span class="control-head"><span>Upscale FSR-like</span></span><select id="fsr-upscale-enabled" class="control-select"><option value="on" selected>On</option><option value="off">Off</option></select></label>
+      <label class="control-row"><span class="control-head"><span>Scala interna</span><output id="fsr-internal-scale-val">85%</output></span><input id="fsr-internal-scale" type="range" min="0.65" max="1" step="0.01" value="0.85" /></label>
+      <label class="control-row"><span class="control-head"><span>Nitidezza upscale</span><output id="fsr-sharpness-val">0.00</output></span><input id="fsr-sharpness" type="range" min="0" max="1.25" step="0.01" value="0" /></label>
       <div class="control-box" id="main-facade-led-controls">
         <div class="control-section">LED centrale mio palazzo</div>
       </div>
@@ -1226,6 +1229,7 @@ ti auguriamo un esperienza illuminante.</p>
     "three/addons/postprocessing/UnrealBloomPass.js": "./UnrealBloomPass.js",
     "three/addons/postprocessing/OutputPass.js": "./OutputPass.js",
     "three/addons/postprocessing/FXAAPass.js": "./FXAAPass.js",
+    "three/addons/postprocessing/ShaderPass.js": "./ShaderPass.js",
     "three/addons/postprocessing/Pass.js": "./Pass.js",
     "three/addons/postprocessing/MaskPass.js": "./MaskPass.js",
     "three/addons/loaders/GLTFLoader.js": "./GLTFLoader.js",
@@ -1281,7 +1285,7 @@ const cityRevealProfileState = {
 };
 
 // Postprocessing (optional bloom + FXAA). Best-effort — fallback to plain renderer if any module fails.
-let composer = null, bloomPass = null, fxaaPass = null;
+let composer = null, bloomPass = null, fxaaPass = null, fsrSharpenPass = null;
 let postEnabled = true;
 let hexUpdateEnabled = true;
 const HEX_ROAD_UPDATE_FRAME_STRIDE = 2;
@@ -1309,6 +1313,9 @@ let requestedBloomResolutionScale = 0.35;
 let bloomResolutionScale = 0.35;
 let bloomEnabled = true;
 let antialiasMode = 'fxaa';
+let fsrUpscaleEnabled = true;
+let fsrInternalScale = 0.85;
+let fsrSharpness = 0;
 let dynamicQualityScale = 1;
 let performanceMode = 'auto';
 let performanceAdjustCooldown = 0;
@@ -1316,19 +1323,21 @@ let lastAppliedRendererPixelRatio = -1;
 let lastAppliedComposerPixelRatio = -1;
 let lastBloomTargetKey = '';
 let lastFxaaTargetKey = '';
+let lastFsrTargetKey = '';
 let cityRevealPerformanceProfileActive = false;
 let secondaryEffectFrame = 0;
 let boundaryErrorAccumulatedDt = 0;
 const SECONDARY_EFFECT_UPDATE_STRIDE = 2;
 try {
-  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { FXAAPass }] = await Promise.all([
+  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { FXAAPass }, { ShaderPass }] = await Promise.all([
     import('three/addons/postprocessing/EffectComposer.js'),
     import('three/addons/postprocessing/RenderPass.js'),
     import('three/addons/postprocessing/UnrealBloomPass.js'),
     import('three/addons/postprocessing/OutputPass.js'),
     import('three/addons/postprocessing/FXAAPass.js'),
+    import('three/addons/postprocessing/ShaderPass.js'),
   ]);
-  window.__POST = { EffectComposer, RenderPass, UnrealBloomPass, OutputPass, FXAAPass };
+  window.__POST = { EffectComposer, RenderPass, UnrealBloomPass, OutputPass, FXAAPass, ShaderPass };
   usePost = true;
 } catch (e) {
   console.warn('Postprocessing unavailable, falling back to plain renderer:', e.message);
@@ -1346,6 +1355,42 @@ try {
 } catch (e) {
   console.warn('Runner GLB support unavailable:', e.message);
 }
+
+const TRON_FSR_SHARPEN_SHADER = {
+  name: 'TronFsrLikeSharpen',
+  uniforms: {
+    tDiffuse: { value: null },
+    resolution: { value: new THREE.Vector2(1, 1) },
+    sharpness: { value: 0 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform float sharpness;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 texel = 1.0 / max(resolution, vec2(1.0));
+      vec4 center = texture2D(tDiffuse, vUv);
+      vec3 blur = (
+        texture2D(tDiffuse, vUv + vec2(texel.x, 0.0)).rgb +
+        texture2D(tDiffuse, vUv - vec2(texel.x, 0.0)).rgb +
+        texture2D(tDiffuse, vUv + vec2(0.0, texel.y)).rgb +
+        texture2D(tDiffuse, vUv - vec2(0.0, texel.y)).rgb
+      ) * 0.25;
+      vec3 detail = center.rgb - blur;
+      vec3 color = center.rgb + detail * sharpness;
+      gl_FragColor = vec4(clamp(color, 0.0, 1.0), center.a);
+    }
+  `,
+};
 
 // ---------- palette ----------
 const PAL = {
@@ -1862,6 +1907,11 @@ const controlEls = {
   bloomQualityVal: document.getElementById('bloom-quality-val'),
   pixelRatio: document.getElementById('pixel-ratio'),
   pixelRatioVal: document.getElementById('pixel-ratio-val'),
+  fsrUpscaleEnabled: document.getElementById('fsr-upscale-enabled'),
+  fsrInternalScale: document.getElementById('fsr-internal-scale'),
+  fsrInternalScaleVal: document.getElementById('fsr-internal-scale-val'),
+  fsrSharpness: document.getElementById('fsr-sharpness'),
+  fsrSharpnessVal: document.getElementById('fsr-sharpness-val'),
   wireframeEnabled: document.getElementById('wireframe-enabled'),
   wireframeEnabledVal: document.getElementById('wireframe-enabled-val'),
   wireframeDelay: document.getElementById('wireframe-delay'),
@@ -1949,6 +1999,8 @@ const gpuTimerState = {
   sampleCount: 0,
   disjointCount: 0,
 };
+const GPU_TIMER_SAMPLE_STRIDE = 30;
+let gpuTimerFrameIndex = 0;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(FIXED_CAMERA_FOV, window.innerWidth / window.innerHeight, 0.1, 10000);
@@ -11027,10 +11079,6 @@ function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
   const columnW = (areaW - columnGap * (LAB_EQUALIZER_BAR_COUNT - 1)) / LAB_EQUALIZER_BAR_COUNT;
   const rowH = (areaH - rowGap * (LAB_EQUALIZER_SEGMENT_ROWS - 1)) / LAB_EQUALIZER_SEGMENT_ROWS;
   const bottomY = marginY + areaH;
-  const slotPath = new Path2D();
-  const activeSegments = [];
-  const peakSegments = [];
-
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = 'rgb(1 3 4)';
   ctx.fillRect(0, 0, width, height);
@@ -11042,42 +11090,26 @@ function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
   ctx.fillStyle = tubeGlow;
   ctx.fillRect(0, 0, width, height);
 
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
   for (let column = 0; column < LAB_EQUALIZER_BAR_COUNT; column += 1) {
     const x = marginX + column * (columnW + columnGap);
     const level = THREE.MathUtils.clamp(labEqualizerLevels[column] ?? 0, 0, 1);
-    const activeRowsFloat = labEqualizerLevelToRows(level);
-    const activeRows = THREE.MathUtils.clamp(Math.round(activeRowsFloat), 0, LAB_EQUALIZER_SEGMENT_ROWS);
+    const activeRows = THREE.MathUtils.clamp(Math.round(labEqualizerLevelToRows(level)), 0, LAB_EQUALIZER_SEGMENT_ROWS);
     for (let row = 0; row < LAB_EQUALIZER_SEGMENT_ROWS; row += 1) {
       const y = bottomY - (row + 1) * rowH - row * rowGap;
-      slotPath.rect(x, y, columnW, rowH);
+      ctx.fillStyle = 'rgba(0, 1, 2, 0.98)';
+      ctx.fillRect(x, y, columnW, rowH);
       if (row >= activeRows) continue;
-      activeSegments.push({ x, y, row, column });
-    }
-    const peakRows = THREE.MathUtils.clamp(labEqualizerPeaks[column] ?? 0, 0, LAB_EQUALIZER_SEGMENT_ROWS);
-    const peakRow = THREE.MathUtils.clamp(Math.ceil(peakRows) - 1, 0, LAB_EQUALIZER_SEGMENT_ROWS - 1);
-    if (peakRows >= activeRowsFloat - 0.25 && peakRows > 1.2) {
-      const y = bottomY - (peakRow + 1) * rowH - peakRow * rowGap;
-      peakSegments.push({ x, y, row: peakRow, column });
+      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 1, beatPulse);
+      ctx.fillRect(x, y, columnW, rowH);
+      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.78, beatPulse);
+      ctx.fillRect(x + 0.4, y + 0.35, Math.max(1, columnW - 0.8), Math.max(1, rowH - 0.7));
+      const leftLine = x + Math.sin(now * 0.003 + column) * 0.8;
+      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.14, beatPulse);
+      ctx.fillRect(leftLine, y + 0.35, Math.max(1, columnW * 0.035), Math.max(1, rowH - 0.7));
     }
   }
-
-  ctx.save();
-  ctx.clip(slotPath);
-  ctx.fillStyle = 'rgba(0, 1, 2, 0.98)';
-  ctx.fillRect(marginX, marginY, areaW, areaH);
-  ctx.restore();
-
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-over';
-  activeSegments.forEach((segment) => {
-    ctx.fillStyle = labEqualizerCrtBlockColor(segment.column, segment.row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 1, beatPulse);
-    ctx.fillRect(segment.x, segment.y, columnW, rowH);
-    ctx.fillStyle = labEqualizerCrtBlockColor(segment.column, segment.row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.78, beatPulse);
-    ctx.fillRect(segment.x + 0.4, segment.y + 0.35, Math.max(1, columnW - 0.8), Math.max(1, rowH - 0.7));
-    const leftLine = segment.x + Math.sin(now * 0.003 + segment.column) * 0.8;
-    ctx.fillStyle = labEqualizerCrtBlockColor(segment.column, segment.row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.14, beatPulse);
-    ctx.fillRect(leftLine, segment.y + 0.35, Math.max(1, columnW * 0.035), Math.max(1, rowH - 0.7));
-  });
   ctx.restore();
 
   ctx.save();
@@ -11089,14 +11121,20 @@ function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
   ctx.beginPath();
   ctx.rect(marginX, reflectionTop, areaW, reflectionH);
   ctx.clip();
-  activeSegments.forEach((segment) => {
-    const distance = bottomY - (segment.y + rowH * 0.5);
-    const reflectedY = reflectionTop + distance * 0.33;
-    const fade = THREE.MathUtils.clamp(1 - ((reflectedY - reflectionTop) / reflectionH), 0, 1);
-    ctx.globalAlpha = THREE.MathUtils.clamp(0.32 * reflectionStrength, 0, 0.95) * fade;
-    ctx.fillStyle = labEqualizerCrtBlockColor(segment.column, segment.row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 0.88, beatPulse);
-    ctx.fillRect(segment.x, reflectedY, columnW, Math.max(1, rowH * 0.55));
-  });
+  for (let column = 0; column < LAB_EQUALIZER_BAR_COUNT; column += 1) {
+    const x = marginX + column * (columnW + columnGap);
+    const level = THREE.MathUtils.clamp(labEqualizerLevels[column] ?? 0, 0, 1);
+    const activeRows = THREE.MathUtils.clamp(Math.round(labEqualizerLevelToRows(level)), 0, LAB_EQUALIZER_SEGMENT_ROWS);
+    for (let row = 0; row < activeRows; row += 1) {
+      const y = bottomY - (row + 1) * rowH - row * rowGap;
+      const distance = bottomY - (y + rowH * 0.5);
+      const reflectedY = reflectionTop + distance * 0.33;
+      const fade = THREE.MathUtils.clamp(1 - ((reflectedY - reflectionTop) / reflectionH), 0, 1);
+      ctx.globalAlpha = THREE.MathUtils.clamp(0.32 * reflectionStrength, 0, 0.95) * fade;
+      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 0.88, beatPulse);
+      ctx.fillRect(x, reflectedY, columnW, Math.max(1, rowH * 0.55));
+    }
+  }
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'destination-in';
   ctx.fillStyle = reflectionGradient;
@@ -11105,10 +11143,18 @@ function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
 
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
-  peakSegments.forEach((segment) => {
-    ctx.fillStyle = labEqualizerPeakBlockColor(segment.column, segment.row, LAB_EQUALIZER_SEGMENT_ROWS, now, beatPulse);
-    ctx.fillRect(segment.x, segment.y, columnW, rowH);
-  });
+  for (let column = 0; column < LAB_EQUALIZER_BAR_COUNT; column += 1) {
+    const x = marginX + column * (columnW + columnGap);
+    const level = THREE.MathUtils.clamp(labEqualizerLevels[column] ?? 0, 0, 1);
+    const activeRowsFloat = labEqualizerLevelToRows(level);
+    const peakRows = THREE.MathUtils.clamp(labEqualizerPeaks[column] ?? 0, 0, LAB_EQUALIZER_SEGMENT_ROWS);
+    const peakRow = THREE.MathUtils.clamp(Math.ceil(peakRows) - 1, 0, LAB_EQUALIZER_SEGMENT_ROWS - 1);
+    if (peakRows >= activeRowsFloat - 0.25 && peakRows > 1.2) {
+      const y = bottomY - (peakRow + 1) * rowH - peakRow * rowGap;
+      ctx.fillStyle = labEqualizerPeakBlockColor(column, peakRow, LAB_EQUALIZER_SEGMENT_ROWS, now, beatPulse);
+      ctx.fillRect(x, y, columnW, rowH);
+    }
+  }
   ctx.restore();
 
   ctx.save();
@@ -12441,6 +12487,16 @@ let tronRunnerRevealProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
 let tronRunnerRevealRawProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
 let tronRunnerRevealActive = false;
 let tronRunnerRevealComplete = !TRON_RUNNER_REVEAL_ENABLED;
+const tronRunnerRevealVisualCache = {
+  ready: null,
+  progress: -1,
+  rawProgress: -1,
+  active: null,
+  complete: null,
+  crowdCount: -1,
+  idleBuilt: null,
+  sourceVisible: null,
+};
 let tronRunnerCrowdAccumulatedDt = 0;
 const tronRunnerCrowd = [];
 const tronRunnerIdleCharacter = {
@@ -12525,6 +12581,7 @@ const tronRunnerCrowdRuntimeStats = {
   distanceReuses: 0,
   performanceFreezeFrameCount: 0,
 };
+const tronRunnerCrowdReflectionCandidates = [];
 const tronRunnerBeatPulseState = {
   value: 0,
   multiplier: 1,
@@ -13011,6 +13068,28 @@ function applyTronRunnerRevealVisuals() {
   const visibleFactor = THREE.MathUtils.clamp(factor, 0, 1);
   const complete = visibleFactor >= 0.995 || !TRON_RUNNER_REVEAL_ENABLED;
   const activePulse = tronRunnerRevealActive ? Math.sin(Math.PI * tronRunnerRevealRawProgress) : 0;
+  const cacheProgress = Number(visibleFactor.toFixed(4));
+  const cacheRawProgress = Number(tronRunnerRevealRawProgress.toFixed(4));
+  if (
+    tronRunnerRevealVisualCache.ready === tronRunnerState.ready &&
+    tronRunnerRevealVisualCache.progress === cacheProgress &&
+    tronRunnerRevealVisualCache.rawProgress === cacheRawProgress &&
+    tronRunnerRevealVisualCache.active === tronRunnerRevealActive &&
+    tronRunnerRevealVisualCache.complete === complete &&
+    tronRunnerRevealVisualCache.crowdCount === tronRunnerCrowd.length &&
+    tronRunnerRevealVisualCache.idleBuilt === tronRunnerIdleCharacter.built &&
+    tronRunnerRevealVisualCache.sourceVisible === TRON_RUNNER_SOURCE_CHARACTER_VISIBLE
+  ) {
+    return;
+  }
+  tronRunnerRevealVisualCache.ready = tronRunnerState.ready;
+  tronRunnerRevealVisualCache.progress = cacheProgress;
+  tronRunnerRevealVisualCache.rawProgress = cacheRawProgress;
+  tronRunnerRevealVisualCache.active = tronRunnerRevealActive;
+  tronRunnerRevealVisualCache.complete = complete;
+  tronRunnerRevealVisualCache.crowdCount = tronRunnerCrowd.length;
+  tronRunnerRevealVisualCache.idleBuilt = tronRunnerIdleCharacter.built;
+  tronRunnerRevealVisualCache.sourceVisible = TRON_RUNNER_SOURCE_CHARACTER_VISIBLE;
   const shouldRenderRunner = Boolean(
     TRON_RUNNER_SOURCE_CHARACTER_VISIBLE &&
     tronRunnerState.ready &&
@@ -13991,27 +14070,32 @@ function updateTronRunnerCrowdReflectionBudget() {
   budgetLimit = Math.min(budgetLimit, rampLimit);
   tronRunnerCrowdRuntimeStats.reflectionBudgetLimit = budgetLimit;
   if (budgetLimit <= 0) return;
-  const candidates = tronRunnerCrowd
-    .filter((member) => member.group.visible && member.reflectionGroup)
-    .map((member) => {
-      const distance = tronRunnerCrowdDistanceToCamera(member);
-      member.dynamicReflectionDistance = distance;
-      return { member, distance };
-    })
-    .filter(({ distance }) => {
-      const nearEnough = distance <= TRON_RUNNER_CROWD_REFLECTION_NEAR_DISTANCE;
-      if (!nearEnough) tronRunnerCrowdRuntimeStats.reflectionDistanceSkippedCount += 1;
-      return nearEnough;
-    })
-    .sort((a, b) => a.distance - b.distance);
-  tronRunnerCrowdRuntimeStats.reflectionCandidateCount = candidates.length;
-  candidates.slice(0, budgetLimit).forEach(({ member }, rank) => {
+  tronRunnerCrowdReflectionCandidates.length = 0;
+  for (const member of tronRunnerCrowd) {
+    if (!member.group.visible || !member.reflectionGroup) continue;
+    const distance = tronRunnerCrowdDistanceToCamera(member);
+    member.dynamicReflectionDistance = distance;
+    if (distance > TRON_RUNNER_CROWD_REFLECTION_NEAR_DISTANCE) {
+      tronRunnerCrowdRuntimeStats.reflectionDistanceSkippedCount += 1;
+      continue;
+    }
+    tronRunnerCrowdRuntimeStats.reflectionCandidateCount += 1;
+    let insertAt = tronRunnerCrowdReflectionCandidates.length;
+    while (insertAt > 0 && distance < tronRunnerCrowdReflectionCandidates[insertAt - 1].distance) insertAt--;
+    if (insertAt < budgetLimit) {
+      tronRunnerCrowdReflectionCandidates.splice(insertAt, 0, { member, distance });
+      if (tronRunnerCrowdReflectionCandidates.length > budgetLimit) {
+        tronRunnerCrowdReflectionCandidates.length = budgetLimit;
+      }
+    }
+  }
+  tronRunnerCrowdReflectionCandidates.forEach(({ member }, rank) => {
     member.dynamicReflectionBudgetActive = true;
     member.dynamicReflectionRank = rank + 1;
   });
   tronRunnerCrowdRuntimeStats.activeReflectionCount = Math.min(
     budgetLimit,
-    candidates.length
+    tronRunnerCrowdRuntimeStats.reflectionCandidateCount
   );
 }
 
@@ -16266,6 +16350,14 @@ const cityRevealWireCullStats = {
   solidVisible: 0,
   roadFadeVisible: 0,
 };
+let cityRevealWireCullRevision = 0;
+const cityRevealWireCullCache = {
+  revision: -1,
+  count: -1,
+  frontZ: NaN,
+  alpha: NaN,
+  groupVisible: null,
+};
 const cityRevealRealClipPlane = new THREE.Plane(CITY_REVEAL_SWEEP_NORMAL.clone(), -cityRevealFrontZ);
 const CITY_REVEAL_REAL_PREWARM_TARGET_SIZE = 4;
 let cityRevealRealPrewarmTarget = null;
@@ -16936,6 +17028,7 @@ function clearCityRevealWire() {
   cityRevealWireCullStats.solidVisible = 0;
   cityRevealWireCullStats.roadFadeVisible = 0;
   cityRevealRoadGridSkippedPerimeterSegments = 0;
+  cityRevealWireCullRevision++;
 }
 
 function cityRevealRoadSolidTopY() {
@@ -17201,14 +17294,31 @@ function cityRevealObjectStillWireVisible(object) {
 }
 
 function updateCityRevealWireObjectCulling() {
+  const count = cityRevealWireCullObjects.length;
+  const groupVisible = cityRevealWireAlpha > 0.002 && cityRevealWireGroup.visible;
+  const roundedFrontZ = Number(cityRevealFrontZ.toFixed(3));
+  const roundedAlpha = Number(cityRevealWireAlpha.toFixed(4));
+  if (
+    cityRevealWireCullCache.revision === cityRevealWireCullRevision &&
+    cityRevealWireCullCache.count === count &&
+    cityRevealWireCullCache.frontZ === roundedFrontZ &&
+    cityRevealWireCullCache.alpha === roundedAlpha &&
+    cityRevealWireCullCache.groupVisible === groupVisible
+  ) {
+    return;
+  }
+  cityRevealWireCullCache.revision = cityRevealWireCullRevision;
+  cityRevealWireCullCache.count = count;
+  cityRevealWireCullCache.frontZ = roundedFrontZ;
+  cityRevealWireCullCache.alpha = roundedAlpha;
+  cityRevealWireCullCache.groupVisible = groupVisible;
   const stats = cityRevealWireCullStats;
-  stats.total = cityRevealWireCullObjects.length;
+  stats.total = count;
   stats.visible = 0;
   stats.hidden = 0;
   stats.wireVisible = 0;
   stats.solidVisible = 0;
   stats.roadFadeVisible = 0;
-  const groupVisible = cityRevealWireAlpha > 0.002 && cityRevealWireGroup.visible;
   for (const object of cityRevealWireCullObjects) {
     const visible = groupVisible && cityRevealObjectStillWireVisible(object);
     object.visible = visible;
@@ -17284,6 +17394,7 @@ function cityRevealComposerPassProfile() {
     mainLedReveal: Boolean(cityRevealMainLedRevealPass?.enabled),
     bloom: Boolean(bloomPass?.enabled),
     fxaa: Boolean(fxaaPass?.enabled),
+    fsrSharpen: Boolean(fsrSharpenPass?.enabled),
     output: Boolean(composer),
   };
   const mainLedSceneRenders = passes.mainLedReveal ? 2 : 0;
@@ -17294,7 +17405,7 @@ function cityRevealComposerPassProfile() {
     passes.roadGrid,
     passes.realCity,
   ].filter(Boolean).length + mainLedSceneRenders;
-  const postPasses = [passes.bloom, passes.fxaa, passes.output].filter(Boolean).length;
+  const postPasses = [passes.bloom, passes.fxaa, passes.fsrSharpen, passes.output].filter(Boolean).length;
   return {
     composer: shouldUseComposer(),
     passes,
@@ -17919,12 +18030,43 @@ function renderCityRevealCompositeFrame() {
 }
 
 // ---------- post (bloom) ----------
+function effectiveComposerPixelRatio() {
+  const internalScale = fsrUpscaleEnabled
+    ? THREE.MathUtils.clamp(fsrInternalScale, 0.65, 1)
+    : 1;
+  return Math.max(MIN_DYNAMIC_PIXEL_RATIO, activePixelRatio * internalScale);
+}
+
+function isFsrUpscaleActive() {
+  return Boolean(fsrUpscaleEnabled && fsrInternalScale < 0.999);
+}
+
+function syncFsrSharpenPass() {
+  if (!fsrSharpenPass) return;
+  fsrSharpenPass.enabled = Boolean(fsrUpscaleEnabled && fsrSharpness > 0.001);
+  if (fsrSharpenPass.uniforms?.sharpness) {
+    fsrSharpenPass.uniforms.sharpness.value = THREE.MathUtils.clamp(fsrSharpness, 0, 1.25);
+  }
+}
+
+function resizeFsrSharpenTarget() {
+  if (!fsrSharpenPass) return;
+  const composerPixelRatio = effectiveComposerPixelRatio();
+  const width = Math.max(1, Math.round(window.innerWidth * composerPixelRatio));
+  const height = Math.max(1, Math.round(window.innerHeight * composerPixelRatio));
+  const key = `${width}x${height}`;
+  if (key === lastFsrTargetKey) return;
+  lastFsrTargetKey = key;
+  fsrSharpenPass.uniforms?.resolution?.value?.set(width, height);
+}
+
 function resizeBloomTargets() {
   if (!bloomPass) return;
   const requestedScale = Math.min(effectiveBloomScaleForDevice(requestedBloomResolutionScale), BLOOM_RESOLUTION_CAP);
   bloomResolutionScale = Math.max(MIN_DYNAMIC_BLOOM_SCALE, requestedScale * dynamicQualityScale);
-  const width = Math.max(MIN_BLOOM_TARGET_SIZE, Math.round(window.innerWidth * activePixelRatio * bloomResolutionScale));
-  const height = Math.max(MIN_BLOOM_TARGET_SIZE, Math.round(window.innerHeight * activePixelRatio * bloomResolutionScale));
+  const composerPixelRatio = effectiveComposerPixelRatio();
+  const width = Math.max(MIN_BLOOM_TARGET_SIZE, Math.round(window.innerWidth * composerPixelRatio * bloomResolutionScale));
+  const height = Math.max(MIN_BLOOM_TARGET_SIZE, Math.round(window.innerHeight * composerPixelRatio * bloomResolutionScale));
   const key = `${width}x${height}`;
   if (key === lastBloomTargetKey) return;
   lastBloomTargetKey = key;
@@ -17933,13 +18075,15 @@ function resizeBloomTargets() {
 
 function resizeFxaaTargets() {
   if (!fxaaPass && !cityRevealWireFxaaPass) return;
-  const width = Math.max(1, Math.round(window.innerWidth * activePixelRatio));
-  const height = Math.max(1, Math.round(window.innerHeight * activePixelRatio));
+  const composerPixelRatio = effectiveComposerPixelRatio();
+  const width = Math.max(1, Math.round(window.innerWidth * composerPixelRatio));
+  const height = Math.max(1, Math.round(window.innerHeight * composerPixelRatio));
   const key = `${width}x${height}`;
   if (key === lastFxaaTargetKey) return;
   lastFxaaTargetKey = key;
   fxaaPass?.setSize(width, height);
   cityRevealWireFxaaPass?.setSize(width, height);
+  resizeFsrSharpenTarget();
 }
 
 function normalizedAntialiasMode(mode) {
@@ -17955,9 +18099,12 @@ function disposeComposerTargets() {
   if (!composer) return;
   bloomPass?.dispose?.();
   fxaaPass?.dispose?.();
+  fsrSharpenPass?.material?.dispose?.();
+  fsrSharpenPass?.dispose?.();
   composer.dispose?.();
   bloomPass = null;
   fxaaPass = null;
+  fsrSharpenPass = null;
   cityRevealSkyPass = null;
   cityRevealOverlayPass = null;
   cityRevealWirePass = null;
@@ -17970,14 +18117,15 @@ function disposeComposerTargets() {
 
 function rebuildComposer() {
   if (!usePost) return;
-  const { EffectComposer, RenderPass, UnrealBloomPass, OutputPass, FXAAPass } = window.__POST;
+  const { EffectComposer, RenderPass, UnrealBloomPass, OutputPass, FXAAPass, ShaderPass } = window.__POST;
   disposeComposerTargets();
   composer = new EffectComposer(renderer);
   lastAppliedComposerPixelRatio = -1;
   lastBloomTargetKey = '';
   lastFxaaTargetKey = '';
+  lastFsrTargetKey = '';
   composer.setSize(window.innerWidth, window.innerHeight);
-  composer.setPixelRatio(activePixelRatio);
+  composer.setPixelRatio(effectiveComposerPixelRatio());
   cityRevealSkyPass = new RenderPass(cityRevealSkyScene, camera);
   cityRevealSkyPass.clear = true;
   cityRevealOverlayPass = new RenderPass(cityRevealOverlayScene, cityRevealOverlayCamera);
@@ -18007,9 +18155,16 @@ function rebuildComposer() {
   composer.addPass(bloomPass);
   fxaaPass = new FXAAPass();
   composer.addPass(fxaaPass);
+  fsrSharpenPass = new ShaderPass(TRON_FSR_SHARPEN_SHADER);
+  fsrSharpenPass.setSize = (width, height) => {
+    fsrSharpenPass.uniforms?.resolution?.value?.set(Math.max(1, width), Math.max(1, height));
+  };
+  syncFsrSharpenPass();
+  composer.addPass(fsrSharpenPass);
   composer.addPass(new OutputPass());
   resizeBloomTargets();
   resizeFxaaTargets();
+  resizeFsrSharpenTarget();
   applyBloomEnabled(bloomEnabled);
 }
 
@@ -18121,7 +18276,12 @@ function mobilePerformanceProfileInspect() {
 
 function shouldUseComposer() {
   if (!composer || !postEnabled) return false;
-  return Boolean(isBloomPassActive() || fxaaPass?.enabled || (cityRevealWireframeEnabled && cityRevealWireAlpha > 0.002));
+  return Boolean(
+    isBloomPassActive() ||
+    fxaaPass?.enabled ||
+    isFsrUpscaleActive() ||
+    (cityRevealWireframeEnabled && cityRevealWireAlpha > 0.002)
+  );
 }
 
 function applyRenderResolution(requestedPixelRatio) {
@@ -18143,12 +18303,17 @@ function applyRenderResolution(requestedPixelRatio) {
     lastAppliedRendererPixelRatio = activePixelRatio;
   }
   if (composer) {
-    if (Math.abs(activePixelRatio - lastAppliedComposerPixelRatio) > 0.0001) {
-      composer.setPixelRatio(activePixelRatio);
-      lastAppliedComposerPixelRatio = activePixelRatio;
+    const composerPixelRatio = effectiveComposerPixelRatio();
+    if (Math.abs(composerPixelRatio - lastAppliedComposerPixelRatio) > 0.0001) {
+      composer.setPixelRatio(composerPixelRatio);
+      lastAppliedComposerPixelRatio = composerPixelRatio;
+      lastBloomTargetKey = '';
+      lastFxaaTargetKey = '';
+      lastFsrTargetKey = '';
     }
     resizeBloomTargets();
     resizeFxaaTargets();
+    syncFsrSharpenPass();
   }
 }
 
@@ -18788,6 +18953,9 @@ function mountFxCategoryPanels() {
     'render-resolution',
     'aa-mode',
     'pixel-ratio',
+    'fsr-upscale-enabled',
+    'fsr-internal-scale',
+    'fsr-sharpness',
   ]);
   const performanceTarget = document.getElementById('performance-fx-controls');
   if (performanceTarget && !document.getElementById('performance-diagnostics')) {
@@ -19316,6 +19484,9 @@ const POST_FAST_CONTROL_IDS = new Set([
   'bloom-threshold',
   'bloom-quality',
   'pixel-ratio',
+  'fsr-upscale-enabled',
+  'fsr-internal-scale',
+  'fsr-sharpness',
 ]);
 const WIREFRAME_FAST_CONTROL_IDS = new Set([
   'wireframe-enabled',
@@ -19518,6 +19689,18 @@ function scheduleLiveControls(event) {
   });
 }
 
+function applyFsrUpscaleControlsFromUI() {
+  if (!controlEls.fsrUpscaleEnabled || !controlEls.fsrInternalScale || !controlEls.fsrSharpness) return;
+  fsrUpscaleEnabled = controlEls.fsrUpscaleEnabled.value !== 'off';
+  fsrInternalScale = THREE.MathUtils.clamp(Number(controlEls.fsrInternalScale.value) || 0.85, 0.65, 1);
+  fsrSharpness = THREE.MathUtils.clamp(Number(controlEls.fsrSharpness.value) || 0, 0, 1.25);
+  controlEls.fsrInternalScale.value = fsrInternalScale.toFixed(2);
+  controlEls.fsrSharpness.value = fsrSharpness.toFixed(2);
+  controlEls.fsrInternalScaleVal.textContent = `${Math.round(fsrInternalScale * 100)}%`;
+  controlEls.fsrSharpnessVal.textContent = fsrSharpness.toFixed(2);
+  syncFsrSharpenPass();
+}
+
 function applyPostControlsFromUI() {
   const nextPerformanceMode = controlEls.performanceMode.value;
   const nextRenderResolution = Number(controlEls.renderResolution.value);
@@ -19534,6 +19717,7 @@ function applyPostControlsFromUI() {
   manualRenderScale = nextRenderResolution;
   requestedBloomResolutionScale = bloomQuality;
   requestedPixelRatio = pixelRatio;
+  applyFsrUpscaleControlsFromUI();
   applyAntialiasControls(nextAntialiasMode);
   applyBloomEnabled(nextBloomEnabled);
   if (performanceMode !== previousPerformanceMode || performanceMode === 'quality') {
@@ -19553,6 +19737,7 @@ function applyPostControlsFromUI() {
   controlEls.bloomThresholdVal.textContent = bloomThreshold.toFixed(2);
   controlEls.bloomQualityVal.textContent = bloomQuality.toFixed(2);
   controlEls.pixelRatioVal.textContent = pixelRatio.toFixed(2);
+  applyFsrUpscaleControlsFromUI();
   applyWireframeFxControlsFromUI();
 }
 
@@ -20333,6 +20518,7 @@ function applyLiveControls() {
   manualRenderScale = nextRenderResolution;
   requestedBloomResolutionScale = bloomQuality;
   requestedPixelRatio = pixelRatio;
+  applyFsrUpscaleControlsFromUI();
   applyAntialiasControls(nextAntialiasMode);
   applyBloomEnabled(nextBloomEnabled);
   if (performanceMode !== previousPerformanceMode || performanceMode === 'quality') {
@@ -20616,6 +20802,7 @@ function applyLiveControls() {
   controlEls.bloomThresholdVal.textContent = bloomThreshold.toFixed(2);
   controlEls.bloomQualityVal.textContent = bloomQuality.toFixed(2);
   controlEls.pixelRatioVal.textContent = pixelRatio.toFixed(2);
+  applyFsrUpscaleControlsFromUI();
   applyTronSoundtrackIntroFxControlsFromUI();
   applyCharacterControlsFromUI();
 }
@@ -21228,7 +21415,13 @@ function updatePerformanceLiveRollingMetrics(dt, frameMs, updateMs, renderMs) {
 
 function beginGpuTimerSample() {
   const state = gpuTimerState;
-  if (!state.supported || state.activeQuery || state.pending.length > 8) return;
+  gpuTimerFrameIndex++;
+  if (
+    gpuTimerFrameIndex % GPU_TIMER_SAMPLE_STRIDE !== 0 ||
+    !state.supported ||
+    state.activeQuery ||
+    state.pending.length > 8
+  ) return;
   try {
     const query = state.webgl2 ? state.gl.createQuery() : state.ext.createQueryEXT();
     if (!query) return;
@@ -21326,6 +21519,7 @@ function performanceLiveMetricsSummary() {
     gpuMs: gpuMs > 0 ? Number(gpuMs.toFixed(3)) : 0,
     gpuFpsTheoretical: gpuTheoreticalFps > 0 ? Number(gpuTheoreticalFps.toFixed(1)) : 0,
     gpuSamples: gpuTimerState.sampleCount,
+    gpuSampleStride: GPU_TIMER_SAMPLE_STRIDE,
     gpuPending: gpuTimerState.pending.length,
     gpuDisjointCount: gpuTimerState.disjointCount,
     presentationDropActive,
@@ -21383,6 +21577,10 @@ function performanceDiagnosticsPixelPipeline() {
     dynamicPixelRatioAfterPreRevealCap: Number(Math.min(dynamicPixelRatioBeforeClamp, revealPixelRatioCap).toFixed(3)),
     dynamicPixelRatioAfterRevealCap: Number(Math.min(dynamicPixelRatioBeforeClamp, revealPixelRatioCap).toFixed(3)),
     activePixelRatio: Number(activePixelRatio.toFixed(3)),
+    composerPixelRatio: Number(effectiveComposerPixelRatio().toFixed(3)),
+    fsrUpscaleEnabled,
+    fsrInternalScale: Number(fsrInternalScale.toFixed(2)),
+    fsrSharpness: Number(fsrSharpness.toFixed(2)),
     minDynamicPixelRatio: MIN_DYNAMIC_PIXEL_RATIO,
     maxRenderPixelRatio: MAX_RENDER_PIXEL_RATIO,
     preRevealPerformanceActive: cityRevealPerformanceProfileActive,
@@ -21402,6 +21600,11 @@ function performanceDiagnosticsComposerSummary() {
     passCount: activePasses.length,
     activePasses,
     estimatedPasses: profile.estimatedPasses,
+    composerPixelRatio: Number(effectiveComposerPixelRatio().toFixed(3)),
+    fsrUpscaleEnabled,
+    fsrInternalScale: Number(fsrInternalScale.toFixed(2)),
+    fsrSharpness: Number(fsrSharpness.toFixed(2)),
+    fsrSharpenEnabled: Boolean(fsrSharpenPass?.enabled),
   };
 }
 
@@ -21416,6 +21619,7 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
   const memoryInfo = renderer.info.memory || {};
   const bloomTarget = performanceDiagnosticsTargetSizeFromKey(lastBloomTargetKey);
   const fxaaTarget = performanceDiagnosticsTargetSizeFromKey(lastFxaaTargetKey);
+  const fsrTarget = performanceDiagnosticsTargetSizeFromKey(lastFsrTargetKey);
   return {
     fps: Number.isFinite(measuredFps) ? Number(measuredFps.toFixed(1)) : 0,
     renderScale: Number(activePixelRatio.toFixed(2)),
@@ -21444,6 +21648,12 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
     composerPassCount: composerSummary.passCount,
     composerActivePasses: composerSummary.activePasses,
     composerEstimatedPasses: composerSummary.estimatedPasses,
+    composerPixelRatio: composerSummary.composerPixelRatio,
+    fsrUpscaleEnabled: composerSummary.fsrUpscaleEnabled,
+    fsrInternalScale: composerSummary.fsrInternalScale,
+    fsrSharpness: composerSummary.fsrSharpness,
+    fsrSharpenEnabled: composerSummary.fsrSharpenEnabled,
+    fsrTarget,
     bloomEnabled,
     bloomPassEnabled: Boolean(bloomPass?.enabled),
     bloomRevealBypassed: isBloomRevealBypassed(),
@@ -21478,6 +21688,7 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
     gpuMs: liveMetrics.gpuMs,
     gpuFpsTheoretical: liveMetrics.gpuFpsTheoretical,
     gpuSamples: liveMetrics.gpuSamples,
+    gpuSampleStride: liveMetrics.gpuSampleStride,
     gpuPending: liveMetrics.gpuPending,
     gpuDisjointCount: liveMetrics.gpuDisjointCount,
     presentationDropActive: liveMetrics.presentationDropActive,
@@ -21521,7 +21732,10 @@ function updatePerformanceLiveOverlay(stats) {
   );
   setPerfLiveText(perfCpuRenderMsEl, `${stats.rollingUpdateMs.toFixed(1)} / ${stats.rollingRenderMs.toFixed(1)} ms`);
   setPerfLiveText(perfGpuMsEl, gpuText, stats.gpuTimerSupported ? '' : 'muted');
-  setPerfLiveText(perfResolutionEl, `${stats.drawingBufferWidth}x${stats.drawingBufferHeight} ${stats.renderScale.toFixed(2)}x`);
+  setPerfLiveText(
+    perfResolutionEl,
+    `${stats.drawingBufferWidth}x${stats.drawingBufferHeight} ${stats.renderScale.toFixed(2)}x / post ${stats.composerPixelRatio.toFixed(2)}x`
+  );
   setPerfLiveText(perfPassDrawEl, `${stats.composerActive ? stats.composerPassCount : 0} / ${stats.drawCalls}`);
   setPerfLiveText(perfTriFxEl, `${Math.round(stats.triangles / 1000)}k ${stats.bloomActive ? 'B' : '-'}${stats.fxaaEnabled ? 'A' : '-'}`);
 }
@@ -21538,6 +21752,7 @@ function updatePerformanceDiagnostics(measuredFps = latestMeasuredFps) {
       `bneck ${stats.bottleneck}`,
       `gpu ${stats.gpuTimerSupported ? `${stats.gpuMs.toFixed(1)}ms` : 'n/a'}`,
       `render ${stats.renderScale.toFixed(2)}x`,
+      `fsr ${stats.fsrUpscaleEnabled ? `${Math.round(stats.fsrInternalScale * 100)}%` : 'off'}`,
       `qualita ${stats.qualityScale.toFixed(2)}`,
       `px ${Math.round(stats.canvasPixels / 1000)}k`,
       `draw ${stats.drawCalls}`,
