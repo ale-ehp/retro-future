@@ -1268,6 +1268,7 @@ let cityRevealWireframeDensity = 2;
 let cityRevealWireOpacityScale = 1;
 let cityRevealBackplateOpacityScale = 0;
 let cityRevealStartedAt = 0;
+let cityRevealArmedAt = 0;
 let cityRevealWireAlpha = 1;
 let cityRevealBackplateRevealFactor = 1;
 let cityRevealFrontZ = 1e9;
@@ -1973,8 +1974,9 @@ const performanceDiagnosticsTiming = {
 };
 const PERFORMANCE_LIVE_METRIC_ALPHA = 0.12;
 const PERFORMANCE_LIVE_MIN_FRAME_MS = 0.001;
-const PERFORMANCE_SPIKE_FPS_THRESHOLD = 55;
+const PERFORMANCE_SPIKE_FPS_THRESHOLD = 50;
 const PERFORMANCE_SPIKE_FRAME_MS_THRESHOLD = 22;
+const PERFORMANCE_SPIKE_RAF_MS_THRESHOLD = 1000 / PERFORMANCE_SPIKE_FPS_THRESHOLD;
 const PERFORMANCE_SPIKE_MIN_INTERVAL_MS = 320;
 const PERFORMANCE_SPIKE_MAX_RECORDS = 12;
 const performanceLiveMetrics = {
@@ -1988,6 +1990,7 @@ const performanceLiveMetrics = {
 const performanceSpikeState = {
   count: 0,
   lastLoggedAt: -Infinity,
+  lastTextureCount: 0,
   last: null,
   worst: null,
   records: [],
@@ -2014,10 +2017,13 @@ const gpuTimerState = {
   activeQuery: null,
   pending: [],
   latestMs: 0,
+  latestAt: 0,
+  latestPhase: '',
   sampleCount: 0,
   disjointCount: 0,
 };
-const GPU_TIMER_SAMPLE_STRIDE = 30;
+const GPU_TIMER_SAMPLE_STRIDE = 180;
+const GPU_TIMER_SAMPLE_MAX_AGE_MS = 4500;
 let gpuTimerFrameIndex = 0;
 
 const scene = new THREE.Scene();
@@ -10667,6 +10673,7 @@ let labEqualizerAccumulatedDt = 0;
 let labEqualizerBassEnvelope = 0;
 let labEqualizerBassPulse = 0;
 let labEqualizerActivatedAfterReveal = false;
+let labEqualizerPrewarmed = false;
 const labEqualizerState = {
   enabled: false,
   ready: false,
@@ -11192,11 +11199,22 @@ function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
   labEqualizerTexture.needsUpdate = true;
 }
 
-function buildLabEqualizer() {
+function prewarmLabEqualizerTexture() {
+  if (!labEqualizerTexture || labEqualizerPrewarmed) return;
+  try {
+    renderer.initTexture?.(labEqualizerTexture);
+    labEqualizerPrewarmed = true;
+  } catch {
+    labEqualizerPrewarmed = false;
+  }
+}
+
+function buildLabEqualizer({ visible = cityRevealComplete } = {}) {
   if (!LAB_EQUALIZER_ENABLED || labEqualizerState.enabled) return;
   ensureLabEqualizerVisualResources();
   if (!labEqualizerPanelMat || !labEqualizerDisplayMat) return;
   labEqualizerState.enabled = true;
+  labEqualizerGroup.visible = Boolean(visible);
   labEqualizerGroup.scale.setScalar(LAB_EQUALIZER_SCENE_SCALE);
   syncLabEqualizerPose();
   labEqualizerGroup.renderOrder = 42;
@@ -11219,6 +11237,7 @@ function buildLabEqualizer() {
   scene.add(labEqualizerGroup);
   labEqualizerState.boardChildren = labEqualizerGroup.children.length;
   drawLabEqualizerCanvas(performance.now(), 0, 0);
+  prewarmLabEqualizerTexture();
   applyLabEqualizerControlsFromUI();
   updateLabEqualizerButton();
 }
@@ -11226,6 +11245,7 @@ function buildLabEqualizer() {
 function activateLabEqualizerAfterReveal() {
   if (!LAB_EQUALIZER_ENABLED || labEqualizerActivatedAfterReveal || !cityRevealComplete) return false;
   buildLabEqualizer();
+  labEqualizerGroup.visible = true;
   ensureLabEqualizerAudioGraphIfNeeded(performance.now(), true);
   labEqualizerActivatedAfterReveal = true;
   labEqualizerStartedAt = performance.now();
@@ -17444,6 +17464,8 @@ function cityRevealProfileSceneSnapshot() {
     },
     reveal: {
       started: cityRevealStartedAt > 0,
+      armed: cityRevealArmedAt > 0,
+      armedElapsedMs: cityRevealArmedAt > 0 ? Number((performance.now() - cityRevealArmedAt).toFixed(1)) : 0,
       complete: cityRevealComplete,
       completedAt: Number(cityRevealCompletedAt.toFixed(1)),
       postRevealElapsedMs: Number(cityRevealPostRevealElapsedMs().toFixed(1)),
@@ -17722,6 +17744,7 @@ function startCityRevealWireframe() {
   buildCityRevealWireframe();
   setCityRevealSweepFront(cityRevealSweepStartZ);
   cityRevealStartedAt = 0;
+  cityRevealArmedAt = 0;
   cityRevealComplete = false;
   cityRevealCompletedAt = 0;
   cityRevealWaitingForVisibleFrame = false;
@@ -17731,7 +17754,7 @@ function startCityRevealWireframe() {
 
 function startCityRevealWireTimer() {
   if (!cityRevealWireframeEnabled) return;
-  if (cityRevealComplete || cityRevealStartedAt || cityRevealWaitingForVisibleFrame) return;
+  if (cityRevealComplete || cityRevealStartedAt || cityRevealArmedAt || cityRevealWaitingForVisibleFrame) return;
   cityRevealWaitingForVisibleFrame = true;
 }
 
@@ -17747,7 +17770,7 @@ function updateCityRevealWireframe(now) {
   }
   if (cityRevealComplete) return;
   if (cityRevealWaitingForVisibleFrame) {
-    cityRevealStartedAt = Number.isFinite(now) && now > 0 ? now : performance.now() || 1;
+    cityRevealArmedAt = Number.isFinite(now) && now > 0 ? now : performance.now() || 1;
     cityRevealWaitingForVisibleFrame = false;
     cityRevealSweepProgress = 0;
     cityRevealBackplateRevealFactor = 1;
@@ -17755,6 +17778,16 @@ function updateCityRevealWireframe(now) {
     setCityRevealSweepFront(cityRevealSweepStartZ);
     setCityRevealWireAlpha(1);
     return;
+  }
+  if (cityRevealArmedAt && !cityRevealStartedAt) {
+    const armedElapsed = now - cityRevealArmedAt;
+    if (armedElapsed < cityRevealEffectiveDelayMs()) return;
+    cityRevealStartedAt = now - cityRevealEffectiveDelayMs();
+    cityRevealSweepProgress = 0;
+    cityRevealBackplateRevealFactor = 1;
+    setCityRevealRoadGridAlphaFactor(1);
+    setCityRevealSweepFront(cityRevealSweepStartZ);
+    setCityRevealWireAlpha(1);
   }
   if (!cityRevealStartedAt) return;
   const elapsed = now - cityRevealStartedAt;
@@ -17807,7 +17840,7 @@ function isCityRevealPerformanceCritical() {
   return Boolean(
     cityRevealWireframeEnabled &&
     !cityRevealComplete &&
-    (cityRevealWaitingForVisibleFrame || cityRevealStartedAt > 0)
+    (cityRevealWaitingForVisibleFrame || cityRevealArmedAt > 0 || cityRevealStartedAt > 0)
   );
 }
 
@@ -20916,6 +20949,168 @@ bindSaveButtons();
 
 updateControlTabs();
 setupSettingsToggle();
+
+const SCENE_TEXTURE_PREWARM_KEYS = Object.freeze([
+  'map',
+  'normalMap',
+  'roughnessMap',
+  'metalnessMap',
+  'emissiveMap',
+  'alphaMap',
+  'aoMap',
+  'bumpMap',
+  'displacementMap',
+  'lightMap',
+  'specularMap',
+  'envMap',
+]);
+const sceneTexturePrewarmStats = {
+  supported: false,
+  attempted: 0,
+  uploaded: 0,
+  errors: 0,
+  durationMs: 0,
+};
+const postProcessingPrewarmStats = {
+  attempted: false,
+  rendered: false,
+  postRevealRendered: false,
+  errors: 0,
+  durationMs: 0,
+  texturesAfter: 0,
+};
+const skinnedMeshPrewarmStats = {
+  attempted: 0,
+  created: 0,
+  uploaded: 0,
+  errors: 0,
+  durationMs: 0,
+};
+
+function prewarmTextureUpload(texture, seen) {
+  if (!texture?.isTexture || seen.has(texture)) return;
+  seen.add(texture);
+  sceneTexturePrewarmStats.attempted += 1;
+  try {
+    renderer.initTexture?.(texture);
+    sceneTexturePrewarmStats.uploaded += 1;
+  } catch {
+    sceneTexturePrewarmStats.errors += 1;
+  }
+}
+
+function prewarmMaterialTextureUploads(material, seen) {
+  if (!material) return;
+  for (const key of SCENE_TEXTURE_PREWARM_KEYS) {
+    prewarmTextureUpload(material[key], seen);
+  }
+  for (const uniform of Object.values(material.uniforms || {})) {
+    prewarmTextureUpload(uniform?.value, seen);
+  }
+}
+
+function prewarmSceneTextureUploads(root = scene) {
+  const started = performance.now();
+  sceneTexturePrewarmStats.supported = typeof renderer.initTexture === 'function';
+  sceneTexturePrewarmStats.attempted = 0;
+  sceneTexturePrewarmStats.uploaded = 0;
+  sceneTexturePrewarmStats.errors = 0;
+  if (!sceneTexturePrewarmStats.supported) return sceneTexturePrewarmStats;
+  const seen = new Set();
+  root.traverse((object) => {
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of materials) prewarmMaterialTextureUploads(material, seen);
+  });
+  sceneTexturePrewarmStats.durationMs = Number((performance.now() - started).toFixed(2));
+  return sceneTexturePrewarmStats;
+}
+
+function prewarmSkinnedMeshBoneTextures(root = scene) {
+  const started = performance.now();
+  skinnedMeshPrewarmStats.attempted = 0;
+  skinnedMeshPrewarmStats.created = 0;
+  skinnedMeshPrewarmStats.uploaded = 0;
+  skinnedMeshPrewarmStats.errors = 0;
+  const seenSkeletons = new Set();
+  root.traverse((object) => {
+    if (!object?.isSkinnedMesh || !object.skeleton || seenSkeletons.has(object.skeleton)) return;
+    seenSkeletons.add(object.skeleton);
+    skinnedMeshPrewarmStats.attempted += 1;
+    try {
+      if (!object.skeleton.boneTexture && typeof object.skeleton.computeBoneTexture === 'function') {
+        object.skeleton.computeBoneTexture();
+        skinnedMeshPrewarmStats.created += 1;
+      }
+      if (object.skeleton.boneTexture) {
+        renderer.initTexture?.(object.skeleton.boneTexture);
+        skinnedMeshPrewarmStats.uploaded += 1;
+      }
+    } catch {
+      skinnedMeshPrewarmStats.errors += 1;
+    }
+  });
+  skinnedMeshPrewarmStats.durationMs = Number((performance.now() - started).toFixed(2));
+  return skinnedMeshPrewarmStats;
+}
+
+function prewarmPostProcessingPasses() {
+  postProcessingPrewarmStats.attempted = true;
+  postProcessingPrewarmStats.rendered = false;
+  postProcessingPrewarmStats.postRevealRendered = false;
+  postProcessingPrewarmStats.errors = 0;
+  const started = performance.now();
+  if (!composer) return postProcessingPrewarmStats;
+  const previousPostEnabled = postEnabled;
+  const previousBloomEnabled = bloomPass?.enabled;
+  const previousFxaaEnabled = fxaaPass?.enabled;
+  const previousRevealComplete = cityRevealComplete;
+  const previousRevealCompletedAt = cityRevealCompletedAt;
+  const previousRevealStartedAt = cityRevealStartedAt;
+  const previousRevealWaitingForVisibleFrame = cityRevealWaitingForVisibleFrame;
+  const previousRevealSweepProgress = cityRevealSweepProgress;
+  const previousBackplateRevealFactor = cityRevealBackplateRevealFactor;
+  const previousRoadGridAlphaFactor = cityRevealRoadGridAlphaFactor;
+  const previousWireAlpha = cityRevealWireAlpha;
+  try {
+    postEnabled = true;
+    if (bloomPass) bloomPass.enabled = true;
+    if (fxaaPass) fxaaPass.enabled = antialiasMode === 'fxaa';
+    syncCityRevealComposerPasses();
+    composer.render();
+    postProcessingPrewarmStats.rendered = true;
+    cityRevealComplete = true;
+    cityRevealCompletedAt = performance.now();
+    cityRevealStartedAt = 1;
+    cityRevealWaitingForVisibleFrame = false;
+    cityRevealSweepProgress = 1;
+    cityRevealBackplateRevealFactor = 0;
+    setCityRevealRoadGridAlphaFactor(0);
+    setCityRevealWireAlpha(0);
+    syncCityRevealComposerPasses();
+    composer.render();
+    postProcessingPrewarmStats.postRevealRendered = true;
+  } catch {
+    postProcessingPrewarmStats.errors += 1;
+  } finally {
+    cityRevealComplete = previousRevealComplete;
+    cityRevealCompletedAt = previousRevealCompletedAt;
+    cityRevealStartedAt = previousRevealStartedAt;
+    cityRevealWaitingForVisibleFrame = previousRevealWaitingForVisibleFrame;
+    cityRevealSweepProgress = previousRevealSweepProgress;
+    cityRevealBackplateRevealFactor = previousBackplateRevealFactor;
+    setCityRevealRoadGridAlphaFactor(previousRoadGridAlphaFactor);
+    setCityRevealWireAlpha(previousWireAlpha);
+    postEnabled = previousPostEnabled;
+    if (bloomPass) bloomPass.enabled = previousBloomEnabled;
+    if (fxaaPass) fxaaPass.enabled = previousFxaaEnabled;
+    syncCityRevealComposerPasses();
+    postProcessingPrewarmStats.durationMs = Number((performance.now() - started).toFixed(2));
+    postProcessingPrewarmStats.texturesAfter = renderer.info.memory?.textures ?? 0;
+    performanceSpikeState.lastTextureCount = postProcessingPrewarmStats.texturesAfter;
+  }
+  return postProcessingPrewarmStats;
+}
+
 async function bootSceneWithFinalDefaults() {
   await loadProjectCanonicalDefaults();
   loadStoredControlDefaults();
@@ -20923,11 +21118,15 @@ async function bootSceneWithFinalDefaults() {
   applyBridgeFixedDefaults();
   loadStoredPlayerSpawn();
   applyLiveControls();
+  buildLabEqualizer({ visible: false });
   setTronNoclip(false, { silent: true });
   applyPlayerSpawn(playerSpawn, false);
   await loadTronRunner();
   buildTronMainPlayerBody();
   await drainTronRunnerCrowdBuildQueue();
+  prewarmSkinnedMeshBoneTextures(scene);
+  prewarmSceneTextureUploads(scene);
+  prewarmPostProcessingPasses();
   await ensureFootstepAudioReady();
   prewarmCityRevealRealPass();
   scheduleDroneIntroAutoFlight();
@@ -21114,6 +21313,8 @@ window.__tronInspect = () => ({
   cityRevealSweepStartZ,
   cityRevealSweepEndZ,
   cityRevealSweepProgress,
+  cityRevealArmed: cityRevealArmedAt > 0,
+  cityRevealArmedElapsedMs: cityRevealArmedAt > 0 ? Number((performance.now() - cityRevealArmedAt).toFixed(1)) : 0,
   cityRevealMainBuildingSlow: cityRevealMainBuildingSlowDiagnostics(),
   cityRevealRealPrewarm: {
     status: cityRevealRealPrewarmStatus,
@@ -21123,6 +21324,7 @@ window.__tronInspect = () => ({
   },
   cityRevealMainFacadeVerticalLed: { ...mainFacadeVerticalRevealState },
   cityRevealStarted: cityRevealStartedAt > 0,
+  cityRevealComplete,
   cityRevealWaitingForBackspace: cityRevealWireframeEnabled && !backspaceIntroTriggered && !cityRevealStartedAt && !cityRevealComplete,
   cityRevealWaitingForVisibleFrame,
   cityRevealClipPlaneNormal: {
@@ -21376,6 +21578,9 @@ window.__tronPerfInspect = () => ({
   boundaryErrorPulse,
   boundaryErrorTextureAge: boundaryErrorTextureLastAge,
   liveDiagnostics: performanceDiagnosticsSummary(),
+  skinnedMeshPrewarm: { ...skinnedMeshPrewarmStats },
+  texturePrewarm: { ...sceneTexturePrewarmStats },
+  postProcessingPrewarm: { ...postProcessingPrewarmStats },
   render: { ...renderer.info.render },
   memory: { ...renderer.info.memory },
 });
@@ -21446,7 +21651,11 @@ function beginGpuTimerSample() {
     if (!query) return;
     if (state.webgl2) state.gl.beginQuery(state.ext.TIME_ELAPSED_EXT, query);
     else state.ext.beginQueryEXT(state.ext.TIME_ELAPSED_EXT, query);
-    state.activeQuery = query;
+    state.activeQuery = {
+      query,
+      phase: performanceSpikePhaseLabel(),
+      startedAt: performance.now(),
+    };
   } catch {
     state.supported = false;
     state.activeQuery = null;
@@ -21473,7 +21682,8 @@ function pollGpuTimerSamples() {
   try {
     const disjoint = Boolean(state.gl.getParameter(state.ext.GPU_DISJOINT_EXT));
     while (state.pending.length) {
-      const query = state.pending[0];
+      const sample = state.pending[0];
+      const query = sample?.query || sample;
       const available = state.webgl2
         ? state.gl.getQueryParameter(query, state.gl.QUERY_RESULT_AVAILABLE)
         : state.ext.getQueryObjectEXT(query, state.ext.QUERY_RESULT_AVAILABLE_EXT);
@@ -21489,6 +21699,8 @@ function pollGpuTimerSamples() {
         continue;
       }
       state.latestMs = Math.max(0, elapsedNs / 1000000);
+      state.latestAt = performance.now();
+      state.latestPhase = sample?.phase || '';
       state.sampleCount += 1;
     }
   } catch {
@@ -21502,7 +21714,15 @@ function performanceLiveMetricsSummary() {
   const frameMs = Math.max(PERFORMANCE_LIVE_MIN_FRAME_MS, performanceLiveMetrics.frameMsAvg || performanceDiagnosticsTiming.frameMs || 0);
   const updateMs = performanceLiveMetrics.updateMsAvg || performanceDiagnosticsTiming.updateMs || 0;
   const renderMs = performanceLiveMetrics.renderMsAvg || performanceDiagnosticsTiming.renderMs || 0;
-  const gpuMs = gpuTimerState.supported && gpuTimerState.sampleCount > 0 ? gpuTimerState.latestMs : 0;
+  const currentPhase = performanceSpikePhaseLabel();
+  const gpuSampleAgeMs = gpuTimerState.latestAt > 0 ? performance.now() - gpuTimerState.latestAt : Infinity;
+  const gpuSampleFresh = Boolean(
+    gpuTimerState.supported &&
+    gpuTimerState.sampleCount > 0 &&
+    gpuSampleAgeMs <= GPU_TIMER_SAMPLE_MAX_AGE_MS &&
+    (!gpuTimerState.latestPhase || gpuTimerState.latestPhase === currentPhase)
+  );
+  const gpuMs = gpuSampleFresh ? gpuTimerState.latestMs : 0;
   const targetHz = Math.max(1, performanceLiveMetrics.targetHz || 60);
   const targetMs = performanceLiveMetrics.targetMs || (1000 / targetHz);
   const measuredFps = Number.isFinite(latestMeasuredFps) && latestMeasuredFps > 0 ? latestMeasuredFps : 0;
@@ -21539,6 +21759,10 @@ function performanceLiveMetricsSummary() {
     gpuFpsTheoretical: gpuTheoreticalFps > 0 ? Number(gpuTheoreticalFps.toFixed(1)) : 0,
     gpuSamples: gpuTimerState.sampleCount,
     gpuSampleStride: GPU_TIMER_SAMPLE_STRIDE,
+    gpuSampleFresh,
+    gpuSampleAgeMs: Number.isFinite(gpuSampleAgeMs) ? Number(gpuSampleAgeMs.toFixed(1)) : 0,
+    gpuSamplePhase: gpuTimerState.latestPhase,
+    phase: currentPhase,
     gpuPending: gpuTimerState.pending.length,
     gpuDisjointCount: gpuTimerState.disjointCount,
     presentationDropActive,
@@ -21548,15 +21772,16 @@ function performanceLiveMetricsSummary() {
 
 function performanceSpikePhaseLabel() {
   if (cityRevealWaitingForVisibleFrame) return 'wire-wait';
-  if (isCityRevealPerformanceCritical()) return 'reveal';
   if (cityRevealComplete) return 'post';
+  if (cityRevealArmedAt > 0 && !cityRevealStartedAt) return 'pre-reveal';
+  if (isCityRevealPerformanceCritical()) return 'reveal';
   if (cityRevealStartedAt > 0) return 'reveal-delay';
   return 'pre';
 }
 
 function performanceSpikeBottleneckLabel({ rawRafDtMs, frameMs, updateMs, renderMs, liveMetrics }) {
   if (liveMetrics?.presentationDropActive && rawRafDtMs > Math.max(frameMs, 1) * 1.25) return 'present';
-  if (gpuTimerState.supported && gpuTimerState.latestMs > Math.max(frameMs, updateMs, renderMs) * 1.15) return 'gpu';
+  if ((liveMetrics?.gpuMs || 0) > Math.max(frameMs, updateMs, renderMs) * 1.15) return 'gpu';
   if (renderMs > updateMs * 1.2 && renderMs > 8) return 'render';
   if (updateMs > renderMs * 1.2 && updateMs > 8) return 'update';
   if (frameMs > rawRafDtMs * 0.8) return 'main';
@@ -21596,14 +21821,19 @@ function performanceSpikeSummary() {
 function recordPerformanceSpike({ now, rawRafDtMs, updateMs, renderMs, frameMs }) {
   const instantaneousFps = rawRafDtMs > 0 ? 1000 / rawRafDtMs : 0;
   const liveMetrics = performanceLiveMetricsSummary();
-  const slowFrame = rawRafDtMs >= PERFORMANCE_SPIKE_FRAME_MS_THRESHOLD ||
-    frameMs >= PERFORMANCE_SPIKE_FRAME_MS_THRESHOLD ||
-    (latestMeasuredFps > 0 && latestMeasuredFps < PERFORMANCE_SPIKE_FPS_THRESHOLD);
-  if (!slowFrame) return;
+  const workSpike = frameMs >= PERFORMANCE_SPIKE_FRAME_MS_THRESHOLD;
+  const rafDrop = rawRafDtMs >= PERFORMANCE_SPIKE_RAF_MS_THRESHOLD &&
+    (workSpike || liveMetrics.presentationDropActive);
+  const measuredDrop = latestMeasuredFps > 0 && latestMeasuredFps < PERFORMANCE_SPIKE_FPS_THRESHOLD;
+  if (!rafDrop && !measuredDrop) return;
   if (now - performanceSpikeState.lastLoggedAt < PERFORMANCE_SPIKE_MIN_INTERVAL_MS) return;
 
   const renderInfo = renderer.info.render || {};
   const memoryInfo = renderer.info.memory || {};
+  const textureCount = memoryInfo.textures ?? 0;
+  const previousTextureCount = performanceSpikeState.lastTextureCount || textureCount;
+  const textureDelta = Math.max(0, textureCount - previousTextureCount);
+  const context = textureDelta >= 4 ? 'texture-upload' : performanceSpikePrimaryContext();
   const spike = {
     index: performanceSpikeState.count + 1,
     now: performance.now(),
@@ -21614,15 +21844,17 @@ function recordPerformanceSpike({ now, rawRafDtMs, updateMs, renderMs, frameMs }
     frameMs: Number(frameMs.toFixed(1)),
     updateMs: Number(updateMs.toFixed(1)),
     renderMs: Number(renderMs.toFixed(1)),
-    gpuMs: gpuTimerState.latestMs > 0 ? Number(gpuTimerState.latestMs.toFixed(1)) : 0,
+    workSpike,
+    gpuMs: liveMetrics.gpuMs > 0 ? Number(liveMetrics.gpuMs.toFixed(1)) : 0,
     bottleneck: performanceSpikeBottleneckLabel({ rawRafDtMs, frameMs, updateMs, renderMs, liveMetrics }),
-    context: performanceSpikePrimaryContext(),
+    context,
     phase: performanceSpikePhaseLabel(),
     composerPasses: cityRevealComposerPassProfile().estimatedPasses,
     drawCalls: renderInfo.calls ?? 0,
     trianglesK: Math.round((renderInfo.triangles ?? 0) / 1000),
     lines: renderInfo.lines ?? 0,
-    textures: memoryInfo.textures ?? 0,
+    textures: textureCount,
+    textureDelta,
     bloom: Boolean(isBloomPassActive()),
     bloomTarget: lastBloomTargetKey || '',
     fxaa: Boolean(fxaaPass?.enabled),
@@ -21637,6 +21869,7 @@ function recordPerformanceSpike({ now, rawRafDtMs, updateMs, renderMs, frameMs }
 
   performanceSpikeState.count = spike.index;
   performanceSpikeState.lastLoggedAt = now;
+  performanceSpikeState.lastTextureCount = textureCount;
   performanceSpikeState.last = spike;
   if (!performanceSpikeState.worst || spike.rafMs > performanceSpikeState.worst.rafMs) {
     performanceSpikeState.worst = spike;
@@ -21810,6 +22043,10 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
     gpuFpsTheoretical: liveMetrics.gpuFpsTheoretical,
     gpuSamples: liveMetrics.gpuSamples,
     gpuSampleStride: liveMetrics.gpuSampleStride,
+    gpuSampleFresh: liveMetrics.gpuSampleFresh,
+    gpuSampleAgeMs: liveMetrics.gpuSampleAgeMs,
+    gpuSamplePhase: liveMetrics.gpuSamplePhase,
+    phase: liveMetrics.phase,
     gpuPending: liveMetrics.gpuPending,
     gpuDisjointCount: liveMetrics.gpuDisjointCount,
     presentationDropActive: liveMetrics.presentationDropActive,
