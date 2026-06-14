@@ -6930,6 +6930,8 @@ const sideBuildingRecords = [];
 const mainBuildingRecords = [];
 const sideBuildingColliders = [];
 const mainBuildingColliders = [];
+let tronRunnerCrowdColliderRecordCache = null;
+let tronRunnerCrowdColliderRecordCacheSourceLength = -1;
 const sideBuildingMaterials = [];
 const mainBuildingMaterials = [];
 const bridgeMaterials = [];
@@ -9435,6 +9437,7 @@ function buildSideBuilding(x, z, h) {
     footprintChamfer: chamfer,
   };
   sideBuildingRecords.push(record);
+  invalidateTronRunnerCrowdColliderRecords();
   sideBuildingBasePadRecords.push(basePad);
   buildSideBuildingDoor(record);
   buildSideBuildingCivicNumber(record);
@@ -9471,6 +9474,7 @@ buildSideHorizontalLedRingBatches(overlayGroup);
   mainBuildingColliders.push(collider);
   const basePad = createBuildingBasePad(overlayGroup, 0, MAIN_BUILDING_Z);
   mainBuildingRecords.push({ mesh: m, collider, basePad, baseW: w, baseD: d, footprintChamfer: chamfer });
+  invalidateTronRunnerCrowdColliderRecords();
   mainBuildingBasePadRecords.push(basePad);
   addBuildingEdges(overlayGroup, w, h, d, 0, 0, MAIN_BUILDING_Z, PAL.tealLight, chamfer * 0.82, 'main-building', { footprintChamfer: chamfer });
 }
@@ -14758,8 +14762,18 @@ function tronRunnerCrowdPointInsideRoute(member, x, z) {
   return pointInBasePadPolygon(localX, localZ, polygon);
 }
 
+function invalidateTronRunnerCrowdColliderRecords() {
+  tronRunnerCrowdColliderRecordCache = null;
+  tronRunnerCrowdColliderRecordCacheSourceLength = -1;
+}
+
 function tronRunnerCrowdColliderRecords() {
-  return [...sideBuildingRecords, ...mainBuildingRecords].filter((record) => record.collider);
+  const sourceLength = sideBuildingRecords.length + mainBuildingRecords.length;
+  if (!tronRunnerCrowdColliderRecordCache || tronRunnerCrowdColliderRecordCacheSourceLength !== sourceLength) {
+    tronRunnerCrowdColliderRecordCache = [...sideBuildingRecords, ...mainBuildingRecords].filter((record) => record.collider);
+    tronRunnerCrowdColliderRecordCacheSourceLength = sourceLength;
+  }
+  return tronRunnerCrowdColliderRecordCache;
 }
 
 function tronRunnerCrowdColliderLabel(record) {
