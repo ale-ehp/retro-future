@@ -1995,6 +1995,34 @@ const performanceSpikeState = {
   worst: null,
   records: [],
 };
+const postRevealPerfIsolationState = {
+  bloom: true,
+  equalizer: true,
+  crowd: true,
+  crowdReflections: true,
+};
+
+function postRevealPerfIsolationInspect() {
+  return { ...postRevealPerfIsolationState };
+}
+
+function applyPostRevealPerfIsolation(next = {}) {
+  for (const [key, value] of Object.entries(next || {})) {
+    if (Object.prototype.hasOwnProperty.call(postRevealPerfIsolationState, key)) {
+      postRevealPerfIsolationState[key] = value !== false && value !== 'off';
+    }
+  }
+  if (!postRevealPerfIsolationState.crowd) {
+    try { tronRunnerCrowdGroup.visible = false; } catch {}
+  }
+  if (!postRevealPerfIsolationState.equalizer) {
+    try { labEqualizerGroup.visible = false; } catch {}
+  }
+  return postRevealPerfIsolationInspect();
+}
+
+window.__tronPerfIsolation = applyPostRevealPerfIsolation;
+window.__tronPerfIsolationInspect = postRevealPerfIsolationInspect;
 renderer.setPixelRatio(activePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.localClippingEnabled = true;
@@ -11256,6 +11284,7 @@ function updateLabEqualizer(now, dt) {
   if (!cityRevealComplete) return;
   activateLabEqualizerAfterReveal();
   if (!labEqualizerState.enabled) return;
+  if (postRevealPerfIsolationState.equalizer && !labEqualizerGroup.visible) labEqualizerGroup.visible = true;
   syncLabEqualizerPoseIfNeeded(now);
   updateLabEqualizerVisibility(now);
   ensureLabEqualizerAudioGraphIfNeeded(now);
@@ -14098,7 +14127,7 @@ function updateTronRunnerCrowdReflectionBudget() {
     member.dynamicReflectionRank = null;
     member.dynamicReflectionDistance = Number.POSITIVE_INFINITY;
   }
-  if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED || !tronRunnerCrowdGroup.visible) return;
+  if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED || !postRevealPerfIsolationState.crowdReflections || !tronRunnerCrowdGroup.visible) return;
   if (!TRON_RUNNER_CROWD_REFLECTION_REVEAL_ENABLED && isCityRevealPerformanceCritical()) return;
   let budgetLimit = TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE;
   if (latestMeasuredFps > 0 && latestMeasuredFps < 42) budgetLimit = 0;
@@ -14626,11 +14655,12 @@ function updateTronRunnerCrowdReflection(member) {
   const group = member.reflectionGroup;
   const bodyMaterials = member.reflectionBodyMaterials || [];
   const ledMaterials = member.reflectionLedMaterials || [];
-  const budgetActive = member.dynamicReflectionBudgetActive === true;
+  const budgetActive = postRevealPerfIsolationState.crowdReflections && member.dynamicReflectionBudgetActive === true;
   const bodyOpacity = budgetActive ? tronRunnerDynamicReflectionBodyOpacityForSurface(member.surface) : 0;
   const ledOpacity = budgetActive ? tronRunnerDynamicReflectionLedOpacityForSurface(member.surface) : 0;
   const visible = Boolean(
     TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED &&
+    postRevealPerfIsolationState.crowdReflections &&
     tronRunnerCrowdGroup.visible &&
     member.group.visible &&
     group &&
@@ -21581,6 +21611,7 @@ window.__tronPerfInspect = () => ({
   skinnedMeshPrewarm: { ...skinnedMeshPrewarmStats },
   texturePrewarm: { ...sceneTexturePrewarmStats },
   postProcessingPrewarm: { ...postProcessingPrewarmStats },
+  postRevealIsolation: postRevealPerfIsolationInspect(),
   render: { ...renderer.info.render },
   memory: { ...renderer.info.memory },
 });
@@ -22188,7 +22219,14 @@ function tick(now) {
     }
     updateWalkSimulation(dt);
     if (shouldUpdateTronRunnerSourceCharacter()) updateTronRunner(dt);
-    updateTronRunnerCrowd(dt);
+    if (postRevealPerfIsolationState.crowd) {
+      updateTronRunnerCrowd(dt);
+    } else {
+      tronRunnerCrowdGroup.visible = false;
+      tronRunnerCrowdRuntimeStats.cullingVisibleCount = 0;
+      tronRunnerCrowdRuntimeStats.cullingHiddenCount = tronRunnerCrowd.length;
+      tronRunnerCrowdRuntimeStats.activeReflectionCount = 0;
+    }
   } else {
     tronRunnerCrowdRuntimeStats.performanceFreezeFrameCount += 1;
   }
@@ -22207,9 +22245,13 @@ function tick(now) {
   updateCityRevealWireframe(now);
   syncCityRevealPerformanceProfile();
   const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
-  if (bloomPass) bloomPass.enabled = bloomEnabled && !postRevealPerformanceCritical;
+  if (bloomPass) bloomPass.enabled = bloomEnabled && postRevealPerfIsolationState.bloom && !postRevealPerformanceCritical;
   if (!postRevealPerformanceCritical) {
-    updateLabEqualizer(now, dt);
+    if (postRevealPerfIsolationState.equalizer) {
+      updateLabEqualizer(now, dt);
+    } else if (labEqualizerGroup.visible) {
+      labEqualizerGroup.visible = false;
+    }
     updateTronRunnerReveal(now);
     updateTronRunnerBeatPulse();
     updateTronMainPlayerBody(dt);
