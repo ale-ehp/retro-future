@@ -18052,7 +18052,8 @@ function mobilePerformanceProfileState() {
 }
 
 function mobilePerformanceProfileActive() {
-  return mobilePerformanceProfileState().active;
+  const touchPoints = Number.isFinite(navigator.maxTouchPoints) ? navigator.maxTouchPoints : 0;
+  return Boolean(mobilePerformanceQuery.matches || touchPoints > 0 || window.innerWidth <= 760);
 }
 
 function effectiveRenderScaleForDevice(baseScale = manualRenderScale) {
