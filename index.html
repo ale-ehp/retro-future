@@ -1198,10 +1198,7 @@
     </section>
 
     <section class="control-panel" data-panel="export">
-    <section class="control-panel" data-panel="export">
       <div class="control-section">Preset</div>
-      <button id="export-settings" class="control-action" type="button">Export settings JSON</button>
-      <button id="save-default-settings" class="control-action" type="button">Salva tutti come default</button>
       <button class="control-action save-tab-settings" type="button" data-save-tab="export">Salva scheda Export</button>
     </section>
   </div>
@@ -1956,8 +1953,6 @@ const controlEls = {
   musicFxWobbleVal: document.getElementById('music-fx-wobble-val'),
   musicFxNoise: document.getElementById('music-fx-noise'),
   musicFxNoiseVal: document.getElementById('music-fx-noise-val'),
-  exportSettings: document.getElementById('export-settings'),
-  saveDefaultSettings: document.getElementById('save-default-settings'),
   resetCameraHeight: document.getElementById('reset-camera-height'),
   playerSpawnVal: document.getElementById('player-spawn-val'),
   saveLiveSpawn: document.getElementById('save-live-spawn'),
@@ -19214,23 +19209,11 @@ async function persistSettingsToProject(scope, settings, extra = {}) {
     if (!response.ok || result.ok === false) {
       throw new Error(result.error || `HTTP ${response.status}`);
     }
-    console.log('TRON boulevard settings saved to project JSON', result);
     return result;
   } catch (error) {
     console.warn('TRON boulevard project JSON save failed', error);
     return null;
   }
-}
-
-function exportLiveSettings() {
-  const settings = collectAllControlSettings();
-  const text = JSON.stringify(settings, null, 2);
-  console.log('TRON boulevard live settings', settings);
-  navigator.clipboard?.writeText(text).catch(() => {});
-  setButtonFeedback(controlEls.exportSettings, 'Settings copied');
-  persistSettingsToProject('export', settings).then((result) => {
-    if (result) setButtonFeedback(controlEls.exportSettings, 'Copied + JSON salvato');
-  });
 }
 
 const TAB_STORAGE_PREFIX = 'tron-boulevard-tab:';
@@ -19377,11 +19360,6 @@ async function loadProjectCanonicalDefaults() {
     }
     const nextLanding = sanitizeDroneLandingPose(payload.landing);
     if (nextLanding) droneLandingPose = nextLanding;
-    console.log('TRON boulevard canonical settings loaded', {
-      source: payload.source,
-      firefoxSavedAt: payload.firefoxSavedAt,
-      settings: Object.keys(payload.settings).length,
-    });
     return true;
   } catch (error) {
     console.warn('TRON boulevard canonical settings load failed', error);
@@ -19412,22 +19390,6 @@ function applyRetroFutureRevealTimingDefaults() {
   }
 }
 
-function saveAllControlDefaults(button) {
-  const payload = {
-    savedAt: new Date().toISOString(),
-    settings: collectAllControlSettings(),
-  };
-  const text = JSON.stringify(payload, null, 2);
-  localStorage.setItem(DEFAULT_SETTINGS_KEY, text);
-  navigator.clipboard?.writeText(text).catch(() => {});
-  applyControlSettings(payload.settings, true);
-  console.log('TRON boulevard default settings', payload);
-  setButtonFeedback(button, 'Default salvati');
-  persistSettingsToProject('all-defaults', payload.settings, { savedAt: payload.savedAt }).then((result) => {
-    if (result) setButtonFeedback(button, 'Default + JSON salvati');
-  });
-}
-
 function saveTabSettings(tabName, button) {
   const panel = document.querySelector(`#hud-controls .control-panel[data-panel="${tabName}"]`);
   if (!panel) return;
@@ -19440,7 +19402,6 @@ function saveTabSettings(tabName, button) {
   localStorage.setItem(`${TAB_STORAGE_PREFIX}${tabName}`, text);
   navigator.clipboard?.writeText(text).catch(() => {});
   applyControlSettings(payload.settings, true);
-  console.log('TRON boulevard tab settings', payload);
   setButtonFeedback(button, 'Scheda salvata');
   const canonicalSettings = collectAllControlSettings();
   persistSettingsToProject('tab', payload.settings, { tab: tabName, savedAt: payload.savedAt }).then((result) => {
@@ -19871,7 +19832,6 @@ function applyPostControlsFromUI() {
   controlEls.bloomThresholdVal.textContent = bloomThreshold.toFixed(2);
   controlEls.bloomQualityVal.textContent = bloomQuality.toFixed(2);
   controlEls.pixelRatioVal.textContent = pixelRatio.toFixed(2);
-  applyFsrUpscaleControlsFromUI();
   applyWireframeFxControlsFromUI();
 }
 
@@ -20937,7 +20897,6 @@ function applyLiveControls() {
   controlEls.bloomThresholdVal.textContent = bloomThreshold.toFixed(2);
   controlEls.bloomQualityVal.textContent = bloomQuality.toFixed(2);
   controlEls.pixelRatioVal.textContent = pixelRatio.toFixed(2);
-  applyFsrUpscaleControlsFromUI();
   applyTronSoundtrackIntroFxControlsFromUI();
   applyCharacterControlsFromUI();
 }
