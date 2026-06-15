@@ -10722,6 +10722,9 @@ const LAB_EQUALIZER_WORLD_WIDTH = LAB_EQUALIZER_BOARD_WIDTH * LAB_EQUALIZER_SCEN
 const LAB_EQUALIZER_WORLD_HEIGHT = LAB_EQUALIZER_BOARD_HEIGHT * LAB_EQUALIZER_SCENE_SCALE;
 const LAB_EQUALIZER_CANVAS_WIDTH = 768;
 const LAB_EQUALIZER_CANVAS_HEIGHT = 384;
+const LAB_EQUALIZER_GROUP_RENDER_ORDER = 18;
+const LAB_EQUALIZER_PANEL_RENDER_ORDER = 18;
+const LAB_EQUALIZER_DISPLAY_RENDER_ORDER = 19;
 const LAB_EQUALIZER_TEXTURE_INTERVAL_MS = 1000 / 12;
 const LAB_EQUALIZER_TEXTURE_ADAPTIVE_SOFT_INTERVAL_MS = 1000 / 8;
 const LAB_EQUALIZER_TEXTURE_ADAPTIVE_HARD_INTERVAL_MS = 1000 / 6;
@@ -10879,6 +10882,7 @@ function ensureLabEqualizerVisualResources() {
     transparent: true,
     opacity: 1,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
@@ -11567,11 +11571,11 @@ function buildLabEqualizer({ visible = cityRevealComplete } = {}) {
   labEqualizerGroup.visible = Boolean(visible);
   labEqualizerGroup.scale.setScalar(LAB_EQUALIZER_SCENE_SCALE);
   syncLabEqualizerPose();
-  labEqualizerGroup.renderOrder = 42;
+  labEqualizerGroup.renderOrder = LAB_EQUALIZER_GROUP_RENDER_ORDER;
 
   const panel = new THREE.Mesh(new THREE.PlaneGeometry(LAB_EQUALIZER_BOARD_WIDTH, LAB_EQUALIZER_BOARD_HEIGHT), labEqualizerPanelMat);
   panel.name = 'real-demo-phosphor-equalizer-panel';
-  panel.renderOrder = 40;
+  panel.renderOrder = LAB_EQUALIZER_PANEL_RENDER_ORDER;
   panel.frustumCulled = true;
   labEqualizerGroup.add(panel);
   addLabEqualizerFrame(labEqualizerGroup, LAB_EQUALIZER_BOARD_WIDTH, LAB_EQUALIZER_BOARD_HEIGHT, 0.48);
@@ -11581,7 +11585,7 @@ function buildLabEqualizer({ visible = cityRevealComplete } = {}) {
   );
   labEqualizerDisplayMesh.name = 'real-demo-equalizer-canvas';
   labEqualizerDisplayMesh.position.z = 0.54;
-  labEqualizerDisplayMesh.renderOrder = 46;
+  labEqualizerDisplayMesh.renderOrder = LAB_EQUALIZER_DISPLAY_RENDER_ORDER;
   labEqualizerDisplayMesh.frustumCulled = true;
   labEqualizerGroup.add(labEqualizerDisplayMesh);
   scene.add(labEqualizerGroup);
@@ -11763,6 +11767,13 @@ function labEqualizerInspect() {
     activatedAfterReveal: labEqualizerActivatedAfterReveal,
     cityRevealComplete,
     boardChildren: labEqualizerGroup.children.length,
+    renderOrder: {
+      group: labEqualizerGroup.renderOrder,
+      panel: labEqualizerGroup.children.find((child) => child.name === 'real-demo-phosphor-equalizer-panel')?.renderOrder ?? null,
+      display: labEqualizerDisplayMesh?.renderOrder ?? null,
+      displayDepthTest: Boolean(labEqualizerDisplayMat?.depthTest),
+      displayDepthWrite: Boolean(labEqualizerDisplayMat?.depthWrite),
+    },
     activeBands: labEqualizerLevels.filter((level) => level > 0.01).length,
     spectrumMode: 'float-db-neutral',
     analyserConfig: {
