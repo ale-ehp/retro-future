@@ -1655,10 +1655,11 @@ function applyTronSoundtrackIntroLofiMix(active, fadeSeconds = TRON_SOUNDTRACK_I
   const wet = mix;
   const lfoDepth = fxActive ? fx.wobble * TRON_SOUNDTRACK_INTRO_FX_MAX_WOBBLE_DEPTH_HZ : 0.0001;
   const noiseGain = fxActive ? fx.noise * TRON_SOUNDTRACK_INTRO_FX_MAX_NOISE_GAIN : 0.0001;
+  const mutedStart = fxActive ? null : 0.0001;
   tronSoundtrack.dryGains.forEach((gain) => rampGain(gain, dry, fadeSeconds));
-  tronSoundtrack.introLofiGains.forEach((gain) => rampGain(gain, wet, fadeSeconds));
-  tronSoundtrack.introLofiLfoGains.forEach((gain) => rampGain(gain, lfoDepth, fadeSeconds));
-  if (tronSoundtrack.introNoiseGain) rampGain(tronSoundtrack.introNoiseGain, noiseGain, fadeSeconds);
+  tronSoundtrack.introLofiGains.forEach((gain) => rampGain(gain, wet, fadeSeconds, mutedStart));
+  tronSoundtrack.introLofiLfoGains.forEach((gain) => rampGain(gain, lfoDepth, fadeSeconds, mutedStart));
+  if (tronSoundtrack.introNoiseGain) rampGain(tronSoundtrack.introNoiseGain, noiseGain, fadeSeconds, mutedStart);
   if (tronSoundtrack.ready) syncTronIntroFxNodeSettings(fadeSeconds);
 }
 
