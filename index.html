@@ -10723,13 +10723,17 @@ const LAB_EQUALIZER_WORLD_HEIGHT = LAB_EQUALIZER_BOARD_HEIGHT * LAB_EQUALIZER_SC
 const LAB_EQUALIZER_CANVAS_WIDTH = 768;
 const LAB_EQUALIZER_CANVAS_HEIGHT = 384;
 const LAB_EQUALIZER_TEXTURE_INTERVAL_MS = 1000 / 12;
+const LAB_EQUALIZER_TEXTURE_ADAPTIVE_SOFT_INTERVAL_MS = 1000 / 8;
+const LAB_EQUALIZER_TEXTURE_ADAPTIVE_HARD_INTERVAL_MS = 1000 / 6;
 const LAB_EQUALIZER_AUDIO_SAMPLE_INTERVAL_MS = 1000 / 30;
-const LAB_EQUALIZER_OFFSCREEN_SAMPLE_INTERVAL_MS = 1000 / 12;
+const LAB_EQUALIZER_OFFSCREEN_SAMPLE_INTERVAL_MS = 1000;
+const LAB_EQUALIZER_AUDIO_KICK_SAMPLE_INTERVAL_MS = 1000 / 8;
 const LAB_EQUALIZER_IDLE_SAMPLE_INTERVAL_MS = 250;
 const LAB_EQUALIZER_OFFSCREEN_TEXTURE_INTERVAL_MS = 1000 / 4;
 const LAB_EQUALIZER_VISIBILITY_INTERVAL_MS = 1000 / 12;
 const LAB_EQUALIZER_POSE_INTERVAL_MS = 250;
 const LAB_EQUALIZER_GRAPH_INTERVAL_MS = 500;
+const LAB_EQUALIZER_STATIC_TEXTURE_REFRESH_MS = 500;
 const LAB_EQUALIZER_START_WALL_OFFSET_Z = GRID_BLOCK * 3;
 const LAB_EQUALIZER_START_WALL_INSET_Y = 6;
 const LAB_EQUALIZER_VERTICAL_OFFSET = 50;
@@ -10762,6 +10766,8 @@ const labEqualizerVisibilitySphere = new THREE.Sphere(new THREE.Vector3(), LAB_E
 const labEqualizerWorldPosition = new THREE.Vector3();
 let labEqualizerCanvas = null;
 let labEqualizerCtx = null;
+let labEqualizerStaticCanvas = null;
+let labEqualizerStaticCtx = null;
 let labEqualizerTexture = null;
 let labEqualizerPanelMat = null;
 let labEqualizerDisplayMat = null;
@@ -10776,6 +10782,7 @@ let labEqualizerLastGraphEnsureAt = -Infinity;
 let labEqualizerLastPoseAt = -Infinity;
 let labEqualizerLastVisibilityAt = -Infinity;
 let labEqualizerLastSampleAt = -Infinity;
+let labEqualizerLastTextureDrawAt = -Infinity;
 let labEqualizerAccumulatedDt = 0;
 let labEqualizerBassEnvelope = 0;
 let labEqualizerBassPulse = 0;
@@ -10783,6 +10790,8 @@ let labEqualizerActivatedAfterReveal = false;
 let labEqualizerPrewarmed = false;
 let labEqualizerForceTextureDraw = true;
 let labEqualizerBandMetadataSignature = '';
+let labEqualizerLastTextureSignature = '';
+let labEqualizerStaticTextureSignature = '';
 const labEqualizerBandMetadata = Array.from({ length: LAB_EQUALIZER_BAR_COUNT }, () => null);
 const labEqualizerState = {
   enabled: false,
@@ -10813,8 +10822,11 @@ const labEqualizerState = {
   textureIntervalMs: 0,
   analyserFps: 0,
   textureFps: 0,
+  adaptiveTextureFps: 12,
   sampleCount: 0,
   textureUpdateCount: 0,
+  textureSkippedCount: 0,
+  staticTextureDrawCount: 0,
   skippedFrames: 0,
   bars: LAB_EQUALIZER_BAR_COUNT,
   segmentRows: LAB_EQUALIZER_SEGMENT_ROWS,
@@ -10845,6 +10857,10 @@ function ensureLabEqualizerVisualResources() {
   labEqualizerCanvas.width = LAB_EQUALIZER_CANVAS_WIDTH;
   labEqualizerCanvas.height = LAB_EQUALIZER_CANVAS_HEIGHT;
   labEqualizerCtx = labEqualizerCanvas.getContext('2d');
+  labEqualizerStaticCanvas = document.createElement('canvas');
+  labEqualizerStaticCanvas.width = LAB_EQUALIZER_CANVAS_WIDTH;
+  labEqualizerStaticCanvas.height = LAB_EQUALIZER_CANVAS_HEIGHT;
+  labEqualizerStaticCtx = labEqualizerStaticCanvas.getContext('2d');
   labEqualizerTexture = new THREE.CanvasTexture(labEqualizerCanvas);
   labEqualizerTexture.colorSpace = THREE.SRGBColorSpace;
   labEqualizerTexture.generateMipmaps = false;
@@ -10867,7 +10883,7 @@ function ensureLabEqualizerVisualResources() {
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
   });
-  return Boolean(labEqualizerCtx);
+  return Boolean(labEqualizerCtx && labEqualizerStaticCtx);
 }
 
 function updateLabEqualizerButton() {
@@ -11073,6 +11089,36 @@ function labEqualizerLevelToRows(level) {
   return THREE.MathUtils.clamp(visibleLevel * LAB_EQUALIZER_SEGMENT_ROWS, 0, LAB_EQUALIZER_SEGMENT_ROWS);
 }
 
+function labEqualizerTextureSignature(averageLevel, peakLevel, beatPulse) {
+  const parts = [
+    Math.round(averageLevel * 64),
+    Math.round(peakLevel * 64),
+    Math.round(beatPulse * 32),
+    Math.round(labEqualizerState.reflectionStrength * 32),
+    Math.round(labEqualizerState.pulseMaster * 16),
+    Math.round(labEqualizerState.pulseBlue * 16),
+    Math.round(labEqualizerState.pulseCyan * 16),
+    Math.round(labEqualizerState.pulseMagenta * 16),
+    Math.round(labEqualizerState.pulseRed * 16),
+    Math.round(labEqualizerState.pulseYellow * 16),
+    Math.round(labEqualizerState.pulseGreen * 16),
+  ];
+  for (let index = 0; index < LAB_EQUALIZER_BAR_COUNT; index += 1) {
+    parts.push(Math.round(labEqualizerLevelToRows(labEqualizerLevels[index] || 0)));
+    parts.push(Math.ceil(THREE.MathUtils.clamp(labEqualizerPeaks[index] || 0, 0, LAB_EQUALIZER_SEGMENT_ROWS)));
+  }
+  return parts.join(':');
+}
+
+function shouldDrawLabEqualizerTexture(now, averageLevel, peakLevel, beatPulse) {
+  if (labEqualizerForceTextureDraw) return true;
+  const signature = labEqualizerTextureSignature(averageLevel, peakLevel, beatPulse);
+  const staticRefreshDue = now - labEqualizerLastTextureDrawAt >= LAB_EQUALIZER_STATIC_TEXTURE_REFRESH_MS;
+  if (signature !== labEqualizerLastTextureSignature || staticRefreshDue) return true;
+  labEqualizerState.textureSkippedCount += 1;
+  return false;
+}
+
 function labEqualizerPeakFallRowsPerSecond() {
   const t = THREE.MathUtils.clamp((labEqualizerState.peakFall + 6) / 12, 0, 1);
   return Math.exp(
@@ -11152,13 +11198,27 @@ function updateLabEqualizerVisibility(now, force = false) {
 
 function labEqualizerSampleIntervalMs() {
   if (!labEqualizerState.playing) return LAB_EQUALIZER_IDLE_SAMPLE_INTERVAL_MS;
-  return labEqualizerState.visibleInCamera ? LAB_EQUALIZER_AUDIO_SAMPLE_INTERVAL_MS : LAB_EQUALIZER_OFFSCREEN_SAMPLE_INTERVAL_MS;
+  if (labEqualizerState.renderVisible) return LAB_EQUALIZER_AUDIO_SAMPLE_INTERVAL_MS;
+  return TRON_RUNNER_BEAT_PULSE_AUDIO_KICK_ENABLED
+    ? LAB_EQUALIZER_AUDIO_KICK_SAMPLE_INTERVAL_MS
+    : LAB_EQUALIZER_OFFSCREEN_SAMPLE_INTERVAL_MS;
 }
 
 function labEqualizerTextureIntervalMs() {
   if (!labEqualizerState.renderVisible) return 0;
   if (!labEqualizerState.playing) return 1000;
-  return labEqualizerState.visibleInCamera ? LAB_EQUALIZER_TEXTURE_INTERVAL_MS : LAB_EQUALIZER_OFFSCREEN_TEXTURE_INTERVAL_MS;
+  const baseInterval = labEqualizerState.visibleInCamera ? LAB_EQUALIZER_TEXTURE_INTERVAL_MS : LAB_EQUALIZER_OFFSCREEN_TEXTURE_INTERVAL_MS;
+  if (!labEqualizerState.visibleInCamera) {
+    labEqualizerState.adaptiveTextureFps = Number((1000 / Math.max(1, baseInterval)).toFixed(1));
+    return baseInterval;
+  }
+  const targetHz = Math.max(1, performanceLiveMetrics?.targetHz || 60);
+  const measuredFps = Number.isFinite(latestMeasuredFps) ? latestMeasuredFps : 0;
+  let interval = baseInterval;
+  if (measuredFps > 0 && measuredFps < targetHz * 0.76) interval = LAB_EQUALIZER_TEXTURE_ADAPTIVE_HARD_INTERVAL_MS;
+  else if (measuredFps > 0 && measuredFps < targetHz * 0.92) interval = LAB_EQUALIZER_TEXTURE_ADAPTIVE_SOFT_INTERVAL_MS;
+  labEqualizerState.adaptiveTextureFps = Number((1000 / Math.max(1, interval)).toFixed(1));
+  return interval;
 }
 
 function addLabEqualizerFrame(group, width, height, z = 0.48) {
@@ -11250,7 +11310,36 @@ function labEqualizerBeatPulse(bassEnergy, dt) {
   return THREE.MathUtils.clamp(labEqualizerBassPulse + bassBody, 0, 1);
 }
 
-function drawLabEqualizerCrtOverlay(ctx, width, height, now, peakLevel) {
+function labEqualizerCanvasLayout() {
+  const width = LAB_EQUALIZER_CANVAS_WIDTH;
+  const height = LAB_EQUALIZER_CANVAS_HEIGHT;
+  const marginX = 28;
+  const marginY = 38;
+  const areaW = width - marginX * 2;
+  const areaH = 296;
+  const columnGap = 5;
+  const rowGap = 1;
+  const columnW = (areaW - columnGap * (LAB_EQUALIZER_BAR_COUNT - 1)) / LAB_EQUALIZER_BAR_COUNT;
+  const rowH = (areaH - rowGap * (LAB_EQUALIZER_SEGMENT_ROWS - 1)) / LAB_EQUALIZER_SEGMENT_ROWS;
+  return {
+    width,
+    height,
+    marginX,
+    marginY,
+    areaW,
+    areaH,
+    reflectionTop: marginY + areaH + 10,
+    reflectionH: 62,
+    labelY: height - 12,
+    columnGap,
+    rowGap,
+    columnW,
+    rowH,
+    bottomY: marginY + areaH,
+  };
+}
+
+function drawLabEqualizerStaticCrtOverlay(ctx, width, height) {
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
   for (let y = 0; y < height; y += 4) {
@@ -11265,14 +11354,6 @@ function drawLabEqualizerCrtOverlay(ctx, width, height, now, peakLevel) {
     ctx.fillStyle = 'rgba(80, 180, 255, 0.018)';
     ctx.fillRect(x + 4, 0, 1, height);
   }
-  ctx.globalCompositeOperation = 'screen';
-  const rollY = (now * 0.038) % (height + 120) - 60;
-  const roll = ctx.createLinearGradient(0, rollY - 34, 0, rollY + 34);
-  roll.addColorStop(0, 'rgba(0, 0, 0, 0)');
-  roll.addColorStop(0.5, `rgba(170, 255, 230, ${(0.035 + peakLevel * 0.030).toFixed(3)})`);
-  roll.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = roll;
-  ctx.fillRect(0, rollY - 34, width, 68);
   ctx.restore();
 
   ctx.save();
@@ -11285,32 +11366,51 @@ function drawLabEqualizerCrtOverlay(ctx, width, height, now, peakLevel) {
   ctx.restore();
 }
 
-function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
-  ensureLabEqualizerVisualResources();
-  const ctx = labEqualizerCtx;
-  if (!ctx) return;
+function drawLabEqualizerDynamicCrtRoll(ctx, width, height, now, peakLevel) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const rollY = (now * 0.038) % (height + 120) - 60;
+  const roll = ctx.createLinearGradient(0, rollY - 34, 0, rollY + 34);
+  roll.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  roll.addColorStop(0.5, `rgba(170, 255, 230, ${(0.035 + peakLevel * 0.030).toFixed(3)})`);
+  roll.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = roll;
+  ctx.fillRect(0, rollY - 34, width, 68);
+  ctx.restore();
+}
 
-  const width = LAB_EQUALIZER_CANVAS_WIDTH;
-  const height = LAB_EQUALIZER_CANVAS_HEIGHT;
-  const marginX = 28;
-  const marginY = 38;
-  const areaW = width - marginX * 2;
-  const areaH = 296;
-  const reflectionTop = marginY + areaH + 10;
-  const reflectionH = 62;
-  const reflectionStrength = labEqualizerState.reflectionStrength;
-  const labelY = height - 12;
-  const columnGap = 5;
-  const rowGap = 1;
-  const columnW = (areaW - columnGap * (LAB_EQUALIZER_BAR_COUNT - 1)) / LAB_EQUALIZER_BAR_COUNT;
-  const rowH = (areaH - rowGap * (LAB_EQUALIZER_SEGMENT_ROWS - 1)) / LAB_EQUALIZER_SEGMENT_ROWS;
-  const bottomY = marginY + areaH;
+function drawLabEqualizerStaticCanvas() {
+  ensureLabEqualizerBandMetadata();
+  const signature = [
+    LAB_EQUALIZER_CANVAS_WIDTH,
+    LAB_EQUALIZER_CANVAS_HEIGHT,
+    LAB_EQUALIZER_BAR_COUNT,
+    LAB_EQUALIZER_SEGMENT_ROWS,
+    labEqualizerBandMetadataSignature,
+  ].join(':');
+  if (signature === labEqualizerStaticTextureSignature && labEqualizerStaticCanvas) return;
+  const ctx = labEqualizerStaticCtx;
+  if (!ctx) return;
+  const {
+    width,
+    height,
+    marginX,
+    areaW,
+    areaH,
+    columnGap,
+    rowGap,
+    columnW,
+    rowH,
+    bottomY,
+    labelY,
+  } = labEqualizerCanvasLayout();
+
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = 'rgb(1 3 4)';
   ctx.fillRect(0, 0, width, height);
 
   const tubeGlow = ctx.createRadialGradient(width * 0.50, height * 0.45, width * 0.06, width * 0.50, height * 0.45, width * 0.62);
-  tubeGlow.addColorStop(0, `rgba(0, 250, 210, ${(0.020 + averageLevel * 0.020).toFixed(3)})`);
+  tubeGlow.addColorStop(0, 'rgba(0, 250, 210, 0.020)');
   tubeGlow.addColorStop(0.46, 'rgba(0, 34, 36, 0.22)');
   tubeGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
   ctx.fillStyle = tubeGlow;
@@ -11318,66 +11418,11 @@ function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
 
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'rgba(0, 1, 2, 0.98)';
   for (let column = 0; column < LAB_EQUALIZER_BAR_COUNT; column += 1) {
     const x = marginX + column * (columnW + columnGap);
-    const level = THREE.MathUtils.clamp(labEqualizerLevels[column] ?? 0, 0, 1);
-    const activeRows = THREE.MathUtils.clamp(Math.round(labEqualizerLevelToRows(level)), 0, LAB_EQUALIZER_SEGMENT_ROWS);
     for (let row = 0; row < LAB_EQUALIZER_SEGMENT_ROWS; row += 1) {
       const y = bottomY - (row + 1) * rowH - row * rowGap;
-      ctx.fillStyle = 'rgba(0, 1, 2, 0.98)';
-      ctx.fillRect(x, y, columnW, rowH);
-      if (row >= activeRows) continue;
-      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 1, beatPulse);
-      ctx.fillRect(x, y, columnW, rowH);
-      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.78, beatPulse);
-      ctx.fillRect(x + 0.4, y + 0.35, Math.max(1, columnW - 0.8), Math.max(1, rowH - 0.7));
-      const leftLine = x + Math.sin(now * 0.003 + column) * 0.8;
-      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.14, beatPulse);
-      ctx.fillRect(leftLine, y + 0.35, Math.max(1, columnW * 0.035), Math.max(1, rowH - 0.7));
-    }
-  }
-  ctx.restore();
-
-  ctx.save();
-  ctx.globalCompositeOperation = 'screen';
-  const reflectionGradient = ctx.createLinearGradient(0, reflectionTop, 0, reflectionTop + reflectionH);
-  reflectionGradient.addColorStop(0, `rgba(0, 0, 0, ${THREE.MathUtils.clamp(0.42 * reflectionStrength, 0, 0.88).toFixed(3)})`);
-  reflectionGradient.addColorStop(0.52, `rgba(0, 0, 0, ${THREE.MathUtils.clamp(0.16 * reflectionStrength, 0, 0.55).toFixed(3)})`);
-  reflectionGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.beginPath();
-  ctx.rect(marginX, reflectionTop, areaW, reflectionH);
-  ctx.clip();
-  for (let column = 0; column < LAB_EQUALIZER_BAR_COUNT; column += 1) {
-    const x = marginX + column * (columnW + columnGap);
-    const level = THREE.MathUtils.clamp(labEqualizerLevels[column] ?? 0, 0, 1);
-    const activeRows = THREE.MathUtils.clamp(Math.round(labEqualizerLevelToRows(level)), 0, LAB_EQUALIZER_SEGMENT_ROWS);
-    for (let row = 0; row < activeRows; row += 1) {
-      const y = bottomY - (row + 1) * rowH - row * rowGap;
-      const distance = bottomY - (y + rowH * 0.5);
-      const reflectedY = reflectionTop + distance * 0.33;
-      const fade = THREE.MathUtils.clamp(1 - ((reflectedY - reflectionTop) / reflectionH), 0, 1);
-      ctx.globalAlpha = THREE.MathUtils.clamp(0.32 * reflectionStrength, 0, 0.95) * fade;
-      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 0.88, beatPulse);
-      ctx.fillRect(x, reflectedY, columnW, Math.max(1, rowH * 0.55));
-    }
-  }
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'destination-in';
-  ctx.fillStyle = reflectionGradient;
-  ctx.fillRect(marginX, reflectionTop, areaW, reflectionH);
-  ctx.restore();
-
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-over';
-  for (let column = 0; column < LAB_EQUALIZER_BAR_COUNT; column += 1) {
-    const x = marginX + column * (columnW + columnGap);
-    const level = THREE.MathUtils.clamp(labEqualizerLevels[column] ?? 0, 0, 1);
-    const activeRowsFloat = labEqualizerLevelToRows(level);
-    const peakRows = THREE.MathUtils.clamp(labEqualizerPeaks[column] ?? 0, 0, LAB_EQUALIZER_SEGMENT_ROWS);
-    const peakRow = THREE.MathUtils.clamp(Math.ceil(peakRows) - 1, 0, LAB_EQUALIZER_SEGMENT_ROWS - 1);
-    if (peakRows >= activeRowsFloat - 0.25 && peakRows > 1.2) {
-      const y = bottomY - (peakRow + 1) * rowH - peakRow * rowGap;
-      ctx.fillStyle = labEqualizerPeakBlockColor(column, peakRow, LAB_EQUALIZER_SEGMENT_ROWS, now, beatPulse);
       ctx.fillRect(x, y, columnW, rowH);
     }
   }
@@ -11395,7 +11440,111 @@ function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
   }
   ctx.restore();
 
-  drawLabEqualizerCrtOverlay(ctx, width, height, now, peakLevel);
+  drawLabEqualizerStaticCrtOverlay(ctx, width, height);
+  labEqualizerStaticTextureSignature = signature;
+  labEqualizerState.staticTextureDrawCount += 1;
+}
+
+function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
+  ensureLabEqualizerVisualResources();
+  const ctx = labEqualizerCtx;
+  if (!ctx) return;
+
+  drawLabEqualizerStaticCanvas();
+  const {
+    width,
+    height,
+    marginX,
+    areaW,
+    reflectionTop,
+    reflectionH,
+    columnGap,
+    rowGap,
+    columnW,
+    rowH,
+    bottomY,
+  } = labEqualizerCanvasLayout();
+  const reflectionStrength = labEqualizerState.reflectionStrength;
+
+  if (labEqualizerStaticCanvas) ctx.drawImage(labEqualizerStaticCanvas, 0, 0);
+  else ctx.clearRect(0, 0, width, height);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const liveGlow = ctx.createRadialGradient(width * 0.50, height * 0.45, width * 0.08, width * 0.50, height * 0.45, width * 0.58);
+  liveGlow.addColorStop(0, `rgba(0, 250, 210, ${(averageLevel * 0.018).toFixed(3)})`);
+  liveGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = liveGlow;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  for (let column = 0; column < LAB_EQUALIZER_BAR_COUNT; column += 1) {
+    const x = marginX + column * (columnW + columnGap);
+    const level = THREE.MathUtils.clamp(labEqualizerLevels[column] ?? 0, 0, 1);
+    const activeRows = THREE.MathUtils.clamp(Math.round(labEqualizerLevelToRows(level)), 0, LAB_EQUALIZER_SEGMENT_ROWS);
+    for (let row = 0; row < activeRows; row += 1) {
+      const y = bottomY - (row + 1) * rowH - row * rowGap;
+      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 1, beatPulse);
+      ctx.fillRect(x, y, columnW, rowH);
+      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.78, beatPulse);
+      ctx.fillRect(x + 0.4, y + 0.35, Math.max(1, columnW - 0.8), Math.max(1, rowH - 0.7));
+      const leftLine = x + Math.sin(now * 0.003 + column) * 0.8;
+      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.14, beatPulse);
+      ctx.fillRect(leftLine, y + 0.35, Math.max(1, columnW * 0.035), Math.max(1, rowH - 0.7));
+    }
+  }
+  ctx.restore();
+
+  if (reflectionStrength > 0.01) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    const reflectionGradient = ctx.createLinearGradient(0, reflectionTop, 0, reflectionTop + reflectionH);
+    reflectionGradient.addColorStop(0, `rgba(0, 0, 0, ${THREE.MathUtils.clamp(0.42 * reflectionStrength, 0, 0.88).toFixed(3)})`);
+    reflectionGradient.addColorStop(0.52, `rgba(0, 0, 0, ${THREE.MathUtils.clamp(0.16 * reflectionStrength, 0, 0.55).toFixed(3)})`);
+    reflectionGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.beginPath();
+    ctx.rect(marginX, reflectionTop, areaW, reflectionH);
+    ctx.clip();
+    for (let column = 0; column < LAB_EQUALIZER_BAR_COUNT; column += 1) {
+      const x = marginX + column * (columnW + columnGap);
+      const level = THREE.MathUtils.clamp(labEqualizerLevels[column] ?? 0, 0, 1);
+      const activeRows = THREE.MathUtils.clamp(Math.round(labEqualizerLevelToRows(level)), 0, LAB_EQUALIZER_SEGMENT_ROWS);
+      for (let row = 0; row < activeRows; row += 1) {
+        const y = bottomY - (row + 1) * rowH - row * rowGap;
+        const distance = bottomY - (y + rowH * 0.5);
+        const reflectedY = reflectionTop + distance * 0.33;
+        const fade = THREE.MathUtils.clamp(1 - ((reflectedY - reflectionTop) / reflectionH), 0, 1);
+        ctx.globalAlpha = THREE.MathUtils.clamp(0.32 * reflectionStrength, 0, 0.95) * fade;
+        ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 0.88, beatPulse);
+        ctx.fillRect(x, reflectedY, columnW, Math.max(1, rowH * 0.55));
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.fillStyle = reflectionGradient;
+    ctx.fillRect(marginX, reflectionTop, areaW, reflectionH);
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  for (let column = 0; column < LAB_EQUALIZER_BAR_COUNT; column += 1) {
+    const x = marginX + column * (columnW + columnGap);
+    const level = THREE.MathUtils.clamp(labEqualizerLevels[column] ?? 0, 0, 1);
+    const activeRowsFloat = labEqualizerLevelToRows(level);
+    const peakRows = THREE.MathUtils.clamp(labEqualizerPeaks[column] ?? 0, 0, LAB_EQUALIZER_SEGMENT_ROWS);
+    const peakRow = THREE.MathUtils.clamp(Math.ceil(peakRows) - 1, 0, LAB_EQUALIZER_SEGMENT_ROWS - 1);
+    if (peakRows >= activeRowsFloat - 0.25 && peakRows > 1.2) {
+      const y = bottomY - (peakRow + 1) * rowH - peakRow * rowGap;
+      ctx.fillStyle = labEqualizerPeakBlockColor(column, peakRow, LAB_EQUALIZER_SEGMENT_ROWS, now, beatPulse);
+      ctx.fillRect(x, y, columnW, rowH);
+    }
+  }
+  ctx.restore();
+
+  drawLabEqualizerDynamicCrtRoll(ctx, width, height, now, peakLevel);
 
   labEqualizerTexture.needsUpdate = true;
 }
@@ -11533,9 +11682,16 @@ function updateLabEqualizer(now, dt) {
     return;
   }
   if (labEqualizerForceTextureDraw || now - labEqualizerLastTextureAt >= textureInterval) {
+    if (!shouldDrawLabEqualizerTexture(now, labEqualizerState.averageLevel, peakLevel, labEqualizerState.beatPulse)) {
+      labEqualizerLastTextureAt = now;
+      labEqualizerState.textureFps = 0;
+      return;
+    }
     drawLabEqualizerCanvas(now, labEqualizerState.averageLevel, peakLevel, labEqualizerState.beatPulse);
     const textureElapsedMs = Number.isFinite(labEqualizerLastTextureAt) ? now - labEqualizerLastTextureAt : textureInterval;
     labEqualizerLastTextureAt = now;
+    labEqualizerLastTextureDrawAt = now;
+    labEqualizerLastTextureSignature = labEqualizerTextureSignature(labEqualizerState.averageLevel, peakLevel, labEqualizerState.beatPulse);
     labEqualizerForceTextureDraw = false;
     labEqualizerState.textureUpdateCount += 1;
     labEqualizerState.textureFps = Number((1000 / Math.max(1, textureElapsedMs)).toFixed(1));
@@ -11618,6 +11774,13 @@ function labEqualizerInspect() {
       levelCeilingDb: LAB_EQUALIZER_LEVEL_DB_CEILING,
       relativeRangeDb: LAB_EQUALIZER_RELATIVE_DB_RANGE,
       levelGamma: LAB_EQUALIZER_LEVEL_GAMMA,
+      visibleSampleMs: LAB_EQUALIZER_AUDIO_SAMPLE_INTERVAL_MS,
+      offscreenSampleMs: LAB_EQUALIZER_OFFSCREEN_SAMPLE_INTERVAL_MS,
+      audioKickSampleMs: LAB_EQUALIZER_AUDIO_KICK_SAMPLE_INTERVAL_MS,
+      staticTextureRefreshMs: LAB_EQUALIZER_STATIC_TEXTURE_REFRESH_MS,
+      visibleTextureMs: LAB_EQUALIZER_TEXTURE_INTERVAL_MS,
+      adaptiveSoftTextureMs: LAB_EQUALIZER_TEXTURE_ADAPTIVE_SOFT_INTERVAL_MS,
+      adaptiveHardTextureMs: LAB_EQUALIZER_TEXTURE_ADAPTIVE_HARD_INTERVAL_MS,
     },
     bandLevels: labEqualizerLevels.map((level) => Number(level.toFixed(3))),
     bandTargetLevels: labEqualizerTargetLevels.map((level) => Number(level.toFixed(3))),
@@ -16580,11 +16743,6 @@ const STATIC_CITY_BOARD_CULL_MARGIN = GRID_BLOCK * 3;
 const staticCityCullMatrix = new THREE.Matrix4();
 const staticCityCullFrustum = new THREE.Frustum();
 const staticCityCullSphere = new THREE.Sphere();
-const staticCityHiddenInstanceMatrix = new THREE.Matrix4().compose(
-  new THREE.Vector3(0, -100000, 0),
-  new THREE.Quaternion(),
-  new THREE.Vector3(0.0001, 0.0001, 0.0001)
-);
 const staticCityCullStats = {
   enabled: STATIC_CITY_CULLING_ENABLED,
   total: 0,
@@ -16674,87 +16832,6 @@ function setStaticCityBuildingClusterVisible(record, visible) {
   }
 }
 
-function staticCitySideRecordForSpec(spec) {
-  if (spec?.staticCityRecord) return spec.staticCityRecord;
-  if (spec?.edgeRole !== 'side-building' || !Array.isArray(spec.center)) return null;
-  const sign = spec.center[0] < 0 ? -1 : 1;
-  const zFactor = spec.center[1] / SIDE_BUILDING_SPACING;
-  let best = null;
-  let bestDelta = Infinity;
-  for (const record of sideBuildingRecords) {
-    if (record.sign !== sign) continue;
-    const delta = Math.abs(record.zFactor - zFactor);
-    if (delta < bestDelta) {
-      best = record;
-      bestDelta = delta;
-    }
-  }
-  spec.staticCityRecord = bestDelta < 0.01 ? best : null;
-  return spec.staticCityRecord;
-}
-
-function setStaticCityInstanceCull(mesh, index, visibleMatrix, visible) {
-  if (!mesh || index < 0) return false;
-  mesh.setMatrixAt(index, visible && visibleMatrix ? visibleMatrix : staticCityHiddenInstanceMatrix);
-  return true;
-}
-
-function updateStaticCityLedInstanceCulling() {
-  staticCityCullStats.ledInstancesTotal = 0;
-  staticCityCullStats.ledInstancesVisible = 0;
-  staticCityCullStats.ledInstancesHidden = 0;
-  let sideEdgeChanged = false;
-  if (sideBuildingEdgeBatch.mesh) {
-    for (const spec of sideBuildingEdgeSpecs) {
-      const record = staticCitySideRecordForSpec(spec);
-      const visible = Boolean(record?.mesh?.visible && spec.staticCityVisibleMatrix);
-      staticCityCullStats.ledInstancesTotal++;
-      if (visible) staticCityCullStats.ledInstancesVisible++;
-      else staticCityCullStats.ledInstancesHidden++;
-      if (spec.staticCityCullVisible === visible) continue;
-      spec.staticCityCullVisible = visible;
-      sideEdgeChanged = setStaticCityInstanceCull(
-        sideBuildingEdgeBatch.mesh,
-        spec.instanceId,
-        spec.staticCityVisibleMatrix,
-        visible
-      ) || sideEdgeChanged;
-    }
-    if (sideEdgeChanged) {
-      sideBuildingEdgeBatch.mesh.instanceMatrix.needsUpdate = true;
-      sideBuildingEdgeBatch.mesh.visible = Boolean(
-        sideBuildingEdgeBatch.mesh.userData.staticCullBaseVisible !== false &&
-        staticCityCullStats.ledInstancesVisible > 0
-      );
-    }
-  }
-
-  for (const batch of Object.values(sideHorizontalLedRingBatches)) {
-    if (!batch.mesh) continue;
-    let visibleCount = 0;
-    let changed = false;
-    for (const spec of batch.specs) {
-      const record = staticCitySideRecordForSpec(spec);
-      const visible = Boolean(record?.mesh?.visible && spec.staticCityVisibleMatrix);
-      staticCityCullStats.ledInstancesTotal++;
-      if (visible) {
-        staticCityCullStats.ledInstancesVisible++;
-        visibleCount++;
-      } else {
-        staticCityCullStats.ledInstancesHidden++;
-      }
-      if (spec.staticCityCullVisible === visible) continue;
-      spec.staticCityCullVisible = visible;
-      changed = setStaticCityInstanceCull(batch.mesh, spec.batchInstanceId, spec.staticCityVisibleMatrix, visible) || changed;
-    }
-    if (changed) {
-      batch.mesh.instanceMatrix.needsUpdate = true;
-      batch.mesh.visible = Boolean(batch.mesh.userData.staticCullBaseVisible !== false && visibleCount > 0);
-    }
-  }
-  staticCityCullStats.doorInstancesVisible = sideDoorBatchState.visibleInstances;
-}
-
 function setStaticCityMainLedClusterVisible(visible) {
   for (const spec of edgeStripSpecs) {
     if (spec.edgeRole === 'main-building') setStaticCityEdgeSpecVisible(spec, visible);
@@ -16795,6 +16872,10 @@ function updateStaticCityCulling() {
   staticCityCullStats.bridgesVisible = 0;
   staticCityCullStats.boardsTotal = cityDepartmentBoards.length + cityRoleBoards.length;
   staticCityCullStats.boardsVisible = 0;
+  staticCityCullStats.ledInstancesTotal = 0;
+  staticCityCullStats.ledInstancesVisible = 0;
+  staticCityCullStats.ledInstancesHidden = 0;
+  staticCityCullStats.doorInstancesVisible = sideDoorBatchState.visibleInstances;
   if (!STATIC_CITY_CULLING_ENABLED) {
     for (const record of [...sideBuildingRecords, ...mainBuildingRecords]) setStaticCityBuildingClusterVisible(record, true);
     for (const record of bridgeRecords) setStaticCityBridgeClusterVisible(record, true);
@@ -16874,7 +16955,6 @@ function updateStaticCityCulling() {
       staticCityCullStats.hidden++;
     }
   }
-  updateStaticCityLedInstanceCulling();
 }
 
 const cityRevealOverlayScene = new THREE.Scene();
@@ -19168,8 +19248,6 @@ function updateHorizontalBuildingLedRings(brightness, hueDeg, mainBrightness, ma
       );
       sideHorizontalLedRingMatrix.compose(sideHorizontalLedRingPosition, sideHorizontalLedRingQuaternion, sideHorizontalLedRingScale);
       batch.mesh.setMatrixAt(spec.batchInstanceId, sideHorizontalLedRingMatrix);
-      spec.staticCityVisibleMatrix = sideHorizontalLedRingMatrix.clone();
-      spec.staticCityCullVisible = null;
       batch.material.color.copy(ledColor);
       batch.mesh.count = batch.count;
       const batchBaseVisible = brightness > 0.001 && stripWidth > 0.01 && batch.count > 0;
@@ -19250,8 +19328,7 @@ function updateEdgeStrips(brightness, thickness, verticalDistance, hueDeg, mainB
     const [lengthP1, lengthP2] = applyVerticalLedLength(joinedP1, joinedP2, edgeVerticalLengthScale(spec, buildingVerticalLength, mainVerticalLength));
     const [p1, p2] = applyLedYOffset(lengthP1, lengthP2, edgeStripYOffset(spec, buildingVerticalY, buildingLowY, buildingHighY, mainVerticalY, mainLowY, mainHighY));
     if (spec.edgeRole === 'side-building' && sideBuildingEdgeBatch.mesh) {
-      spec.staticCityVisibleMatrix = setStripInstanceTransform(sideBuildingEdgeBatch.mesh, spec.instanceId, p1, p2, stripThickness).clone();
-      spec.staticCityCullVisible = null;
+      setStripInstanceTransform(sideBuildingEdgeBatch.mesh, spec.instanceId, p1, p2, stripThickness);
       sideBatchChanged = true;
       continue;
     }
