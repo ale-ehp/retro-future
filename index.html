@@ -1388,6 +1388,21 @@ const TRON_FSR_UPSCALE_SHADER = {
       return dot(color, vec3(0.299, 0.587, 0.114));
     }
 
+    vec3 tronRcasLikeSharpen(vec3 center, vec3 north, vec3 south, vec3 east, vec3 west, float amount) {
+      vec3 localMin = min(center, min(min(north, south), min(east, west)));
+      vec3 localMax = max(center, max(max(north, south), max(east, west)));
+      vec3 neighborAverage = (north + south + east + west) * 0.25;
+      vec3 detail = center - neighborAverage;
+      vec3 range = max(localMax - localMin, vec3(0.001));
+      float lumaRange = max(max(range.r, range.g), range.b);
+      float lumaCenter = tronLuma(center);
+      float lumaNeighbors = tronLuma(neighborAverage);
+      float edgeLimiter = smoothstep(0.01, 0.24, abs(lumaCenter - lumaNeighbors));
+      float adaptiveAmount = amount * mix(0.32, 1.0, edgeLimiter) * clamp(lumaRange * 3.0, 0.15, 1.0);
+      vec3 sharpened = center + detail * adaptiveAmount;
+      return clamp(sharpened, localMin - range * 0.08, localMax + range * 0.08);
+    }
+
     void main() {
       vec2 texel = 1.0 / max(sourceResolution, vec2(1.0));
       vec4 center = texture2D(tDiffuse, vUv);
@@ -1419,9 +1434,8 @@ const TRON_FSR_UPSCALE_SHADER = {
       vec3 edgeAware = center.rgb * 0.54 + (alongA + alongB) * 0.23;
       vec3 reconstructed = mix(center.rgb, edgeAware, edgeStrength);
 
-      vec3 blur = (north + south + east + west) * 0.25;
-      vec3 detail = reconstructed - blur;
-      vec3 color = reconstructed + detail * sharpness;
+      float rcasAmount = clamp(sharpness, 0.0, 1.25);
+      vec3 color = tronRcasLikeSharpen(reconstructed, north, south, east, west, rcasAmount);
       gl_FragColor = vec4(clamp(color, 0.0, 1.0), center.a);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
@@ -22054,6 +22068,7 @@ function performanceDiagnosticsComposerSummary() {
     fsrUpscaleEnabled,
     fsrInternalScale: Number(fsrInternalScale.toFixed(2)),
     fsrSharpness: Number(fsrSharpness.toFixed(2)),
+    fsrSharpenMode: 'rcas-like-adaptive',
     fsrUpscaleShaderEnabled: Boolean(fsrUpscalePass?.enabled),
   };
 }
@@ -22103,6 +22118,7 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
     fsrUpscaleEnabled: composerSummary.fsrUpscaleEnabled,
     fsrInternalScale: composerSummary.fsrInternalScale,
     fsrSharpness: composerSummary.fsrSharpness,
+    fsrSharpenMode: composerSummary.fsrSharpenMode,
     fsrUpscaleShaderEnabled: composerSummary.fsrUpscaleShaderEnabled,
     fsrTarget,
     bloomEnabled,
