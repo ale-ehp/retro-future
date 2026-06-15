@@ -1230,7 +1230,6 @@ ti auguriamo un esperienza illuminante.</p>
     "three/addons/postprocessing/EffectComposer.js": "./EffectComposer.js",
     "three/addons/postprocessing/RenderPass.js": "./RenderPass.js",
     "three/addons/postprocessing/UnrealBloomPass.js": "./UnrealBloomPass.js",
-    "three/addons/postprocessing/OutputPass.js": "./OutputPass.js",
     "three/addons/postprocessing/FXAAPass.js": "./FXAAPass.js",
     "three/addons/postprocessing/ShaderPass.js": "./ShaderPass.js",
     "three/addons/postprocessing/Pass.js": "./Pass.js",
@@ -1289,7 +1288,7 @@ const cityRevealProfileState = {
 };
 
 // Postprocessing (optional bloom + FXAA). Best-effort — fallback to plain renderer if any module fails.
-let composer = null, bloomPass = null, fxaaPass = null, fsrSharpenPass = null;
+let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null;
 let postEnabled = true;
 let hexUpdateEnabled = true;
 const HEX_ROAD_UPDATE_FRAME_STRIDE = 2;
@@ -1337,15 +1336,14 @@ let secondaryEffectFrame = 0;
 let boundaryErrorAccumulatedDt = 0;
 const SECONDARY_EFFECT_UPDATE_STRIDE = 2;
 try {
-  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { FXAAPass }, { ShaderPass }] = await Promise.all([
+  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { FXAAPass }, { ShaderPass }] = await Promise.all([
     import('three/addons/postprocessing/EffectComposer.js'),
     import('three/addons/postprocessing/RenderPass.js'),
     import('three/addons/postprocessing/UnrealBloomPass.js'),
-    import('three/addons/postprocessing/OutputPass.js'),
     import('three/addons/postprocessing/FXAAPass.js'),
     import('three/addons/postprocessing/ShaderPass.js'),
   ]);
-  window.__POST = { EffectComposer, RenderPass, UnrealBloomPass, OutputPass, FXAAPass, ShaderPass };
+  window.__POST = { EffectComposer, RenderPass, UnrealBloomPass, FXAAPass, ShaderPass };
   usePost = true;
 } catch (e) {
   console.warn('Postprocessing unavailable, falling back to plain renderer:', e.message);
@@ -1364,12 +1362,13 @@ try {
   console.warn('Runner GLB support unavailable:', e.message);
 }
 
-const TRON_FSR_SHARPEN_SHADER = {
-  name: 'TronFsrLikeSharpen',
+const TRON_FSR_UPSCALE_SHADER = {
+  name: 'TronFsrLikeUpscale',
   uniforms: {
     tDiffuse: { value: null },
-    resolution: { value: new THREE.Vector2(1, 1) },
+    sourceResolution: { value: new THREE.Vector2(1, 1) },
     sharpness: { value: 0 },
+    upscaleActive: { value: 0 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -1380,22 +1379,52 @@ const TRON_FSR_SHARPEN_SHADER = {
   `,
   fragmentShader: `
     uniform sampler2D tDiffuse;
-    uniform vec2 resolution;
+    uniform vec2 sourceResolution;
     uniform float sharpness;
+    uniform float upscaleActive;
     varying vec2 vUv;
 
+    float tronLuma(vec3 color) {
+      return dot(color, vec3(0.299, 0.587, 0.114));
+    }
+
     void main() {
-      vec2 texel = 1.0 / max(resolution, vec2(1.0));
+      vec2 texel = 1.0 / max(sourceResolution, vec2(1.0));
       vec4 center = texture2D(tDiffuse, vUv);
-      vec3 blur = (
-        texture2D(tDiffuse, vUv + vec2(texel.x, 0.0)).rgb +
-        texture2D(tDiffuse, vUv - vec2(texel.x, 0.0)).rgb +
-        texture2D(tDiffuse, vUv + vec2(0.0, texel.y)).rgb +
-        texture2D(tDiffuse, vUv - vec2(0.0, texel.y)).rgb
-      ) * 0.25;
-      vec3 detail = center.rgb - blur;
-      vec3 color = center.rgb + detail * sharpness;
+      vec3 north = texture2D(tDiffuse, vUv + vec2(0.0, texel.y)).rgb;
+      vec3 south = texture2D(tDiffuse, vUv - vec2(0.0, texel.y)).rgb;
+      vec3 east = texture2D(tDiffuse, vUv + vec2(texel.x, 0.0)).rgb;
+      vec3 west = texture2D(tDiffuse, vUv - vec2(texel.x, 0.0)).rgb;
+      vec3 northEast = texture2D(tDiffuse, vUv + texel).rgb;
+      vec3 northWest = texture2D(tDiffuse, vUv + vec2(-texel.x, texel.y)).rgb;
+      vec3 southEast = texture2D(tDiffuse, vUv + vec2(texel.x, -texel.y)).rgb;
+      vec3 southWest = texture2D(tDiffuse, vUv - texel).rgb;
+
+      float lN = tronLuma(north);
+      float lS = tronLuma(south);
+      float lE = tronLuma(east);
+      float lW = tronLuma(west);
+      float lNE = tronLuma(northEast);
+      float lNW = tronLuma(northWest);
+      float lSE = tronLuma(southEast);
+      float lSW = tronLuma(southWest);
+      vec2 edge = vec2((lNW + 2.0 * lW + lSW) - (lNE + 2.0 * lE + lSE),
+                       (lSW + 2.0 * lS + lSE) - (lNW + 2.0 * lN + lNE));
+      float edgeStrength = clamp(length(edge) * 1.35, 0.0, 1.0) * upscaleActive;
+      vec2 edgeDir = normalize(edge + vec2(0.0001));
+      vec2 tangent = vec2(-edgeDir.y, edgeDir.x);
+
+      vec3 alongA = texture2D(tDiffuse, vUv + tangent * texel * 0.65).rgb;
+      vec3 alongB = texture2D(tDiffuse, vUv - tangent * texel * 0.65).rgb;
+      vec3 edgeAware = center.rgb * 0.54 + (alongA + alongB) * 0.23;
+      vec3 reconstructed = mix(center.rgb, edgeAware, edgeStrength);
+
+      vec3 blur = (north + south + east + west) * 0.25;
+      vec3 detail = reconstructed - blur;
+      vec3 color = reconstructed + detail * sharpness;
       gl_FragColor = vec4(clamp(color, 0.0, 1.0), center.a);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
     }
   `,
 };
@@ -17472,8 +17501,8 @@ function cityRevealComposerPassProfile() {
     mainLedReveal: Boolean(cityRevealMainLedRevealPass?.enabled),
     bloom: Boolean(bloomPass?.enabled),
     fxaa: Boolean(fxaaPass?.enabled),
-    fsrSharpen: Boolean(fsrSharpenPass?.enabled),
-    output: Boolean(composer),
+    fsrUpscale: Boolean(fsrUpscalePass?.enabled),
+    output: Boolean(composer && !fsrUpscalePass),
   };
   const mainLedSceneRenders = passes.mainLedReveal ? 2 : 0;
   const sceneRenderPasses = [
@@ -17483,7 +17512,7 @@ function cityRevealComposerPassProfile() {
     passes.roadGrid,
     passes.realCity,
   ].filter(Boolean).length + mainLedSceneRenders;
-  const postPasses = [passes.bloom, passes.fxaa, passes.fsrSharpen, passes.output].filter(Boolean).length;
+  const postPasses = [passes.bloom, passes.fxaa, passes.fsrUpscale, passes.output].filter(Boolean).length;
   return {
     composer: shouldUseComposer(),
     passes,
@@ -18132,23 +18161,27 @@ function isFsrUpscaleActive() {
   return Boolean(fsrUpscaleEnabled && fsrInternalScale < 0.999);
 }
 
-function syncFsrSharpenPass() {
-  if (!fsrSharpenPass) return;
-  fsrSharpenPass.enabled = Boolean(fsrUpscaleEnabled && fsrSharpness > 0.001);
-  if (fsrSharpenPass.uniforms?.sharpness) {
-    fsrSharpenPass.uniforms.sharpness.value = THREE.MathUtils.clamp(fsrSharpness, 0, 1.25);
+function syncFsrUpscalePass() {
+  if (!fsrUpscalePass) return;
+  fsrUpscalePass.enabled = true;
+  const upscaleActive = isFsrUpscaleActive() ? 1 : 0;
+  if (fsrUpscalePass.uniforms?.upscaleActive) {
+    fsrUpscalePass.uniforms.upscaleActive.value = upscaleActive;
+  }
+  if (fsrUpscalePass.uniforms?.sharpness) {
+    fsrUpscalePass.uniforms.sharpness.value = THREE.MathUtils.clamp(fsrSharpness, 0, 1.25);
   }
 }
 
-function resizeFsrSharpenTarget() {
-  if (!fsrSharpenPass) return;
+function resizeFsrUpscaleTarget() {
+  if (!fsrUpscalePass) return;
   const composerPixelRatio = effectiveComposerPixelRatio();
   const width = Math.max(1, Math.round(window.innerWidth * composerPixelRatio));
   const height = Math.max(1, Math.round(window.innerHeight * composerPixelRatio));
   const key = `${width}x${height}`;
   if (key === lastFsrTargetKey) return;
   lastFsrTargetKey = key;
-  fsrSharpenPass.uniforms?.resolution?.value?.set(width, height);
+  fsrUpscalePass.uniforms?.sourceResolution?.value?.set(width, height);
 }
 
 function resizeBloomTargets() {
@@ -18174,7 +18207,7 @@ function resizeFxaaTargets() {
   lastFxaaTargetKey = key;
   fxaaPass?.setSize(width, height);
   cityRevealWireFxaaPass?.setSize(width, height);
-  resizeFsrSharpenTarget();
+  resizeFsrUpscaleTarget();
 }
 
 function normalizedAntialiasMode(mode) {
@@ -18190,12 +18223,12 @@ function disposeComposerTargets() {
   if (!composer) return;
   bloomPass?.dispose?.();
   fxaaPass?.dispose?.();
-  fsrSharpenPass?.material?.dispose?.();
-  fsrSharpenPass?.dispose?.();
+  fsrUpscalePass?.material?.dispose?.();
+  fsrUpscalePass?.dispose?.();
   composer.dispose?.();
   bloomPass = null;
   fxaaPass = null;
-  fsrSharpenPass = null;
+  fsrUpscalePass = null;
   cityRevealSkyPass = null;
   cityRevealOverlayPass = null;
   cityRevealWirePass = null;
@@ -18208,7 +18241,7 @@ function disposeComposerTargets() {
 
 function rebuildComposer() {
   if (!usePost) return;
-  const { EffectComposer, RenderPass, UnrealBloomPass, OutputPass, FXAAPass, ShaderPass } = window.__POST;
+  const { EffectComposer, RenderPass, UnrealBloomPass, FXAAPass, ShaderPass } = window.__POST;
   disposeComposerTargets();
   composer = new EffectComposer(renderer);
   lastAppliedComposerPixelRatio = -1;
@@ -18248,16 +18281,15 @@ function rebuildComposer() {
   composer.addPass(bloomPass);
   fxaaPass = new FXAAPass();
   composer.addPass(fxaaPass);
-  fsrSharpenPass = new ShaderPass(TRON_FSR_SHARPEN_SHADER);
-  fsrSharpenPass.setSize = (width, height) => {
-    fsrSharpenPass.uniforms?.resolution?.value?.set(Math.max(1, width), Math.max(1, height));
+  fsrUpscalePass = new ShaderPass(TRON_FSR_UPSCALE_SHADER);
+  fsrUpscalePass.setSize = (width, height) => {
+    fsrUpscalePass.uniforms?.sourceResolution?.value?.set(Math.max(1, width), Math.max(1, height));
   };
-  syncFsrSharpenPass();
-  composer.addPass(fsrSharpenPass);
-  composer.addPass(new OutputPass());
+  syncFsrUpscalePass();
+  composer.addPass(fsrUpscalePass);
   resizeBloomTargets();
   resizeFxaaTargets();
-  resizeFsrSharpenTarget();
+  resizeFsrUpscaleTarget();
   applyBloomEnabled(bloomEnabled);
 }
 
@@ -18452,7 +18484,7 @@ function applyRenderResolution(requestedPixelRatio) {
     }
     resizeBloomTargets();
     resizeFxaaTargets();
-    syncFsrSharpenPass();
+    syncFsrUpscalePass();
   }
 }
 
@@ -19803,7 +19835,7 @@ function applyFsrUpscaleControlsFromUI() {
   controlEls.fsrSharpness.value = fsrSharpness.toFixed(2);
   controlEls.fsrInternalScaleVal.textContent = `${Math.round(fsrInternalScale * 100)}%`;
   controlEls.fsrSharpnessVal.textContent = fsrSharpness.toFixed(2);
-  syncFsrSharpenPass();
+  syncFsrUpscalePass();
 }
 
 function applyPostControlsFromUI() {
@@ -22022,7 +22054,7 @@ function performanceDiagnosticsComposerSummary() {
     fsrUpscaleEnabled,
     fsrInternalScale: Number(fsrInternalScale.toFixed(2)),
     fsrSharpness: Number(fsrSharpness.toFixed(2)),
-    fsrSharpenEnabled: Boolean(fsrSharpenPass?.enabled),
+    fsrUpscaleShaderEnabled: Boolean(fsrUpscalePass?.enabled),
   };
 }
 
@@ -22071,7 +22103,7 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
     fsrUpscaleEnabled: composerSummary.fsrUpscaleEnabled,
     fsrInternalScale: composerSummary.fsrInternalScale,
     fsrSharpness: composerSummary.fsrSharpness,
-    fsrSharpenEnabled: composerSummary.fsrSharpenEnabled,
+    fsrUpscaleShaderEnabled: composerSummary.fsrUpscaleShaderEnabled,
     fsrTarget,
     bloomEnabled,
     bloomPassEnabled: Boolean(bloomPass?.enabled),
