@@ -9008,6 +9008,7 @@ function setStripInstanceTransform(mesh, index, p1, p2, thickness) {
   const scale = new THREE.Vector3(thickness, thickness, len);
   const matrix = new THREE.Matrix4().compose(position, quaternion, scale);
   mesh.setMatrixAt(index, matrix);
+  return matrix;
 }
 
 function buildSideBuildingEdgeBatch(group) {
@@ -10734,6 +10735,14 @@ const LAB_EQUALIZER_START_WALL_INSET_Y = 6;
 const LAB_EQUALIZER_VERTICAL_OFFSET = 50;
 const LAB_EQUALIZER_MIN_HZ = 35;
 const LAB_EQUALIZER_MAX_HZ = 15500;
+const LAB_EQUALIZER_FFT_SIZE = 4096;
+const LAB_EQUALIZER_ANALYSER_MIN_DB = -96;
+const LAB_EQUALIZER_ANALYSER_MAX_DB = -6;
+const LAB_EQUALIZER_ANALYSER_SMOOTHING = 0.28;
+const LAB_EQUALIZER_LEVEL_DB_FLOOR = -88;
+const LAB_EQUALIZER_LEVEL_DB_CEILING = -18;
+const LAB_EQUALIZER_RELATIVE_DB_RANGE = 42;
+const LAB_EQUALIZER_LEVEL_GAMMA = 1.55;
 const LAB_EQUALIZER_PEAK_HOLD_SECONDS = 0.14;
 const LAB_EQUALIZER_PEAK_MIN_FALL_ROWS_PER_SEC = 1.8;
 const LAB_EQUALIZER_PEAK_MAX_FALL_ROWS_PER_SEC = 52;
@@ -10744,6 +10753,8 @@ labEqualizerGroup.name = 'real-demo-phosphor-audio-equalizer';
 const labEqualizerLevels = Array.from({ length: LAB_EQUALIZER_BAR_COUNT }, () => 0);
 const labEqualizerPeaks = Array.from({ length: LAB_EQUALIZER_BAR_COUNT }, () => 0);
 const labEqualizerPeakHoldTimers = Array.from({ length: LAB_EQUALIZER_BAR_COUNT }, () => 0);
+const labEqualizerTargetLevels = Array.from({ length: LAB_EQUALIZER_BAR_COUNT }, () => 0);
+const labEqualizerBandDbValues = Array.from({ length: LAB_EQUALIZER_BAR_COUNT }, () => LAB_EQUALIZER_LEVEL_DB_FLOOR);
 const labEqualizerConnectedSources = new WeakSet();
 const labEqualizerFrustumMatrix = new THREE.Matrix4();
 const labEqualizerFrustum = new THREE.Frustum();
@@ -10770,6 +10781,9 @@ let labEqualizerBassEnvelope = 0;
 let labEqualizerBassPulse = 0;
 let labEqualizerActivatedAfterReveal = false;
 let labEqualizerPrewarmed = false;
+let labEqualizerForceTextureDraw = true;
+let labEqualizerBandMetadataSignature = '';
+const labEqualizerBandMetadata = Array.from({ length: LAB_EQUALIZER_BAR_COUNT }, () => null);
 const labEqualizerState = {
   enabled: false,
   ready: false,
@@ -10794,6 +10808,7 @@ const labEqualizerState = {
   beatPulse: 0,
   textureFree: false,
   visibleInCamera: false,
+  renderVisible: false,
   sampleIntervalMs: 0,
   textureIntervalMs: 0,
   analyserFps: 0,
@@ -10805,6 +10820,7 @@ const labEqualizerState = {
   segmentRows: LAB_EQUALIZER_SEGMENT_ROWS,
   canvasWidth: LAB_EQUALIZER_CANVAS_WIDTH,
   canvasHeight: LAB_EQUALIZER_CANVAS_HEIGHT,
+  fftSize: LAB_EQUALIZER_FFT_SIZE,
   sceneScale: LAB_EQUALIZER_SCENE_SCALE,
   boardWidth: LAB_EQUALIZER_WORLD_WIDTH,
   boardHeight: LAB_EQUALIZER_WORLD_HEIGHT,
@@ -10889,9 +10905,11 @@ function ensureLabEqualizerAudioGraph() {
   if (!labEqualizerAnalyser || labEqualizerAudioContext !== ctx) {
     labEqualizerAudioContext = ctx;
     labEqualizerAnalyser = ctx.createAnalyser();
-    labEqualizerAnalyser.fftSize = 2048;
-    labEqualizerAnalyser.smoothingTimeConstant = 0.42;
-    labEqualizerFrequencyData = new Uint8Array(labEqualizerAnalyser.frequencyBinCount);
+    labEqualizerAnalyser.fftSize = LAB_EQUALIZER_FFT_SIZE;
+    labEqualizerAnalyser.minDecibels = LAB_EQUALIZER_ANALYSER_MIN_DB;
+    labEqualizerAnalyser.maxDecibels = LAB_EQUALIZER_ANALYSER_MAX_DB;
+    labEqualizerAnalyser.smoothingTimeConstant = LAB_EQUALIZER_ANALYSER_SMOOTHING;
+    labEqualizerFrequencyData = new Float32Array(labEqualizerAnalyser.frequencyBinCount);
     labEqualizerGain = ctx.createGain();
     labEqualizerGain.gain.setValueAtTime(0, ctx.currentTime);
     labEqualizerAnalyser.connect(labEqualizerGain).connect(ctx.destination);
@@ -10939,42 +10957,112 @@ async function toggleLabEqualizerAudio() {
   return startLabEqualizerAudio();
 }
 
-function labEqualizerBandLevel(index, now) {
+function computeLabEqualizerBandResponse(_centerHz) {
+  return 1;
+}
+
+function labEqualizerPulseColorGroupFromHue(hue) {
+  if (hue >= 260 && hue < 330) return 'Magenta';
+  if (hue >= 330 || hue < 52) return 'Red';
+  if (hue >= 52 && hue < 88) return 'Yellow';
+  if (hue >= 88 && hue < 165) return 'Green';
+  if (hue >= 165 && hue < 205) return 'Cyan';
+  return 'Blue';
+}
+
+function ensureLabEqualizerBandMetadata() {
+  const binCount = labEqualizerFrequencyData?.length || 0;
+  const sampleRate = labEqualizerAudioContext?.sampleRate || 48000;
+  const signature = `${sampleRate}:${binCount}`;
+  if (signature === labEqualizerBandMetadataSignature && labEqualizerBandMetadata[0]) {
+    return labEqualizerBandMetadata;
+  }
+  labEqualizerBandMetadataSignature = signature;
+  const nyquist = sampleRate * 0.5;
+  const frequencyRatio = LAB_EQUALIZER_MAX_HZ / LAB_EQUALIZER_MIN_HZ;
+  for (let index = 0; index < LAB_EQUALIZER_BAR_COUNT; index += 1) {
+    const bandStart = index / LAB_EQUALIZER_BAR_COUNT;
+    const bandEnd = (index + 1) / LAB_EQUALIZER_BAR_COUNT;
+    const center = (index + 0.5) / LAB_EQUALIZER_BAR_COUNT;
+    const lowHz = LAB_EQUALIZER_MIN_HZ * Math.pow(frequencyRatio, bandStart);
+    const highHz = LAB_EQUALIZER_MIN_HZ * Math.pow(frequencyRatio, bandEnd);
+    const centerHz = LAB_EQUALIZER_MIN_HZ * Math.pow(frequencyRatio, center);
+    const startBin = binCount > 0
+      ? THREE.MathUtils.clamp(Math.floor(lowHz / nyquist * binCount), 0, binCount - 1)
+      : 0;
+    const endBin = binCount > 0
+      ? THREE.MathUtils.clamp(Math.ceil(highHz / nyquist * binCount), startBin + 1, binCount)
+      : 0;
+    const hue = labEqualizerColumnHue(index);
+    labEqualizerBandMetadata[index] = {
+      lowHz,
+      highHz,
+      centerHz,
+      startBin,
+      endBin,
+      response: computeLabEqualizerBandResponse(centerHz),
+      label: labEqualizerFormatHz(centerHz),
+      hue,
+      pulseGroup: labEqualizerPulseColorGroupFromHue(hue),
+    };
+  }
+  return labEqualizerBandMetadata;
+}
+
+function labEqualizerBandMetadataFor(index) {
+  return ensureLabEqualizerBandMetadata()[index] || null;
+}
+
+function labEqualizerBandWeightedDb(index) {
   if (!labEqualizerAnalyser || !labEqualizerFrequencyData || !labEqualizerState.playing) {
-    return 0;
+    labEqualizerBandDbValues[index] = LAB_EQUALIZER_LEVEL_DB_FLOOR;
+    return LAB_EQUALIZER_LEVEL_DB_FLOOR;
   }
-  const nyquist = (labEqualizerAudioContext?.sampleRate || 48000) * 0.5;
-  const bandStart = index / LAB_EQUALIZER_BAR_COUNT;
-  const bandEnd = (index + 1) / LAB_EQUALIZER_BAR_COUNT;
-  const lowHz = LAB_EQUALIZER_MIN_HZ * Math.pow(LAB_EQUALIZER_MAX_HZ / LAB_EQUALIZER_MIN_HZ, bandStart);
-  const highHz = LAB_EQUALIZER_MIN_HZ * Math.pow(LAB_EQUALIZER_MAX_HZ / LAB_EQUALIZER_MIN_HZ, bandEnd);
-  const startBin = THREE.MathUtils.clamp(Math.floor(lowHz / nyquist * labEqualizerFrequencyData.length), 0, labEqualizerFrequencyData.length - 1);
-  const endBin = THREE.MathUtils.clamp(Math.ceil(highHz / nyquist * labEqualizerFrequencyData.length), startBin + 1, labEqualizerFrequencyData.length);
-  let sum = 0;
-  let peak = 0;
-  for (let bin = startBin; bin < endBin; bin += 1) {
-    const value = labEqualizerFrequencyData[bin] / 255;
-    sum += value;
-    peak = Math.max(peak, value);
+  const band = labEqualizerBandMetadataFor(index);
+  if (!band || band.endBin <= band.startBin) {
+    labEqualizerBandDbValues[index] = LAB_EQUALIZER_LEVEL_DB_FLOOR;
+    return LAB_EQUALIZER_LEVEL_DB_FLOOR;
   }
-  const average = sum / Math.max(1, endBin - startBin);
-  const weightedLevel = average * 0.82 + peak * 0.18;
-  return THREE.MathUtils.clamp(Math.pow(weightedLevel, 0.68) * labEqualizerState.sensitivity * labEqualizerBandResponse(index), 0, 1);
+  let sumDb = 0;
+  let peakDb = -Infinity;
+  let count = 0;
+  for (let bin = band.startBin; bin < band.endBin; bin += 1) {
+    const value = labEqualizerFrequencyData[bin];
+    if (!Number.isFinite(value)) continue;
+    const db = THREE.MathUtils.clamp(value, LAB_EQUALIZER_ANALYSER_MIN_DB, LAB_EQUALIZER_ANALYSER_MAX_DB);
+    sumDb += db;
+    peakDb = Math.max(peakDb, db);
+    count += 1;
+  }
+  if (count <= 0) {
+    labEqualizerBandDbValues[index] = LAB_EQUALIZER_LEVEL_DB_FLOOR;
+    return LAB_EQUALIZER_LEVEL_DB_FLOOR;
+  }
+  const averageDb = sumDb / count;
+  const weightedDb = averageDb * 0.74 + peakDb * 0.26;
+  labEqualizerBandDbValues[index] = weightedDb;
+  return weightedDb;
+}
+
+function labEqualizerBandLevel(index, framePeakDb) {
+  const weightedDb = labEqualizerBandDbValues[index] ?? LAB_EQUALIZER_LEVEL_DB_FLOOR;
+  if (!Number.isFinite(weightedDb) || !Number.isFinite(framePeakDb)) return 0;
+  const relativeFloorDb = Math.max(LAB_EQUALIZER_LEVEL_DB_FLOOR, framePeakDb - LAB_EQUALIZER_RELATIVE_DB_RANGE);
+  const relativeCeilingDb = Math.max(relativeFloorDb + 1, framePeakDb);
+  const normalized = THREE.MathUtils.clamp(
+    (weightedDb - relativeFloorDb) / (relativeCeilingDb - relativeFloorDb),
+    0,
+    1,
+  );
+  return THREE.MathUtils.clamp(Math.pow(normalized, LAB_EQUALIZER_LEVEL_GAMMA) * labEqualizerState.sensitivity * labEqualizerBandResponse(index), 0, 1);
 }
 
 function labEqualizerBandCenterHz(index) {
-  const center = (index + 0.5) / LAB_EQUALIZER_BAR_COUNT;
-  return LAB_EQUALIZER_MIN_HZ * Math.pow(LAB_EQUALIZER_MAX_HZ / LAB_EQUALIZER_MIN_HZ, center);
+  return labEqualizerBandMetadataFor(index)?.centerHz || LAB_EQUALIZER_MIN_HZ;
 }
 
 function labEqualizerBandResponse(index) {
-  const centerHz = labEqualizerBandCenterHz(index);
-  const octaveFrom = (hz) => Math.log2(Math.max(1, centerHz) / hz);
-  const bassLift = Math.exp(-Math.pow(octaveFrom(90) / 1.15, 2)) * 0.16;
-  const lowMidDip = Math.exp(-Math.pow(octaveFrom(360) / 1.08, 2)) * 0.09;
-  const presenceLift = Math.exp(-Math.pow(octaveFrom(2400) / 1.35, 2)) * 0.10;
-  const airLift = Math.exp(-Math.pow(octaveFrom(8500) / 1.25, 2)) * 0.07;
-  return THREE.MathUtils.clamp(0.90 + bassLift - lowMidDip + presenceLift + airLift, 0.74, 1.18);
+  return labEqualizerBandMetadataFor(index)?.response || 1;
 }
 
 function labEqualizerLevelToRows(level) {
@@ -11023,9 +11111,28 @@ function syncLabEqualizerPoseIfNeeded(now, force = false) {
   syncLabEqualizerPose();
 }
 
+function setLabEqualizerRenderVisible(visible) {
+  const renderVisible = Boolean(visible);
+  if (labEqualizerState.renderVisible !== renderVisible) {
+    if (!labEqualizerState.renderVisible && renderVisible) {
+      labEqualizerForceTextureDraw = true;
+    }
+    labEqualizerState.renderVisible = renderVisible;
+  }
+  if (labEqualizerGroup.visible !== renderVisible) {
+    labEqualizerGroup.visible = renderVisible;
+  }
+  labEqualizerState.textureFree = !renderVisible;
+  if (!renderVisible) {
+    labEqualizerState.textureIntervalMs = 0;
+    labEqualizerState.textureFps = 0;
+  }
+}
+
 function updateLabEqualizerVisibility(now, force = false) {
   if (!labEqualizerState.enabled) {
     labEqualizerState.visibleInCamera = false;
+    setLabEqualizerRenderVisible(false);
     return false;
   }
   if (!force && now - labEqualizerLastVisibilityAt < LAB_EQUALIZER_VISIBILITY_INTERVAL_MS) {
@@ -11039,6 +11146,7 @@ function updateLabEqualizerVisibility(now, force = false) {
   labEqualizerGroup.getWorldPosition(labEqualizerWorldPosition);
   labEqualizerVisibilitySphere.center.copy(labEqualizerWorldPosition);
   labEqualizerState.visibleInCamera = labEqualizerFrustum.intersectsSphere(labEqualizerVisibilitySphere);
+  setLabEqualizerRenderVisible(postRevealPerfIsolationState.equalizer && labEqualizerState.visibleInCamera);
   return labEqualizerState.visibleInCamera;
 }
 
@@ -11048,6 +11156,7 @@ function labEqualizerSampleIntervalMs() {
 }
 
 function labEqualizerTextureIntervalMs() {
+  if (!labEqualizerState.renderVisible) return 0;
   if (!labEqualizerState.playing) return 1000;
   return labEqualizerState.visibleInCamera ? LAB_EQUALIZER_TEXTURE_INTERVAL_MS : LAB_EQUALIZER_OFFSCREEN_TEXTURE_INTERVAL_MS;
 }
@@ -11068,6 +11177,8 @@ function labEqualizerMixHue(from, to, t) {
 }
 
 function labEqualizerColumnHue(column) {
+  const cachedHue = labEqualizerBandMetadata[column]?.hue;
+  if (Number.isFinite(cachedHue)) return cachedHue;
   const t = LAB_EQUALIZER_BAR_COUNT <= 1 ? 0 : column / (LAB_EQUALIZER_BAR_COUNT - 1);
   const stops = [
     [0.00, 222],
@@ -11091,13 +11202,7 @@ function labEqualizerColumnHue(column) {
 }
 
 function labEqualizerPulseColorGroup(column) {
-  const hue = labEqualizerColumnHue(column);
-  if (hue >= 260 && hue < 330) return 'Magenta';
-  if (hue >= 330 || hue < 52) return 'Red';
-  if (hue >= 52 && hue < 88) return 'Yellow';
-  if (hue >= 88 && hue < 165) return 'Green';
-  if (hue >= 165 && hue < 205) return 'Cyan';
-  return 'Blue';
+  return labEqualizerBandMetadata[column]?.pulseGroup || labEqualizerPulseColorGroupFromHue(labEqualizerColumnHue(column));
 }
 
 function labEqualizerPulsePowerForColumn(column) {
@@ -11285,7 +11390,7 @@ function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
   ctx.fillStyle = 'rgba(174, 255, 238, 0.68)';
   for (let column = 0; column < LAB_EQUALIZER_BAR_COUNT; column += 1) {
     const x = marginX + column * (columnW + columnGap) + columnW * 0.52;
-    const label = labEqualizerFormatHz(labEqualizerBandCenterHz(column));
+    const label = labEqualizerBandMetadataFor(column)?.label || labEqualizerFormatHz(labEqualizerBandCenterHz(column));
     ctx.fillText(label, x, labelY);
   }
   ctx.restore();
@@ -11352,9 +11457,9 @@ function updateLabEqualizer(now, dt) {
   if (!cityRevealComplete) return;
   activateLabEqualizerAfterReveal();
   if (!labEqualizerState.enabled) return;
-  if (postRevealPerfIsolationState.equalizer && !labEqualizerGroup.visible) labEqualizerGroup.visible = true;
   syncLabEqualizerPoseIfNeeded(now);
   updateLabEqualizerVisibility(now);
+  setLabEqualizerRenderVisible(postRevealPerfIsolationState.equalizer && labEqualizerState.visibleInCamera);
   ensureLabEqualizerAudioGraphIfNeeded(now);
   labEqualizerState.playing = Boolean(tronSoundtrack.playing);
 
@@ -11373,15 +11478,21 @@ function updateLabEqualizer(now, dt) {
   labEqualizerState.analyserFps = Number((1000 / Math.max(1, sampleElapsedMs)).toFixed(1));
 
   if (labEqualizerAnalyser && labEqualizerFrequencyData && labEqualizerState.playing) {
-    labEqualizerAnalyser.getByteFrequencyData(labEqualizerFrequencyData);
+    labEqualizerAnalyser.getFloatFrequencyData(labEqualizerFrequencyData);
+    ensureLabEqualizerBandMetadata();
   }
   let levelSum = 0;
   let peakLevel = 0;
   let bassEnergySum = 0;
   let bassEnergyWeight = 0;
   const peakFallRowsPerSecond = labEqualizerPeakFallRowsPerSecond();
+  let framePeakDb = LAB_EQUALIZER_LEVEL_DB_FLOOR;
   for (let index = 0; index < LAB_EQUALIZER_BAR_COUNT; index += 1) {
-    const target = labEqualizerBandLevel(index, now);
+    framePeakDb = Math.max(framePeakDb, labEqualizerBandWeightedDb(index));
+  }
+  for (let index = 0; index < LAB_EQUALIZER_BAR_COUNT; index += 1) {
+    const target = labEqualizerBandLevel(index, framePeakDb);
+    labEqualizerTargetLevels[index] = target;
     const attack = 1 - Math.exp(-sampleDt * 30);
     const release = 1 - Math.exp(-sampleDt * 10);
     const smooth = target > labEqualizerLevels[index] ? attack : release;
@@ -11417,10 +11528,15 @@ function updateLabEqualizer(now, dt) {
   if (labEqualizerDisplayMat) labEqualizerDisplayMat.opacity = 0.94 + peakLevel * 0.06;
   const textureInterval = labEqualizerTextureIntervalMs();
   labEqualizerState.textureIntervalMs = Number(textureInterval.toFixed(1));
-  if (now - labEqualizerLastTextureAt >= textureInterval) {
+  if (!labEqualizerState.renderVisible) {
+    labEqualizerState.textureFps = 0;
+    return;
+  }
+  if (labEqualizerForceTextureDraw || now - labEqualizerLastTextureAt >= textureInterval) {
     drawLabEqualizerCanvas(now, labEqualizerState.averageLevel, peakLevel, labEqualizerState.beatPulse);
     const textureElapsedMs = Number.isFinite(labEqualizerLastTextureAt) ? now - labEqualizerLastTextureAt : textureInterval;
     labEqualizerLastTextureAt = now;
+    labEqualizerForceTextureDraw = false;
     labEqualizerState.textureUpdateCount += 1;
     labEqualizerState.textureFps = Number((1000 / Math.max(1, textureElapsedMs)).toFixed(1));
   }
@@ -11486,11 +11602,26 @@ function labEqualizerInspect() {
     peakFallRowsPerSecond: Number(labEqualizerPeakFallRowsPerSecond().toFixed(2)),
     analyserReady: Boolean(labEqualizerAnalyser),
     visualReady: Boolean(labEqualizerCanvas && labEqualizerTexture),
+    renderVisible: Boolean(labEqualizerState.renderVisible),
+    bandMetadataSignature: labEqualizerBandMetadataSignature,
     activatedAfterReveal: labEqualizerActivatedAfterReveal,
     cityRevealComplete,
     boardChildren: labEqualizerGroup.children.length,
     activeBands: labEqualizerLevels.filter((level) => level > 0.01).length,
+    spectrumMode: 'float-db-neutral',
+    analyserConfig: {
+      fftSize: labEqualizerAnalyser?.fftSize || LAB_EQUALIZER_FFT_SIZE,
+      minDecibels: labEqualizerAnalyser?.minDecibels ?? LAB_EQUALIZER_ANALYSER_MIN_DB,
+      maxDecibels: labEqualizerAnalyser?.maxDecibels ?? LAB_EQUALIZER_ANALYSER_MAX_DB,
+      smoothingTimeConstant: labEqualizerAnalyser?.smoothingTimeConstant ?? LAB_EQUALIZER_ANALYSER_SMOOTHING,
+      levelFloorDb: LAB_EQUALIZER_LEVEL_DB_FLOOR,
+      levelCeilingDb: LAB_EQUALIZER_LEVEL_DB_CEILING,
+      relativeRangeDb: LAB_EQUALIZER_RELATIVE_DB_RANGE,
+      levelGamma: LAB_EQUALIZER_LEVEL_GAMMA,
+    },
     bandLevels: labEqualizerLevels.map((level) => Number(level.toFixed(3))),
+    bandTargetLevels: labEqualizerTargetLevels.map((level) => Number(level.toFixed(3))),
+    bandDb: labEqualizerBandDbValues.map((db) => Number(db.toFixed(1))),
     peakRows: labEqualizerPeaks.map((row) => Number(row.toFixed(2))),
     bandLabels: labEqualizerLevels.map((_, index) => labEqualizerFormatHz(labEqualizerBandCenterHz(index))),
     bandCentersHz: labEqualizerLevels.map((_, index) => Math.round(labEqualizerBandCenterHz(index))),
@@ -16449,6 +16580,11 @@ const STATIC_CITY_BOARD_CULL_MARGIN = GRID_BLOCK * 3;
 const staticCityCullMatrix = new THREE.Matrix4();
 const staticCityCullFrustum = new THREE.Frustum();
 const staticCityCullSphere = new THREE.Sphere();
+const staticCityHiddenInstanceMatrix = new THREE.Matrix4().compose(
+  new THREE.Vector3(0, -100000, 0),
+  new THREE.Quaternion(),
+  new THREE.Vector3(0.0001, 0.0001, 0.0001)
+);
 const staticCityCullStats = {
   enabled: STATIC_CITY_CULLING_ENABLED,
   total: 0,
@@ -16460,7 +16596,12 @@ const staticCityCullStats = {
   bridgesVisible: 0,
   boardsTotal: 0,
   boardsVisible: 0,
+  ledInstancesTotal: 0,
+  ledInstancesVisible: 0,
+  ledInstancesHidden: 0,
+  doorInstancesVisible: 0,
 };
+let staticCityDoorCullDirty = false;
 
 function setStaticCityObjectVisible(object, visible) {
   if (!object) return;
@@ -16520,13 +16661,98 @@ function setStaticCityBuildingClusterVisible(record, visible) {
   setStaticCityObjectVisible(record.mesh, visible);
   setStaticCityBasePadVisible(record.basePad, visible);
   setStaticCityObjectVisible(record.civicNumberGroup, visible);
-  if (record.sideDoor) setStaticCityObjectVisible(record.sideDoor, visible && sideDoorEnabled);
+  if (record.sideDoor) {
+    const nextDoorVisible = Boolean(visible && sideDoorEnabled);
+    if (record.sideDoor.visible !== nextDoorVisible) staticCityDoorCullDirty = true;
+    setStaticCityObjectVisible(record.sideDoor, nextDoorVisible);
+  }
   if (record.basePadLedBatch?.mesh) {
     setStaticCityObjectVisible(
       record.basePadLedBatch.mesh,
       visible && basePadLedBatch.sceneVisible && record.basePadLedBatch.count > 0
     );
   }
+}
+
+function staticCitySideRecordForSpec(spec) {
+  if (spec?.staticCityRecord) return spec.staticCityRecord;
+  if (spec?.edgeRole !== 'side-building' || !Array.isArray(spec.center)) return null;
+  const sign = spec.center[0] < 0 ? -1 : 1;
+  const zFactor = spec.center[1] / SIDE_BUILDING_SPACING;
+  let best = null;
+  let bestDelta = Infinity;
+  for (const record of sideBuildingRecords) {
+    if (record.sign !== sign) continue;
+    const delta = Math.abs(record.zFactor - zFactor);
+    if (delta < bestDelta) {
+      best = record;
+      bestDelta = delta;
+    }
+  }
+  spec.staticCityRecord = bestDelta < 0.01 ? best : null;
+  return spec.staticCityRecord;
+}
+
+function setStaticCityInstanceCull(mesh, index, visibleMatrix, visible) {
+  if (!mesh || index < 0) return false;
+  mesh.setMatrixAt(index, visible && visibleMatrix ? visibleMatrix : staticCityHiddenInstanceMatrix);
+  return true;
+}
+
+function updateStaticCityLedInstanceCulling() {
+  staticCityCullStats.ledInstancesTotal = 0;
+  staticCityCullStats.ledInstancesVisible = 0;
+  staticCityCullStats.ledInstancesHidden = 0;
+  let sideEdgeChanged = false;
+  if (sideBuildingEdgeBatch.mesh) {
+    for (const spec of sideBuildingEdgeSpecs) {
+      const record = staticCitySideRecordForSpec(spec);
+      const visible = Boolean(record?.mesh?.visible && spec.staticCityVisibleMatrix);
+      staticCityCullStats.ledInstancesTotal++;
+      if (visible) staticCityCullStats.ledInstancesVisible++;
+      else staticCityCullStats.ledInstancesHidden++;
+      if (spec.staticCityCullVisible === visible) continue;
+      spec.staticCityCullVisible = visible;
+      sideEdgeChanged = setStaticCityInstanceCull(
+        sideBuildingEdgeBatch.mesh,
+        spec.instanceId,
+        spec.staticCityVisibleMatrix,
+        visible
+      ) || sideEdgeChanged;
+    }
+    if (sideEdgeChanged) {
+      sideBuildingEdgeBatch.mesh.instanceMatrix.needsUpdate = true;
+      sideBuildingEdgeBatch.mesh.visible = Boolean(
+        sideBuildingEdgeBatch.mesh.userData.staticCullBaseVisible !== false &&
+        staticCityCullStats.ledInstancesVisible > 0
+      );
+    }
+  }
+
+  for (const batch of Object.values(sideHorizontalLedRingBatches)) {
+    if (!batch.mesh) continue;
+    let visibleCount = 0;
+    let changed = false;
+    for (const spec of batch.specs) {
+      const record = staticCitySideRecordForSpec(spec);
+      const visible = Boolean(record?.mesh?.visible && spec.staticCityVisibleMatrix);
+      staticCityCullStats.ledInstancesTotal++;
+      if (visible) {
+        staticCityCullStats.ledInstancesVisible++;
+        visibleCount++;
+      } else {
+        staticCityCullStats.ledInstancesHidden++;
+      }
+      if (spec.staticCityCullVisible === visible) continue;
+      spec.staticCityCullVisible = visible;
+      changed = setStaticCityInstanceCull(batch.mesh, spec.batchInstanceId, spec.staticCityVisibleMatrix, visible) || changed;
+    }
+    if (changed) {
+      batch.mesh.instanceMatrix.needsUpdate = true;
+      batch.mesh.visible = Boolean(batch.mesh.userData.staticCullBaseVisible !== false && visibleCount > 0);
+    }
+  }
+  staticCityCullStats.doorInstancesVisible = sideDoorBatchState.visibleInstances;
 }
 
 function setStaticCityMainLedClusterVisible(visible) {
@@ -16591,6 +16817,10 @@ function updateStaticCityCulling() {
       staticCityCullStats.hidden++;
     }
   }
+  if (staticCityDoorCullDirty) {
+    updateSideBuildingDoorBatchMeshes();
+    staticCityDoorCullDirty = false;
+  }
   for (const record of mainBuildingRecords) {
     const visible = staticCityCullFrustum.intersectsSphere(staticCityRecordSphere(record));
     setStaticCityBuildingClusterVisible(record, visible);
@@ -16644,6 +16874,7 @@ function updateStaticCityCulling() {
       staticCityCullStats.hidden++;
     }
   }
+  updateStaticCityLedInstanceCulling();
 }
 
 const cityRevealOverlayScene = new THREE.Scene();
@@ -18937,9 +19168,13 @@ function updateHorizontalBuildingLedRings(brightness, hueDeg, mainBrightness, ma
       );
       sideHorizontalLedRingMatrix.compose(sideHorizontalLedRingPosition, sideHorizontalLedRingQuaternion, sideHorizontalLedRingScale);
       batch.mesh.setMatrixAt(spec.batchInstanceId, sideHorizontalLedRingMatrix);
+      spec.staticCityVisibleMatrix = sideHorizontalLedRingMatrix.clone();
+      spec.staticCityCullVisible = null;
       batch.material.color.copy(ledColor);
       batch.mesh.count = batch.count;
-      batch.mesh.visible = brightness > 0.001 && stripWidth > 0.01 && batch.count > 0;
+      const batchBaseVisible = brightness > 0.001 && stripWidth > 0.01 && batch.count > 0;
+      batch.mesh.userData.staticCullBaseVisible = batchBaseVisible;
+      batch.mesh.visible = batchBaseVisible;
       changedSideRingBatches.add(batch);
       continue;
     }
@@ -19015,7 +19250,8 @@ function updateEdgeStrips(brightness, thickness, verticalDistance, hueDeg, mainB
     const [lengthP1, lengthP2] = applyVerticalLedLength(joinedP1, joinedP2, edgeVerticalLengthScale(spec, buildingVerticalLength, mainVerticalLength));
     const [p1, p2] = applyLedYOffset(lengthP1, lengthP2, edgeStripYOffset(spec, buildingVerticalY, buildingLowY, buildingHighY, mainVerticalY, mainLowY, mainHighY));
     if (spec.edgeRole === 'side-building' && sideBuildingEdgeBatch.mesh) {
-      setStripInstanceTransform(sideBuildingEdgeBatch.mesh, spec.instanceId, p1, p2, stripThickness);
+      spec.staticCityVisibleMatrix = setStripInstanceTransform(sideBuildingEdgeBatch.mesh, spec.instanceId, p1, p2, stripThickness).clone();
+      spec.staticCityCullVisible = null;
       sideBatchChanged = true;
       continue;
     }
@@ -19025,6 +19261,7 @@ function updateEdgeStrips(brightness, thickness, verticalDistance, hueDeg, mainB
   }
   if (sideBatchChanged && sideBuildingEdgeBatch.mesh) {
     sideBuildingEdgeBatch.mesh.instanceMatrix.needsUpdate = true;
+    sideBuildingEdgeBatch.mesh.userData.staticCullBaseVisible = sideBuildingEdgeBatch.enabled;
     sideBuildingEdgeBatch.mesh.visible = sideBuildingEdgeBatch.enabled;
     refreshCullingBounds(sideBuildingEdgeBatch.mesh);
   }
@@ -22489,6 +22726,9 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
     staticCityCullBridgesTotal: staticCityCullStats.bridgesTotal,
     staticCityCullBoardsVisible: staticCityCullStats.boardsVisible,
     staticCityCullBoardsTotal: staticCityCullStats.boardsTotal,
+    staticCityCullLedVisible: staticCityCullStats.ledInstancesVisible,
+    staticCityCullLedTotal: staticCityCullStats.ledInstancesTotal,
+    staticCityCullDoorInstancesVisible: staticCityCullStats.doorInstancesVisible,
     frameMs: Number(performanceDiagnosticsTiming.frameMs.toFixed(2)),
     updateMs: Number(performanceDiagnosticsTiming.updateMs.toFixed(2)),
     renderMs: Number(performanceDiagnosticsTiming.renderMs.toFixed(2)),
@@ -22593,6 +22833,7 @@ function updatePerformanceDiagnostics(measuredFps = latestMeasuredFps) {
       `draw ${stats.drawCalls}`,
       `tri ${Math.round(stats.triangles / 1000)}k`,
       `cityCull ${stats.staticCityCullVisible}/${stats.staticCityCullTotal}`,
+      `ledCull ${stats.staticCityCullLedVisible}/${stats.staticCityCullLedTotal}`,
       `frame ${stats.frameMs.toFixed(1)}ms`,
       `render ${stats.renderMs.toFixed(1)}ms`,
       `revealCap ${stats.pixelPipeline.revealPerformanceActive ? 'on' : 'off'}`,
@@ -22615,6 +22856,7 @@ function updatePerformanceDiagnostics(measuredFps = latestMeasuredFps) {
         `${stats.viewport} dpr ${stats.devicePixelRatio} req ${stats.requestedPixelRatio} px ${Math.round(stats.canvasPixels / 1000)}k`,
         `draw ${stats.drawCalls} tri ${Math.round(stats.triangles / 1000)}k tex ${stats.textures}`,
         `cityCull ${stats.staticCityCullVisible}/${stats.staticCityCullTotal} buildings ${stats.staticCityCullBuildingsVisible}/${stats.staticCityCullBuildingsTotal}`,
+        `ledCull ${stats.staticCityCullLedVisible}/${stats.staticCityCullLedTotal} doors ${stats.staticCityCullDoorInstancesVisible}`,
         `fx ${stats.composerActive ? stats.composerPassCount : 0} bloom ${stats.bloomActive ? stats.bloomTarget.key || 'on' : 'off'} aa ${stats.fxaaEnabled ? 'on' : 'off'}`,
         `crowd ${stats.crowdVisible}/${tronRunnerCrowd.length} refl ${stats.reflections}/${stats.reflectionBudget} freeze ${stats.revealFreezeFrames}`,
         `frame ${stats.frameMs.toFixed(1)} update ${stats.updateMs.toFixed(1)} render ${stats.renderMs.toFixed(1)}ms`,
