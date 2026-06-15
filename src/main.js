@@ -1,15 +1,41 @@
 import * as THREE from 'three';
+import {
+  BLOOM_BYPASS_STRENGTH,
+  BLOOM_OPTIMIZED_ACTIVE_MIPS,
+  BLOOM_OPTIMIZED_UPDATE_STRIDE,
+  BLOOM_RESOLUTION_CAP,
+  BLOOM_TEMPORAL_MOVE_EPS_SQ,
+  BLOOM_TEMPORAL_ROTATE_EPS,
+  CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS,
+  CITY_REVEAL_BACKPLATE_SWEEP_PORTION,
+  CITY_REVEAL_DEFAULT_DELAY_MS,
+  CITY_REVEAL_DEFAULT_FADE_MS,
+  CITY_REVEAL_MAX_SKY_BACKPLATE_OPACITY,
+  CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP,
+  CITY_REVEAL_PROFILE_MAX_SAMPLES,
+  CITY_REVEAL_PROFILE_SAMPLE_MS,
+  CITY_REVEAL_RENDER_ORDER,
+  CITY_REVEAL_SWEEP_MARGIN_Z,
+  CITY_REVEAL_SWEEP_MODE,
+  FIXED_CAMERA_FOV,
+  FSR_BENCHMARK_PRESET_KEYS,
+  FSR_MANUAL_CONTROL_IDS,
+  FSR_PRESETS,
+  HEX_ROAD_UPDATE_FRAME_STRIDE,
+  MAX_HEX_ROAD_ACCUMULATED_DT,
+  MAX_RENDER_PIXEL_RATIO,
+  MIN_BLOOM_TARGET_SIZE,
+  MIN_DYNAMIC_BLOOM_SCALE,
+  MIN_DYNAMIC_PIXEL_RATIO,
+  MIN_DYNAMIC_QUALITY_SCALE,
+  MOBILE_PERFORMANCE_BLOOM_SCALE_CAP,
+  MOBILE_PERFORMANCE_PIXEL_RATIO_CAP,
+  MOBILE_PERFORMANCE_QUERY,
+  MOBILE_PERFORMANCE_RENDER_SCALE_CAP,
+  SECONDARY_EFFECT_UPDATE_STRIDE,
+} from './config.js';
 
-const CITY_REVEAL_DEFAULT_DELAY_MS = 8800;
-const CITY_REVEAL_DEFAULT_FADE_MS = 1500;
-const CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS = 0;
-const CITY_REVEAL_SWEEP_MARGIN_Z = 36;
-const CITY_REVEAL_SWEEP_MODE = 'vertical-45';
 const CITY_REVEAL_SWEEP_NORMAL = new THREE.Vector3(0, -1, 1).normalize();
-const CITY_REVEAL_BACKPLATE_SWEEP_PORTION = 0.08;
-const CITY_REVEAL_MAX_SKY_BACKPLATE_OPACITY = 0.28;
-const CITY_REVEAL_RENDER_ORDER = 'wireframe-under-real-city';
-const FIXED_CAMERA_FOV = 70;
 let cityRevealDelayMs = CITY_REVEAL_DEFAULT_DELAY_MS;
 let cityRevealFadeMs = CITY_REVEAL_DEFAULT_FADE_MS;
 let cityRevealWireframeEnabled = true;
@@ -27,8 +53,6 @@ let cityRevealSweepProgress = 0;
 let cityRevealComplete = false;
 let cityRevealCompletedAt = 0;
 let cityRevealWaitingForVisibleFrame = false;
-const CITY_REVEAL_PROFILE_SAMPLE_MS = 500;
-const CITY_REVEAL_PROFILE_MAX_SAMPLES = 80;
 const cityRevealProfileState = {
   running: false,
   completed: false,
@@ -44,36 +68,9 @@ const cityRevealProfileState = {
 let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null;
 let postEnabled = true;
 let hexUpdateEnabled = true;
-const HEX_ROAD_UPDATE_FRAME_STRIDE = 2;
-const MAX_HEX_ROAD_ACCUMULATED_DT = 0.1;
 let hexRoadUpdateFrame = 0;
 let hexRoadAccumulatedDt = 0;
 let usePost = false;
-const MAX_RENDER_PIXEL_RATIO = 1.5;
-const MIN_DYNAMIC_PIXEL_RATIO = 0.25;
-const MIN_DYNAMIC_BLOOM_SCALE = 0.10;
-const MIN_DYNAMIC_QUALITY_SCALE = 0.25;
-const BLOOM_RESOLUTION_CAP = 0.24;
-const BLOOM_OPTIMIZED_ACTIVE_MIPS = 3;
-const BLOOM_OPTIMIZED_UPDATE_STRIDE = 2;
-const BLOOM_TEMPORAL_MOVE_EPS_SQ = 0.0025;
-const BLOOM_TEMPORAL_ROTATE_EPS = 0.000003;
-const BLOOM_BYPASS_STRENGTH = 0.015;
-const MIN_BLOOM_TARGET_SIZE = 96;
-const CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP = 1.5;
-const MOBILE_PERFORMANCE_QUERY = '(max-width: 760px), (hover: none), (pointer: coarse)';
-const MOBILE_PERFORMANCE_RENDER_SCALE_CAP = 1;
-const MOBILE_PERFORMANCE_PIXEL_RATIO_CAP = 1.5;
-const MOBILE_PERFORMANCE_BLOOM_SCALE_CAP = 0.14;
-const FSR_PRESETS = Object.freeze({
-  custom: { label: 'Custom', enabled: false, scale: 1 },
-  quality: { label: 'Quality 85%', enabled: true, scale: 0.85 },
-  balanced: { label: 'Balanced 75%', enabled: true, scale: 0.75 },
-  performance: { label: 'Performance 65%', enabled: true, scale: 0.65 },
-  off: { label: 'Off / full-res', enabled: false, scale: 1 },
-});
-const FSR_BENCHMARK_PRESET_KEYS = Object.freeze(['off', 'quality', 'balanced', 'performance']);
-const FSR_MANUAL_CONTROL_IDS = new Set(['fsr-upscale-enabled', 'fsr-internal-scale']);
 const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
 let activePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO);
 let requestedPixelRatio = MAX_RENDER_PIXEL_RATIO;
@@ -96,7 +93,6 @@ let lastFsrTargetKey = '';
 let cityRevealPerformanceProfileActive = false;
 let secondaryEffectFrame = 0;
 let boundaryErrorAccumulatedDt = 0;
-const SECONDARY_EFFECT_UPDATE_STRIDE = 2;
 try {
   const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { FXAAPass }, { ShaderPass }] = await Promise.all([
     import('three/addons/postprocessing/EffectComposer.js'),
