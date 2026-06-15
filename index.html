@@ -10725,9 +10725,9 @@ const LAB_EQUALIZER_CANVAS_HEIGHT = 384;
 const LAB_EQUALIZER_GROUP_RENDER_ORDER = 18;
 const LAB_EQUALIZER_PANEL_RENDER_ORDER = 18;
 const LAB_EQUALIZER_DISPLAY_RENDER_ORDER = 19;
-const LAB_EQUALIZER_TEXTURE_INTERVAL_MS = 1000 / 12;
-const LAB_EQUALIZER_TEXTURE_ADAPTIVE_SOFT_INTERVAL_MS = 1000 / 8;
-const LAB_EQUALIZER_TEXTURE_ADAPTIVE_HARD_INTERVAL_MS = 1000 / 6;
+const LAB_EQUALIZER_TEXTURE_INTERVAL_MS = 1000 / 6;
+const LAB_EQUALIZER_TEXTURE_ADAPTIVE_SOFT_INTERVAL_MS = 1000 / 5;
+const LAB_EQUALIZER_TEXTURE_ADAPTIVE_HARD_INTERVAL_MS = 1000 / 4;
 const LAB_EQUALIZER_AUDIO_SAMPLE_INTERVAL_MS = 1000 / 30;
 const LAB_EQUALIZER_OFFSCREEN_SAMPLE_INTERVAL_MS = 1000;
 const LAB_EQUALIZER_AUDIO_KICK_SAMPLE_INTERVAL_MS = 1000 / 8;
@@ -10871,20 +10871,21 @@ function ensureLabEqualizerVisualResources() {
   labEqualizerTexture.magFilter = THREE.LinearFilter;
   labEqualizerPanelMat = new THREE.MeshBasicMaterial({
     color: 0x000101,
-    transparent: true,
-    opacity: 0.98,
-    depthWrite: false,
+    transparent: false,
+    opacity: 1,
+    depthWrite: true,
+    depthTest: true,
     toneMapped: false,
     side: THREE.DoubleSide,
   });
   labEqualizerDisplayMat = new THREE.MeshBasicMaterial({
     map: labEqualizerTexture,
-    transparent: true,
+    transparent: false,
     opacity: 1,
-    depthWrite: false,
+    depthWrite: true,
     depthTest: true,
     toneMapped: false,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
     side: THREE.DoubleSide,
   });
   return Boolean(labEqualizerCtx && labEqualizerStaticCtx);
@@ -11677,8 +11678,6 @@ function updateLabEqualizer(now, dt) {
   labEqualizerState.peakLevel = peakLevel;
   labEqualizerState.bassEnergy = bassEnergy;
   labEqualizerState.beatPulse = labEqualizerBeatPulse(bassEnergy, sampleDt);
-  if (labEqualizerPanelMat) labEqualizerPanelMat.opacity = 0.84 + peakLevel * 0.10;
-  if (labEqualizerDisplayMat) labEqualizerDisplayMat.opacity = 0.94 + peakLevel * 0.06;
   const textureInterval = labEqualizerTextureIntervalMs();
   labEqualizerState.textureIntervalMs = Number(textureInterval.toFixed(1));
   if (!labEqualizerState.renderVisible) {
@@ -16973,10 +16972,27 @@ const cityRevealOverlayCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10
 cityRevealOverlayCamera.position.z = 1;
 const cityRevealSkyScene = new THREE.Scene();
 cityRevealSkyScene.background = skyDisplayColor;
-const cityRevealSkyDome = new THREE.Mesh(domeGeo, domeMat);
+const cityRevealSkyMat = domeMat.clone();
+cityRevealSkyMat.name = 'city-reveal-sky-material';
+const cityRevealSkyDome = new THREE.Mesh(domeGeo, cityRevealSkyMat);
 cityRevealSkyDome.frustumCulled = false;
 cityRevealSkyDome.renderOrder = domeMesh.renderOrder;
 cityRevealSkyScene.add(cityRevealSkyDome);
+function cityRevealSkyUsesBudgetQuality() {
+  return Boolean(cityRevealWireframeEnabled && !cityRevealComplete);
+}
+function syncCityRevealSkyMaterial() {
+  for (const [key, sourceUniform] of Object.entries(domeMat.uniforms || {})) {
+    const targetUniform = cityRevealSkyMat.uniforms?.[key];
+    if (!targetUniform) continue;
+    const value = sourceUniform.value;
+    if (value?.isColor && targetUniform.value?.isColor) targetUniform.value.copy(value);
+    else targetUniform.value = value;
+  }
+  if (cityRevealSkyUsesBudgetQuality() && cityRevealSkyMat.uniforms?.uSkyQuality) {
+    cityRevealSkyMat.uniforms.uSkyQuality.value = 0;
+  }
+}
 const cityRevealFadeDurationMs = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : cityRevealFadeMs;
 const cityRevealEffectiveDelayMs = () => cityRevealDelayMs + CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS;
 const cityRevealBackplateMat = new THREE.MeshBasicMaterial({
@@ -18348,6 +18364,7 @@ function markCityRevealComplete(now = performance.now()) {
     cityRevealCompletedAt = Number.isFinite(now) && now > 0 ? now : performance.now();
   }
   cityRevealComplete = true;
+  syncCityRevealSkyMaterial();
 }
 
 function startCityRevealWireframe() {
@@ -18475,6 +18492,7 @@ function syncCityRevealSkyDome() {
   cityRevealSkyScene.background = scene.background || skyDisplayColor;
   cityRevealSkyDome.visible = domeMesh.visible;
   cityRevealSkyDome.position.copy(camera.position);
+  syncCityRevealSkyMaterial();
 }
 
 function renderCityRevealSkyBase() {
@@ -18894,7 +18912,6 @@ function syncBloomTemporalBudget() {
     bloomEnabled &&
     postRevealPerfIsolationState.bloom &&
     bloomPass.enabled &&
-    cityRevealComplete &&
     !isCityRevealPerformanceCritical()
   );
   if (!active) {
@@ -18907,7 +18924,8 @@ function syncBloomTemporalBudget() {
   if (bloomTemporalPrimed) {
     const moved = camera.position.distanceToSquared(bloomTemporalCameraPosition) > BLOOM_TEMPORAL_MOVE_EPS_SQ;
     const rotated = 1 - Math.abs(camera.quaternion.dot(bloomTemporalCameraQuaternion)) > BLOOM_TEMPORAL_ROTATE_EPS;
-    cameraMoving = moved || rotated || droneIntroFlight.active;
+    const revealSweeping = cityRevealStartedAt > 0 && !cityRevealComplete;
+    cameraMoving = moved || rotated || droneIntroFlight.active || revealSweeping;
   }
   const nextStride = cameraMoving ? 1 : BLOOM_OPTIMIZED_UPDATE_STRIDE;
   if (bloomPass.updateStride !== nextStride) {
@@ -22071,6 +22089,9 @@ window.__tronInspect = () => ({
   cityRevealBackplateVisible: cityRevealBackplate.visible,
   cityRevealSkyPassActive: Boolean(cityRevealSkyPass?.enabled),
   cityRevealSkyDomeVisible: cityRevealSkyDome.visible,
+  cityRevealSkyBudgetQuality: cityRevealSkyUsesBudgetQuality(),
+  cityRevealSkyQualityMain: domeMat.uniforms.uSkyQuality.value,
+  cityRevealSkyQualityReveal: cityRevealSkyMat.uniforms.uSkyQuality.value,
   cityRevealSweepMode: CITY_REVEAL_SWEEP_MODE,
   cityRevealFrontZ,
   cityRevealSweepStartZ,
@@ -22344,6 +22365,9 @@ window.__tronPerfInspect = () => ({
     cloudThreshold: domeMat.uniforms.uStormCloudThreshold.value,
     band: domeMat.uniforms.uStormBand.value,
     veil: domeMat.uniforms.uStormVeil.value,
+    mainQuality: domeMat.uniforms.uSkyQuality.value,
+    revealQuality: cityRevealSkyMat.uniforms.uSkyQuality.value,
+    revealBudgetQuality: cityRevealSkyUsesBudgetQuality(),
   },
   hexUpdateEnabled,
   hexTiles: hexRoadTiles.length,
