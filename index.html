@@ -1188,9 +1188,12 @@
       <label class="control-row"><span class="control-head"><span>Bloom threshold</span><output id="bloom-threshold-val">0.68</output></span><input id="bloom-threshold" type="range" min="0" max="1" step="0.01" value="0.68" /></label>
       <label class="control-row"><span class="control-head"><span>Bloom quality</span><output id="bloom-quality-val">0.35</output></span><input id="bloom-quality" type="range" min="0.25" max="1" step="0.05" value="0.35" /></label>
       <label class="control-row"><span class="control-head"><span>Pixel ratio</span><output id="pixel-ratio-val">1.50</output></span><input id="pixel-ratio" type="range" min="0.75" max="1.5" step="0.05" value="1.5" /></label>
+      <label class="control-row select-row"><span class="control-head"><span>Preset FSR</span></span><select id="fsr-preset" class="control-select"><option value="custom">Custom</option><option value="quality" selected>Quality 85%</option><option value="balanced">Balanced 75%</option><option value="performance">Performance 65%</option><option value="off">Off / full-res</option></select></label>
       <label class="control-row select-row"><span class="control-head"><span>Upscale FSR-like</span></span><select id="fsr-upscale-enabled" class="control-select"><option value="on" selected>On</option><option value="off">Off</option></select></label>
       <label class="control-row"><span class="control-head"><span>Scala interna</span><output id="fsr-internal-scale-val">85%</output></span><input id="fsr-internal-scale" type="range" min="0.65" max="1" step="0.01" value="0.85" /></label>
       <label class="control-row"><span class="control-head"><span>Nitidezza upscale</span><output id="fsr-sharpness-val">0.00</output></span><input id="fsr-sharpness" type="range" min="0" max="1.25" step="0.01" value="0" /></label>
+      <button id="run-fsr-benchmark" class="control-action" type="button">Benchmark FSR A/B</button>
+      <div id="fsr-benchmark-results" class="control-value">Benchmark FSR non eseguito</div>
       <div class="control-box" id="main-facade-led-controls">
         <div class="control-section">LED centrale mio palazzo</div>
       </div>
@@ -1247,7 +1250,7 @@ ti auguriamo un esperienza illuminante.</p>
 <script type="module">
 import * as THREE from 'three';
 
-const CITY_REVEAL_DEFAULT_DELAY_MS = 4400;
+const CITY_REVEAL_DEFAULT_DELAY_MS = 8800;
 const CITY_REVEAL_DEFAULT_FADE_MS = 1500;
 const CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS = 0;
 const CITY_REVEAL_SWEEP_MARGIN_Z = 36;
@@ -1312,6 +1315,15 @@ const MOBILE_PERFORMANCE_QUERY = '(max-width: 760px), (hover: none), (pointer: c
 const MOBILE_PERFORMANCE_RENDER_SCALE_CAP = 1;
 const MOBILE_PERFORMANCE_PIXEL_RATIO_CAP = 1.5;
 const MOBILE_PERFORMANCE_BLOOM_SCALE_CAP = 0.14;
+const FSR_PRESETS = Object.freeze({
+  custom: { label: 'Custom', enabled: true, scale: 0.85 },
+  quality: { label: 'Quality 85%', enabled: true, scale: 0.85 },
+  balanced: { label: 'Balanced 75%', enabled: true, scale: 0.75 },
+  performance: { label: 'Performance 65%', enabled: true, scale: 0.65 },
+  off: { label: 'Off / full-res', enabled: false, scale: 1 },
+});
+const FSR_BENCHMARK_PRESET_KEYS = Object.freeze(['off', 'quality', 'balanced', 'performance']);
+const FSR_MANUAL_CONTROL_IDS = new Set(['fsr-upscale-enabled', 'fsr-internal-scale']);
 const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
 let activePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO);
 let requestedPixelRatio = MAX_RENDER_PIXEL_RATIO;
@@ -1959,11 +1971,14 @@ const controlEls = {
   bloomQualityVal: document.getElementById('bloom-quality-val'),
   pixelRatio: document.getElementById('pixel-ratio'),
   pixelRatioVal: document.getElementById('pixel-ratio-val'),
+  fsrPreset: document.getElementById('fsr-preset'),
   fsrUpscaleEnabled: document.getElementById('fsr-upscale-enabled'),
   fsrInternalScale: document.getElementById('fsr-internal-scale'),
   fsrInternalScaleVal: document.getElementById('fsr-internal-scale-val'),
   fsrSharpness: document.getElementById('fsr-sharpness'),
   fsrSharpnessVal: document.getElementById('fsr-sharpness-val'),
+  runFsrBenchmark: document.getElementById('run-fsr-benchmark'),
+  fsrBenchmarkResults: document.getElementById('fsr-benchmark-results'),
   wireframeEnabled: document.getElementById('wireframe-enabled'),
   wireframeEnabledVal: document.getElementById('wireframe-enabled-val'),
   wireframeDelay: document.getElementById('wireframe-delay'),
@@ -19146,10 +19161,13 @@ function mountFxCategoryPanels() {
     'render-resolution',
     'aa-mode',
     'pixel-ratio',
+    'fsr-preset',
     'fsr-upscale-enabled',
     'fsr-internal-scale',
     'fsr-sharpness',
   ]);
+  appendElement('performance-fx-controls', 'run-fsr-benchmark');
+  appendElement('performance-fx-controls', 'fsr-benchmark-results');
   const performanceTarget = document.getElementById('performance-fx-controls');
   if (performanceTarget && !document.getElementById('performance-diagnostics')) {
     const section = document.createElement('div');
@@ -19643,6 +19661,7 @@ const POST_FAST_CONTROL_IDS = new Set([
   'bloom-threshold',
   'bloom-quality',
   'pixel-ratio',
+  'fsr-preset',
   'fsr-upscale-enabled',
   'fsr-internal-scale',
   'fsr-sharpness',
@@ -19801,6 +19820,9 @@ let liveControlsFrame = 0;
 let liveControlsScope = null;
 function fastScopeForControl(target) {
   if (!target?.id) return 'all';
+  if (FSR_MANUAL_CONTROL_IDS.has(target.id) && controlEls.fsrPreset) {
+    controlEls.fsrPreset.value = 'custom';
+  }
   if (SKY_FAST_CONTROL_IDS.has(target.id)) return 'sky';
   if (POST_FAST_CONTROL_IDS.has(target.id)) return 'post';
   if (WIREFRAME_FAST_CONTROL_IDS.has(target.id)) return 'wireframe';
@@ -19848,8 +19870,94 @@ function scheduleLiveControls(event) {
   });
 }
 
+function applyFsrPresetSelectionToControls() {
+  if (!controlEls.fsrPreset || !controlEls.fsrUpscaleEnabled || !controlEls.fsrInternalScale) return;
+  const presetKey = controlEls.fsrPreset.value || 'custom';
+  const preset = FSR_PRESETS[presetKey];
+  if (!preset || presetKey === 'custom') return;
+  controlEls.fsrUpscaleEnabled.value = preset.enabled ? 'on' : 'off';
+  controlEls.fsrInternalScale.value = preset.scale.toFixed(2);
+}
+
+function applyFsrPresetKey(presetKey) {
+  if (!controlEls.fsrPreset || !FSR_PRESETS[presetKey]) return;
+  controlEls.fsrPreset.value = presetKey;
+  applyPostControlsFromUI();
+}
+
+function fsrBenchmarkDelay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitFsrBenchmarkFrames(frameCount = 12) {
+  for (let index = 0; index < frameCount; index++) {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+}
+
+function formatFsrBenchmarkNumber(value, decimals = 1) {
+  return Number.isFinite(value) ? value.toFixed(decimals) : 'n/a';
+}
+
+function collectFsrBenchmarkSample(presetKey) {
+  const stats = performanceDiagnosticsSummary(latestMeasuredFps);
+  const preset = FSR_PRESETS[presetKey] || FSR_PRESETS.custom;
+  const passes = Array.isArray(stats.composerActivePasses) ? stats.composerActivePasses.join('+') : '';
+  return {
+    label: preset.label,
+    fps: stats.fps,
+    theoreticalFps: stats.theoreticalFps,
+    gpuMs: stats.gpuMs,
+    gpuSupported: stats.gpuTimerSupported,
+    fsrEnabled: stats.fsrUpscaleEnabled,
+    fsrScale: stats.fsrInternalScale,
+    target: stats.fsrTarget?.key || `${stats.drawingBufferWidth}x${stats.drawingBufferHeight}`,
+    passes,
+  };
+}
+
+function formatFsrBenchmarkResults(results) {
+  if (!results.length) return 'Benchmark FSR non eseguito';
+  return results.map((result) => {
+    const gpu = result.gpuSupported ? `${formatFsrBenchmarkNumber(result.gpuMs)}ms` : 'n/a';
+    const fsr = result.fsrEnabled ? `${Math.round(result.fsrScale * 100)}%` : 'off';
+    return `${result.label}: FPS ${formatFsrBenchmarkNumber(result.fps)} | teo ${formatFsrBenchmarkNumber(result.theoreticalFps, 0)} | GPU ${gpu} | FSR ${fsr} | ${result.target} | ${result.passes}`;
+  }).join('\n');
+}
+
+async function runFsrBenchmark() {
+  if (!controlEls.fsrBenchmarkResults) return;
+  const previous = {
+    preset: controlEls.fsrPreset?.value || 'custom',
+    enabled: controlEls.fsrUpscaleEnabled?.value || 'on',
+    scale: controlEls.fsrInternalScale?.value || '0.85',
+    sharpness: controlEls.fsrSharpness?.value || '0',
+  };
+  controlEls.fsrBenchmarkResults.style.whiteSpace = 'pre-line';
+  controlEls.fsrBenchmarkResults.textContent = 'Benchmark FSR in corso...';
+  const results = [];
+  try {
+    for (const presetKey of FSR_BENCHMARK_PRESET_KEYS) {
+      applyFsrPresetKey(presetKey);
+      updatePerformanceDiagnostics(latestMeasuredFps);
+      await waitFsrBenchmarkFrames(18);
+      await fsrBenchmarkDelay(180);
+      updatePerformanceDiagnostics(latestMeasuredFps);
+      results.push(collectFsrBenchmarkSample(presetKey));
+    }
+    controlEls.fsrBenchmarkResults.textContent = formatFsrBenchmarkResults(results);
+  } finally {
+    if (controlEls.fsrPreset) controlEls.fsrPreset.value = previous.preset;
+    if (controlEls.fsrUpscaleEnabled) controlEls.fsrUpscaleEnabled.value = previous.enabled;
+    if (controlEls.fsrInternalScale) controlEls.fsrInternalScale.value = previous.scale;
+    if (controlEls.fsrSharpness) controlEls.fsrSharpness.value = previous.sharpness;
+    applyPostControlsFromUI();
+  }
+}
+
 function applyFsrUpscaleControlsFromUI() {
   if (!controlEls.fsrUpscaleEnabled || !controlEls.fsrInternalScale || !controlEls.fsrSharpness) return;
+  applyFsrPresetSelectionToControls();
   fsrUpscaleEnabled = controlEls.fsrUpscaleEnabled.value !== 'off';
   fsrInternalScale = THREE.MathUtils.clamp(Number(controlEls.fsrInternalScale.value) || 0.85, 0.65, 1);
   fsrSharpness = THREE.MathUtils.clamp(Number(controlEls.fsrSharpness.value) || 0, 0, 1.25);
@@ -21053,6 +21161,7 @@ controlEls.resetPlayerSpawn.addEventListener('click', () => applyPlayerSpawn(pla
 controlEls.saveStartPosition.addEventListener('click', captureLivePlayerSpawn);
 controlEls.goStartPosition.addEventListener('click', () => applyPlayerSpawn(playerSpawn, true));
 controlEls.droneIntroFlight?.addEventListener('click', () => startDroneIntroFlight('manual'));
+controlEls.runFsrBenchmark?.addEventListener('click', runFsrBenchmark);
 bindSaveButtons();
 
 updateControlTabs();
@@ -22076,6 +22185,7 @@ function performanceDiagnosticsComposerSummary() {
     activePasses,
     estimatedPasses: profile.estimatedPasses,
     composerPixelRatio: Number(effectiveComposerPixelRatio().toFixed(3)),
+    fsrPreset: controlEls.fsrPreset?.value || 'custom',
     fsrUpscaleEnabled,
     fsrInternalScale: Number(fsrInternalScale.toFixed(2)),
     fsrSharpness: Number(fsrSharpness.toFixed(2)),
@@ -22126,6 +22236,7 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
     composerActivePasses: composerSummary.activePasses,
     composerEstimatedPasses: composerSummary.estimatedPasses,
     composerPixelRatio: composerSummary.composerPixelRatio,
+    fsrPreset: composerSummary.fsrPreset,
     fsrUpscaleEnabled: composerSummary.fsrUpscaleEnabled,
     fsrInternalScale: composerSummary.fsrInternalScale,
     fsrSharpness: composerSummary.fsrSharpness,
