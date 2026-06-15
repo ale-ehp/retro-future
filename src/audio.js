@@ -21,7 +21,7 @@ export const TRON_SOUNDTRACK_INTRO_FX_WOBBLE_RATE_HZ = 7.5;
 export const TRON_SOUNDTRACK_INTRO_FX_MAX_WOBBLE_DEPTH_HZ = 1600;
 export const TRON_SOUNDTRACK_INTRO_FX_MAX_NOISE_GAIN = 0.055;
 export const TRON_SOUNDTRACK_INTRO_FX_DEFAULTS = Object.freeze({
-  enabled: true,
+  enabled: false,
   mix: 1,
   crusher: 0,
   bitDepth: 8,

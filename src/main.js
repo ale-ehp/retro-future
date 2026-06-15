@@ -1876,7 +1876,7 @@ function startTronFileSoundtrack(source = 'manual') {
   tronSoundtrack.loopCount = 0;
   tronSoundtrack.error = '';
   tronSoundtrack.gains.forEach((gain) => gain.gain.setValueAtTime(0.0001, ctx.currentTime));
-  setTronSoundtrackIntroLofi(true, 0.01);
+  if (tronSoundtrack.introFx.enabled) setTronSoundtrackIntroLofi(true, 0.01);
   startTronSoundtrackElement(0, TRON_SOUNDTRACK_INITIAL_START_SECONDS, TRON_SOUNDTRACK_FADE_IN_SECONDS, tronSoundtrack.targetVolume);
   if (tronSoundtrack.timer) window.clearInterval(tronSoundtrack.timer);
   tronSoundtrack.timer = window.setInterval(monitorTronSoundtrackLoop, 250);
