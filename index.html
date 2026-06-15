@@ -5283,6 +5283,8 @@ const basePadHexInstancePosition = new THREE.Vector3();
 const basePadHexInstanceScale = new THREE.Vector3();
 const SIDEWALK_CURB_REVEAL = 0.14;
 const SIDEWALK_CURB_OVERLAP = 0.035;
+const BASE_PAD_FRUSTUM_CULLING_ENABLED = true;
+const BASE_PAD_CULLING_BOUNDS_MARGIN = GRID_BLOCK * 3;
 const HEX_TILE_BUCKET_SIZE = 64;
 const HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED = true;
 const HEX_ROAD_UPLOAD_BATCH_LIMIT = 10;
@@ -5510,6 +5512,13 @@ function refreshCullingBounds(object) {
     object.computeBoundingSphere?.();
     object.computeBoundingBox?.();
   }
+}
+
+function refreshCullingBoundsWithMargin(object, margin = 0) {
+  refreshCullingBounds(object);
+  if (!object?.geometry || margin <= 0) return;
+  if (object.geometry.boundingSphere) object.geometry.boundingSphere.radius += margin;
+  if (object.geometry.boundingBox) object.geometry.boundingBox.expandByScalar(margin);
 }
 
 function flushHexTileBatchUploads() {
@@ -7354,33 +7363,33 @@ function createBuildingBasePad(group, x, z) {
   const mesh = new THREE.Mesh(new THREE.BufferGeometry(), basePadSurfaceMat);
   mesh.position.set(x, DEFAULT_BASE_PAD_Y - DEFAULT_BASE_PAD_THICKNESS, z);
   mesh.renderOrder = 1;
-  mesh.frustumCulled = false;
+  mesh.frustumCulled = BASE_PAD_FRUSTUM_CULLING_ENABLED;
   group.add(mesh);
 
   const curbRamp = new THREE.Mesh(new THREE.BufferGeometry(), basePadSurfaceMat);
   curbRamp.position.set(x, 0, z);
   curbRamp.renderOrder = 2;
-  curbRamp.frustumCulled = false;
+  curbRamp.frustumCulled = BASE_PAD_FRUSTUM_CULLING_ENABLED;
   curbRamp.visible = false;
   group.add(curbRamp);
 
   const innerMesh = new THREE.Mesh(new THREE.BufferGeometry(), basePadSurfaceMat);
   innerMesh.position.set(x, 0, z);
   innerMesh.renderOrder = 3;
-  innerMesh.frustumCulled = false;
+  innerMesh.frustumCulled = BASE_PAD_FRUSTUM_CULLING_ENABLED;
   innerMesh.visible = false;
   group.add(innerMesh);
 
   const border = new THREE.LineLoop(new THREE.BufferGeometry(), buildingBasePadBorderMat);
   border.position.set(x, DEFAULT_BASE_PAD_Y + 0.035, z);
   border.renderOrder = 4;
-  border.frustumCulled = false;
+  border.frustumCulled = BASE_PAD_FRUSTUM_CULLING_ENABLED;
   group.add(border);
 
   const innerBorder = new THREE.LineLoop(new THREE.BufferGeometry(), buildingBasePadBorderMat);
   innerBorder.position.set(x, DEFAULT_BASE_PAD_Y + 0.035, z);
   innerBorder.renderOrder = 5;
-  innerBorder.frustumCulled = false;
+  innerBorder.frustumCulled = BASE_PAD_FRUSTUM_CULLING_ENABLED;
   innerBorder.visible = false;
   group.add(innerBorder);
   return { mesh, curbRamp, innerMesh, border, innerBorder, hitPolygon: [], innerHitPolygon: [], hitHalfSize: 0 };
@@ -7402,12 +7411,13 @@ function updateBuildingBasePad(record, x, z, widthScale, depthScale, sizeScale, 
   const borderPoints = basePadBorderPoints(width, depth, cornerCut, radius);
   record.basePad.mesh.geometry.dispose();
   record.basePad.mesh.geometry = makeBasePadSurfaceGeometry(width, depth, cornerCut, radius, thickness);
-  refreshCullingBounds(record.basePad.mesh);
+  refreshCullingBoundsWithMargin(record.basePad.mesh, BASE_PAD_CULLING_BOUNDS_MARGIN);
   record.basePad.mesh.position.y = bottomY;
   record.basePad.mesh.position.x = x;
   record.basePad.mesh.position.z = z;
   record.basePad.border.geometry.dispose();
   record.basePad.border.geometry = new THREE.BufferGeometry().setFromPoints(borderPoints);
+  refreshCullingBoundsWithMargin(record.basePad.border, BASE_PAD_CULLING_BOUNDS_MARGIN);
   record.basePad.border.position.x = x;
   record.basePad.border.position.y = effectivePadY + 0.035;
   record.basePad.border.position.z = z;
@@ -7423,20 +7433,21 @@ function updateBuildingBasePad(record, x, z, widthScale, depthScale, sizeScale, 
     const innerTopY = effectivePadY + innerRaise + 0.018;
     record.basePad.curbRamp.geometry.dispose();
     record.basePad.curbRamp.geometry = makeBasePadCurbRampGeometry(curbOuterPoints, innerPoints, curbOuterY, curbInnerY, basePadCurbRadius);
-    refreshCullingBounds(record.basePad.curbRamp);
+    refreshCullingBoundsWithMargin(record.basePad.curbRamp, BASE_PAD_CULLING_BOUNDS_MARGIN);
     record.basePad.curbRamp.position.x = x;
     record.basePad.curbRamp.position.y = 0;
     record.basePad.curbRamp.position.z = z;
     record.basePad.curbRamp.visible = true;
     record.basePad.innerMesh.geometry.dispose();
     record.basePad.innerMesh.geometry = makeBasePadTopGeometry(innerPoints, innerTopY);
-    refreshCullingBounds(record.basePad.innerMesh);
+    refreshCullingBoundsWithMargin(record.basePad.innerMesh, BASE_PAD_CULLING_BOUNDS_MARGIN);
     record.basePad.innerMesh.position.x = x;
     record.basePad.innerMesh.position.y = 0;
     record.basePad.innerMesh.position.z = z;
     record.basePad.innerMesh.visible = true;
     record.basePad.innerBorder.geometry.dispose();
     record.basePad.innerBorder.geometry = new THREE.BufferGeometry().setFromPoints(innerPoints);
+    refreshCullingBoundsWithMargin(record.basePad.innerBorder, BASE_PAD_CULLING_BOUNDS_MARGIN);
     record.basePad.innerBorder.position.x = x;
     record.basePad.innerBorder.position.y = innerTopY + 0.035;
     record.basePad.innerBorder.position.z = z;
@@ -21470,6 +21481,8 @@ window.__tronInspect = () => ({
       realBelowRoadCount: surfaceYs.filter((topY) => topY <= roadTopY + 0.001).length,
       wireHiddenByRoadSolidCount: wireYs.filter((wireY) => wireY <= roadSolidTopY + 0.001).length,
       sidewalkRenderableObjects: sidewalkObjects.length,
+      basePadObjectCullingEnabled: BASE_PAD_FRUSTUM_CULLING_ENABLED,
+      basePadCullingBoundsMargin: BASE_PAD_CULLING_BOUNDS_MARGIN,
       sidewalkCullingDisabled: sidewalkCullingEnabledCount === 0,
       sidewalkCullingEnabledCount,
       basePadLedBatchFrustumCulled: basePadLedRenderableBatches.length > 0 && basePadLedCullingEnabledCount === basePadLedRenderableBatches.length,
