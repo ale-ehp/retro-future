@@ -18325,8 +18325,16 @@ function isBloomPassActive() {
   return Boolean(bloomPass?.enabled && (bloomPass.strength ?? 0) > BLOOM_BYPASS_STRENGTH);
 }
 
+function hasDroneIntroLanded() {
+  return Boolean(!droneIntroFlight.active && droneIntroFlight.progress >= 0.999);
+}
+
+function shouldBypassBloomForRevealPerformance() {
+  return Boolean(isCityRevealPerformanceCritical() && !hasDroneIntroLanded());
+}
+
 function isBloomRevealBypassed() {
-  return Boolean(bloomEnabled && bloomPass && !bloomPass.enabled && isCityRevealPerformanceCritical());
+  return Boolean(bloomEnabled && bloomPass && !bloomPass.enabled && shouldBypassBloomForRevealPerformance());
 }
 
 const bloomTemporalCameraPosition = new THREE.Vector3();
@@ -21382,6 +21390,7 @@ window.__tronInspect = () => ({
   cameraCollisionUnlockedByBackspace,
   droneIntro: {
     active: droneIntroFlight.active,
+    landed: hasDroneIntroLanded(),
     progress: droneIntroFlight.progress,
     durationMs: droneIntroFlight.durationMs,
     triggerKey: DRONE_INTRO_TRIGGER_KEY,
@@ -21588,6 +21597,7 @@ window.__tronInspect = () => ({
     bloomEnabled,
     bloomPassEnabled: Boolean(bloomPass?.enabled),
     bloomRevealBypassed: isBloomRevealBypassed(),
+    bloomRevealBypassActive: shouldBypassBloomForRevealPerformance(),
     bloomActive: isBloomPassActive(),
     bloomStrength: bloomPass?.strength ?? 0,
     bloomRadius: bloomPass?.radius ?? 0,
@@ -21651,6 +21661,7 @@ window.__tronPerfInspect = () => ({
   bloomEnabled,
   bloomPassEnabled: Boolean(bloomPass?.enabled),
   bloomRevealBypassed: isBloomRevealBypassed(),
+  bloomRevealBypassActive: shouldBypassBloomForRevealPerformance(),
   bloomActive: isBloomPassActive(),
   fxaaEnabled: Boolean(fxaaPass?.enabled),
   antialiasMode,
@@ -22124,6 +22135,7 @@ function performanceDiagnosticsSummary(measuredFps = latestMeasuredFps) {
     bloomEnabled,
     bloomPassEnabled: Boolean(bloomPass?.enabled),
     bloomRevealBypassed: isBloomRevealBypassed(),
+    bloomRevealBypassActive: shouldBypassBloomForRevealPerformance(),
     bloomActive: isBloomPassActive(),
     bloomResolutionScale: Number(bloomResolutionScale.toFixed(3)),
     bloomTarget,
@@ -22327,7 +22339,8 @@ function tick(now) {
   updateCityRevealWireframe(now);
   syncCityRevealPerformanceProfile();
   const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
-  if (bloomPass) bloomPass.enabled = bloomEnabled && postRevealPerfIsolationState.bloom && !postRevealPerformanceCritical;
+  const bypassBloomForReveal = shouldBypassBloomForRevealPerformance();
+  if (bloomPass) bloomPass.enabled = bloomEnabled && postRevealPerfIsolationState.bloom && !bypassBloomForReveal;
   syncBloomTemporalBudget();
   if (!postRevealPerformanceCritical) {
     if (postRevealPerfIsolationState.equalizer) {
