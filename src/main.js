@@ -8292,34 +8292,35 @@ function tronRunnerCrowdLedEmissiveIntensity() {
 
 function tronRunnerSetBeatPulseState(nextState) {
   Object.assign(tronRunnerBeatPulseState, nextState);
-  tronRunnerState.beatPulse = {
-    enabled: tronRunnerBeatPulseEnabled,
-    bpm: tronRunnerBeatPulseBpm,
-    offsetSeconds: tronRunnerBeatPulseOffset,
-    intensity: tronRunnerBeatPulseIntensity,
-    decay: tronRunnerBeatPulseDecay,
-    division: tronRunnerBeatPulseDivision,
-    value: Number(tronRunnerBeatPulseState.value.toFixed(3)),
-    multiplier: Number(tronRunnerBeatPulseState.multiplier.toFixed(3)),
-    phase: Number(tronRunnerBeatPulseState.phase.toFixed(3)),
-    beatIndex: tronRunnerBeatPulseState.beatIndex,
-    audioTime: Number(tronRunnerBeatPulseState.audioTime.toFixed(3)),
-    active: tronRunnerBeatPulseState.active,
-    source: tronRunnerBeatPulseState.source || 'bpm',
-    kickPulse: Number((tronRunnerBeatPulseState.kickPulse || 0).toFixed(3)),
-    bassPulse: Number((tronRunnerBeatPulseState.bassPulse || 0).toFixed(3)),
-    bassEnergy: Number((tronRunnerBeatPulseState.bassEnergy || 0).toFixed(3)),
-    lowBandDriven: Boolean(tronRunnerBeatPulseState.lowBandDriven),
-    analyserReady: Boolean(tronRunnerBeatPulseState.analyserReady),
-    sampleAgeMs: Number.isFinite(tronRunnerBeatPulseState.sampleAgeMs)
-      ? Number(tronRunnerBeatPulseState.sampleAgeMs.toFixed(1))
-      : null,
-    materialUpdateOptimized: tronRunnerBeatPulseRuntimeStats.materialUpdateOptimized,
-    materialPasses: tronRunnerBeatPulseRuntimeStats.materialPasses,
-    materialSkips: tronRunnerBeatPulseRuntimeStats.materialSkips,
-    materialCount: tronRunnerBeatPulseRuntimeStats.materialCount,
-    baseRevision: tronRunnerBeatPulseRuntimeStats.baseRevision,
-  };
+  // Mutate the existing beatPulse object in place (allocated once in createTronRunnerState)
+  // instead of reassigning a fresh literal every frame; values stay byte-identical.
+  const beat = tronRunnerState.beatPulse || (tronRunnerState.beatPulse = {});
+  beat.enabled = tronRunnerBeatPulseEnabled;
+  beat.bpm = tronRunnerBeatPulseBpm;
+  beat.offsetSeconds = tronRunnerBeatPulseOffset;
+  beat.intensity = tronRunnerBeatPulseIntensity;
+  beat.decay = tronRunnerBeatPulseDecay;
+  beat.division = tronRunnerBeatPulseDivision;
+  beat.value = Number(tronRunnerBeatPulseState.value.toFixed(3));
+  beat.multiplier = Number(tronRunnerBeatPulseState.multiplier.toFixed(3));
+  beat.phase = Number(tronRunnerBeatPulseState.phase.toFixed(3));
+  beat.beatIndex = tronRunnerBeatPulseState.beatIndex;
+  beat.audioTime = Number(tronRunnerBeatPulseState.audioTime.toFixed(3));
+  beat.active = tronRunnerBeatPulseState.active;
+  beat.source = tronRunnerBeatPulseState.source || 'bpm';
+  beat.kickPulse = Number((tronRunnerBeatPulseState.kickPulse || 0).toFixed(3));
+  beat.bassPulse = Number((tronRunnerBeatPulseState.bassPulse || 0).toFixed(3));
+  beat.bassEnergy = Number((tronRunnerBeatPulseState.bassEnergy || 0).toFixed(3));
+  beat.lowBandDriven = Boolean(tronRunnerBeatPulseState.lowBandDriven);
+  beat.analyserReady = Boolean(tronRunnerBeatPulseState.analyserReady);
+  beat.sampleAgeMs = Number.isFinite(tronRunnerBeatPulseState.sampleAgeMs)
+    ? Number(tronRunnerBeatPulseState.sampleAgeMs.toFixed(1))
+    : null;
+  beat.materialUpdateOptimized = tronRunnerBeatPulseRuntimeStats.materialUpdateOptimized;
+  beat.materialPasses = tronRunnerBeatPulseRuntimeStats.materialPasses;
+  beat.materialSkips = tronRunnerBeatPulseRuntimeStats.materialSkips;
+  beat.materialCount = tronRunnerBeatPulseRuntimeStats.materialCount;
+  beat.baseRevision = tronRunnerBeatPulseRuntimeStats.baseRevision;
 }
 
 function tronRunnerSoundtrackTimeSeconds() {
@@ -8328,23 +8329,40 @@ function tronRunnerSoundtrackTimeSeconds() {
   return Number.isFinite(time) ? time : 0;
 }
 
+const tronRunnerBeatPulseValueScratch = {
+  value: 0,
+  multiplier: 1,
+  phase: 0,
+  beatIndex: 0,
+  audioTime: 0,
+  active: false,
+  source: 'inactive',
+  kickPulse: 0,
+  bassPulse: 0,
+  bassEnergy: 0,
+  lowBandDriven: false,
+  analyserReady: false,
+  sampleAgeMs: Infinity,
+};
+
 function tronRunnerBeatPulseValue(audioTime = tronRunnerSoundtrackTimeSeconds()) {
+  // Reused scratch: consumed synchronously by updateTronRunnerBeatPulse (Object.assign + reads).
+  const out = tronRunnerBeatPulseValueScratch;
   if (!tronRunnerBeatPulseEnabled || !tronSoundtrack.playing || !tronRunnerRevealComplete) {
-    return {
-      value: 0,
-      multiplier: 1,
-      phase: 0,
-      beatIndex: 0,
-      audioTime,
-      active: false,
-      source: 'inactive',
-      kickPulse: 0,
-      bassPulse: 0,
-      bassEnergy: 0,
-      lowBandDriven: false,
-      analyserReady: labEqualizerAnalyserPresent(),
-      sampleAgeMs: Infinity,
-    };
+    out.value = 0;
+    out.multiplier = 1;
+    out.phase = 0;
+    out.beatIndex = 0;
+    out.audioTime = audioTime;
+    out.active = false;
+    out.source = 'inactive';
+    out.kickPulse = 0;
+    out.bassPulse = 0;
+    out.bassEnergy = 0;
+    out.lowBandDriven = false;
+    out.analyserReady = labEqualizerAnalyserPresent();
+    out.sampleAgeMs = Infinity;
+    return out;
   }
   const now = performance.now();
   const sampleAgeMs = Number.isFinite(labEqualizerLastSampleTime()) ? now - labEqualizerLastSampleTime() : Infinity;
@@ -8367,21 +8385,20 @@ function tronRunnerBeatPulseValue(audioTime = tronRunnerSoundtrackTimeSeconds())
       1,
       TRON_RUNNER_BEAT_PULSE_MAX_MULTIPLIER
     );
-    return {
-      value,
-      multiplier,
-      phase: 0,
-      beatIndex: labEqualizerState.sampleCount,
-      audioTime,
-      active: true,
-      source: 'audio-bass-kick',
-      kickPulse,
-      bassPulse: value,
-      bassEnergy,
-      lowBandDriven: TRON_RUNNER_BEAT_PULSE_LOW_BAND_ENABLED,
-      analyserReady,
-      sampleAgeMs,
-    };
+    out.value = value;
+    out.multiplier = multiplier;
+    out.phase = 0;
+    out.beatIndex = labEqualizerState.sampleCount;
+    out.audioTime = audioTime;
+    out.active = true;
+    out.source = 'audio-bass-kick';
+    out.kickPulse = kickPulse;
+    out.bassPulse = value;
+    out.bassEnergy = bassEnergy;
+    out.lowBandDriven = TRON_RUNNER_BEAT_PULSE_LOW_BAND_ENABLED;
+    out.analyserReady = analyserReady;
+    out.sampleAgeMs = sampleAgeMs;
+    return out;
   }
   const bpm = Math.max(1, tronRunnerBeatPulseBpm);
   const division = Math.max(0.05, tronRunnerBeatPulseDivision);
@@ -8394,21 +8411,20 @@ function tronRunnerBeatPulseValue(audioTime = tronRunnerSoundtrackTimeSeconds())
     1,
     TRON_RUNNER_BEAT_PULSE_MAX_MULTIPLIER
   );
-  return {
-    value,
-    multiplier,
-    phase,
-    beatIndex,
-    audioTime,
-    active: true,
-    source: analyserReady ? 'bpm-clock' : 'bpm-fallback',
-    kickPulse: 0,
-    bassPulse: 0,
-    bassEnergy: THREE.MathUtils.clamp(labEqualizerState.bassEnergy || 0, 0, 1),
-    lowBandDriven: false,
-    analyserReady,
-    sampleAgeMs,
-  };
+  out.value = value;
+  out.multiplier = multiplier;
+  out.phase = phase;
+  out.beatIndex = beatIndex;
+  out.audioTime = audioTime;
+  out.active = true;
+  out.source = analyserReady ? 'bpm-clock' : 'bpm-fallback';
+  out.kickPulse = 0;
+  out.bassPulse = 0;
+  out.bassEnergy = THREE.MathUtils.clamp(labEqualizerState.bassEnergy || 0, 0, 1);
+  out.lowBandDriven = false;
+  out.analyserReady = analyserReady;
+  out.sampleAgeMs = sampleAgeMs;
+  return out;
 }
 
 function applyTronRunnerBeatPulseToMaterial(material, multiplier) {
