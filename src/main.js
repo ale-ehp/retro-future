@@ -204,6 +204,7 @@ import {
   poseTronRunnerIdleCharacterArmsCrossed as poseTronRunnerIdleCharacterArmsCrossedCore,
 } from './character-build.js';
 import {
+  resolveTronRunnerCrowdCollision as resolveTronRunnerCrowdCollisionCore,
   resolveTronRunnerRoundedCollider,
   tronRunnerCrowdBuildingCollisionDiagnostic as tronRunnerCrowdBuildingCollisionDiagnosticCore,
   tronRunnerCrowdColliderLabel,
@@ -12265,26 +12266,14 @@ function tronRunnerCrowdColliderRecords() {
 }
 
 function resolveTronRunnerCrowdCollision(member, point) {
-  if (!TRON_RUNNER_CROWD_COLLISIONS_ENABLED) return false;
-  let collided = false;
-  for (const record of tronRunnerCrowdColliderRecords()) {
-    const beforeX = point.x;
-    const beforeZ = point.z;
-    if (resolveTronRunnerRoundedCollider(point, record.collider, TRON_RUNNER_CROWD_BUILDING_GUARD)) {
-      collided = true;
-      if (!tronRunnerCrowdPointInsideRoute(member, point.x, point.z)) {
-        point.x = beforeX;
-        point.z = beforeZ;
-      }
-    }
-  }
-  if (!tronRunnerCrowdPointInsideRoute(member, point.x, point.z)) {
-    collided = true;
-    const current = member.group.position;
-    point.x = current.x;
-    point.z = current.z;
-  }
-  return collided;
+  return resolveTronRunnerCrowdCollisionCore(
+    member,
+    point,
+    TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
+    tronRunnerCrowdColliderRecords,
+    TRON_RUNNER_CROWD_BUILDING_GUARD,
+    tronRunnerCrowdPointInsideRoute,
+  );
 }
 
 function tronRunnerCrowdBuildingCollisionDiagnostic(member) {

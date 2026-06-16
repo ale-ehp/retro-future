@@ -91,3 +91,26 @@ export function tronRunnerCrowdBuildingCollisionDiagnostic({
     label,
   };
 }
+
+export function resolveTronRunnerCrowdCollision(member, point, collisionsEnabled, getColliderRecords, buildingGuard, pointInsideRoute) {
+  if (!collisionsEnabled) return false;
+  let collided = false;
+  for (const record of getColliderRecords()) {
+    const beforeX = point.x;
+    const beforeZ = point.z;
+    if (resolveTronRunnerRoundedCollider(point, record.collider, buildingGuard)) {
+      collided = true;
+      if (!pointInsideRoute(member, point.x, point.z)) {
+        point.x = beforeX;
+        point.z = beforeZ;
+      }
+    }
+  }
+  if (!pointInsideRoute(member, point.x, point.z)) {
+    collided = true;
+    const current = member.group.position;
+    point.x = current.x;
+    point.z = current.z;
+  }
+  return collided;
+}
