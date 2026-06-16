@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 export function cityDepartmentPageItems(page, config) {
   const start = page * config.rows;
   return config.departments.slice(start, start + config.rows);
@@ -21,4 +23,556 @@ export function cityDepartmentInterpolatedText(oldText, newText, row, progress, 
     result += cityDepartmentBoardChar(oldPadded, newPadded, row, i, progress, textureUpdates, config);
   }
   return result.trimEnd();
+}
+
+let deps = null;
+let scene = null;
+let camera = null;
+let renderer = null;
+let reflectionEnvMap = null;
+let PAL = null;
+let elStrip = null;
+let sideBuildingRecords = null;
+let DEFAULT_DRONE_LANDING_POSE = null;
+let TRON_RUNNER_REVEAL_ENABLED = false;
+
+// ---------- City department departures boards ----------
+export const CITY_DEPARTMENT_BOARD_ENABLED = true;
+const CITY_DEPARTMENT_BOARD_TARGET_CIVICS = Object.freeze([1]);
+const CITY_DEPARTMENT_BOARD_ROWS = 6;
+const CITY_DEPARTMENT_BOARD_CHAR_SLOTS = 28;
+const CITY_DEPARTMENT_BOARD_HOLD_MS = 5200;
+const CITY_DEPARTMENT_BOARD_SWITCH_MS = 2200;
+const CITY_DEPARTMENT_BOARD_SWITCH_STAGGER_MS = 0;
+const CITY_DEPARTMENT_BOARD_TEXTURE_FPS = 13;
+const CITY_DEPARTMENT_BOARD_TEXTURE_SCALE = 0.5;
+const CITY_DEPARTMENT_BOARD_TEXTURE_WIDTH = 2048;
+const CITY_DEPARTMENT_BOARD_TEXTURE_HEIGHT = 1024;
+const CITY_DEPARTMENT_BOARD_WIDTH = 21;
+const CITY_DEPARTMENT_BOARD_HEIGHT = 10.5;
+const CITY_DEPARTMENT_BOARD_INNER_SLIDE = 0.68;
+const CITY_DEPARTMENT_BOARD_REVEAL_EPS = 0.0015;
+const CITY_DEPARTMENT_BOARD_REVEAL_WITH_RUNNERS = true;
+const CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY = 0.46;
+const CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY = 0.96;
+window.__cityDepartmentBoardTextureUploadEnabled = new URLSearchParams(location.search).get('boardUpload') !== '0';
+const CITY_DEPARTMENT_BOARD_SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 /&';
+const CITY_DEPARTMENTS = Object.freeze([
+  'Tech Engineering',
+  'AI / ML',
+  'Product & Design',
+  'Strategy & Business',
+  'Sales',
+  'Marketing',
+  'Legal / Compliance',
+  'Domain Experts',
+  'Operations / Finance',
+  'Support & Delivery',
+  'Data & Analytics',
+  'Specialists',
+]);
+const cityDepartmentBoardState = {
+  nextSwitchAt: 0,
+  cycle: 0,
+  updateOptimized: true,
+  poseSyncs: 0,
+  poseSkips: 0,
+  revealWrites: 0,
+  revealSkips: 0,
+  lastPoseSignature: '',
+  lastRevealFactor: -1,
+  lastRevealVisible: null,
+};
+const cityDepartmentBoards = [];
+let cityDepartmentBoardPanelMat = null;
+
+function createCityDepartmentBoardTextureResources() {
+  const canvas = document.createElement('canvas');
+  canvas.width = CITY_DEPARTMENT_BOARD_TEXTURE_WIDTH * CITY_DEPARTMENT_BOARD_TEXTURE_SCALE;
+  canvas.height = CITY_DEPARTMENT_BOARD_TEXTURE_HEIGHT * CITY_DEPARTMENT_BOARD_TEXTURE_SCALE;
+  const ctx = canvas.getContext('2d');
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy?.() || 1;
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    color: 0xffffff,
+    transparent: true,
+    opacity: CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY,
+    alphaTest: 0.012,
+    depthWrite: false,
+    depthTest: true,
+    toneMapped: false,
+    side: THREE.DoubleSide,
+    blending: THREE.NormalBlending,
+  });
+  return { canvas, ctx, texture, material };
+}
+
+const cityDepartmentBoardTextConfig = {
+  rows: CITY_DEPARTMENT_BOARD_ROWS,
+  charSlots: CITY_DEPARTMENT_BOARD_CHAR_SLOTS,
+  scramble: CITY_DEPARTMENT_BOARD_SCRAMBLE,
+  departments: CITY_DEPARTMENTS,
+};
+
+function drawCityDepartmentBoardTexture(board, now = performance.now()) {
+  if (!board?.ctx || !board?.canvas || !board?.texture || !board?.state) return;
+  const drawStartedAt = performance.now();
+  const state = board.state;
+  const ctx = board.ctx;
+  const pixelW = board.canvas.width;
+  const pixelH = board.canvas.height;
+  const w = CITY_DEPARTMENT_BOARD_TEXTURE_WIDTH;
+  const h = CITY_DEPARTMENT_BOARD_TEXTURE_HEIGHT;
+  const switchProgress = state.switching
+    ? THREE.MathUtils.clamp((now - state.switchStartedAt) / CITY_DEPARTMENT_BOARD_SWITCH_MS, 0, 1)
+    : 0;
+  const oldItems = cityDepartmentPageItems(state.page, cityDepartmentBoardTextConfig);
+  const newItems = cityDepartmentPageItems(state.targetPage, cityDepartmentBoardTextConfig);
+  const pulse = 0.5 + 0.5 * Math.sin(now * 0.004);
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, pixelW, pixelH);
+  ctx.setTransform(pixelW / w, 0, 0, pixelH / h, 0, 0);
+  ctx.fillStyle = 'rgba(0, 12, 15, 0.22)';
+  ctx.fillRect(0, 0, w, h);
+
+  const glow = 18 + pulse * 10;
+  ctx.save();
+  ctx.shadowColor = 'rgba(98, 247, 255, 0.72)';
+  ctx.shadowBlur = glow;
+  ctx.strokeStyle = 'rgba(143, 252, 255, 0.92)';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(58, 58, w - 116, h - 116);
+  ctx.strokeStyle = 'rgba(98, 247, 255, 0.34)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(92, 104, w - 184, h - 164);
+  ctx.restore();
+
+  ctx.font = '900 54px Menlo, Consolas, monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(98, 247, 255, 0.58)';
+  ctx.shadowBlur = 8;
+  ctx.fillStyle = 'rgba(210, 252, 255, 0.96)';
+  ctx.fillText('AVSTUDIO TERMINAL', 118, 122);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(238, 255, 255, 0.92)';
+  ctx.fillText('AVSTUDIO TERMINAL', 118, 122);
+  ctx.shadowBlur = 5;
+  ctx.font = '700 30px Menlo, Consolas, monospace';
+  ctx.fillStyle = 'rgba(98, 247, 255, 0.70)';
+  ctx.fillText('DEPARTMENTS BOARD', 118, 178);
+  ctx.textAlign = 'right';
+  ctx.fillText(`PAGE ${state.switching ? state.targetPage + 1 : state.page + 1}/2`, w - 118, 178);
+
+  const rowTop = 260;
+  const rowHeight = 104;
+  ctx.textAlign = 'left';
+  for (let row = 0; row < CITY_DEPARTMENT_BOARD_ROWS; row++) {
+    const y = rowTop + row * rowHeight;
+    const oldIndex = state.page * CITY_DEPARTMENT_BOARD_ROWS + row + 1;
+    const newIndex = state.targetPage * CITY_DEPARTMENT_BOARD_ROWS + row + 1;
+    const activeIndex = state.switching && switchProgress > (row + 1) / CITY_DEPARTMENT_BOARD_ROWS * 0.82
+      ? newIndex
+      : oldIndex;
+    const oldLabel = oldItems[row] || '';
+    const newLabel = newItems[row] || '';
+    const label = state.switching
+      ? cityDepartmentInterpolatedText(oldLabel, newLabel, row, switchProgress, state.textureUpdates, cityDepartmentBoardTextConfig)
+      : oldLabel;
+    const scan = state.switching
+      ? Math.max(0, 1 - Math.abs(switchProgress * CITY_DEPARTMENT_BOARD_ROWS - row) * 0.8)
+      : 0;
+
+    ctx.fillStyle = row % 2 === 0 ? 'rgba(0, 88, 106, 0.16)' : 'rgba(0, 38, 46, 0.16)';
+    ctx.fillRect(118, y - 46, w - 236, 76);
+    ctx.strokeStyle = 'rgba(98, 247, 255, 0.24)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(118, y + 42);
+    ctx.lineTo(w - 118, y + 42);
+    ctx.stroke();
+
+    ctx.font = '900 44px Menlo, Consolas, monospace';
+    ctx.shadowBlur = 5 + scan * 8;
+    ctx.fillStyle = scan > 0.15 ? 'rgba(236, 255, 255, 0.98)' : 'rgba(143, 252, 255, 0.86)';
+    ctx.fillText(String(activeIndex).padStart(2, '0'), 148, y);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(236, 255, 255, 0.86)';
+    ctx.fillText(String(activeIndex).padStart(2, '0'), 148, y);
+    ctx.font = '900 52px Menlo, Consolas, monospace';
+    ctx.shadowBlur = 5 + scan * 8;
+    ctx.fillStyle = scan > 0.15 ? 'rgba(230, 255, 255, 0.98)' : 'rgba(178, 252, 255, 0.94)';
+    ctx.fillText(label.toUpperCase(), 270, y);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(236, 255, 255, 0.82)';
+    ctx.fillText(label.toUpperCase(), 270, y);
+
+    if (scan > 0.01) {
+      ctx.fillStyle = `rgba(98, 247, 255, ${0.18 * scan})`;
+      ctx.fillRect(118, y - 46, w - 236, 76);
+    }
+  }
+
+  ctx.shadowBlur = 4;
+  ctx.font = '700 28px Menlo, Consolas, monospace';
+  ctx.fillStyle = 'rgba(98, 247, 255, 0.56)';
+  ctx.textAlign = 'left';
+  ctx.fillText('STATUS: ROUTING ACTIVE', 118, h - 106);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  state.lastCanvasDrawMs = performance.now() - drawStartedAt;
+  state.totalCanvasDrawMs += state.lastCanvasDrawMs;
+  if (window.__cityDepartmentBoardTextureUploadEnabled !== false) {
+    board.texture.needsUpdate = true;
+    state.textureUploadRequests++;
+  } else {
+    state.textureUploadSkips++;
+  }
+  state.textureUpdates++;
+}
+
+export function addCityDepartmentFrame(group, width, height, z = 0.06) {
+  const hw = width / 2;
+  const hh = height / 2;
+  const thick = 0.18;
+  const color = PAL.tealLight;
+  group.add(elStrip([-hw, -hh, z], [ hw, -hh, z], color, thick, { depthWrite: false }));
+  group.add(elStrip([ hw, -hh, z], [ hw,  hh, z], color, thick, { depthWrite: false }));
+  group.add(elStrip([ hw,  hh, z], [-hw,  hh, z], color, thick, { depthWrite: false }));
+  group.add(elStrip([-hw,  hh, z], [-hw, -hh, z], color, thick, { depthWrite: false }));
+}
+
+export function cityDepartmentBoardBottomY() {
+  return Number.isFinite(deps.getDroneLandingPose()?.y) ? deps.getDroneLandingPose().y : DEFAULT_DRONE_LANDING_POSE.y;
+}
+
+function syncCityDepartmentBoardPerimeterPose(board) {
+  const record = board.record;
+  const pad = record?.basePad;
+  const polygon = pad?.hitPolygon;
+  let x = record?.mesh?.position?.x ?? 0;
+  let z = record?.mesh?.position?.z ?? 0;
+  let yawValue = 0;
+  if (pad?.border?.position && polygon?.length) {
+    const isLeftBuilding = (record?.mesh?.position?.x ?? -1) < 0;
+    const minX = Math.min(...polygon.map((point) => point[0]));
+    const maxX = Math.max(...polygon.map((point) => point[0]));
+    const minZ = Math.min(...polygon.map((point) => point[1]));
+    const maxZ = Math.max(...polygon.map((point) => point[1]));
+    const playerSideSign = (deps.getPlayerSpawn()?.z ?? camera.position.z ?? record.mesh.position.z) >= record.mesh.position.z ? 1 : -1;
+    const centerX = (minX + maxX) * 0.5;
+    const roadSideX = isLeftBuilding ? maxX : minX;
+    x = pad.border.position.x + THREE.MathUtils.lerp(centerX, roadSideX, CITY_DEPARTMENT_BOARD_INNER_SLIDE);
+    z = pad.border.position.z + (playerSideSign > 0 ? maxZ : minZ) + playerSideSign * 0.35;
+    yawValue = playerSideSign > 0 ? 0 : Math.PI;
+    board.perimeterSynced = true;
+  }
+  board.boardPosition.set(x, cityDepartmentBoardBottomY() + board.boardHeight * 0.5, z);
+  board.yaw = yawValue;
+  board.group.position.copy(board.boardPosition);
+  board.group.rotation.y = board.yaw;
+}
+
+function cityDepartmentBoardPoseSignature() {
+  const parts = [
+    cityDepartmentBoardBottomY().toFixed(3),
+    CITY_DEPARTMENT_BOARD_INNER_SLIDE.toFixed(4),
+    (deps.getPlayerSpawn()?.z ?? camera.position.z ?? 0).toFixed(3),
+  ];
+  for (const board of cityDepartmentBoards) {
+    const record = board.record;
+    const pad = record?.basePad;
+    const polygon = pad?.hitPolygon || [];
+    const xs = polygon.map((point) => point[0]);
+    const zs = polygon.map((point) => point[1]);
+    parts.push(
+      board.civicNumberValue,
+      (record?.mesh?.position?.x ?? 0).toFixed(3),
+      (record?.mesh?.position?.z ?? 0).toFixed(3),
+      (pad?.border?.position?.x ?? 0).toFixed(3),
+      (pad?.border?.position?.z ?? 0).toFixed(3),
+      (xs.length ? Math.min(...xs) : 0).toFixed(3),
+      (xs.length ? Math.max(...xs) : 0).toFixed(3),
+      (zs.length ? Math.min(...zs) : 0).toFixed(3),
+      (zs.length ? Math.max(...zs) : 0).toFixed(3),
+    );
+  }
+  return parts.join('|');
+}
+
+function createCityDepartmentBoard(record, boardIndex = cityDepartmentBoards.length) {
+  const textureResources = createCityDepartmentBoardTextureResources();
+  const board = {
+    record,
+    civicNumberValue: record.civicNumberValue,
+    group: new THREE.Group(),
+    boardPosition: new THREE.Vector3(0, cityDepartmentBoardBottomY() + CITY_DEPARTMENT_BOARD_HEIGHT * 0.5, 0),
+    boardWidth: CITY_DEPARTMENT_BOARD_WIDTH,
+    boardHeight: CITY_DEPARTMENT_BOARD_HEIGHT,
+    yaw: 0,
+    perimeterSynced: false,
+    textMesh: null,
+    panelMesh: null,
+    revealMaterials: [],
+    canvas: textureResources.canvas,
+    ctx: textureResources.ctx,
+    texture: textureResources.texture,
+    textMaterial: textureResources.material,
+    state: {
+      page: 0,
+      targetPage: 0,
+      switching: false,
+      switchStartedAt: 0,
+      nextSwitchAt: 0,
+      lastTextureAt: 0,
+      textureUpdates: 0,
+      textureUploadRequests: 0,
+      textureUploadSkips: 0,
+      lastCanvasDrawMs: 0,
+      totalCanvasDrawMs: 0,
+      switchDelayMs: boardIndex * CITY_DEPARTMENT_BOARD_SWITCH_STAGGER_MS,
+    },
+  };
+  board.group.name = `city-department-board-${record.civicNumberValue}`;
+  syncCityDepartmentBoardPerimeterPose(board);
+  board.group.renderOrder = 30;
+
+  const panel = new THREE.Mesh(new THREE.PlaneGeometry(board.boardWidth, board.boardHeight), cityDepartmentBoardPanelMat);
+  panel.name = `city-department-board-panel-${record.civicNumberValue}`;
+  panel.renderOrder = 28;
+  panel.frustumCulled = false;
+  board.group.add(panel);
+  board.panelMesh = panel;
+
+  const text = new THREE.Mesh(new THREE.PlaneGeometry(board.boardWidth * 0.96, board.boardHeight * 0.96), board.textMaterial);
+  text.name = `city-department-board-text-${record.civicNumberValue}`;
+  text.position.z = 0.12;
+  text.renderOrder = 32;
+  text.frustumCulled = false;
+  board.group.add(text);
+  board.textMesh = text;
+  addCityDepartmentFrame(board.group, board.boardWidth, board.boardHeight, 0.16);
+  board.group.traverse((object) => {
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    materials.forEach((material) => {
+      if (!material || !Number.isFinite(material.opacity)) return;
+      material.transparent = true;
+      material.userData.cityDepartmentBoardBaseOpacity = material.opacity;
+      board.revealMaterials.push(material);
+    });
+  });
+  board.group.visible = false;
+  scene.add(board.group);
+  cityDepartmentBoards.push(board);
+}
+
+function buildCityDepartmentBoards() {
+  if (!CITY_DEPARTMENT_BOARD_ENABLED || cityDepartmentBoards.length) return;
+  const now = performance.now();
+  for (const civic of CITY_DEPARTMENT_BOARD_TARGET_CIVICS) {
+    const record = sideBuildingRecords.find((item) => item.civicNumberValue === civic);
+    if (record) createCityDepartmentBoard(record, cityDepartmentBoards.length);
+  }
+  cityDepartmentBoardState.nextSwitchAt = now + CITY_DEPARTMENT_BOARD_HOLD_MS;
+  for (const board of cityDepartmentBoards) {
+    board.state.nextSwitchAt = now + CITY_DEPARTMENT_BOARD_HOLD_MS + board.state.switchDelayMs;
+    drawCityDepartmentBoardTexture(board, now);
+  }
+}
+
+export function updateCityDepartmentBoards(now) {
+  if (!cityDepartmentBoards.length) return;
+  const poseSignature = cityDepartmentBoardPoseSignature();
+  if (poseSignature !== cityDepartmentBoardState.lastPoseSignature) {
+    cityDepartmentBoardState.lastPoseSignature = poseSignature;
+    cityDepartmentBoardState.poseSyncs += 1;
+    for (const board of cityDepartmentBoards) syncCityDepartmentBoardPerimeterPose(board);
+  } else {
+    cityDepartmentBoardState.poseSkips += 1;
+  }
+  const revealFactor = cityDepartmentBoardRevealFactor();
+  syncCityDepartmentBoardRevealVisibility(revealFactor);
+  if (revealFactor <= 0.002) {
+    cityDepartmentBoardState.nextSwitchAt = now + CITY_DEPARTMENT_BOARD_HOLD_MS;
+    for (const board of cityDepartmentBoards) {
+      board.state.nextSwitchAt = now + CITY_DEPARTMENT_BOARD_HOLD_MS + board.state.switchDelayMs;
+    }
+    return;
+  }
+  const minFrameMs = 1000 / CITY_DEPARTMENT_BOARD_TEXTURE_FPS;
+  for (const board of cityDepartmentBoards) {
+    const state = board.state;
+    let completedSwitch = false;
+    if (!state.switching && now >= state.nextSwitchAt) {
+      state.switching = true;
+      state.targetPage = (state.page + 1) % 2;
+      state.switchStartedAt = now;
+    }
+    const progress = state.switching
+      ? THREE.MathUtils.clamp((now - state.switchStartedAt) / CITY_DEPARTMENT_BOARD_SWITCH_MS, 0, 1)
+      : 0;
+    if (state.switching && progress >= 1) {
+      state.switching = false;
+      state.page = state.targetPage;
+      state.nextSwitchAt = now + CITY_DEPARTMENT_BOARD_HOLD_MS;
+      completedSwitch = true;
+      cityDepartmentBoardState.cycle++;
+    }
+    if (state.switching || completedSwitch || state.lastTextureAt === 0) {
+      if (!completedSwitch && now - state.lastTextureAt < minFrameMs) continue;
+      state.lastTextureAt = now;
+      drawCityDepartmentBoardTexture(board, now);
+    }
+  }
+  cityDepartmentBoardState.nextSwitchAt = Math.min(
+    ...cityDepartmentBoards.map((board) => board.state.nextSwitchAt || Number.POSITIVE_INFINITY)
+  );
+  const glow = 0.10 + 0.05 * Math.sin(now * 0.005);
+  cityDepartmentBoardPanelMat.emissiveIntensity = (0.20 + glow) * THREE.MathUtils.lerp(0.35, 1, revealFactor);
+}
+
+export function cityDepartmentBoardRevealFactor() {
+  if (!CITY_DEPARTMENT_BOARD_REVEAL_WITH_RUNNERS || !TRON_RUNNER_REVEAL_ENABLED) return 1;
+  if (!deps.getCityRevealComplete() || !deps.getRunnerReady()) return 0;
+  if (deps.getRevealComplete()) return 1;
+  if (!deps.getRevealStartedAt() && !deps.getRevealActive()) return 0;
+  return THREE.MathUtils.clamp(deps.getRevealProgress(), 0, 1);
+}
+
+function syncCityDepartmentBoardRevealVisibility(revealFactor = cityDepartmentBoardRevealFactor()) {
+  const factor = THREE.MathUtils.clamp(revealFactor, 0, 1);
+  const visible = Boolean(CITY_DEPARTMENT_BOARD_ENABLED && (factor > 0.002 || deps.getRevealActive()));
+  if (
+    Math.abs(factor - cityDepartmentBoardState.lastRevealFactor) < CITY_DEPARTMENT_BOARD_REVEAL_EPS
+    && cityDepartmentBoardState.lastRevealVisible === visible
+  ) {
+    cityDepartmentBoardState.revealSkips += 1;
+    return;
+  }
+  cityDepartmentBoardState.lastRevealFactor = factor;
+  cityDepartmentBoardState.lastRevealVisible = visible;
+  for (const board of cityDepartmentBoards) {
+    if (board.group.visible !== visible) board.group.visible = visible;
+    for (const material of board.revealMaterials) {
+      const baseOpacity = Number.isFinite(material.userData.cityDepartmentBoardBaseOpacity)
+        ? material.userData.cityDepartmentBoardBaseOpacity
+        : material.opacity;
+      const nextOpacity = baseOpacity * factor;
+      if (Math.abs((material.opacity ?? 0) - nextOpacity) < CITY_DEPARTMENT_BOARD_REVEAL_EPS) continue;
+      material.opacity = nextOpacity;
+      material.needsUpdate = true;
+      cityDepartmentBoardState.revealWrites += 1;
+    }
+  }
+}
+
+export function cityDepartmentBoardInspect() {
+  const firstBoard = cityDepartmentBoards[0] || null;
+  const firstState = firstBoard?.state || null;
+  const now = performance.now();
+  return {
+    enabled: CITY_DEPARTMENT_BOARD_ENABLED,
+    targetCivics: [...CITY_DEPARTMENT_BOARD_TARGET_CIVICS],
+    count: cityDepartmentBoards.length,
+    visible: Boolean(firstBoard?.group?.visible),
+    revealWithRunners: CITY_DEPARTMENT_BOARD_REVEAL_WITH_RUNNERS,
+    revealFactor: Number(cityDepartmentBoardRevealFactor().toFixed(3)),
+    page: firstState?.page ?? 0,
+    targetPage: firstState?.targetPage ?? 0,
+    switching: cityDepartmentBoards.some((board) => board.state?.switching),
+    textureUpdates: cityDepartmentBoards.reduce((sum, board) => sum + (board.state?.textureUpdates || 0), 0),
+    nextSwitchAt: cityDepartmentBoardState.nextSwitchAt,
+    cycle: cityDepartmentBoardState.cycle,
+    rows: CITY_DEPARTMENT_BOARD_ROWS,
+    items: cityDepartmentPageItems(firstState?.page ?? 0, cityDepartmentBoardTextConfig),
+    innerSlide: CITY_DEPARTMENT_BOARD_INNER_SLIDE,
+    textureFps: CITY_DEPARTMENT_BOARD_TEXTURE_FPS,
+    switchStaggerMs: CITY_DEPARTMENT_BOARD_SWITCH_STAGGER_MS,
+    textureUploadEnabled: window.__cityDepartmentBoardTextureUploadEnabled !== false,
+    bottomY: cityDepartmentBoardBottomY(),
+    textureWidth: firstBoard?.canvas?.width ?? CITY_DEPARTMENT_BOARD_TEXTURE_WIDTH * CITY_DEPARTMENT_BOARD_TEXTURE_SCALE,
+    textureHeight: firstBoard?.canvas?.height ?? CITY_DEPARTMENT_BOARD_TEXTURE_HEIGHT * CITY_DEPARTMENT_BOARD_TEXTURE_SCALE,
+    textureScale: CITY_DEPARTMENT_BOARD_TEXTURE_SCALE,
+    textureMipmaps: firstBoard?.texture?.generateMipmaps ?? false,
+    updateOptimized: cityDepartmentBoardState.updateOptimized,
+    runtime: {
+      poseSyncs: cityDepartmentBoardState.poseSyncs,
+      poseSkips: cityDepartmentBoardState.poseSkips,
+      revealWrites: cityDepartmentBoardState.revealWrites,
+      revealSkips: cityDepartmentBoardState.revealSkips,
+      lastRevealFactor: Number(Math.max(0, cityDepartmentBoardState.lastRevealFactor).toFixed(3)),
+      lastRevealVisible: cityDepartmentBoardState.lastRevealVisible,
+    },
+    boards: cityDepartmentBoards.map((board) => ({
+      civicNumberValue: board.civicNumberValue,
+      visible: Boolean(board.group.visible),
+      children: board.group.children.length,
+      perimeterSynced: board.perimeterSynced,
+      yaw: board.yaw,
+      boardWidth: board.boardWidth,
+      boardHeight: board.boardHeight,
+      boardBottomY: board.boardPosition.y - board.boardHeight * 0.5,
+      page: board.state.page,
+      targetPage: board.state.targetPage,
+      switching: board.state.switching,
+      switchDelayMs: board.state.switchDelayMs,
+      switchStartedAt: board.state.switchStartedAt,
+      nextSwitchAt: board.state.nextSwitchAt,
+      switchProgress: board.state.switching
+        ? THREE.MathUtils.clamp((now - board.state.switchStartedAt) / CITY_DEPARTMENT_BOARD_SWITCH_MS, 0, 1)
+        : 0,
+      textureUpdates: board.state.textureUpdates,
+      textureUploadRequests: board.state.textureUploadRequests,
+      textureUploadSkips: board.state.textureUploadSkips,
+      lastCanvasDrawMs: board.state.lastCanvasDrawMs,
+      totalCanvasDrawMs: board.state.totalCanvasDrawMs,
+      textureWidth: board.canvas.width,
+      textureHeight: board.canvas.height,
+      boardPosition: {
+        x: board.boardPosition.x,
+        y: board.boardPosition.y,
+        z: board.boardPosition.z,
+      },
+    })),
+  };
+}
+window.__cityDepartmentBoardInspect = cityDepartmentBoardInspect;
+
+export function getCityDepartmentBoards() {
+  return cityDepartmentBoards;
+}
+
+export function initCityDepartmentBoards(d) {
+  deps = d;
+  ({
+    scene,
+    camera,
+    renderer,
+    reflectionEnvMap,
+    PAL,
+    elStrip,
+    sideBuildingRecords,
+    DEFAULT_DRONE_LANDING_POSE,
+    TRON_RUNNER_REVEAL_ENABLED,
+  } = d);
+  cityDepartmentBoardPanelMat = new THREE.MeshStandardMaterial({
+  color: 0x001216,
+  metalness: 0.45,
+  roughness: 0.18,
+  envMap: reflectionEnvMap,
+  envMapIntensity: 0.72,
+  emissive: 0x00333b,
+  emissiveIntensity: 0.22,
+  transparent: true,
+  opacity: CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+});
+  buildCityDepartmentBoards();
 }
