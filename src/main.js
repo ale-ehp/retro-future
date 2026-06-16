@@ -359,6 +359,10 @@ import {
   mobilePerformanceProfileState as mobilePerformanceProfileStateCore,
 } from './performance-mobile.js';
 import {
+  cityDepartmentInterpolatedText as cityDepartmentInterpolatedTextCore,
+  cityDepartmentPageItems as cityDepartmentPageItemsCore,
+} from './city-boards.js';
+import {
   initStaticCityCulling,
   staticCityCullStats,
   updateStaticCityCulling,
@@ -7879,29 +7883,19 @@ function createCityDepartmentBoardTextureResources() {
   return { canvas, ctx, texture, material };
 }
 
-function cityDepartmentPageItems(page) {
-  const start = page * CITY_DEPARTMENT_BOARD_ROWS;
-  return CITY_DEPARTMENTS.slice(start, start + CITY_DEPARTMENT_BOARD_ROWS);
-}
+const cityDepartmentBoardTextConfig = {
+  rows: CITY_DEPARTMENT_BOARD_ROWS,
+  charSlots: CITY_DEPARTMENT_BOARD_CHAR_SLOTS,
+  scramble: CITY_DEPARTMENT_BOARD_SCRAMBLE,
+  departments: CITY_DEPARTMENTS,
+};
 
-function cityDepartmentBoardChar(oldText, newText, row, index, progress, textureUpdates = 0) {
-  const total = CITY_DEPARTMENT_BOARD_ROWS * CITY_DEPARTMENT_BOARD_CHAR_SLOTS;
-  const cursor = progress * total;
-  const charCursor = row * CITY_DEPARTMENT_BOARD_CHAR_SLOTS + index;
-  if (cursor >= charCursor + 1) return newText[index] || ' ';
-  if (cursor <= charCursor) return oldText[index] || ' ';
-  const scrambleIndex = (row * 17 + index * 11 + textureUpdates * 3) % CITY_DEPARTMENT_BOARD_SCRAMBLE.length;
-  return CITY_DEPARTMENT_BOARD_SCRAMBLE[scrambleIndex];
+function cityDepartmentPageItems(page) {
+  return cityDepartmentPageItemsCore(page, cityDepartmentBoardTextConfig);
 }
 
 function cityDepartmentInterpolatedText(oldText, newText, row, progress, textureUpdates = 0) {
-  const oldPadded = oldText.padEnd(CITY_DEPARTMENT_BOARD_CHAR_SLOTS, ' ');
-  const newPadded = newText.padEnd(CITY_DEPARTMENT_BOARD_CHAR_SLOTS, ' ');
-  let result = '';
-  for (let i = 0; i < CITY_DEPARTMENT_BOARD_CHAR_SLOTS; i++) {
-    result += cityDepartmentBoardChar(oldPadded, newPadded, row, i, progress, textureUpdates);
-  }
-  return result.trimEnd();
+  return cityDepartmentInterpolatedTextCore(oldText, newText, row, progress, textureUpdates, cityDepartmentBoardTextConfig);
 }
 
 function drawCityDepartmentBoardTexture(board, now = performance.now()) {
