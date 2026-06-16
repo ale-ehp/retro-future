@@ -213,3 +213,55 @@ export function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ,
     speedScale,
   };
 }
+
+export function tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ, distance, collided, now, deps) {
+  const {
+    reachRadius,
+    deadlockMoveEps,
+    deadlockMs,
+    deadlockNudge,
+    yieldDurationMs,
+    pointInsideRoute,
+    resolveCollision,
+    setState,
+  } = deps;
+  const movedDistance = Math.hypot(nextPoint.x - current.x, nextPoint.z - current.z);
+  const blocked = distance > reachRadius * 2.5
+    && movedDistance < deadlockMoveEps
+    && (collided || member.avoidanceNeighbors > 0 || member.state === 'yield' || member.state === 'avoid');
+  if (!blocked) {
+    member.stuckSince = 0;
+    return false;
+  }
+  if (!member.stuckSince) {
+    member.stuckSince = now;
+    return false;
+  }
+  if (now - member.stuckSince < deadlockMs) return false;
+
+  const preferredSide = (member.index ?? 0) % 2 === 0 ? 1 : -1;
+  const sideOptions = [preferredSide, -preferredSide];
+  for (const sideSign of sideOptions) {
+    const candidate = {
+      x: current.x - dirZ * sideSign * deadlockNudge,
+      z: current.z + dirX * sideSign * deadlockNudge,
+    };
+    if (!pointInsideRoute(member, candidate.x, candidate.z)) continue;
+    resolveCollision(member, candidate);
+    const nudgeDistance = Math.hypot(candidate.x - current.x, candidate.z - current.z);
+    if (nudgeDistance <= deadlockMoveEps) continue;
+    nextPoint.x = candidate.x;
+    nextPoint.z = candidate.z;
+    member.stuckSince = 0;
+    member.stuckEscapes = (member.stuckEscapes || 0) + 1;
+    member.waypointIndex = (member.waypointIndex + 1) % member.route.points.length;
+    setState(member, 'avoid', now, yieldDurationMs);
+    return true;
+  }
+
+  member.stuckSince = 0;
+  member.stuckEscapes = (member.stuckEscapes || 0) + 1;
+  member.waypointIndex = (member.waypointIndex + 1) % member.route.points.length;
+  setState(member, 'avoid', now, yieldDurationMs);
+  return false;
+}
