@@ -210,6 +210,8 @@ import {
   tronRunnerCrowdPointInsideRoute as tronRunnerCrowdPointInsideRouteCore,
 } from './character-collision.js';
 import {
+  nearbyTronRunnerCrowdMembers as nearbyTronRunnerCrowdMembersCore,
+  prepareTronRunnerCrowdSpatialGrid as prepareTronRunnerCrowdSpatialGridCore,
   setTronRunnerCrowdFrameDistance as setTronRunnerCrowdFrameDistanceCore,
   tronRunnerCrowdDistanceToCamera as tronRunnerCrowdDistanceToCameraCore,
   tronRunnerCrowdLodStride as tronRunnerCrowdLodStrideCore,
@@ -11657,35 +11659,25 @@ function tronRunnerCrowdDistanceToCamera(member) {
 }
 
 function prepareTronRunnerCrowdSpatialGrid() {
-  tronRunnerCrowdSpatialGrid.clear();
-  for (const member of tronRunnerCrowd) {
-    if (TRON_RUNNER_CROWD_CULLING_ENABLED && member.cullingVisible === false && member.cullingDistance > TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE) {
-      continue;
-    }
-    const cx = tronRunnerCrowdGridCoord(member.group.position.x);
-    const cz = tronRunnerCrowdGridCoord(member.group.position.z);
-    const key = tronRunnerCrowdGridKey(cx, cz);
-    let bucket = tronRunnerCrowdSpatialGrid.get(key);
-    if (!bucket) {
-      bucket = [];
-      tronRunnerCrowdSpatialGrid.set(key, bucket);
-    }
-    bucket.push(member);
-  }
-  tronRunnerCrowdRuntimeStats.gridCells = tronRunnerCrowdSpatialGrid.size;
+  prepareTronRunnerCrowdSpatialGridCore(
+    tronRunnerCrowdSpatialGrid,
+    tronRunnerCrowd,
+    tronRunnerCrowdRuntimeStats,
+    TRON_RUNNER_CROWD_CULLING_ENABLED,
+    TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE,
+    tronRunnerCrowdGridCoord,
+    tronRunnerCrowdGridKey,
+  );
 }
 
 function nearbyTronRunnerCrowdMembers(x, z) {
-  const cx = tronRunnerCrowdGridCoord(x);
-  const cz = tronRunnerCrowdGridCoord(z);
-  const members = [];
-  for (let dz = -1; dz <= 1; dz += 1) {
-    for (let dx = -1; dx <= 1; dx += 1) {
-      const bucket = tronRunnerCrowdSpatialGrid.get(tronRunnerCrowdGridKey(cx + dx, cz + dz));
-      if (bucket) members.push(...bucket);
-    }
-  }
-  return members;
+  return nearbyTronRunnerCrowdMembersCore(
+    x,
+    z,
+    tronRunnerCrowdSpatialGrid,
+    tronRunnerCrowdGridCoord,
+    tronRunnerCrowdGridKey,
+  );
 }
 
 function tronRunnerCrowdLodStride(member) {
