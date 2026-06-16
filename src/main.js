@@ -331,6 +331,16 @@ import {
   stopTronSoundtrackIntroLofiForReveal as stopTronSoundtrackIntroLofiForRevealCore,
   syncTronIntroFxNodeSettings as syncTronIntroFxNodeSettingsCore,
   tronIntroFxEffectiveFilters as tronIntroFxEffectiveFiltersCore,
+  createTronSoundtrackElement as createTronSoundtrackElementCore,
+  setupTronSoundtrackGraph as setupTronSoundtrackGraphCore,
+  tronSoundtrackLoopStart as tronSoundtrackLoopStartCore,
+  pauseTronSoundtrackElement as pauseTronSoundtrackElementCore,
+  startTronSoundtrackElement as startTronSoundtrackElementCore,
+  crossfadeTronSoundtrack as crossfadeTronSoundtrackCore,
+  monitorTronSoundtrackLoop as monitorTronSoundtrackLoopCore,
+  startTronFileSoundtrack as startTronFileSoundtrackCore,
+  stopTronFileSoundtrack as stopTronFileSoundtrackCore,
+  setTronFileSoundtrackVolume as setTronFileSoundtrackVolumeCore,
 } from './audio.js';
 import {
   LAB_EQUALIZER_ANALYSER_MAX_DB,
@@ -1783,20 +1793,14 @@ function setupTronSynthMusicGraph(ctx) {
   return true;
 }
 
+const tronSoundtrackDeps = {
+  soundtrack: tronSoundtrack,
+  getCtx: () => footstepAudioContext,
+  ensureCtx: ensureTronAudioContext,
+};
+
 function createTronSoundtrackElement() {
-  const audio = new Audio(TRON_SOUNDTRACK_URL);
-  audio.preload = 'auto';
-  audio.loop = false;
-  audio.playsInline = true;
-  audio.addEventListener('loadedmetadata', () => {
-    if (Number.isFinite(audio.duration)) tronSoundtrack.duration = audio.duration;
-  });
-  audio.addEventListener('error', () => {
-    const code = audio.error?.code || 0;
-    tronSoundtrack.error = `Soundtrack load error ${code}`;
-    console.warn('[tron-soundtrack]', tronSoundtrack.error);
-  });
-  return audio;
+  return createTronSoundtrackElementCore(tronSoundtrack);
 }
 
 function createTronIntroBitcrushCurve(bitDepth, crusher) {
@@ -1836,85 +1840,11 @@ function stopTronSoundtrackIntroLofiForReveal() {
 }
 
 function setupTronSoundtrackGraph(ctx) {
-  if (tronSoundtrack.ready) return true;
-  tronSoundtrack.elements = [createTronSoundtrackElement(), createTronSoundtrackElement()];
-  tronSoundtrack.sources = [];
-  tronSoundtrack.gains = [];
-  tronSoundtrack.dryGains = [];
-  tronSoundtrack.introLofiGains = [];
-  tronSoundtrack.introHighpassFilters = [];
-  tronSoundtrack.introLowpassFilters = [];
-  tronSoundtrack.introLofiShapers = [];
-  tronSoundtrack.introDistortionShapers = [];
-  tronSoundtrack.introLofiLfos = [];
-  tronSoundtrack.introLofiLfoGains = [];
-  tronSoundtrack.elements.forEach((audio) => {
-    const source = ctx.createMediaElementSource(audio);
-    const gain = ctx.createGain();
-    const dryGain = ctx.createGain();
-    const introLofiGain = ctx.createGain();
-    const introHighpassFilter = ctx.createBiquadFilter();
-    const introLowpassFilter = ctx.createBiquadFilter();
-    const introLofiShaper = ctx.createWaveShaper();
-    const introDistortionShaper = ctx.createWaveShaper();
-    const introLofiLfo = ctx.createOscillator();
-    const introLofiLfoGain = ctx.createGain();
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    dryGain.gain.setValueAtTime(1, ctx.currentTime);
-    introLofiGain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    introHighpassFilter.type = 'highpass';
-    introHighpassFilter.frequency.setValueAtTime(TRON_SOUNDTRACK_INTRO_FX_DEFAULTS.highpassHz, ctx.currentTime);
-    introHighpassFilter.Q.setValueAtTime(0.72, ctx.currentTime);
-    introLowpassFilter.type = 'lowpass';
-    introLowpassFilter.frequency.setValueAtTime(TRON_SOUNDTRACK_INTRO_FX_DEFAULTS.lowpassHz, ctx.currentTime);
-    introLowpassFilter.Q.setValueAtTime(0.72, ctx.currentTime);
-    introLofiShaper.curve = createTronIntroBitcrushCurve(tronSoundtrack.introFx.bitDepth, tronSoundtrack.introFx.crusher);
-    introLofiShaper.oversample = 'none';
-    introDistortionShaper.curve = createTronIntroDistortionCurve(tronSoundtrack.introFx.distortion);
-    introDistortionShaper.oversample = 'none';
-    introLofiLfo.type = 'sine';
-    introLofiLfo.frequency.setValueAtTime(TRON_SOUNDTRACK_INTRO_FX_WOBBLE_RATE_HZ, ctx.currentTime);
-    introLofiLfoGain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    introLofiLfo.connect(introLofiLfoGain).connect(introLowpassFilter.frequency);
-    introLofiLfo.start();
-    source.connect(dryGain).connect(gain);
-    source.connect(introLofiShaper).connect(introHighpassFilter).connect(introLowpassFilter).connect(introDistortionShaper).connect(introLofiGain).connect(gain);
-    gain.connect(ctx.destination);
-    tronSoundtrack.sources.push(source);
-    tronSoundtrack.gains.push(gain);
-    tronSoundtrack.dryGains.push(dryGain);
-    tronSoundtrack.introLofiGains.push(introLofiGain);
-    tronSoundtrack.introHighpassFilters.push(introHighpassFilter);
-    tronSoundtrack.introLowpassFilters.push(introLowpassFilter);
-    tronSoundtrack.introLofiShapers.push(introLofiShaper);
-    tronSoundtrack.introDistortionShapers.push(introDistortionShaper);
-    tronSoundtrack.introLofiLfos.push(introLofiLfo);
-    tronSoundtrack.introLofiLfoGains.push(introLofiLfoGain);
-    audio.load();
-  });
-  const noiseSource = ctx.createBufferSource();
-  const noiseFilter = ctx.createBiquadFilter();
-  const noiseGain = ctx.createGain();
-  noiseSource.buffer = createTronIntroNoiseBuffer(ctx);
-  noiseSource.loop = true;
-  noiseFilter.type = 'bandpass';
-  noiseFilter.frequency.setValueAtTime(3200, ctx.currentTime);
-  noiseFilter.Q.setValueAtTime(0.8, ctx.currentTime);
-  noiseGain.gain.setValueAtTime(0.0001, ctx.currentTime);
-  noiseSource.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
-  noiseSource.start();
-  tronSoundtrack.introNoiseSource = noiseSource;
-  tronSoundtrack.introNoiseFilter = noiseFilter;
-  tronSoundtrack.introNoiseGain = noiseGain;
-  tronSoundtrack.ready = true;
-  applyTronSoundtrackIntroLofiMix(tronSoundtrack.introLofiActive, 0.01);
-  return true;
+  return setupTronSoundtrackGraphCore(tronSoundtrackDeps, ctx);
 }
 
 function tronSoundtrackLoopStart() {
-  const duration = tronSoundtrack.duration || tronSoundtrack.elements[tronSoundtrack.activeIndex]?.duration || 0;
-  const safeMax = Math.max(0, duration - TRON_SOUNDTRACK_CROSSFADE_SECONDS - 1);
-  return Math.min(TRON_SOUNDTRACK_LOOP_START_SECONDS, safeMax);
+  return tronSoundtrackLoopStartCore(tronSoundtrack);
 }
 
 function rampGain(gainNode, value, seconds, fromValue = null) {
@@ -1922,117 +1852,31 @@ function rampGain(gainNode, value, seconds, fromValue = null) {
 }
 
 function pauseTronSoundtrackElement(index) {
-  const audio = tronSoundtrack.elements[index];
-  if (!audio) return;
-  audio.pause();
-  setAudioCurrentTime(audio, tronSoundtrackLoopStart());
+  return pauseTronSoundtrackElementCore(tronSoundtrack, index);
 }
 
 function startTronSoundtrackElement(index, startAt, fadeSeconds, volume = tronSoundtrack.targetVolume) {
-  const audio = tronSoundtrack.elements[index];
-  const gain = tronSoundtrack.gains[index];
-  if (!audio || !gain) return false;
-  const duration = Number.isFinite(audio.duration) ? audio.duration : tronSoundtrack.duration;
-  const safeStart = Number.isFinite(duration) && duration > 0
-    ? Math.min(Math.max(0, startAt), Math.max(0, duration - 0.25))
-    : Math.max(0, startAt);
-  setAudioCurrentTime(audio, safeStart);
-  gain.gain.cancelScheduledValues(footstepAudioContext.currentTime);
-  gain.gain.setValueAtTime(0.0001, footstepAudioContext.currentTime);
-  const playPromise = audio.play();
-  if (playPromise?.catch) {
-    playPromise.catch((error) => {
-      tronSoundtrack.error = error?.message || String(error);
-      console.warn('[tron-soundtrack]', tronSoundtrack.error);
-    });
-  }
-  rampGain(gain, volume, fadeSeconds, 0.0001);
-  tronSoundtrack.lastStartAt = safeStart;
-  return true;
+  return startTronSoundtrackElementCore(tronSoundtrackDeps, footstepAudioContext, index, startAt, fadeSeconds, volume);
 }
 
 function crossfadeTronSoundtrack() {
-  if (!tronSoundtrack.playing || tronSoundtrack.crossfading || !footstepAudioContext) return false;
-  const activeIndex = tronSoundtrack.activeIndex;
-  const nextIndex = activeIndex === 0 ? 1 : 0;
-  const activeGain = tronSoundtrack.gains[activeIndex];
-  const loopStart = tronSoundtrackLoopStart();
-  tronSoundtrack.crossfading = true;
-  startTronSoundtrackElement(nextIndex, loopStart, TRON_SOUNDTRACK_CROSSFADE_SECONDS, tronSoundtrack.targetVolume);
-  rampGain(activeGain, 0.0001, TRON_SOUNDTRACK_CROSSFADE_SECONDS);
-  window.setTimeout(() => {
-    pauseTronSoundtrackElement(activeIndex);
-    tronSoundtrack.activeIndex = nextIndex;
-    tronSoundtrack.crossfading = false;
-    tronSoundtrack.loopCount += 1;
-    tronSoundtrack.lastLoopAt = performance.now();
-  }, Math.ceil(TRON_SOUNDTRACK_CROSSFADE_SECONDS * 1000) + 80);
-  return true;
+  return crossfadeTronSoundtrackCore(tronSoundtrackDeps);
 }
 
 function monitorTronSoundtrackLoop() {
-  if (!tronSoundtrack.playing || tronSoundtrack.crossfading) return;
-  const active = tronSoundtrack.elements[tronSoundtrack.activeIndex];
-  const duration = Number.isFinite(active?.duration) ? active.duration : tronSoundtrack.duration;
-  if (!active || !Number.isFinite(duration) || duration <= TRON_SOUNDTRACK_CROSSFADE_SECONDS + 2) return;
-  tronSoundtrack.duration = duration;
-  if (active.currentTime >= duration - TRON_SOUNDTRACK_CROSSFADE_SECONDS) {
-    crossfadeTronSoundtrack();
-  }
+  return monitorTronSoundtrackLoopCore(tronSoundtrackDeps);
 }
 
 function startTronFileSoundtrack(source = 'manual') {
-  if (!TRON_SOUNDTRACK_ENABLED || tronSoundtrack.playing) return Boolean(tronSoundtrack.playing);
-  const ctx = ensureTronAudioContext();
-  if (!ctx) {
-    tronSoundtrack.error = 'AudioContext unavailable';
-    return false;
-  }
-  setupTronSoundtrackGraph(ctx);
-  tronSoundtrack.playing = true;
-  tronSoundtrack.startedAt = performance.now();
-  tronSoundtrack.startSource = source;
-  tronSoundtrack.activeIndex = 0;
-  tronSoundtrack.crossfading = false;
-  tronSoundtrack.loopCount = 0;
-  tronSoundtrack.error = '';
-  tronSoundtrack.gains.forEach((gain) => gain.gain.setValueAtTime(0.0001, ctx.currentTime));
-  if (tronSoundtrack.introFx.enabled && !String(source).startsWith('welcome-')) setTronSoundtrackIntroLofi(true, 0.01);
-  startTronSoundtrackElement(0, TRON_SOUNDTRACK_INITIAL_START_SECONDS, TRON_SOUNDTRACK_FADE_IN_SECONDS, tronSoundtrack.targetVolume);
-  if (tronSoundtrack.timer) window.clearInterval(tronSoundtrack.timer);
-  tronSoundtrack.timer = window.setInterval(monitorTronSoundtrackLoop, 250);
-  return true;
+  return startTronFileSoundtrackCore(tronSoundtrackDeps, source);
 }
 
 function stopTronFileSoundtrack(fadeSeconds = TRON_SOUNDTRACK_STOP_FADE_SECONDS) {
-  if (!tronSoundtrack.playing) return false;
-  if (tronSoundtrack.timer) {
-    window.clearInterval(tronSoundtrack.timer);
-    tronSoundtrack.timer = 0;
-  }
-  tronSoundtrack.playing = false;
-  tronSoundtrack.crossfading = false;
-  setTronSoundtrackIntroLofi(false, fadeSeconds);
-  tronSoundtrack.gains.forEach((gain) => rampGain(gain, 0.0001, fadeSeconds));
-  window.setTimeout(() => {
-    tronSoundtrack.elements.forEach((audio) => {
-      audio.pause();
-      setAudioCurrentTime(audio, 0);
-    });
-  }, Math.ceil(fadeSeconds * 1000) + 80);
-  return true;
+  return stopTronFileSoundtrackCore(tronSoundtrackDeps, fadeSeconds);
 }
 
 function setTronFileSoundtrackVolume(value = TRON_SOUNDTRACK_VOLUME) {
-  const next = THREE.MathUtils.clamp(Number(value), 0, 1.2);
-  if (!Number.isFinite(next)) return false;
-  tronSoundtrack.targetVolume = next;
-  if (!tronSoundtrack.playing) return true;
-  const activeGain = tronSoundtrack.gains[tronSoundtrack.activeIndex];
-  const inactiveGain = tronSoundtrack.gains[tronSoundtrack.activeIndex === 0 ? 1 : 0];
-  rampGain(activeGain, next, 0.08);
-  if (!tronSoundtrack.crossfading) rampGain(inactiveGain, 0.0001, 0.08);
-  return true;
+  return setTronFileSoundtrackVolumeCore(tronSoundtrackDeps, value);
 }
 
 function disconnectTronSynthNode(node) {
