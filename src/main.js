@@ -219,6 +219,18 @@ import {
   tronRunnerCrowdGridKey,
 } from './character-movement.js';
 import {
+  tronRunnerCrowdCandidateRecords as tronRunnerCrowdCandidateRecordsCore,
+  tronRunnerCrowdFallbackPlacement as tronRunnerCrowdFallbackPlacementCore,
+  tronRunnerCrowdRecordRoadDir,
+  tronRunnerCrowdRoutePoint,
+  tronRunnerCrowdRouteStyleForIndex as tronRunnerCrowdRouteStyleForIndexCore,
+  tronRunnerCrowdRouteStyleOrdinal as tronRunnerCrowdRouteStyleOrdinalCore,
+  tronRunnerCrowdSecondaryStreetSummary as tronRunnerCrowdSecondaryStreetSummaryCore,
+  tronRunnerCrowdSideStreetLaneAssignment,
+  tronRunnerCrowdSideStreetLateralRoute as tronRunnerCrowdSideStreetLateralRouteCore,
+  tronRunnerCrowdSideStreetPairs as tronRunnerCrowdSideStreetPairsCore,
+} from './character-routes.js';
+import {
   makeTronRunnerShadowTexture,
   makeTronRunnerSuitEmissiveTexture,
   makeTronRunnerSuitLedMaskTexture,
@@ -11429,49 +11441,24 @@ function tronRunnerSurfaceYForPoint(x, z) {
 }
 
 function tronRunnerCrowdFallbackPlacement(index) {
-  const limits = roadHexBoundaryLimits();
-  const row = index % 5;
-  const side = index < 5 ? -1 : 1;
-  const minZ = dynamicRoadCenter - dynamicRoadLength * 0.5 + GRID_BLOCK * 8;
-  const maxZ = dynamicRoadCenter + dynamicRoadLength * 0.5 - GRID_BLOCK * 8;
-  const z = THREE.MathUtils.clamp(
-    THREE.MathUtils.lerp(minZ, maxZ, (row + 1) / 6),
-    limits.minZ + GRID_BLOCK * 3,
-    limits.maxZ - GRID_BLOCK * 3
-  );
-  const x = THREE.MathUtils.clamp(
-    side * Math.max(GRID_BLOCK * 2, roadHalf() * 0.34),
-    limits.minX + GRID_BLOCK * 2,
-    limits.maxX - GRID_BLOCK * 2
-  );
-  return {
-    x,
-    y: roadTileTopY() + TRON_RUNNER_CROWD_GROUND_OFFSET,
-    z,
-    yaw: side < 0 ? 0 : Math.PI,
-    surface: 'road-fallback',
-  };
+  return tronRunnerCrowdFallbackPlacementCore({
+    index,
+    limits: roadHexBoundaryLimits(),
+    dynamicRoadCenter,
+    dynamicRoadLength,
+    gridBlock: GRID_BLOCK,
+    roadHalf: roadHalf(),
+    roadTopY: roadTileTopY(),
+    groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
+  });
 }
 
 function tronRunnerCrowdCandidateRecords() {
-  return sideBuildingRecords
-    .filter((record) =>
-      record.mesh?.visible !== false &&
-      record.basePad?.hitPolygon?.length &&
-      record.collider &&
-      !TRON_RUNNER_CROWD_EXCLUDED_CIVICS.has(record.civicNumberValue)
-    )
-    .sort((a, b) => {
-      const az = Number(a.mesh?.position?.z ?? 0);
-      const bz = Number(b.mesh?.position?.z ?? 0);
-      if (Math.abs(az - bz) > GRID_BLOCK * 0.5) return bz - az;
-      return (a.sign || 0) - (b.sign || 0);
-    });
-}
-
-function tronRunnerCrowdRecordRoadDir(record) {
-  const x = record?.collider?.x ?? record?.mesh?.position?.x ?? record?.sign ?? 1;
-  return x < 0 ? 1 : -1;
+  return tronRunnerCrowdCandidateRecordsCore({
+    records: sideBuildingRecords,
+    excludedCivics: TRON_RUNNER_CROWD_EXCLUDED_CIVICS,
+    gridBlock: GRID_BLOCK,
+  });
 }
 
 function tronRunnerCrowdPointClearOfRecord(record, worldX, worldZ, padding = TRON_RUNNER_CROWD_BUILDING_GUARD) {
@@ -11490,15 +11477,6 @@ function tronRunnerCrowdPadPointSafe(record, localX, localZ, polygon, padding = 
     pad.border.position.z + localZ,
     padding
   );
-}
-
-function tronRunnerCrowdRoutePoint(record, localX, localZ, y) {
-  const pad = record.basePad;
-  return {
-    x: pad.border.position.x + localX,
-    y,
-    z: pad.border.position.z + localZ,
-  };
 }
 
 function tronRunnerCrowdLoopRouteForRecord(record, index) {
@@ -11553,21 +11531,7 @@ function tronRunnerCrowdLoopRouteForRecord(record, index) {
 }
 
 function tronRunnerCrowdSideStreetPairs(records) {
-  const rows = new Map();
-  for (const record of records) {
-    const z = Number(record.mesh?.position?.z ?? 0);
-    const key = String(Math.round(z / Math.max(1, GRID_BLOCK)));
-    let row = rows.get(key);
-    if (!row) {
-      row = { z, left: null, right: null };
-      rows.set(key, row);
-    }
-    if ((record.sign || 0) < 0) row.left = record;
-    else row.right = record;
-  }
-  return [...rows.values()]
-    .filter((row) => row.left && row.right)
-    .sort((a, b) => b.z - a.z);
+  return tronRunnerCrowdSideStreetPairsCore(records, GRID_BLOCK);
 }
 
 function tronRunnerCrowdRoadFacingRoutePoint(record, offsetZ = 0) {
@@ -11675,111 +11639,36 @@ function tronRunnerCrowdDetectedSideStreetLanes(records) {
 
 function tronRunnerCrowdSecondaryStreetSummary(records) {
   const lanes = tronRunnerCrowdDetectedSideStreetLanes(records);
-  const streets = new Map();
-  for (const lane of lanes) {
-    let street = streets.get(lane.streetId);
-    if (!street) {
-      street = {
-        id: lane.streetId,
-        z: Number(lane.z.toFixed(2)),
-        lanes: [],
-      };
-      streets.set(lane.streetId, street);
-    }
-    street.lanes.push({
-      side: lane.sideName,
-      label: lane.label,
-      innerX: Number(lane.innerX.toFixed(2)),
-      outerX: Number(lane.outerX.toFixed(2)),
-    });
-  }
-  return {
-    streetCount: streets.size,
-    laneCount: lanes.length,
-    streets: [...streets.values()],
-  };
+  return tronRunnerCrowdSecondaryStreetSummaryCore(lanes);
 }
 
 function tronRunnerCrowdRouteStyleOrdinal(routeIndex, style) {
-  let ordinal = 0;
-  for (let i = 0; i <= routeIndex; i += 1) {
-    if (tronRunnerCrowdRouteStyleForIndex(i) !== style) continue;
-    if (i === routeIndex) return ordinal;
-    ordinal += 1;
-  }
-  return ordinal;
-}
-
-function tronRunnerCrowdSideStreetLaneAssignment(lanes, ordinal = 0) {
-  if (!lanes.length) return null;
-  if (ordinal < lanes.length) {
-    return {
-      lane: lanes[ordinal],
-      laneOrdinal: ordinal,
-      groupIndex: 0,
-      groupCount: 1,
-    };
-  }
-  const extraOrdinal = ordinal - lanes.length;
-  const targetIndexes = [
-    Math.min(lanes.length - 1, Math.max(0, Math.floor(lanes.length * 0.25))),
-    Math.min(lanes.length - 1, Math.max(0, Math.floor(lanes.length * 0.75))),
-  ].filter((value, index, list) => list.indexOf(value) === index);
-  const targetIndex = targetIndexes[Math.floor(extraOrdinal / 2) % targetIndexes.length] ?? 0;
-  return {
-    lane: lanes[targetIndex],
-    laneOrdinal: targetIndex,
-    groupIndex: (extraOrdinal % 2) + 1,
-    groupCount: 3,
-  };
+  return tronRunnerCrowdRouteStyleOrdinalCore({
+    routeIndex,
+    style,
+    routeStyleForIndex: tronRunnerCrowdRouteStyleForIndex,
+  });
 }
 
 function tronRunnerCrowdSideStreetLateralRoute(lane, index, ordinal = 0, assignment = null) {
-  if (!lane) return null;
-  const y = roadTileTopY() + TRON_RUNNER_CROWD_GROUND_OFFSET;
-  const groupIndex = Number(assignment?.groupIndex ?? 0);
-  const groupCount = Number(assignment?.groupCount ?? 1);
-  const laneOrdinal = Number(assignment?.laneOrdinal ?? ordinal);
-  const groupOffset = groupCount > 1
-    ? (groupIndex - (groupCount - 1) * 0.5) * Math.min(GRID_BLOCK * 0.18, 2.4)
-    : 0;
-  const laneJitter = groupOffset || (((laneOrdinal % 3) - 1) * Math.min(GRID_BLOCK * 0.12, 1.6));
-  const z = lane.z + laneJitter;
-  const points = [
-    { x: lane.innerX, y, z },
-    { x: lane.outerX, y, z },
-  ];
-  if (laneOrdinal % 2) points.reverse();
-  const startProgress = groupCount > 1
-    ? THREE.MathUtils.clamp(0.5 + (groupIndex - (groupCount - 1) * 0.5) * 0.08, 0.34, 0.66)
-    : 0.5;
-  return {
-    mode: 'side-street-lateral',
-    points,
-    label: lane.label,
-    cluster: 'side-street-lateral',
-    surface: 'road-fallback',
-    sideStreetId: lane.streetId,
-    sideStreetSide: lane.sideName,
-    sideStreetLateralOrdinal: ordinal,
-    sideStreetGroupIndex: groupIndex,
-    sideStreetGroupCount: groupCount,
-    startProgress,
-  };
+  return tronRunnerCrowdSideStreetLateralRouteCore({
+    lane,
+    ordinal,
+    assignment,
+    y: roadTileTopY() + TRON_RUNNER_CROWD_GROUND_OFFSET,
+    gridBlock: GRID_BLOCK,
+  });
 }
 
 function tronRunnerCrowdRouteStyleForIndex(routeIndex) {
   const records = tronRunnerCrowdCandidateRecords();
   const laneCount = tronRunnerCrowdDetectedSideStreetLanes(records).length;
-  const sideStreetRouteCount = laneCount + TRON_RUNNER_CROWD_SIDE_STREET_GROUP_EXTRA_COUNT;
-  if (routeIndex < sideStreetRouteCount) return 'side-street-lateral';
-  const fallbackIndex = routeIndex - sideStreetRouteCount;
-  const fallbackCycle = [
-    'single-building-loop',
-    TRON_RUNNER_CROWD_PATH_MODE,
-    'single-building-loop',
-  ];
-  return fallbackCycle[fallbackIndex % fallbackCycle.length];
+  return tronRunnerCrowdRouteStyleForIndexCore({
+    routeIndex,
+    laneCount,
+    sideStreetGroupExtraCount: TRON_RUNNER_CROWD_SIDE_STREET_GROUP_EXTRA_COUNT,
+    pathMode: TRON_RUNNER_CROWD_PATH_MODE,
+  });
 }
 
 function tronRunnerCrowdStartPlayerRoute(index) {
