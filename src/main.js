@@ -213,6 +213,15 @@ import {
   makeTronRunnerReflectionMaterial as createTronRunnerReflectionMaterial,
 } from './character-materials.js';
 import {
+  countBy,
+  inspectTronRunnerMaterials,
+  maxBy,
+  minBy,
+  sideStreetCoverage as buildSideStreetCoverage,
+  sideStreetGroupedSegments as buildSideStreetGroupedSegments,
+  sumBy,
+} from './character-inspect.js';
+import {
   computeTronRunnerEffectiveAnimationSpeed,
   syncTronRunnerWalkCycleToDistance as syncTronRunnerWalkCycleToDistanceCore,
   tronRunnerCrowdGridCoord as tronRunnerCrowdGridCoordCore,
@@ -12684,18 +12693,7 @@ function tronRunnerCrowdInspect() {
     const buildingCollision = tronRunnerCrowdBuildingCollisionDiagnostic(member);
     const heightFromRoad = member.group.position.y - roadTileTopY();
     const targetHeight = TRON_RUNNER_TARGET_HEIGHT * member.group.scale.y;
-    const materialOpacities = [];
-    const materialEmissiveIntensities = [];
-    const materialColors = new Set();
-    let transparentMaterialCount = 0;
-    member.model?.traverse((object) => {
-      if (!object.isMesh || !object.material) return;
-      if (Number.isFinite(object.material.opacity)) materialOpacities.push(object.material.opacity);
-      if (Number.isFinite(object.material.emissiveIntensity)) materialEmissiveIntensities.push(object.material.emissiveIntensity);
-      if (object.material.transparent) transparentMaterialCount += 1;
-      const colorHex = object.material.color?.getHexString?.();
-      if (colorHex) materialColors.add(colorHex);
-    });
+    const materialInspect = inspectTronRunnerMaterials(member.model);
     return {
       index: member.index + 1,
       visible: Boolean(tronRunnerCrowdGroup.visible && member.group.visible),
@@ -12718,14 +12716,10 @@ function tronRunnerCrowdInspect() {
       startMode: member.startMode ?? 'unknown',
       colorPreset: member.colorPreset ?? 'current',
       colorName: member.colorName ?? 'current cyan',
-      materialMinOpacity: Number((materialOpacities.length ? Math.min(...materialOpacities) : 1).toFixed(3)),
-      materialMaxOpacity: Number((materialOpacities.length ? Math.max(...materialOpacities) : 1).toFixed(3)),
-      materialMaxEmissiveIntensity: Number((materialEmissiveIntensities.length ? Math.max(...materialEmissiveIntensities) : 0).toFixed(3)),
+      ...materialInspect,
       walkActionTime: Number((member.action?.time ?? 0).toFixed(3)),
       walkClipDuration: Number((member.action?.getClip?.()?.duration ?? 0).toFixed(3)),
       walkCycleOffset: Number((member.walkCycleOffset ?? 0).toFixed(3)),
-      transparentMaterialCount,
-      materialColors: [...materialColors],
       state: member.state ?? 'walk',
       lodStride: member.lodStride ?? 1,
       lodDistance: Number((member.lodDistance ?? 0).toFixed(1)),
@@ -12765,47 +12759,16 @@ function tronRunnerCrowdInspect() {
   const targetHeightDeltas = members.map((member) => Math.abs(member.targetHeight - runnerTargetHeight));
   const heightFromRoadDeltas = members.map((member) => Math.abs(member.heightFromRoad - runnerHeightFromRoad));
   const groundOffsetDeltas = members.map((member) => Math.abs(member.groundOffset - TRON_RUNNER_CROWD_GROUND_OFFSET));
-  const stateCounts = members.reduce((counts, member) => {
-    counts[member.state] = (counts[member.state] || 0) + 1;
-    return counts;
-  }, {});
-  const routeDistribution = members.reduce((counts, member) => {
-    const key = member.routeMode || 'fallback-road';
-    counts[key] = (counts[key] || 0) + 1;
-    return counts;
-  }, {});
-  const lodStrideCounts = members.reduce((counts, member) => {
-    const key = String(member.lodStride || 1);
-    counts[key] = (counts[key] || 0) + 1;
-    return counts;
-  }, {});
-  const colorCounts = members.reduce((counts, member) => {
-    const key = member.colorPreset || 'current';
-    counts[key] = (counts[key] || 0) + 1;
-    return counts;
-  }, {});
+  const stateCounts = countBy(members, (member) => member.state);
+  const routeDistribution = countBy(members, (member) => member.routeMode || 'fallback-road');
+  const lodStrideCounts = countBy(members, (member) => String(member.lodStride || 1));
+  const colorCounts = countBy(members, (member) => member.colorPreset || 'current');
   const sideStreetSummary = tronRunnerCrowdSecondaryStreetSummary(tronRunnerCrowdCandidateRecords());
-  const sideStreetCoverage = sideStreetSummary.streets.map((street) => {
-    const assigned = members.filter((member) => member.sideStreetId === street.id);
-    return {
-      id: street.id,
-      z: street.z,
-      left: assigned.filter((member) => member.sideStreetSide === 'left').length,
-      right: assigned.filter((member) => member.sideStreetSide === 'right').length,
-    };
-  });
-  const sideStreetGroupedSegments = sideStreetCoverage.flatMap((street) => (
-    ['left', 'right']
-      .filter((side) => street[side] >= 2)
-      .map((side) => ({
-        id: street.id,
-        side,
-        count: street[side],
-      }))
-  ));
-  const materialMinOpacity = members.length ? Math.min(...members.map((member) => member.materialMinOpacity)) : 1;
-  const materialMaxEmissiveIntensity = members.length ? Math.max(...members.map((member) => member.materialMaxEmissiveIntensity)) : 0;
-  const transparentMaterialCount = members.reduce((sum, member) => sum + member.transparentMaterialCount, 0);
+  const sideStreetCoverage = buildSideStreetCoverage(sideStreetSummary.streets, members);
+  const sideStreetGroupedSegments = buildSideStreetGroupedSegments(sideStreetCoverage);
+  const materialMinOpacity = minBy(members, (member) => member.materialMinOpacity, 1);
+  const materialMaxEmissiveIntensity = maxBy(members, (member) => member.materialMaxEmissiveIntensity, 0);
+  const transparentMaterialCount = sumBy(members, (member) => member.transparentMaterialCount);
   return {
     enabled: TRON_RUNNER_CROWD_ENABLED,
     mode: TRON_RUNNER_CROWD_PATH_MODE,
@@ -12835,11 +12798,11 @@ function tronRunnerCrowdInspect() {
     )).length,
     movingMembers: members.filter((member) => member.recentlyMoved).length,
     stuckMembers: members.filter((member) => member.stuckMs > TRON_RUNNER_CROWD_DEADLOCK_MS).length,
-    stuckEscapes: members.reduce((sum, member) => sum + member.stuckEscapes, 0),
+    stuckEscapes: sumBy(members, (member) => member.stuckEscapes),
     collisionEnabled: TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
-    collisionCount: members.reduce((sum, member) => sum + member.collisionCount, 0),
+    collisionCount: sumBy(members, (member) => member.collisionCount),
     buildingCollisionMembers: members.filter((member) => member.buildingCollision).length,
-    maxBuildingCollisionCorrection: Number((members.length ? Math.max(...members.map((member) => member.buildingCollisionCorrection)) : 0).toFixed(3)),
+    maxBuildingCollisionCorrection: Number(maxBy(members, (member) => member.buildingCollisionCorrection, 0).toFixed(3)),
     requestedCount: TRON_RUNNER_CROWD_COUNT,
     cloneSource: 'runner-post-fit-model',
     skeletonClone: Boolean(cloneRunnerSkeleton),
@@ -12865,11 +12828,11 @@ function tronRunnerCrowdInspect() {
       budgetActiveCount: tronRunnerCrowdRuntimeStats.activeReflectionCount,
       candidateCount: tronRunnerCrowdRuntimeStats.reflectionCandidateCount,
       visibleCount: members.filter((member) => member.dynamicReflectionVisible).length,
-      meshCount: members.reduce((sum, member) => sum + (member.dynamicReflectionMeshCount || 0), 0),
-      ledMeshCount: members.reduce((sum, member) => sum + (member.dynamicReflectionLedMeshCount || 0), 0),
-      maxOpacity: Number((members.length ? Math.max(...members.map((member) => member.dynamicReflectionOpacity || 0)) : 0).toFixed(3)),
-      bodyOpacity: Number((members.length ? Math.max(...members.map((member) => member.dynamicReflectionBodyOpacity || 0)) : 0).toFixed(3)),
-      ledOpacity: Number((members.length ? Math.max(...members.map((member) => member.dynamicReflectionLedOpacity || 0)) : 0).toFixed(3)),
+      meshCount: sumBy(members, (member) => member.dynamicReflectionMeshCount || 0),
+      ledMeshCount: sumBy(members, (member) => member.dynamicReflectionLedMeshCount || 0),
+      maxOpacity: Number(maxBy(members, (member) => member.dynamicReflectionOpacity || 0, 0).toFixed(3)),
+      bodyOpacity: Number(maxBy(members, (member) => member.dynamicReflectionBodyOpacity || 0, 0).toFixed(3)),
+      ledOpacity: Number(maxBy(members, (member) => member.dynamicReflectionLedOpacity || 0, 0).toFixed(3)),
       yScale: TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
     },
     culling: {
