@@ -39,6 +39,43 @@ export function resetWelcomeWindowMotion(motion, deps) {
   };
 }
 
+export function dismissWelcomeWindow(state, deps) {
+  if (!deps.overlay || state.dismissed) return;
+  deps.resetMotion();
+  state.dismissed = true;
+  deps.overlay.classList.add('is-dismissed');
+  deps.overlay.setAttribute('aria-hidden', 'true');
+}
+
+export function welcomeWindowVisible(state, deps) {
+  return Boolean(deps.overlay && !state.dismissed);
+}
+
+export function welcomeWindowUsesTouchPrompt(deps) {
+  return Boolean(deps.touchQuery.matches || deps.mobileQuery.matches || navigator.maxTouchPoints > 0);
+}
+
+export function applyWelcomeWindowInputMode(deps) {
+  if (!deps.keyLabel) return;
+  const useTouchPrompt = welcomeWindowUsesTouchPrompt(deps);
+  deps.action?.classList.toggle('is-touch-prompt', useTouchPrompt);
+  if (deps.actionPrefix) deps.actionPrefix.textContent = useTouchPrompt ? '' : 'Premi ';
+  deps.keyLabel.textContent = useTouchPrompt
+    ? (deps.keyLabel.dataset.touchLabel || 'Clicca')
+    : (deps.keyLabel.dataset.desktopLabel || '[Spazio]');
+  const lookInputLabel = document.getElementById('look-input-label');
+  if (lookInputLabel) lookInputLabel.textContent = welcomeWindowUsesTouchPrompt(deps) ? 'Touch' : 'Mouse';
+  deps.updatePointerLockHint();
+}
+
+export function triggerWelcomeWindowTouch(event, state, deps) {
+  if (!welcomeWindowVisible(state, deps)) return;
+  if (!welcomeWindowUsesTouchPrompt(deps)) return;
+  event.preventDefault?.();
+  deps.ensureFootstepAudioReady();
+  deps.triggerBackspaceDroneIntro('welcome-touch');
+}
+
 export function setupWelcomeWindowMotion(motion, deps) {
   if (!deps.overlay || !deps.panel || !deps.motionAllowed) return;
   window.addEventListener('pointermove', (event) => {
