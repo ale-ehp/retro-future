@@ -212,6 +212,18 @@ import {
   makeTronRunnerSuitTexture,
 } from './character-textures.js';
 import {
+  createTronMainPlayerBodyState,
+  createTronRunnerAutonomy,
+  createTronRunnerBeatPulseRuntimeStats,
+  createTronRunnerBeatPulseState,
+  createTronRunnerCrowdBuildStats,
+  createTronRunnerCrowdRuntimeStats,
+  createTronRunnerIdleCharacter,
+  createTronRunnerParts,
+  createTronRunnerRevealVisualCache,
+  createTronRunnerState,
+} from './runner-state.js';
+import {
   TRON_SOUNDTRACK_CROSSFADE_SECONDS,
   TRON_SOUNDTRACK_ENABLED,
   TRON_SOUNDTRACK_FADE_IN_SECONDS,
@@ -10512,165 +10524,13 @@ tronRunnerRealShadowTarget.name = 'tron-runner-real-shadow-target';
 tronRunnerRealShadowLight.target = tronRunnerRealShadowTarget;
 scene.add(tronRunnerRealShadowLight);
 scene.add(tronRunnerRealShadowTarget);
-const tronRunnerParts = {
-  model: null,
-  mixer: null,
-  skeletonGlow: null,
-  groundShadow: null,
-  realShadowReceiver: null,
-  reflectionGroup: null,
-  reflectionModel: null,
-  reflectionLedModel: null,
-  reflectionMixer: null,
-  reflectionLedMixer: null,
-  reflectionMaterials: [],
-  reflectionBodyMaterials: [],
-  reflectionLedMaterials: [],
-  reflectionActions: {},
-  reflectionLedActions: {},
-  reflectionActiveAction: null,
-  reflectionLedActiveAction: null,
-  reflectionActionNames: null,
-  reflectionLedActionNames: null,
-  dynamicReflectionMeshCount: 0,
-  dynamicReflectionLedMeshCount: 0,
+const tronRunnerParts = createTronRunnerParts({
   realShadowLight: tronRunnerRealShadowLight,
   realShadowTarget: tronRunnerRealShadowTarget,
-  realShadowCasterCount: 0,
-  revealScan: null,
-  keyLight: null,
-  leftRim: null,
-  rightRim: null,
-  lowFill: null,
-  materials: [],
-  actions: {},
-  activeAction: null,
-  actionNames: null,
-};
-const tronRunnerState = {
-  enabled: TRON_RUNNER_ENABLED,
-  ready: false,
-  loaded: 0,
-  error: '',
-  action: 'Walk',
-  clip: '',
-  targetHeight: TRON_RUNNER_TARGET_HEIGHT,
-  doorHalfHeight: 0,
-  surfaceY: 0,
-  route: null,
-  surface: 'sidewalk',
-  scale: 1,
-  walkSpeed: TRON_RUNNER_DEFAULT_SPEED,
-  animationSpeed: 1,
-  effectiveAnimationSpeed: 1,
-  strideSync: 1,
-  distanceDrivenWalk: {
-    enabled: TRON_RUNNER_DISTANCE_DRIVEN_WALK_ENABLED,
-    crowdEnabled: TRON_RUNNER_CROWD_DISTANCE_DRIVEN_WALK_ENABLED,
-    cycleDistance: TRON_RUNNER_WALK_CYCLE_DISTANCE,
-    visualDistance: 0,
-  },
-  materialReflect: 0.06,
-  materialMetalness: 0.12,
-  materialRoughness: 0.92,
-  shadowSoftness: 1.15,
-  shadowPulse: 0.08,
-  shadowCyan: 0,
-  shadowOffsetX: 0,
-  shadowOffsetZ: 0.2,
-  groundShadowEnabled: TRON_RUNNER_GROUND_SHADOW_ENABLED,
-  contactShadowMaxOpacity: TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY,
-  runnerLightingMode: TRON_RUNNER_LIGHTING_MODE,
-  suitTextureMode: TRON_RUNNER_SUIT_TEXTURE_MODE,
-  realShadowEnabled: TRON_RUNNER_REAL_SHADOW_ENABLED,
-  realShadowOpacity: TRON_RUNNER_REAL_SHADOW_BASE_OPACITY,
-  realShadowCasterCount: 0,
-  realShadowReceiverType: 'shadow-material',
-  dynamicReflectionEnabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
-  dynamicReflectionVisible: false,
-  dynamicReflectionOpacity: 0,
-  dynamicReflectionBodyOpacity: 0,
-  dynamicReflectionLedOpacity: 0,
-  crowdRevealMaterialOpacity: TRON_RUNNER_REVEAL_ENABLED ? 0 : 1,
-  dynamicReflectionSurface: 'sidewalk',
-  dynamicReflectionMeshCount: 0,
-  dynamicReflectionLedMeshCount: 0,
-  dynamicReflectionAnimated: false,
-  autonomy: {
-    mode: 'free-roam',
-    collisionEnabled: TRON_RUNNER_FREE_ROAM_COLLISIONS_ENABLED,
-    footstepsEnabled: TRON_RUNNER_FREE_ROAM_FOOTSTEPS_ENABLED,
-    waypointIndex: 0,
-    waypointCount: 0,
-    distanceWalked: 0,
-    collisionCount: 0,
-    lastCollision: false,
-    lastFootstepSurface: '',
-    lastFootstepSample: '',
-    lastFootstepPlayed: false,
-    audio: {
-      bus: FOOTSTEP_NPC_SPATIAL_BUS,
-      spatialized: false,
-      distanceModel: 'inverse',
-      refDistance: TRON_RUNNER_FOOTSTEP_REF_DISTANCE,
-      maxDistance: TRON_RUNNER_FOOTSTEP_MAX_DISTANCE,
-      rolloffFactor: TRON_RUNNER_FOOTSTEP_ROLLOFF,
-      volumeScale: TRON_RUNNER_FOOTSTEP_VOLUME_SCALE,
-      syncSource: 'walk-cycle',
-      lastGain: 0,
-      lastDistance: 0,
-      lastDistanceGain: 1,
-      lastPlaybackRate: 0,
-      lastPan: 0,
-      lastSample: '',
-      lastSurface: '',
-    },
-  },
-  selfLightIntensity: 0.08,
-  modelLineIntensity: 0.42,
-  pointLightCount: 0,
-  keyLightY: 3.1,
-  keyLightZ: 1.9,
-  rimLightX: 1.9,
-  fillLightY: 0.9,
-  beatPulse: {
-    enabled: TRON_RUNNER_BEAT_PULSE_ENABLED,
-    bpm: TRON_RUNNER_BEAT_PULSE_BPM,
-    offsetSeconds: TRON_RUNNER_BEAT_PULSE_OFFSET_SECONDS,
-    intensity: TRON_RUNNER_BEAT_PULSE_INTENSITY,
-    decay: TRON_RUNNER_BEAT_PULSE_DECAY,
-    division: TRON_RUNNER_BEAT_PULSE_DIVISION,
-    value: 0,
-    multiplier: 1,
-    phase: 0,
-    beatIndex: 0,
-    audioTime: 0,
-    active: false,
-    source: 'bpm',
-    kickPulse: 0,
-    bassPulse: 0,
-    bassEnergy: 0,
-    lowBandDriven: false,
-    analyserReady: false,
-    sampleAgeMs: null,
-  },
-  reveal: {
-    enabled: TRON_RUNNER_REVEAL_ENABLED,
-    mode: 'post-city-scan-pulse',
-    durationMs: TRON_RUNNER_REVEAL_DURATION_MS,
-    phase: 'waiting-city',
-    progress: 0,
-    rawProgress: 0,
-    active: false,
-    complete: false,
-    visibleFactor: 0,
-    scanVisible: false,
-    scanY: 0,
-    emissiveBoost: TRON_RUNNER_REVEAL_EMISSIVE_BOOST,
-    scanOuterOpacity: TRON_RUNNER_REVEAL_SCAN_OUTER_OPACITY,
-    scanCoreOpacity: TRON_RUNNER_REVEAL_SCAN_CORE_OPACITY,
-  },
-};
+});
+const tronRunnerState = createTronRunnerState({
+  footstepBus: FOOTSTEP_NPC_SPATIAL_BUS,
+});
 const tronRunnerBox = new THREE.Box3();
 const tronRunnerSize = new THREE.Vector3();
 let tronRunnerElapsed = 0;
@@ -10705,16 +10565,7 @@ let tronRunnerKeyLightZ = 1.9;
 let tronRunnerRimLightX = 1.9;
 let tronRunnerFillLightY = 0.9;
 let tronRunnerScale = 1;
-const tronMainPlayerBodyState = {
-  enabled: TRON_MAIN_PLAYER_BODY_ENABLED,
-  ready: false,
-  visible: false,
-  phase: 0,
-  walkAmount: 0,
-  speed: 0,
-  limbCount: 0,
-  ledCount: 0,
-};
+const tronMainPlayerBodyState = createTronMainPlayerBodyState();
 const tronMainPlayerBodyParts = [];
 const tronMainPlayerBodyLedMaterials = [];
 const tronMainPlayerBodyOffsetWorld = new THREE.Vector3();
@@ -10728,55 +10579,12 @@ let tronRunnerRevealProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
 let tronRunnerRevealRawProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
 let tronRunnerRevealActive = false;
 let tronRunnerRevealComplete = !TRON_RUNNER_REVEAL_ENABLED;
-const tronRunnerRevealVisualCache = {
-  ready: null,
-  progress: -1,
-  rawProgress: -1,
-  active: null,
-  complete: null,
-  crowdCount: -1,
-  idleBuilt: null,
-  sourceVisible: null,
-};
+const tronRunnerRevealVisualCache = createTronRunnerRevealVisualCache();
 let tronRunnerCrowdAccumulatedDt = 0;
 const tronRunnerCrowd = [];
-const tronRunnerIdleCharacter = {
-  enabled: TRON_RUNNER_IDLE_CHARACTER_ENABLED,
-  static: TRON_RUNNER_IDLE_CHARACTER_STATIC,
-  built: false,
-  visible: false,
-  locked: false,
-  lockedPlacement: null,
-  targetCivic: TRON_RUNNER_IDLE_CHARACTER_CIVIC,
-  recordCivic: null,
-  error: '',
-  pose: 'arms-crossed-lean',
-  poseApplied: false,
-  poseBoneCount: 0,
-  poseBoneNames: [],
-  upperArmPoseApplied: false,
+const tronRunnerIdleCharacter = createTronRunnerIdleCharacter({
   group: tronRunnerIdleCharacterGroup,
-  model: null,
-  materials: [],
-  colorPreset: TRON_RUNNER_IDLE_CHARACTER_COLOR_PRESET,
-  x: 0,
-  y: 0,
-  z: 0,
-  yaw: 0,
-  leanRad: THREE.MathUtils.degToRad(TRON_RUNNER_IDLE_CHARACTER_LEAN_DEG),
-  startSideSign: 1,
-  anchor: '',
-  perimeterClearance: TRON_RUNNER_IDLE_CHARACTER_BODY_CLEARANCE,
-  cornerFaceInset: 0,
-  roundedColliderResolved: false,
-  roundedRadius: 0,
-  cornerFlatInset: TRON_RUNNER_IDLE_CHARACTER_CORNER_FLAT_INSET,
-  frontWallClearance: TRON_RUNNER_IDLE_CHARACTER_FRONT_WALL_CLEARANCE,
-  wallContactEps: TRON_RUNNER_IDLE_CHARACTER_WALL_CONTACT_EPS,
-  roadDir: 0,
-  placementSource: '',
-  corner: '',
-};
+});
 const tronRunnerCrowdBox = new THREE.Box3();
 const tronRunnerIdleCharacterBoundsCenter = new THREE.Vector3();
 const tronRunnerCrowdSize = new THREE.Vector3();
@@ -10785,74 +10593,11 @@ const tronRunnerCrowdCullFrustum = new THREE.Frustum();
 const tronRunnerCrowdCullSphere = new THREE.Sphere(new THREE.Vector3(), TRON_RUNNER_CROWD_CULL_RADIUS);
 const tronRunnerCrowdSpatialGrid = new Map();
 let tronRunnerCrowdBuildJob = null;
-const tronRunnerCrowdBuildStats = {
-  status: 'idle',
-  built: 0,
-  requested: TRON_RUNNER_CROWD_COUNT,
-  startedAt: 0,
-  durationMs: 0,
-  lastChunkMs: 0,
-};
-const tronRunnerCrowdRuntimeStats = {
-  frame: 0,
-  updateCount: 0,
-  skippedFrameCount: 0,
-  gridCells: 0,
-  avoidancePairs: 0,
-  maxAvoidanceOverlap: 0,
-  lastThinkMs: 0,
-  maxThinkMs: 0,
-  lastStepDt: 0,
-  activeReflectionCount: 0,
-  reflectionCandidateCount: 0,
-  reflectionBudgetLimit: 0,
-  reflectionFpsBudgetLimit: 0,
-  reflectionPostRevealRampLimit: 0,
-  reflectionPostRevealRampActive: false,
-  reflectionPostRevealElapsedMs: 0,
-  reflectionPostRevealProgress: 1,
-  reflectionDistanceSkippedCount: 0,
-  cullingVisibleCount: 0,
-  cullingHiddenCount: 0,
-  cullingDistanceHiddenCount: 0,
-  cullingFrustumHiddenCount: 0,
-  cullingMinDistance: 0,
-  cullingMaxDistance: 0,
-  distanceCalculations: 0,
-  distanceReuses: 0,
-  performanceFreezeFrameCount: 0,
-};
+const tronRunnerCrowdBuildStats = createTronRunnerCrowdBuildStats();
+const tronRunnerCrowdRuntimeStats = createTronRunnerCrowdRuntimeStats();
 const tronRunnerCrowdReflectionCandidates = [];
-const tronRunnerBeatPulseState = {
-  value: 0,
-  multiplier: 1,
-  phase: 0,
-  beatIndex: 0,
-  audioTime: 0,
-  active: false,
-  source: 'bpm',
-  kickPulse: 0,
-  bassPulse: 0,
-  bassEnergy: 0,
-  lowBandDriven: false,
-  analyserReady: false,
-  sampleAgeMs: Infinity,
-};
-const tronRunnerBeatPulseRuntimeStats = {
-  materialUpdateOptimized: TRON_RUNNER_BEAT_PULSE_MATERIAL_SKIP_ENABLED,
-  materialPasses: 0,
-  materialSkips: 0,
-  materialCount: 0,
-  mainMaterialCount: 0,
-  crowdMaterialCount: 0,
-  baseRevision: 0,
-  lastAppliedMultiplier: NaN,
-  lastAppliedBeatIndex: -1,
-  lastAppliedActive: null,
-  lastAppliedSource: '',
-  lastAppliedMaterialCount: -1,
-  lastAppliedBaseRevision: -1,
-};
+const tronRunnerBeatPulseState = createTronRunnerBeatPulseState();
+const tronRunnerBeatPulseRuntimeStats = createTronRunnerBeatPulseRuntimeStats();
 
 function tronRunnerCharacterLedDefaultScale() {
   return TRON_RUNNER_CHARACTER_LED_BRIGHTNESS_MULTIPLIER * TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST;
@@ -11079,28 +10824,9 @@ function applyTronRunnerCrowdLedControls() {
   updateTronRunnerBeatPulse();
 }
 
-const tronRunnerAutonomy = {
-  initialized: false,
-  waypointIndex: 0,
-  distanceWalked: 0,
-  collisionCount: 0,
-  lastCollision: false,
-  footstepPhase: 0,
-  lastFootstepIndex: -1,
-  footstepSide: 0,
-  lastFootstepPlayedAt: 0,
-  lastWalkCyclePhase: null,
-  lastFootstepSurface: '',
-  lastFootstepSample: '',
-  lastFootstepPlayed: false,
-  lastFootstepBus: FOOTSTEP_NPC_SPATIAL_BUS,
-  lastFootstepGain: 0,
-  lastFootstepDistance: 0,
-  lastFootstepDistanceGain: 1,
-  lastFootstepPlaybackRate: 0,
-  lastFootstepPan: 0,
-  lastFootstepSyncSource: 'walk-cycle',
-};
+const tronRunnerAutonomy = createTronRunnerAutonomy({
+  footstepBus: FOOTSTEP_NPC_SPATIAL_BUS,
+});
 
 function tronRunnerDoorHalfHeight() {
   return sideDoorHeight * sideDoorScale * 0.5;
