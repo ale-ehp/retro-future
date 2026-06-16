@@ -101,6 +101,7 @@ let labEqualizerLastGraphEnsureAt = -Infinity;
 let labEqualizerLastPoseAt = -Infinity;
 let labEqualizerLastVisibilityAt = -Infinity;
 let labEqualizerLastSampleAt = -Infinity;
+let labEqualizerLastSampleIntervalRaw = -1;
 let labEqualizerLastTextureDrawAt = -Infinity;
 let labEqualizerAccumulatedDt = 0;
 let labEqualizerBassEnvelope = 0;
@@ -924,7 +925,10 @@ export function updateLabEqualizer(now, dt) {
   labEqualizerState.playing = Boolean(tronSoundtrack.playing);
 
   const sampleInterval = labEqualizerSampleIntervalMs();
-  labEqualizerState.sampleIntervalMs = Number(sampleInterval.toFixed(1));
+  if (sampleInterval !== labEqualizerLastSampleIntervalRaw) {
+    labEqualizerLastSampleIntervalRaw = sampleInterval;
+    labEqualizerState.sampleIntervalMs = Number(sampleInterval.toFixed(1));
+  }
   labEqualizerAccumulatedDt += dt;
   if (now - labEqualizerLastSampleAt < sampleInterval) {
     labEqualizerState.skippedFrames += 1;

@@ -430,9 +430,12 @@ export function updateCityDepartmentBoards(now) {
       drawCityDepartmentBoardTexture(board, now);
     }
   }
-  cityDepartmentBoardState.nextSwitchAt = Math.min(
-    ...cityDepartmentBoards.map((board) => board.state.nextSwitchAt || Number.POSITIVE_INFINITY)
-  );
+  let minNextSwitchAt = Number.POSITIVE_INFINITY;
+  for (const board of cityDepartmentBoards) {
+    const next = board.state.nextSwitchAt || Number.POSITIVE_INFINITY;
+    if (next < minNextSwitchAt) minNextSwitchAt = next;
+  }
+  cityDepartmentBoardState.nextSwitchAt = minNextSwitchAt;
   const glow = 0.10 + 0.05 * Math.sin(now * 0.005);
   cityDepartmentBoardPanelMat.emissiveIntensity = (0.20 + glow) * THREE.MathUtils.lerp(0.35, 1, revealFactor);
 }
