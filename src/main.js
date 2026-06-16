@@ -12020,6 +12020,21 @@ function mainFacadeVerticalRevealProgress() {
 
 function updateMainFacadeVerticalReveal() {
   if (!mainFacadeVerticalRevealLedMaterial && !mainBuildingEdgeVerticalRevealLedMaterial) return;
+  // Once the city reveal is complete the facade reveal is disabled (shader ignores revealY),
+  // so skip the per-frame bounds recompute (filter + transform/world-position alloc chain).
+  // Re-engages automatically if cityRevealComplete is toggled back off (debug re-run).
+  if (cityRevealComplete) {
+    if (mainFacadeVerticalRevealState.enabled || mainFacadeVerticalRevealState.revealY !== 1e9) {
+      mainFacadeVerticalRevealState.enabled = false;
+      mainFacadeVerticalRevealState.active = false;
+      mainFacadeVerticalRevealState.progress = 1;
+      mainFacadeVerticalRevealState.revealY = 1e9;
+      mainFacadeVerticalRevealState.minY = null;
+      mainFacadeVerticalRevealState.maxY = null;
+      setMainFacadeVerticalRevealUniforms(1e9, MAIN_FACADE_VERTICAL_REVEAL_FEATHER, false);
+    }
+    return;
+  }
   const bounds = mainFacadeVerticalRevealLedBounds();
   if (!bounds) {
     mainFacadeVerticalRevealState.enabled = false;
