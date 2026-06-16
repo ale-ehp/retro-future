@@ -227,6 +227,8 @@ import {
 import {
   applyTronRunnerCrowdReflectionState,
   emptyTronRunnerCrowdReflection,
+  tronRunnerCrowdPostRevealReflectionRampLimit as tronRunnerCrowdPostRevealReflectionRampLimitCore,
+  updateTronRunnerCrowdReflectionBudget as updateTronRunnerCrowdReflectionBudgetCore,
 } from './character-reflections.js';
 import {
   countBy,
@@ -11702,83 +11704,38 @@ function cityRevealPostRevealElapsedMs(now = performance.now()) {
 }
 
 function tronRunnerCrowdPostRevealReflectionRampLimit(maxLimit, now = performance.now()) {
-  const safeMax = Math.max(0, Math.round(maxLimit));
-  const stats = tronRunnerCrowdRuntimeStats;
-  stats.reflectionPostRevealRampLimit = safeMax;
-  stats.reflectionPostRevealRampActive = false;
-  stats.reflectionPostRevealElapsedMs = cityRevealPostRevealElapsedMs(now);
-  stats.reflectionPostRevealProgress = 1;
-  if (
-    !TRON_RUNNER_CROWD_REFLECTION_POST_REVEAL_RAMP_ENABLED ||
-    !cityRevealWireframeEnabled ||
-    !cityRevealComplete ||
-    !cityRevealCompletedAt ||
-    safeMax <= 0
-  ) {
-    return safeMax;
-  }
-  const duration = Math.max(1, TRON_RUNNER_CROWD_REFLECTION_POST_REVEAL_RAMP_MS);
-  const elapsed = stats.reflectionPostRevealElapsedMs;
-  const progress = THREE.MathUtils.clamp(elapsed / duration, 0, 1);
-  const rampLimit = Math.min(safeMax, Math.floor(progress * (safeMax + 1)));
-  stats.reflectionPostRevealRampLimit = rampLimit;
-  stats.reflectionPostRevealRampActive = progress < 1;
-  stats.reflectionPostRevealProgress = progress;
-  return rampLimit;
+  return tronRunnerCrowdPostRevealReflectionRampLimitCore({
+    maxLimit,
+    now,
+    stats: tronRunnerCrowdRuntimeStats,
+    rampEnabled: TRON_RUNNER_CROWD_REFLECTION_POST_REVEAL_RAMP_ENABLED,
+    rampMs: TRON_RUNNER_CROWD_REFLECTION_POST_REVEAL_RAMP_MS,
+    cityRevealWireframeEnabled,
+    cityRevealComplete,
+    cityRevealCompletedAt,
+    postRevealElapsedMs: cityRevealPostRevealElapsedMs,
+  });
 }
 
 function updateTronRunnerCrowdReflectionBudget() {
-  tronRunnerCrowdRuntimeStats.activeReflectionCount = 0;
-  tronRunnerCrowdRuntimeStats.reflectionCandidateCount = 0;
-  tronRunnerCrowdRuntimeStats.reflectionBudgetLimit = 0;
-  tronRunnerCrowdRuntimeStats.reflectionFpsBudgetLimit = 0;
-  tronRunnerCrowdRuntimeStats.reflectionPostRevealRampLimit = 0;
-  tronRunnerCrowdRuntimeStats.reflectionPostRevealRampActive = false;
-  tronRunnerCrowdRuntimeStats.reflectionPostRevealElapsedMs = cityRevealPostRevealElapsedMs();
-  tronRunnerCrowdRuntimeStats.reflectionPostRevealProgress = cityRevealComplete ? 1 : 0;
-  tronRunnerCrowdRuntimeStats.reflectionDistanceSkippedCount = 0;
-  for (const member of tronRunnerCrowd) {
-    member.dynamicReflectionBudgetActive = false;
-    member.dynamicReflectionRank = null;
-    member.dynamicReflectionDistance = Number.POSITIVE_INFINITY;
-  }
-  if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED || !postRevealPerfIsolationState.crowdReflections || !tronRunnerCrowdGroup.visible) return;
-  if (!TRON_RUNNER_CROWD_REFLECTION_REVEAL_ENABLED && isCityRevealPerformanceCritical()) return;
-  let budgetLimit = TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE;
-  if (latestMeasuredFps > 0 && latestMeasuredFps < 42) budgetLimit = 0;
-  else if (latestMeasuredFps > 0 && latestMeasuredFps < TRON_RUNNER_CROWD_REFLECTION_MIN_FPS) budgetLimit = Math.max(1, budgetLimit - 1);
-  tronRunnerCrowdRuntimeStats.reflectionFpsBudgetLimit = budgetLimit;
-  const rampLimit = tronRunnerCrowdPostRevealReflectionRampLimit(TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE);
-  budgetLimit = Math.min(budgetLimit, rampLimit);
-  tronRunnerCrowdRuntimeStats.reflectionBudgetLimit = budgetLimit;
-  if (budgetLimit <= 0) return;
-  tronRunnerCrowdReflectionCandidates.length = 0;
-  for (const member of tronRunnerCrowd) {
-    if (!member.group.visible || !member.reflectionGroup) continue;
-    const distance = tronRunnerCrowdDistanceToCamera(member);
-    member.dynamicReflectionDistance = distance;
-    if (distance > TRON_RUNNER_CROWD_REFLECTION_NEAR_DISTANCE) {
-      tronRunnerCrowdRuntimeStats.reflectionDistanceSkippedCount += 1;
-      continue;
-    }
-    tronRunnerCrowdRuntimeStats.reflectionCandidateCount += 1;
-    let insertAt = tronRunnerCrowdReflectionCandidates.length;
-    while (insertAt > 0 && distance < tronRunnerCrowdReflectionCandidates[insertAt - 1].distance) insertAt--;
-    if (insertAt < budgetLimit) {
-      tronRunnerCrowdReflectionCandidates.splice(insertAt, 0, { member, distance });
-      if (tronRunnerCrowdReflectionCandidates.length > budgetLimit) {
-        tronRunnerCrowdReflectionCandidates.length = budgetLimit;
-      }
-    }
-  }
-  tronRunnerCrowdReflectionCandidates.forEach(({ member }, rank) => {
-    member.dynamicReflectionBudgetActive = true;
-    member.dynamicReflectionRank = rank + 1;
+  updateTronRunnerCrowdReflectionBudgetCore({
+    stats: tronRunnerCrowdRuntimeStats,
+    crowd: tronRunnerCrowd,
+    crowdGroup: tronRunnerCrowdGroup,
+    reflectionCandidates: tronRunnerCrowdReflectionCandidates,
+    dynamicReflectionEnabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
+    crowdReflectionsIsolation: postRevealPerfIsolationState.crowdReflections,
+    reflectionRevealEnabled: TRON_RUNNER_CROWD_REFLECTION_REVEAL_ENABLED,
+    reflectionMaxActive: TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE,
+    reflectionMinFps: TRON_RUNNER_CROWD_REFLECTION_MIN_FPS,
+    reflectionNearDistance: TRON_RUNNER_CROWD_REFLECTION_NEAR_DISTANCE,
+    latestMeasuredFps,
+    cityRevealComplete,
+    postRevealElapsedMs: cityRevealPostRevealElapsedMs,
+    isCityRevealPerformanceCritical,
+    distanceToCamera: tronRunnerCrowdDistanceToCamera,
+    rampLimit: tronRunnerCrowdPostRevealReflectionRampLimit,
   });
-  tronRunnerCrowdRuntimeStats.activeReflectionCount = Math.min(
-    budgetLimit,
-    tronRunnerCrowdRuntimeStats.reflectionCandidateCount
-  );
 }
 
 function setTronRunnerCrowdState(member, state, now, durationMs = 0) {
