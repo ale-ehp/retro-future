@@ -3406,6 +3406,7 @@ let roadBoundaryHexBatch = null;
 let roadBoundaryHexCapacity = 0;
 let roadBoundaryHexCount = 0;
 const roadBoundaryPulseMeshes = {};
+const ROAD_BOUNDARY_PULSE_EDGES = ['minX', 'maxX', 'minZ', 'maxZ'];
 let lastRoadBoundaryPulseEdge = null;
 let lastRoadBoundaryPulseAt = 0;
 const hexTileRadius = 1.18 * 3 * 2;
@@ -3606,7 +3607,8 @@ function ensureBasePadHexOverlayCapacity(count) {
 }
 
 function hexTileBucketKey(ix, iz) {
-  return `${ix}:${iz}`;
+  // Numeric key (no per-lookup string alloc); ix/iz are small floored bucket indices.
+  return (ix + 100000) * 1000000 + (iz + 100000);
 }
 
 function rebuildHexRoadTileBuckets() {
@@ -4458,7 +4460,7 @@ function updateRoadBoundaryHexMaterial(hueDeg, brightness = 1) {
 
 function ensureRoadBoundaryPulseMeshes() {
   if (roadBoundaryPulseMeshes.minX) return;
-  ['minX', 'maxX', 'minZ', 'maxZ'].forEach((edge) => {
+  ROAD_BOUNDARY_PULSE_EDGES.forEach((edge) => {
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), roadBoundaryPulseMat.clone());
     mesh.visible = false;
     mesh.userData.edge = edge;
@@ -4515,7 +4517,9 @@ function triggerRoadBoundaryPulse(edge) {
 
 function updateRoadBoundaryPulse(dt) {
   ensureRoadBoundaryPulseMeshes();
-  for (const mesh of Object.values(roadBoundaryPulseMeshes)) {
+  for (const edge of ROAD_BOUNDARY_PULSE_EDGES) {
+    const mesh = roadBoundaryPulseMeshes[edge];
+    if (!mesh) continue;
     const pulse = Math.max(0, (mesh.userData.pulse || 0) - dt * 1.8);
     mesh.userData.pulse = pulse;
     mesh.visible = pulse > 0.01;
@@ -6616,16 +6620,20 @@ function getMainBuildingEdgeVerticalRevealLedMaterial(color = PAL.tealLight) {
   return mainBuildingEdgeVerticalRevealLedMaterial;
 }
 
+function applyMainFacadeVerticalRevealUniformsTo(material, revealY, feather, enabled) {
+  if (!material) return;
+  material.userData.mainFacadeRevealY = revealY;
+  material.userData.mainFacadeRevealFeather = feather;
+  material.userData.mainFacadeRevealEnabled = enabled ? 1 : 0;
+  if (material.userData.mainFacadeRevealYUniform) material.userData.mainFacadeRevealYUniform.value = revealY;
+  if (material.userData.mainFacadeRevealFeatherUniform) material.userData.mainFacadeRevealFeatherUniform.value = feather;
+  if (material.userData.mainFacadeRevealEnabledUniform) material.userData.mainFacadeRevealEnabledUniform.value = enabled ? 1 : 0;
+}
+
 function setMainFacadeVerticalRevealUniforms(revealY, feather, enabled) {
-  for (const material of [mainFacadeVerticalRevealLedMaterial, mainBuildingEdgeVerticalRevealLedMaterial]) {
-    if (!material) continue;
-    material.userData.mainFacadeRevealY = revealY;
-    material.userData.mainFacadeRevealFeather = feather;
-    material.userData.mainFacadeRevealEnabled = enabled ? 1 : 0;
-    if (material.userData.mainFacadeRevealYUniform) material.userData.mainFacadeRevealYUniform.value = revealY;
-    if (material.userData.mainFacadeRevealFeatherUniform) material.userData.mainFacadeRevealFeatherUniform.value = feather;
-    if (material.userData.mainFacadeRevealEnabledUniform) material.userData.mainFacadeRevealEnabledUniform.value = enabled ? 1 : 0;
-  }
+  // Apply to both reveal materials without allocating a per-frame array/closure.
+  applyMainFacadeVerticalRevealUniformsTo(mainFacadeVerticalRevealLedMaterial, revealY, feather, enabled);
+  applyMainFacadeVerticalRevealUniformsTo(mainBuildingEdgeVerticalRevealLedMaterial, revealY, feather, enabled);
 }
 
 function facadeAxisScale(edgeRole, face, sideWidthScale = sideBuildingWidthScale, sideDepthScale = sideBuildingDepthScale, mainWidthScale = mainBuildingWidthScale, mainDepthScale = mainBuildingDepthScale) {
