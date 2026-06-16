@@ -217,6 +217,7 @@ import {
   tronRunnerCrowdAvoidance as tronRunnerCrowdAvoidanceCore,
   tronRunnerCrowdDistanceToCamera as tronRunnerCrowdDistanceToCameraCore,
   tronRunnerCrowdLodStride as tronRunnerCrowdLodStrideCore,
+  tronRunnerCrowdTryDeadlockNudge as tronRunnerCrowdTryDeadlockNudgeCore,
   tronRunnerCrowdWalkCycleOffset,
   updateTronRunnerCrowdCullingState,
 } from './character-crowd.js';
@@ -12303,46 +12304,19 @@ function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, no
   return tronRunnerCrowdAvoidanceCore(member, current, nextPoint, dirX, dirZ, dt, now, tronRunnerCrowdAvoidanceDeps);
 }
 
+const tronRunnerCrowdDeadlockDeps = {
+  reachRadius: TRON_RUNNER_CROWD_REACH_RADIUS,
+  deadlockMoveEps: TRON_RUNNER_CROWD_DEADLOCK_MOVE_EPS,
+  deadlockMs: TRON_RUNNER_CROWD_DEADLOCK_MS,
+  deadlockNudge: TRON_RUNNER_CROWD_DEADLOCK_NUDGE,
+  yieldDurationMs: TRON_RUNNER_CROWD_YIELD_DURATION_MS,
+  pointInsideRoute: tronRunnerCrowdPointInsideRoute,
+  resolveCollision: resolveTronRunnerCrowdCollision,
+  setState: setTronRunnerCrowdState,
+};
+
 function tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ, distance, collided, now) {
-  const movedDistance = Math.hypot(nextPoint.x - current.x, nextPoint.z - current.z);
-  const blocked = distance > TRON_RUNNER_CROWD_REACH_RADIUS * 2.5
-    && movedDistance < TRON_RUNNER_CROWD_DEADLOCK_MOVE_EPS
-    && (collided || member.avoidanceNeighbors > 0 || member.state === 'yield' || member.state === 'avoid');
-  if (!blocked) {
-    member.stuckSince = 0;
-    return false;
-  }
-  if (!member.stuckSince) {
-    member.stuckSince = now;
-    return false;
-  }
-  if (now - member.stuckSince < TRON_RUNNER_CROWD_DEADLOCK_MS) return false;
-
-  const preferredSide = (member.index ?? 0) % 2 === 0 ? 1 : -1;
-  const sideOptions = [preferredSide, -preferredSide];
-  for (const sideSign of sideOptions) {
-    const candidate = {
-      x: current.x - dirZ * sideSign * TRON_RUNNER_CROWD_DEADLOCK_NUDGE,
-      z: current.z + dirX * sideSign * TRON_RUNNER_CROWD_DEADLOCK_NUDGE,
-    };
-    if (!tronRunnerCrowdPointInsideRoute(member, candidate.x, candidate.z)) continue;
-    resolveTronRunnerCrowdCollision(member, candidate);
-    const nudgeDistance = Math.hypot(candidate.x - current.x, candidate.z - current.z);
-    if (nudgeDistance <= TRON_RUNNER_CROWD_DEADLOCK_MOVE_EPS) continue;
-    nextPoint.x = candidate.x;
-    nextPoint.z = candidate.z;
-    member.stuckSince = 0;
-    member.stuckEscapes = (member.stuckEscapes || 0) + 1;
-    member.waypointIndex = (member.waypointIndex + 1) % member.route.points.length;
-    setTronRunnerCrowdState(member, 'avoid', now, TRON_RUNNER_CROWD_YIELD_DURATION_MS);
-    return true;
-  }
-
-  member.stuckSince = 0;
-  member.stuckEscapes = (member.stuckEscapes || 0) + 1;
-  member.waypointIndex = (member.waypointIndex + 1) % member.route.points.length;
-  setTronRunnerCrowdState(member, 'avoid', now, TRON_RUNNER_CROWD_YIELD_DURATION_MS);
-  return false;
+  return tronRunnerCrowdTryDeadlockNudgeCore(member, current, nextPoint, dirX, dirZ, distance, collided, now, tronRunnerCrowdDeadlockDeps);
 }
 
 function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
