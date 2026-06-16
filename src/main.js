@@ -2376,9 +2376,24 @@ function applyViewMotionOffset() {
   camera.position.add(appliedHeadMotion);
 }
 
+const basePadScanRecords = [];
+let basePadScanRecordsKey = -1;
+function basePadCombinedRecords() {
+  // sideBuildingRecords/mainBuildingRecords are append-only after city build; rebuild the
+  // combined scan list only when membership changes instead of spreading a fresh array per frame.
+  const key = sideBuildingRecords.length * 100000 + mainBuildingRecords.length;
+  if (key !== basePadScanRecordsKey) {
+    basePadScanRecords.length = 0;
+    for (const record of sideBuildingRecords) basePadScanRecords.push(record);
+    for (const record of mainBuildingRecords) basePadScanRecords.push(record);
+    basePadScanRecordsKey = key;
+  }
+  return basePadScanRecords;
+}
+
 function basePadAtPoint(x, z) {
-  const records = [...sideBuildingRecords, ...mainBuildingRecords];
-  let bestHit = null;
+  const records = basePadCombinedRecords();
+  let bestPad = null;
   let bestTopY = -Infinity;
   for (const record of records) {
     const pad = record.basePad;
@@ -2391,10 +2406,10 @@ function basePadAtPoint(x, z) {
     const topY = onInner ? (pad.innerTopY ?? pad.topY ?? roadTileTopY()) : (pad.topY ?? roadTileTopY());
     if (topY > bestTopY) {
       bestTopY = topY;
-      bestHit = { pad, topY };
+      bestPad = pad;
     }
   }
-  return bestHit;
+  return bestPad ? { pad: bestPad, topY: bestTopY } : null;
 }
 
 function walkSurfaceLiftAt(x, z) {
@@ -16181,10 +16196,12 @@ function performanceLiveEma(previous, next, alpha = PERFORMANCE_LIVE_METRIC_ALPH
   return previous > 0 ? previous + (value - previous) * alpha : value;
 }
 
+const PERFORMANCE_LIVE_COMMON_REFRESH_HZ = [30, 60, 75, 90, 120, 144, 165, 240];
+
 function performanceLiveRefreshRateFromRaf(rafDtMs) {
   if (!Number.isFinite(rafDtMs) || rafDtMs <= 0) return 60;
   const hz = 1000 / rafDtMs;
-  const common = [30, 60, 75, 90, 120, 144, 165, 240];
+  const common = PERFORMANCE_LIVE_COMMON_REFRESH_HZ;
   let best = common[0];
   let bestDelta = Infinity;
   for (const rate of common) {
@@ -16389,14 +16406,16 @@ function performanceSpikeSummary() {
 }
 
 function recordPerformanceSpike({ now, rawRafDtMs, updateMs, renderMs, frameMs }) {
+  const workSpike = frameMs >= PERFORMANCE_SPIKE_FRAME_MS_THRESHOLD;
+  const rafCouldSpike = rawRafDtMs >= PERFORMANCE_SPIKE_RAF_MS_THRESHOLD;
+  const measuredDrop = latestMeasuredFps > 0 && latestMeasuredFps < PERFORMANCE_SPIKE_FPS_THRESHOLD;
+  // Cheap guards before the per-frame summary alloc: when no spike is possible, bail without building liveMetrics.
+  if (!rafCouldSpike && !measuredDrop) return;
+  if (now - performanceSpikeState.lastLoggedAt < PERFORMANCE_SPIKE_MIN_INTERVAL_MS) return;
   const instantaneousFps = rawRafDtMs > 0 ? 1000 / rawRafDtMs : 0;
   const liveMetrics = performanceLiveMetricsSummary();
-  const workSpike = frameMs >= PERFORMANCE_SPIKE_FRAME_MS_THRESHOLD;
-  const rafDrop = rawRafDtMs >= PERFORMANCE_SPIKE_RAF_MS_THRESHOLD &&
-    (workSpike || liveMetrics.presentationDropActive);
-  const measuredDrop = latestMeasuredFps > 0 && latestMeasuredFps < PERFORMANCE_SPIKE_FPS_THRESHOLD;
+  const rafDrop = rafCouldSpike && (workSpike || liveMetrics.presentationDropActive);
   if (!rafDrop && !measuredDrop) return;
-  if (now - performanceSpikeState.lastLoggedAt < PERFORMANCE_SPIKE_MIN_INTERVAL_MS) return;
 
   const renderInfo = renderer.info.render || {};
   const memoryInfo = renderer.info.memory || {};
