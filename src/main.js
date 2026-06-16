@@ -343,6 +343,12 @@ import {
   setTronFileSoundtrackVolume as setTronFileSoundtrackVolumeCore,
 } from './audio.js';
 import {
+  footstepInverseDistanceGain,
+  pickFootstepSample as pickFootstepSampleCore,
+  setFootstepAudioParam,
+  setFootstepPannerPosition,
+} from './footstep-audio.js';
+import {
   LAB_EQUALIZER_ANALYSER_MAX_DB,
   LAB_EQUALIZER_ANALYSER_MIN_DB,
   LAB_EQUALIZER_ANALYSER_SMOOTHING,
@@ -2146,16 +2152,7 @@ function setTronProceduralMusicVolume(value = TRON_SOUNDTRACK_VOLUME) {
 }
 
 function pickFootstepSample(surfaceKind, side) {
-  const surface = footstepBuffers[surfaceKind]?.length ? surfaceKind : 'road';
-  const candidates = (footstepBuffers[surface] || []).filter((sample) => sample.side === side);
-  if (!candidates.length) return null;
-  const cursor = footstepVariantCursor[surface][side] % candidates.length;
-  footstepVariantCursor[surface][side] += 1;
-  return { surface, sample: candidates[cursor] };
-}
-
-function setFootstepAudioParam(param, value, time) {
-  if (param?.setValueAtTime) param.setValueAtTime(value, time);
+  return pickFootstepSampleCore(footstepBuffers, footstepVariantCursor, surfaceKind, side);
 }
 
 function syncFootstepAudioListener(now = footstepAudioContext?.currentTime ?? 0) {
@@ -2185,28 +2182,6 @@ function syncFootstepAudioListener(now = footstepAudioContext?.currentTime ?? 0)
       footstepAudioUp.z
     );
   }
-}
-
-function setFootstepPannerPosition(panner, origin, now) {
-  if (!panner || !origin) return;
-  if ('positionX' in panner) {
-    setFootstepAudioParam(panner.positionX, origin.x, now);
-    setFootstepAudioParam(panner.positionY, origin.y, now);
-    setFootstepAudioParam(panner.positionZ, origin.z, now);
-  } else {
-    panner.setPosition?.(origin.x, origin.y, origin.z);
-  }
-}
-
-function footstepInverseDistanceGain(distance, refDistance, maxDistance, rolloffFactor) {
-  if (!Number.isFinite(distance)) return 1;
-  if (distance <= refDistance) return 1;
-  if (distance >= maxDistance) return 0;
-  return THREE.MathUtils.clamp(
-    refDistance / (refDistance + rolloffFactor * (distance - refDistance)),
-    0,
-    1
-  );
 }
 
 function playFootstepForSurface(surfaceKind = walkSurfaceKind, intensity = 1, side = 'right', options = {}) {
