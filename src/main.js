@@ -368,6 +368,10 @@ import {
   updateStaticCityCulling,
 } from './static-city-culling.js';
 import {
+  resetWelcomeWindowMotion as resetWelcomeWindowMotionCore,
+  setupWelcomeWindowMotion,
+} from './welcome-ui.js';
+import {
   LAB_EQUALIZER_ANALYSER_MAX_DB,
   LAB_EQUALIZER_ANALYSER_MIN_DB,
   LAB_EQUALIZER_ANALYSER_SMOOTHING,
@@ -712,17 +716,25 @@ const welcomeWindowMotionAllowed = !window.matchMedia('(prefers-reduced-motion: 
 const mobileLandscapeQuery = window.matchMedia('(orientation: landscape)');
 const MOBILE_MOVEMENT_PAD_RADIUS = 58;
 const MOBILE_MOVEMENT_PAD_DEADZONE = 0.12;
-let welcomeWindowMotionFrame = 0;
-let welcomeWindowMotionNext = null;
-let welcomeWindowMotionState = {
-  active: false,
-  moveX: '0.00',
-  moveY: '0.00',
-  bendY: '0.000',
-  tiltX: '0.000',
-  originX: '50.00',
-  cursorX: '50.00',
-  cursorY: '50.00',
+const welcomeWindowMotion = {
+  frame: 0,
+  next: null,
+  state: {
+    active: false,
+    moveX: '0.00',
+    moveY: '0.00',
+    bendY: '0.000',
+    tiltX: '0.000',
+    originX: '50.00',
+    cursorX: '50.00',
+    cursorY: '50.00',
+  },
+};
+const welcomeMotionDeps = {
+  panel: welcomeWindowPanel,
+  overlay: welcomeWindowOverlay,
+  motionAllowed: welcomeWindowMotionAllowed,
+  isVisible: welcomeWindowVisible,
 };
 let welcomeWindowDismissed = false;
 const mobileTouchControlsState = {
@@ -910,72 +922,10 @@ function triggerWelcomeWindowTouch(event) {
   triggerBackspaceDroneIntro('welcome-touch');
 }
 
-function applyWelcomeWindowMotion() {
-  welcomeWindowMotionFrame = 0;
-  if (!welcomeWindowPanel || !welcomeWindowMotionNext) return;
-  const next = welcomeWindowMotionNext;
-  welcomeWindowPanel.style.setProperty('--welcome-move-x', `${next.moveX}px`);
-  welcomeWindowPanel.style.setProperty('--welcome-move-y', `${next.moveY}px`);
-  welcomeWindowPanel.style.setProperty('--welcome-bend-y', `${next.bendY}deg`);
-  welcomeWindowPanel.style.setProperty('--welcome-tilt-x', `${next.tiltX}deg`);
-  welcomeWindowPanel.style.setProperty('--welcome-origin-x', `${next.originX}%`);
-  welcomeWindowOverlay.classList.add('is-motion-active');
-  welcomeWindowMotionState = { active: true, ...next };
-}
-
 function resetWelcomeWindowMotion() {
-  if (welcomeWindowMotionFrame) {
-    cancelAnimationFrame(welcomeWindowMotionFrame);
-    welcomeWindowMotionFrame = 0;
-  }
-  welcomeWindowMotionNext = null;
-  if (welcomeWindowPanel) {
-    welcomeWindowPanel.style.setProperty('--welcome-move-x', '0px');
-    welcomeWindowPanel.style.setProperty('--welcome-move-y', '0px');
-    welcomeWindowPanel.style.setProperty('--welcome-bend-y', '0deg');
-    welcomeWindowPanel.style.setProperty('--welcome-tilt-x', '0deg');
-    welcomeWindowPanel.style.setProperty('--welcome-origin-x', '50%');
-  }
-  welcomeWindowOverlay?.classList.remove('is-motion-active');
-  welcomeWindowMotionState = {
-    active: false,
-    moveX: '0.00',
-    moveY: '0.00',
-    bendY: '0.000',
-    tiltX: '0.000',
-    originX: '50.00',
-    cursorX: '50.00',
-    cursorY: '50.00',
-  };
+  resetWelcomeWindowMotionCore(welcomeWindowMotion, welcomeMotionDeps);
 }
-
-function setupWelcomeWindowMotion() {
-  if (!welcomeWindowOverlay || !welcomeWindowPanel || !welcomeWindowMotionAllowed) return;
-  window.addEventListener('pointermove', (event) => {
-    if (!welcomeWindowVisible()) return;
-    const width = Math.max(1, window.innerWidth);
-    const height = Math.max(1, window.innerHeight);
-    const x = THREE.MathUtils.clamp(event.clientX / width, 0, 1);
-    const y = THREE.MathUtils.clamp(event.clientY / height, 0, 1);
-    const nx = x - 0.5;
-    const ny = y - 0.5;
-    welcomeWindowMotionNext = {
-      moveX: (nx * 4).toFixed(2),
-      moveY: (ny * 2).toFixed(2),
-      bendY: (nx * -5).toFixed(3),
-      tiltX: (ny * -0.8).toFixed(3),
-      originX: (50 - nx * 12).toFixed(2),
-      cursorX: (x * 100).toFixed(2),
-      cursorY: (y * 100).toFixed(2),
-    };
-    if (!welcomeWindowMotionFrame) {
-      welcomeWindowMotionFrame = requestAnimationFrame(applyWelcomeWindowMotion);
-    }
-  }, { passive: true });
-  document.addEventListener('pointerleave', resetWelcomeWindowMotion, { passive: true });
-  window.addEventListener('blur', resetWelcomeWindowMotion);
-}
-setupWelcomeWindowMotion();
+setupWelcomeWindowMotion(welcomeWindowMotion, welcomeMotionDeps);
 applyWelcomeWindowInputMode();
 if (typeof welcomeWindowTouchQuery.addEventListener === 'function') {
   welcomeWindowTouchQuery.addEventListener('change', applyWelcomeWindowInputMode);
@@ -17948,7 +17898,7 @@ window.__tronInspect = () => ({
   footsteps: window.__tronFootstepInspect?.(),
   music: window.__tronMusicInspect?.(),
   equalizer: window.__labEqualizerInspect?.(),
-  welcomePanelMotion: { ...welcomeWindowMotionState },
+  welcomePanelMotion: { ...welcomeWindowMotion.state },
   cityDepartmentBoards: cityDepartmentBoardInspect(),
   cityRoleBoard: cityRoleBoardInspect(),
   backspaceIntroTriggered,
