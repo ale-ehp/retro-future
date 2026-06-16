@@ -9732,10 +9732,13 @@ function buildTronRunnerCrowdReflection(sourceModel, animations, index, colorPre
 }
 
 function updateTronRunnerCrowdReflection(member) {
+  const budgetActive = postRevealPerfIsolationState.crowdReflections && member.dynamicReflectionBudgetActive === true;
+  // Most crowd members are outside the reflection budget (max 3 active). Once cleared, the
+  // applyTronRunnerCrowdReflectionState writes are idempotent (group hidden, opacities 0); skip them.
+  if (!budgetActive && member.dynamicReflectionVisible === false) return;
   const group = member.reflectionGroup;
   const bodyMaterials = member.reflectionBodyMaterials || [];
   const ledMaterials = member.reflectionLedMaterials || [];
-  const budgetActive = postRevealPerfIsolationState.crowdReflections && member.dynamicReflectionBudgetActive === true;
   const bodyOpacity = budgetActive ? tronRunnerDynamicReflectionBodyOpacityForSurface(member.surface) : 0;
   const ledOpacity = budgetActive ? tronRunnerDynamicReflectionLedOpacityForSurface(member.surface) : 0;
   const visible = Boolean(
@@ -12299,15 +12302,15 @@ function pushCityRevealProfileSample(now, force = false) {
 }
 
 function recordCityRevealProfileFrame({ now, dt, updateMs, renderMs, frameMs, renderInfo }) {
-  const profileNow = performance.now();
   if (!cityRevealProfileShouldRun()) {
     if (cityRevealProfileState.running) {
-      pushCityRevealProfileSample(profileNow, true);
+      pushCityRevealProfileSample(performance.now(), true);
       cityRevealProfileState.running = false;
       cityRevealProfileState.completed = true;
     }
     return;
   }
+  const profileNow = performance.now();
   if (!cityRevealProfileState.running) resetCityRevealProfile(profileNow);
   const bucket = cityRevealProfileState.bucket || createCityRevealProfileBucket();
   cityRevealProfileState.bucket = bucket;
