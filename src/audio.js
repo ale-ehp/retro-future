@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 export const TRON_SYNTH_MUSIC_ENABLED = true;
 export const TRON_SYNTH_MUSIC_BPM = 96;
 export const TRON_SYNTH_MUSIC_MASTER_GAIN = 0.14;
@@ -32,3 +34,60 @@ export const TRON_SOUNDTRACK_INTRO_FX_DEFAULTS = Object.freeze({
   wobble: 0,
   noise: 0,
 });
+
+export function createTronSynthNoiseBuffer(ctx) {
+  const length = Math.max(1, Math.floor(ctx.sampleRate * 0.45));
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+  const channel = buffer.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < length; i += 1) {
+    last = last * 0.72 + (Math.random() * 2 - 1) * 0.28;
+    channel[i] = last;
+  }
+  return buffer;
+}
+
+export function createTronIntroNoiseBuffer(ctx) {
+  const length = Math.max(1, Math.floor(ctx.sampleRate * 1.5));
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+  const channel = buffer.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < length; i += 1) {
+    last = last * 0.56 + (Math.random() * 2 - 1) * 0.44;
+    channel[i] = last;
+  }
+  return buffer;
+}
+
+export function createTronIntroBitcrushCurve(bitDepth, crusher, soundtrack) {
+  const safeBits = THREE.MathUtils.clamp(Math.round(bitDepth), 2, 16);
+  const safeCrusher = THREE.MathUtils.clamp(Number(crusher) || 0, 0, 1);
+  const key = `${safeBits}:${safeCrusher.toFixed(3)}`;
+  if (soundtrack.introBitcrushCurveKey === key && soundtrack.introBitcrushCurve) return soundtrack.introBitcrushCurve;
+  const levels = Math.max(2, 2 ** safeBits);
+  const curve = new Float32Array(TRON_SOUNDTRACK_INTRO_FX_CURVE_SIZE);
+  for (let i = 0; i < curve.length; i += 1) {
+    const x = (i / (curve.length - 1)) * 2 - 1;
+    const crushed = Math.round(x * levels) / levels;
+    curve[i] = THREE.MathUtils.lerp(x, crushed, safeCrusher);
+  }
+  soundtrack.introBitcrushCurve = curve;
+  soundtrack.introBitcrushCurveKey = key;
+  return curve;
+}
+
+export function createTronIntroDistortionCurve(amount, soundtrack) {
+  const safeAmount = THREE.MathUtils.clamp(Number(amount) || 0, 0, 1);
+  const key = safeAmount.toFixed(3);
+  if (soundtrack.introDistortionCurveKey === key && soundtrack.introDistortionCurve) return soundtrack.introDistortionCurve;
+  const drive = 1 + safeAmount * 44;
+  const curve = new Float32Array(TRON_SOUNDTRACK_INTRO_FX_CURVE_SIZE);
+  for (let i = 0; i < curve.length; i += 1) {
+    const x = (i / (curve.length - 1)) * 2 - 1;
+    const shaped = (Math.atan(x * drive) / Math.atan(drive));
+    curve[i] = THREE.MathUtils.lerp(x, shaped, safeAmount);
+  }
+  soundtrack.introDistortionCurve = curve;
+  soundtrack.introDistortionCurveKey = key;
+  return curve;
+}
