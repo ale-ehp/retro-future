@@ -117,3 +117,93 @@ export function rampGain(ctx, gainNode, value, seconds, fromValue = null) {
   gainNode.gain.setValueAtTime(startValue, now);
   gainNode.gain.linearRampToValueAtTime(Math.max(0.0001, value), now + Math.max(0.01, seconds));
 }
+
+export function tronIntroFxEffectiveFilters(soundtrack) {
+  const fx = soundtrack.introFx;
+  const telephone = THREE.MathUtils.clamp(fx.telephone, 0, 1);
+  const telephoneHighpass = THREE.MathUtils.lerp(20, 520, telephone);
+  const telephoneLowpass = THREE.MathUtils.lerp(20000, 3300, telephone);
+  const highpassHz = Math.max(20, fx.highpassHz, telephoneHighpass);
+  const lowpassHz = Math.max(highpassHz + 100, Math.min(20000, fx.lowpassHz, telephoneLowpass));
+  return {
+    highpassHz,
+    lowpassHz,
+    q: 0.72 + telephone * 1.5,
+  };
+}
+
+export function syncTronIntroFxNodeSettings(soundtrack, ctx, fadeSeconds = 0.04) {
+  const fx = soundtrack.introFx;
+  const filters = tronIntroFxEffectiveFilters(soundtrack);
+  soundtrack.introLofiShapers.forEach((shaper) => {
+    shaper.curve = createTronIntroBitcrushCurve(fx.bitDepth, fx.crusher, soundtrack);
+  });
+  soundtrack.introDistortionShapers.forEach((shaper) => {
+    shaper.curve = createTronIntroDistortionCurve(fx.distortion, soundtrack);
+  });
+  soundtrack.introHighpassFilters.forEach((filter) => {
+    filter.Q.setValueAtTime(filters.q, ctx.currentTime);
+    setAudioParamSmooth(ctx, filter.frequency, filters.highpassHz, fadeSeconds);
+  });
+  soundtrack.introLowpassFilters.forEach((filter) => {
+    filter.Q.setValueAtTime(filters.q, ctx.currentTime);
+    setAudioParamSmooth(ctx, filter.frequency, filters.lowpassHz, fadeSeconds);
+  });
+  if (soundtrack.introNoiseFilter) {
+    setAudioParamSmooth(ctx, soundtrack.introNoiseFilter.frequency, Math.min(9000, filters.lowpassHz), fadeSeconds);
+  }
+}
+
+export function applyTronSoundtrackIntroLofiMix(soundtrack, ctx, active, fadeSeconds = TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS) {
+  const fx = soundtrack.introFx;
+  const fxActive = Boolean(active && fx.enabled);
+  const mix = fxActive ? THREE.MathUtils.clamp(fx.mix, 0, 1) : 0;
+  const dry = 1 - mix;
+  const wet = mix;
+  const lfoDepth = fxActive ? fx.wobble * TRON_SOUNDTRACK_INTRO_FX_MAX_WOBBLE_DEPTH_HZ : 0.0001;
+  const noiseGain = fxActive ? fx.noise * TRON_SOUNDTRACK_INTRO_FX_MAX_NOISE_GAIN : 0.0001;
+  const mutedStart = fxActive ? null : 0.0001;
+  soundtrack.dryGains.forEach((gain) => rampGain(ctx, gain, dry, fadeSeconds));
+  soundtrack.introLofiGains.forEach((gain) => rampGain(ctx, gain, wet, fadeSeconds, mutedStart));
+  soundtrack.introLofiLfoGains.forEach((gain) => rampGain(ctx, gain, lfoDepth, fadeSeconds, mutedStart));
+  if (soundtrack.introNoiseGain) rampGain(ctx, soundtrack.introNoiseGain, noiseGain, fadeSeconds, mutedStart);
+  if (soundtrack.ready) syncTronIntroFxNodeSettings(soundtrack, ctx, fadeSeconds);
+}
+
+export function setTronSoundtrackIntroLofi(soundtrack, ctx, active, fadeSeconds = TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS, stoppedByReveal = false) {
+  const next = Boolean(active);
+  if (next && soundtrack.introLofiRevealStopTimer) {
+    window.clearTimeout(soundtrack.introLofiRevealStopTimer);
+    soundtrack.introLofiRevealStopTimer = 0;
+  }
+  soundtrack.introLofiActive = next;
+  if (next) {
+    soundtrack.introLofiStoppedByReveal = false;
+    soundtrack.introLofiStartedAt = performance.now();
+  } else {
+    soundtrack.introLofiStoppedByReveal = Boolean(stoppedByReveal);
+    soundtrack.introLofiStoppedAt = performance.now();
+  }
+  if (!soundtrack.ready) return false;
+  applyTronSoundtrackIntroLofiMix(soundtrack, ctx, next, fadeSeconds);
+  return true;
+}
+
+export function scheduleTronSoundtrackIntroLofiStopForReveal(soundtrack, getCtx, delayMs = TRON_SOUNDTRACK_INTRO_FX_REVEAL_STOP_DELAY_MS) {
+  if (!soundtrack.introLofiActive || soundtrack.introLofiStoppedByReveal || soundtrack.introLofiRevealStopTimer) return false;
+  const safeDelay = Math.max(0, Math.round(Number(delayMs) || 0));
+  soundtrack.introLofiRevealStopTimer = window.setTimeout(() => {
+    soundtrack.introLofiRevealStopTimer = 0;
+    stopTronSoundtrackIntroLofiForReveal(soundtrack, getCtx());
+  }, safeDelay);
+  return true;
+}
+
+export function stopTronSoundtrackIntroLofiForReveal(soundtrack, ctx) {
+  if (soundtrack.introLofiRevealStopTimer) {
+    window.clearTimeout(soundtrack.introLofiRevealStopTimer);
+    soundtrack.introLofiRevealStopTimer = 0;
+  }
+  if (!soundtrack.introLofiActive) return false;
+  return setTronSoundtrackIntroLofi(soundtrack, ctx, false, TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS, true);
+}
