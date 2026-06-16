@@ -1042,6 +1042,9 @@ function handleTronDiscCursorMove(event) {
 
 function updateTronDiscCursor(dt) {
   if (!tronDiscCursor) return;
+  // When hidden (pointer-locked / walking — the steady state) the element is visibility:hidden,
+  // so the per-frame transform write is invisible; skip it (re-show resets via handleTronDiscCursorMove).
+  if (!tronDiscCursorState.visible) return;
   const spinDecay = Math.min(1, dt * 2.8);
   const spinEase = Math.min(1, dt * 12);
   const restingTarget = tronDiscCursorState.visible ? TRON_DISC_CURSOR_IDLE_SPIN : 0;
@@ -13878,6 +13881,7 @@ function setupSettingsToggle() {
 
   function setHidden(hidden, persist = true) {
     document.body.classList.toggle('controls-hidden', hidden);
+    if (!hidden) updateStartPositionLiveLabel();
     button.textContent = hidden ? 'Settaggi' : 'Nascondi';
     button.setAttribute('aria-expanded', hidden ? 'false' : 'true');
     controls.setAttribute('aria-hidden', hidden ? 'true' : 'false');
@@ -14192,6 +14196,9 @@ function updatePlayerSpawnLabel() {
 }
 
 function updateStartPositionLiveLabel() {
+  // The label lives in the controls panel, hidden by default; skip the pose-string build + DOM
+  // write while hidden (refreshed on panel open via setHidden). Visual-neutral when not shown.
+  if (document.body.classList.contains('controls-hidden')) return;
   if (controlEls.startPositionLiveVal) controlEls.startPositionLiveVal.textContent = formatCurrentPlayerPose();
 }
 
