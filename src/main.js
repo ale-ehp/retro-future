@@ -359,6 +359,11 @@ import {
   mobilePerformanceProfileState as mobilePerformanceProfileStateCore,
 } from './performance-mobile.js';
 import {
+  initStaticCityCulling,
+  staticCityCullStats,
+  updateStaticCityCulling,
+} from './static-city-culling.js';
+import {
   LAB_EQUALIZER_ANALYSER_MAX_DB,
   LAB_EQUALIZER_ANALYSER_MIN_DB,
   LAB_EQUALIZER_ANALYSER_SMOOTHING,
@@ -13127,225 +13132,26 @@ function addPortalFrame(z) {
 
 // (Ground rungs / spine strips removed — replaced by roadEdge tubes + clean median above)
 
-const STATIC_CITY_CULLING_ENABLED = true;
-const STATIC_CITY_CULL_MARGIN = GRID_BLOCK * 6;
-const STATIC_CITY_BOARD_CULL_MARGIN = GRID_BLOCK * 3;
-const staticCityCullMatrix = new THREE.Matrix4();
-const staticCityCullFrustum = new THREE.Frustum();
-const staticCityCullSphere = new THREE.Sphere();
-const staticCityCullStats = {
-  enabled: STATIC_CITY_CULLING_ENABLED,
-  total: 0,
-  visible: 0,
-  hidden: 0,
-  buildingsTotal: 0,
-  buildingsVisible: 0,
-  bridgesTotal: 0,
-  bridgesVisible: 0,
-  boardsTotal: 0,
-  boardsVisible: 0,
-  ledInstancesTotal: 0,
-  ledInstancesVisible: 0,
-  ledInstancesHidden: 0,
-  doorInstancesVisible: 0,
-};
-let staticCityDoorCullDirty = false;
-
-function setStaticCityObjectVisible(object, visible) {
-  if (!object) return;
-  object.visible = Boolean(visible);
-}
-
-function setStaticCityEdgeSpecVisible(spec, visible) {
-  if (spec?.mesh) setStaticCityObjectVisible(spec.mesh, visible);
-  if (spec?.segmentGroup) setStaticCityObjectVisible(spec.segmentGroup, visible);
-  if (spec?.segmentMesh) setStaticCityObjectVisible(spec.segmentMesh, visible);
-}
-
-function staticCityRecordSphere(record, target = staticCityCullSphere) {
-  const collider = record?.collider;
-  const mesh = record?.mesh;
-  const hw = Math.abs(Number.isFinite(collider?.hw) ? collider.hw : (record?.baseW || GRID_BLOCK) * 0.5);
-  const hd = Math.abs(Number.isFinite(collider?.hd) ? collider.hd : (record?.baseD || GRID_BLOCK) * 0.5);
-  const height = Math.abs(Number.isFinite(collider?.h) ? collider.h : GRID_BLOCK * 10);
-  const x = Number.isFinite(collider?.x) ? collider.x : (mesh?.position.x || 0);
-  const y = (Number.isFinite(collider?.y) ? collider.y : (mesh?.position.y || 0)) + height * 0.5;
-  const z = Number.isFinite(collider?.z) ? collider.z : (mesh?.position.z || 0);
-  target.center.set(x, y, z);
-  target.radius = Math.hypot(hw, hd, height * 0.5) + STATIC_CITY_CULL_MARGIN;
-  return target;
-}
-
-function staticCityBridgeSphere(record, target = staticCityCullSphere) {
-  const mesh = record?.mesh;
-  const width = Math.abs((record?.baseWidth || GRID_BLOCK) * (mesh?.scale.x || 1));
-  const height = Math.abs((record?.baseHeight || GRID_BLOCK) * (mesh?.scale.y || 1));
-  const depth = Math.abs((record?.baseDepth || GRID_BLOCK) * (mesh?.scale.z || 1));
-  target.center.set(mesh?.position.x || 0, (mesh?.position.y || 0) + height * 0.5, mesh?.position.z || 0);
-  target.radius = Math.hypot(width * 0.5, depth * 0.5, height * 0.5) + STATIC_CITY_CULL_MARGIN;
-  return target;
-}
-
-function staticCityBoardSphere(board, target = staticCityCullSphere) {
-  const width = Math.abs(board?.boardWidth || GRID_BLOCK * 8);
-  const height = Math.abs(board?.boardHeight || GRID_BLOCK * 5);
-  if (board?.group) target.center.copy(board.group.position);
-  else target.center.set(0, 0, 0);
-  target.radius = Math.hypot(width * 0.5, height * 0.5) + STATIC_CITY_BOARD_CULL_MARGIN;
-  return target;
-}
-
-function setStaticCityBasePadVisible(basePad, visible) {
-  if (!basePad) return;
-  const hasInnerPad = Boolean(basePadCurbEnabled && basePad.innerHitPolygon?.length);
-  setStaticCityObjectVisible(basePad.mesh, visible);
-  setStaticCityObjectVisible(basePad.border, visible);
-  setStaticCityObjectVisible(basePad.curbRamp, visible && hasInnerPad);
-  setStaticCityObjectVisible(basePad.innerMesh, visible && hasInnerPad);
-  setStaticCityObjectVisible(basePad.innerBorder, visible && hasInnerPad);
-}
-
-function setStaticCityBuildingClusterVisible(record, visible) {
-  setStaticCityObjectVisible(record.mesh, visible);
-  setStaticCityBasePadVisible(record.basePad, visible);
-  setStaticCityObjectVisible(record.civicNumberGroup, visible);
-  if (record.sideDoor) {
-    const nextDoorVisible = Boolean(visible && sideDoorEnabled);
-    if (record.sideDoor.visible !== nextDoorVisible) staticCityDoorCullDirty = true;
-    setStaticCityObjectVisible(record.sideDoor, nextDoorVisible);
-  }
-  if (record.basePadLedBatch?.mesh) {
-    setStaticCityObjectVisible(
-      record.basePadLedBatch.mesh,
-      visible && basePadLedBatch.sceneVisible && record.basePadLedBatch.count > 0
-    );
-  }
-}
-
-function setStaticCityMainLedClusterVisible(visible) {
-  for (const spec of edgeStripSpecs) {
-    if (spec.edgeRole === 'main-building') setStaticCityEdgeSpecVisible(spec, visible);
-  }
-  for (const spec of horizontalBuildingLedRings) {
-    if (spec.edgeRole === 'main-building') setStaticCityEdgeSpecVisible(spec, visible);
-  }
-}
-
-function setStaticCityBridgeClusterVisible(record, visible) {
-  const effectiveVisible = Boolean(record.visible && visible);
-  setStaticCityObjectVisible(record.mesh, effectiveVisible);
-  for (const spec of edgeStripSpecs) {
-    if (spec.edgeRole === 'bridge' && spec.bridgeRecord === record) setStaticCityEdgeSpecVisible(spec, effectiveVisible);
-  }
-  for (const spec of horizontalBuildingLedRings) {
-    if (spec.edgeRole === 'bridge' && spec.bridgeRecord === record) setStaticCityEdgeSpecVisible(spec, effectiveVisible);
-  }
-}
-
-function setStaticCityBoardVisible(board, baseVisible) {
-  if (!board?.group || !baseVisible) {
-    if (board?.group) board.group.visible = false;
-    return false;
-  }
-  const visible = staticCityCullFrustum.intersectsSphere(staticCityBoardSphere(board));
-  board.group.visible = visible;
-  return visible;
-}
-
-function updateStaticCityCulling() {
-  staticCityCullStats.total = 0;
-  staticCityCullStats.visible = 0;
-  staticCityCullStats.hidden = 0;
-  staticCityCullStats.buildingsTotal = sideBuildingRecords.length + mainBuildingRecords.length;
-  staticCityCullStats.buildingsVisible = 0;
-  staticCityCullStats.bridgesTotal = bridgeRecords.length;
-  staticCityCullStats.bridgesVisible = 0;
-  staticCityCullStats.boardsTotal = cityDepartmentBoards.length + cityRoleBoards.length;
-  staticCityCullStats.boardsVisible = 0;
-  staticCityCullStats.ledInstancesTotal = 0;
-  staticCityCullStats.ledInstancesVisible = 0;
-  staticCityCullStats.ledInstancesHidden = 0;
-  staticCityCullStats.doorInstancesVisible = sideDoorBatchState.visibleInstances;
-  if (!STATIC_CITY_CULLING_ENABLED) {
-    for (const record of [...sideBuildingRecords, ...mainBuildingRecords]) setStaticCityBuildingClusterVisible(record, true);
-    for (const record of bridgeRecords) setStaticCityBridgeClusterVisible(record, true);
-    return;
-  }
-
-  camera.updateMatrixWorld();
-  staticCityCullMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-  staticCityCullFrustum.setFromProjectionMatrix(staticCityCullMatrix);
-
-  let mainBuildingVisible = true;
-  for (const record of sideBuildingRecords) {
-    const visible = staticCityCullFrustum.intersectsSphere(staticCityRecordSphere(record));
-    setStaticCityBuildingClusterVisible(record, visible);
-    staticCityCullStats.total++;
-    if (visible) {
-      staticCityCullStats.visible++;
-      staticCityCullStats.buildingsVisible++;
-    } else {
-      staticCityCullStats.hidden++;
-    }
-  }
-  if (staticCityDoorCullDirty) {
-    updateSideBuildingDoorBatchMeshes();
-    staticCityDoorCullDirty = false;
-  }
-  for (const record of mainBuildingRecords) {
-    const visible = staticCityCullFrustum.intersectsSphere(staticCityRecordSphere(record));
-    setStaticCityBuildingClusterVisible(record, visible);
-    mainBuildingVisible = mainBuildingVisible && visible;
-    staticCityCullStats.total++;
-    if (visible) {
-      staticCityCullStats.visible++;
-      staticCityCullStats.buildingsVisible++;
-    } else {
-      staticCityCullStats.hidden++;
-    }
-  }
-  setStaticCityMainLedClusterVisible(mainBuildingVisible);
-
-  for (const record of bridgeRecords) {
-    const visible = record.visible && staticCityCullFrustum.intersectsSphere(staticCityBridgeSphere(record));
-    setStaticCityBridgeClusterVisible(record, visible);
-    staticCityCullStats.total++;
-    if (visible) {
-      staticCityCullStats.visible++;
-      staticCityCullStats.bridgesVisible++;
-    } else {
-      staticCityCullStats.hidden++;
-    }
-  }
-
-  const departmentBoardBaseVisible = Boolean(
-    CITY_DEPARTMENT_BOARD_ENABLED &&
-    (cityDepartmentBoardRevealFactor() > 0.002 || tronRunnerRevealActive)
-  );
-  for (const board of cityDepartmentBoards) {
-    const visible = setStaticCityBoardVisible(board, departmentBoardBaseVisible);
-    staticCityCullStats.total++;
-    if (visible) {
-      staticCityCullStats.visible++;
-      staticCityCullStats.boardsVisible++;
-    } else {
-      staticCityCullStats.hidden++;
-    }
-  }
-
-  const roleBoardRevealFactor = cityDepartmentBoardRevealFactor();
-  for (const board of cityRoleBoards) {
-    const baseVisible = Boolean(CITY_ROLE_BOARD_ENABLED && board.enabled && roleBoardRevealFactor > 0.002);
-    const visible = setStaticCityBoardVisible(board, baseVisible);
-    staticCityCullStats.total++;
-    if (visible) {
-      staticCityCullStats.visible++;
-      staticCityCullStats.boardsVisible++;
-    } else {
-      staticCityCullStats.hidden++;
-    }
-  }
-}
+initStaticCityCulling({
+  camera,
+  sideBuildingRecords,
+  mainBuildingRecords,
+  bridgeRecords,
+  cityDepartmentBoards,
+  cityRoleBoards,
+  edgeStripSpecs,
+  horizontalBuildingLedRings,
+  basePadLedBatch,
+  sideDoorBatchState,
+  gridBlock: GRID_BLOCK,
+  departmentBoardEnabled: CITY_DEPARTMENT_BOARD_ENABLED,
+  roleBoardEnabled: CITY_ROLE_BOARD_ENABLED,
+  getSideDoorEnabled: () => sideDoorEnabled,
+  getBasePadCurbEnabled: () => basePadCurbEnabled,
+  getRevealActive: () => tronRunnerRevealActive,
+  updateDoorBatchMeshes: updateSideBuildingDoorBatchMeshes,
+  departmentBoardRevealFactor: cityDepartmentBoardRevealFactor,
+});
 
 const cityRevealOverlayScene = new THREE.Scene();
 const cityRevealOverlayCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
