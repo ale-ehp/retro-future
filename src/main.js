@@ -206,6 +206,12 @@ import {
   makeTronRunnerReflectionMaterial as createTronRunnerReflectionMaterial,
 } from './character-materials.js';
 import {
+  computeTronRunnerEffectiveAnimationSpeed,
+  syncTronRunnerWalkCycleToDistance as syncTronRunnerWalkCycleToDistanceCore,
+  tronRunnerCrowdGridCoord as tronRunnerCrowdGridCoordCore,
+  tronRunnerCrowdGridKey,
+} from './character-movement.js';
+import {
   makeTronRunnerShadowTexture,
   makeTronRunnerSuitEmissiveTexture,
   makeTronRunnerSuitLedMaskTexture,
@@ -10833,20 +10839,22 @@ function tronRunnerDoorHalfHeight() {
 }
 
 function tronRunnerEffectiveAnimationSpeed() {
-  const speedRatio = THREE.MathUtils.clamp(tronRunnerWalkSpeed / Math.max(0.001, TRON_RUNNER_DEFAULT_SPEED), 0.05, 8);
-  return tronRunnerAnimationSpeed * THREE.MathUtils.lerp(1, speedRatio, tronRunnerStrideSync);
+  return computeTronRunnerEffectiveAnimationSpeed({
+    walkSpeed: tronRunnerWalkSpeed,
+    defaultSpeed: TRON_RUNNER_DEFAULT_SPEED,
+    animationSpeed: tronRunnerAnimationSpeed,
+    strideSync: tronRunnerStrideSync,
+  });
 }
 
 function syncTronRunnerWalkCycleToDistance(mixer, action, distance, phaseOffset = 0) {
-  const clip = action?.getClip?.() || action?._clip;
-  const duration = clip?.duration;
-  if (!mixer || !action || !Number.isFinite(duration) || duration <= 0.001) return false;
-  const cycleDistance = Math.max(0.001, TRON_RUNNER_WALK_CYCLE_DISTANCE);
-  const phase = ((distance / cycleDistance + phaseOffset) % 1 + 1) % 1;
-  action.time = phase * duration;
-  action.setEffectiveTimeScale(1);
-  mixer.update(0);
-  return true;
+  return syncTronRunnerWalkCycleToDistanceCore({
+    mixer,
+    action,
+    distance,
+    phaseOffset,
+    cycleDistance: TRON_RUNNER_WALK_CYCLE_DISTANCE,
+  });
 }
 
 function syncTronRunnerActionSetToDistance(distance, phaseOffset = 0) {
@@ -11913,11 +11921,7 @@ function tronRunnerCrowdBuildRoute(index) {
 }
 
 function tronRunnerCrowdGridCoord(value) {
-  return Math.floor(value / TRON_RUNNER_CROWD_SPATIAL_CELL);
-}
-
-function tronRunnerCrowdGridKey(cx, cz) {
-  return `${cx}:${cz}`;
+  return tronRunnerCrowdGridCoordCore(value, TRON_RUNNER_CROWD_SPATIAL_CELL);
 }
 
 function setTronRunnerCrowdFrameDistance(member, distance) {
