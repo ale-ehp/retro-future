@@ -91,3 +91,29 @@ export function createTronIntroDistortionCurve(amount, soundtrack) {
   soundtrack.introDistortionCurveKey = key;
   return curve;
 }
+
+export function setAudioParamSmooth(ctx, param, value, seconds = 0.04) {
+  if (!ctx || !param) return;
+  const now = ctx.currentTime;
+  const safeValue = Math.max(0.0001, Number(value) || 0.0001);
+  param.cancelScheduledValues(now);
+  param.setValueAtTime(Math.max(0.0001, param.value || safeValue), now);
+  param.linearRampToValueAtTime(safeValue, now + Math.max(0.01, seconds));
+}
+
+export function setAudioCurrentTime(audio, value) {
+  try {
+    audio.currentTime = Math.max(0, value);
+  } catch {}
+}
+
+export function rampGain(ctx, gainNode, value, seconds, fromValue = null) {
+  if (!ctx || !gainNode) return;
+  const now = ctx.currentTime;
+  const startValue = fromValue === null
+    ? Math.max(0.0001, gainNode.gain.value || 0.0001)
+    : Math.max(0.0001, Number(fromValue) || 0.0001);
+  gainNode.gain.cancelScheduledValues(now);
+  gainNode.gain.setValueAtTime(startValue, now);
+  gainNode.gain.linearRampToValueAtTime(Math.max(0.0001, value), now + Math.max(0.01, seconds));
+}
