@@ -116,3 +116,35 @@ export function updateTronRunnerCrowdCullingState({
   stats.cullingMinDistance = Number.isFinite(minDistance) ? minDistance : 0;
   stats.cullingMaxDistance = maxDistance;
 }
+
+export function prepareTronRunnerCrowdSpatialGrid(spatialGrid, crowd, stats, cullingEnabled, lodNearDistance, gridCoord, gridKey) {
+  spatialGrid.clear();
+  for (const member of crowd) {
+    if (cullingEnabled && member.cullingVisible === false && member.cullingDistance > lodNearDistance) {
+      continue;
+    }
+    const cx = gridCoord(member.group.position.x);
+    const cz = gridCoord(member.group.position.z);
+    const key = gridKey(cx, cz);
+    let bucket = spatialGrid.get(key);
+    if (!bucket) {
+      bucket = [];
+      spatialGrid.set(key, bucket);
+    }
+    bucket.push(member);
+  }
+  stats.gridCells = spatialGrid.size;
+}
+
+export function nearbyTronRunnerCrowdMembers(x, z, spatialGrid, gridCoord, gridKey) {
+  const cx = gridCoord(x);
+  const cz = gridCoord(z);
+  const members = [];
+  for (let dz = -1; dz <= 1; dz += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      const bucket = spatialGrid.get(gridKey(cx + dx, cz + dz));
+      if (bucket) members.push(...bucket);
+    }
+  }
+  return members;
+}
