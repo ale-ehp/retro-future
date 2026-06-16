@@ -235,6 +235,7 @@ import {
   sideStreetCoverage as buildSideStreetCoverage,
   sideStreetGroupedSegments as buildSideStreetGroupedSegments,
   sumBy,
+  tronRunnerIdleCharacterInspect as tronRunnerIdleCharacterInspectCore,
 } from './character-inspect.js';
 import {
   tronRunnerWalkCycleFootstep as tronRunnerWalkCycleFootstepCore,
@@ -12832,64 +12833,17 @@ function tronRunnerCrowdInspect() {
 }
 
 function tronRunnerIdleCharacterInspect() {
-  let bounds = null;
-  if (tronRunnerIdleCharacter.built && tronRunnerIdleCharacterGroup.children.length) {
-    tronRunnerCrowdBox.setFromObject(tronRunnerIdleCharacterGroup);
-    if (!tronRunnerCrowdBox.isEmpty()) {
-      const center = tronRunnerCrowdBox.getCenter(tronRunnerIdleCharacterBoundsCenter);
-      bounds = {
-        minX: Number(tronRunnerCrowdBox.min.x.toFixed(2)),
-        minY: Number(tronRunnerCrowdBox.min.y.toFixed(2)),
-        minZ: Number(tronRunnerCrowdBox.min.z.toFixed(2)),
-        maxX: Number(tronRunnerCrowdBox.max.x.toFixed(2)),
-        maxY: Number(tronRunnerCrowdBox.max.y.toFixed(2)),
-        maxZ: Number(tronRunnerCrowdBox.max.z.toFixed(2)),
-        centerX: Number(center.x.toFixed(2)),
-        centerY: Number(center.y.toFixed(2)),
-        centerZ: Number(center.z.toFixed(2)),
-      };
-    }
-  }
-  return {
+  return tronRunnerIdleCharacterInspectCore({
+    idleCharacter: tronRunnerIdleCharacter,
+    idleCharacterGroup: tronRunnerIdleCharacterGroup,
+    crowdBox: tronRunnerCrowdBox,
+    boundsCenter: tronRunnerIdleCharacterBoundsCenter,
     enabled: TRON_RUNNER_IDLE_CHARACTER_ENABLED,
-    built: tronRunnerIdleCharacter.built,
-    visible: Boolean(tronRunnerIdleCharacterGroup.visible),
-    targetCivic: tronRunnerIdleCharacter.targetCivic,
-    recordCivic: tronRunnerIdleCharacter.recordCivic,
-    error: tronRunnerIdleCharacter.error,
-    pose: tronRunnerIdleCharacter.pose,
-    poseApplied: tronRunnerIdleCharacter.poseApplied,
-    poseBoneCount: tronRunnerIdleCharacter.poseBoneCount,
-    poseBoneNames: tronRunnerIdleCharacter.poseBoneNames,
-    upperArmPoseApplied: tronRunnerIdleCharacter.upperArmPoseApplied,
     colorPreset: TRON_RUNNER_IDLE_CHARACTER_COLOR_PRESET,
-    static: tronRunnerIdleCharacter.static,
-    locked: tronRunnerIdleCharacter.locked,
-    anchor: tronRunnerIdleCharacter.anchor,
-    perimeterClearance: tronRunnerIdleCharacter.perimeterClearance,
-    cornerFaceInset: tronRunnerIdleCharacter.cornerFaceInset,
-    roundedColliderResolved: tronRunnerIdleCharacter.roundedColliderResolved,
-    roundedCorrection: Number((tronRunnerIdleCharacter.roundedCorrection ?? 0).toFixed(3)),
-    roundedRadius: Number((tronRunnerIdleCharacter.roundedRadius ?? 0).toFixed(3)),
-    cornerFlatInset: Number((tronRunnerIdleCharacter.cornerFlatInset ?? 0).toFixed(3)),
-    frontWallClearance: Number((tronRunnerIdleCharacter.frontWallClearance ?? 0).toFixed(3)),
-    wallContactEps: Number((tronRunnerIdleCharacter.wallContactEps ?? 0).toFixed(3)),
-    roadDir: tronRunnerIdleCharacter.roadDir,
-    placementSource: tronRunnerIdleCharacter.placementSource,
-    corner: tronRunnerIdleCharacter.corner,
-    startSideSign: tronRunnerIdleCharacter.startSideSign,
-    surface: tronRunnerIdleCharacter.surface,
     liftPx: TRON_RUNNER_IDLE_CHARACTER_LIFT_PX,
-    yLift: Number(TRON_RUNNER_IDLE_CHARACTER_Y_LIFT.toFixed(3)),
-    x: Number((tronRunnerIdleCharacter.x ?? 0).toFixed(2)),
-    y: Number((tronRunnerIdleCharacter.y ?? 0).toFixed(2)),
-    z: Number((tronRunnerIdleCharacter.z ?? 0).toFixed(2)),
-    yaw: Number((tronRunnerIdleCharacter.yaw ?? 0).toFixed(3)),
+    yLift: TRON_RUNNER_IDLE_CHARACTER_Y_LIFT,
     leanDeg: TRON_RUNNER_IDLE_CHARACTER_LEAN_DEG,
-    materialCount: tronRunnerIdleCharacter.materials?.length ?? 0,
-    groupChildren: tronRunnerIdleCharacterGroup.children.length,
-    bounds,
-  };
+  });
 }
 
 function tronRunnerFootstepSurface() {
