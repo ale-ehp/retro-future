@@ -201,6 +201,7 @@ import {
   createTronRunnerCrowdMemberRecord,
   fitTronRunnerModel as fitTronRunnerModelCore,
   makeTronRunnerActionSet,
+  poseTronRunnerIdleCharacterArmsCrossed as poseTronRunnerIdleCharacterArmsCrossedCore,
 } from './character-build.js';
 import {
   resolveTronRunnerRoundedCollider,
@@ -11995,56 +11996,8 @@ function syncTronRunnerIdleCharacterPose() {
   });
 }
 
-function normalizeTronRunnerIdleBoneName(name) {
-  return String(name || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
-}
-
-function findTronRunnerIdleBone(model, patterns, exactKeys = []) {
-  const normalizedKeys = exactKeys.map(normalizeTronRunnerIdleBoneName);
-  let exact = null;
-  let fallback = null;
-  model.traverse((object) => {
-    if (!object.isBone) return;
-    const key = normalizeTronRunnerIdleBoneName(object.name);
-    if (!exact && normalizedKeys.includes(key)) exact = object;
-    if (!fallback && patterns.some((pattern) => pattern.test(key))) fallback = object;
-  });
-  return exact || fallback;
-}
-
-function rotateTronRunnerIdleBone(model, patterns, rotation, exactKeys = []) {
-  const bone = findTronRunnerIdleBone(model, patterns, exactKeys);
-  if (!bone) return null;
-  bone.rotation.set(rotation.x, rotation.y, rotation.z);
-  bone.updateMatrixWorld(true);
-  return bone.name || 'bone';
-}
-
 function poseTronRunnerIdleCharacterArmsCrossed(model) {
-  if (!model) return [];
-  const posed = [];
-  const poseSpecs = [
-    { label: 'spine', exactKeys: ['mixamorigSpine2', 'mixamorigSpine1', 'mixamorigSpine'], patterns: [/spine2$/, /spine1$/, /spine$/], rotation: { x: -0.05, y: 0.03, z: 0.08 } },
-    { label: 'leftUpperArm', exactKeys: ['mixamorigLeftArm', 'leftUpperArm', 'leftArm'], patterns: [/mixamorigleftarm$/, /leftupperarm$/, /leftarm$/], rotation: { x: 0.34, y: 0.72, z: -1.34 } },
-    { label: 'leftForeArm', exactKeys: ['mixamorigLeftForeArm', 'leftForeArm', 'leftLowerArm'], patterns: [/mixamorigleftforearm$/, /leftforearm$/, /leftlowerarm$/], rotation: { x: 0.08, y: -0.56, z: -2.18 } },
-    { label: 'leftHand', exactKeys: ['mixamorigLeftHand', 'leftHand', 'leftWrist'], patterns: [/mixamoriglefthand$/, /lefthand$/, /leftwrist$/], rotation: { x: -0.08, y: 0.24, z: -0.28 } },
-    { label: 'rightUpperArm', exactKeys: ['mixamorigRightArm', 'rightUpperArm', 'rightArm'], patterns: [/mixamorigrightarm$/, /rightupperarm$/, /rightarm$/], rotation: { x: 0.34, y: -0.72, z: 1.34 } },
-    { label: 'rightForeArm', exactKeys: ['mixamorigRightForeArm', 'rightForeArm', 'rightLowerArm'], patterns: [/mixamorigrightforearm$/, /rightforearm$/, /rightlowerarm$/], rotation: { x: 0.08, y: 0.56, z: 2.18 } },
-    { label: 'rightHand', exactKeys: ['mixamorigRightHand', 'rightHand', 'rightWrist'], patterns: [/mixamorigrighthand$/, /righthand$/, /rightwrist$/], rotation: { x: -0.08, y: -0.24, z: 0.28 } },
-  ];
-  for (const spec of poseSpecs) {
-    const boneName = rotateTronRunnerIdleBone(model, spec.patterns, spec.rotation, spec.exactKeys);
-    if (boneName) posed.push(boneName);
-  }
-  const posedKeys = posed.map(normalizeTronRunnerIdleBoneName);
-  const hasLeftUpper = posedKeys.includes('mixamorigleftarm') || posedKeys.some((key) => /left(upper)?arm$/.test(key));
-  const hasRightUpper = posedKeys.includes('mixamorigrightarm') || posedKeys.some((key) => /right(upper)?arm$/.test(key));
-  tronRunnerIdleCharacter.poseApplied = posed.length >= 4;
-  tronRunnerIdleCharacter.poseBoneCount = posed.length;
-  tronRunnerIdleCharacter.poseBoneNames = posed;
-  tronRunnerIdleCharacter.upperArmPoseApplied = hasLeftUpper && hasRightUpper;
-  model.updateMatrixWorld(true);
-  return posed;
+  return poseTronRunnerIdleCharacterArmsCrossedCore(model, tronRunnerIdleCharacter);
 }
 
 function buildTronRunnerIdleCharacter(sourceModel) {
