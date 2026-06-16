@@ -148,3 +148,68 @@ export function nearbyTronRunnerCrowdMembers(x, z, spatialGrid, gridCoord, gridK
   }
   return members;
 }
+
+export function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, now, deps) {
+  const {
+    intelligenceEnabled,
+    avoidanceEnabled,
+    radius,
+    passingPush,
+    strength,
+    yieldDurationMs,
+    stats,
+    nearbyMembers,
+    setState,
+  } = deps;
+  member.avoidanceNeighbors = 0;
+  member.avoidanceOverlap = 0;
+  if (!intelligenceEnabled || !avoidanceEnabled) {
+    return { x: 0, z: 0, speedScale: 1 };
+  }
+  let pushX = 0;
+  let pushZ = 0;
+  let speedScale = 1;
+  const radiusSq = radius * radius;
+  const nearby = nearbyMembers(nextPoint.x, nextPoint.z);
+  for (const other of nearby) {
+    if (other === member) continue;
+    const dx = nextPoint.x - other.group.position.x;
+    const dz = nextPoint.z - other.group.position.z;
+    const distSq = dx * dx + dz * dz;
+    if (distSq <= 0.0001 || distSq >= radiusSq) continue;
+    const dist = Math.sqrt(distSq);
+    const overlap = radius - dist;
+    const weight = overlap / radius;
+    pushX += dx / dist * weight;
+    pushZ += dz / dist * weight;
+    member.avoidanceNeighbors += 1;
+    member.avoidanceOverlap = Math.max(member.avoidanceOverlap, overlap);
+    stats.avoidancePairs += 1;
+    stats.maxAvoidanceOverlap = Math.max(stats.maxAvoidanceOverlap, overlap);
+
+    const otherDx = other.group.position.x - current.x;
+    const otherDz = other.group.position.z - current.z;
+    const ahead = otherDx * dirX + otherDz * dirZ;
+    const side = Math.abs(otherDx * -dirZ + otherDz * dirX);
+    if (ahead > 0 && ahead < radius * 1.25 && side < radius * 0.7) {
+      const memberHasPriority = (member.index ?? 0) <= (other.index ?? 0);
+      const passSign = (member.index ?? 0) % 2 === 0 ? 1 : -1;
+      const passWeight = 1 - side / Math.max(0.001, radius * 0.7);
+      if (memberHasPriority) {
+        speedScale = Math.min(speedScale, 0.82);
+        pushX += -dirZ * passSign * passWeight * passingPush;
+        pushZ += dirX * passSign * passWeight * passingPush;
+      } else {
+        speedScale = Math.min(speedScale, 0.18);
+        pushX += dirZ * passSign * passWeight * passingPush * 0.45;
+        pushZ += -dirX * passSign * passWeight * passingPush * 0.45;
+        setState(member, 'yield', now, yieldDurationMs);
+      }
+    }
+  }
+  return {
+    x: pushX * strength * dt,
+    z: pushZ * strength * dt,
+    speedScale,
+  };
+}
