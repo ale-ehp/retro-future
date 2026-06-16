@@ -368,8 +368,13 @@ import {
   updateStaticCityCulling,
 } from './static-city-culling.js';
 import {
+  applyWelcomeWindowInputMode as applyWelcomeWindowInputModeCore,
+  dismissWelcomeWindow as dismissWelcomeWindowCore,
   resetWelcomeWindowMotion as resetWelcomeWindowMotionCore,
   setupWelcomeWindowMotion,
+  triggerWelcomeWindowTouch as triggerWelcomeWindowTouchCore,
+  welcomeWindowUsesTouchPrompt as welcomeWindowUsesTouchPromptCore,
+  welcomeWindowVisible as welcomeWindowVisibleCore,
 } from './welcome-ui.js';
 import {
   LAB_EQUALIZER_ANALYSER_MAX_DB,
@@ -736,7 +741,19 @@ const welcomeMotionDeps = {
   motionAllowed: welcomeWindowMotionAllowed,
   isVisible: welcomeWindowVisible,
 };
-let welcomeWindowDismissed = false;
+const welcomeWindowState = { dismissed: false };
+const welcomeDeps = {
+  overlay: welcomeWindowOverlay,
+  keyLabel: welcomeWindowKeyLabel,
+  action: welcomeWindowAction,
+  actionPrefix: welcomeWindowActionPrefix,
+  touchQuery: welcomeWindowTouchQuery,
+  mobileQuery: welcomeWindowMobileQuery,
+  resetMotion: resetWelcomeWindowMotion,
+  updatePointerLockHint: updatePointerLockHint,
+  ensureFootstepAudioReady: ensureFootstepAudioReady,
+  triggerBackspaceDroneIntro: triggerBackspaceDroneIntro,
+};
 const mobileTouchControlsState = {
   landscape: false,
   fullscreen: {
@@ -760,19 +777,15 @@ const mobileTouchControlsState = {
 };
 
 function dismissWelcomeWindow() {
-  if (!welcomeWindowOverlay || welcomeWindowDismissed) return;
-  resetWelcomeWindowMotion();
-  welcomeWindowDismissed = true;
-  welcomeWindowOverlay.classList.add('is-dismissed');
-  welcomeWindowOverlay.setAttribute('aria-hidden', 'true');
+  dismissWelcomeWindowCore(welcomeWindowState, welcomeDeps);
 }
 
 function welcomeWindowVisible() {
-  return Boolean(welcomeWindowOverlay && !welcomeWindowDismissed);
+  return welcomeWindowVisibleCore(welcomeWindowState, welcomeDeps);
 }
 
 function welcomeWindowUsesTouchPrompt() {
-  return Boolean(welcomeWindowTouchQuery.matches || welcomeWindowMobileQuery.matches || navigator.maxTouchPoints > 0);
+  return welcomeWindowUsesTouchPromptCore(welcomeDeps);
 }
 
 function isMobileLandscapeMode() {
@@ -902,24 +915,11 @@ function mobileTouchControlsInspect() {
 }
 
 function applyWelcomeWindowInputMode() {
-  if (!welcomeWindowKeyLabel) return;
-  const useTouchPrompt = welcomeWindowUsesTouchPrompt();
-  welcomeWindowAction?.classList.toggle('is-touch-prompt', useTouchPrompt);
-  if (welcomeWindowActionPrefix) welcomeWindowActionPrefix.textContent = useTouchPrompt ? '' : 'Premi ';
-  welcomeWindowKeyLabel.textContent = useTouchPrompt
-    ? (welcomeWindowKeyLabel.dataset.touchLabel || 'Clicca')
-    : (welcomeWindowKeyLabel.dataset.desktopLabel || '[Spazio]');
-  const lookInputLabel = document.getElementById('look-input-label');
-  if (lookInputLabel) lookInputLabel.textContent = welcomeWindowUsesTouchPrompt() ? 'Touch' : 'Mouse';
-  updatePointerLockHint();
+  applyWelcomeWindowInputModeCore(welcomeDeps);
 }
 
 function triggerWelcomeWindowTouch(event) {
-  if (!welcomeWindowVisible()) return;
-  if (!welcomeWindowUsesTouchPrompt()) return;
-  event.preventDefault?.();
-  ensureFootstepAudioReady();
-  triggerBackspaceDroneIntro('welcome-touch');
+  triggerWelcomeWindowTouchCore(event, welcomeWindowState, welcomeDeps);
 }
 
 function resetWelcomeWindowMotion() {
