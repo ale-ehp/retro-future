@@ -349,6 +349,13 @@ import {
   setFootstepPannerPosition,
 } from './footstep-audio.js';
 import {
+  effectiveBloomScaleForDevice as effectiveBloomScaleForDeviceCore,
+  effectivePixelRatioForDevice as effectivePixelRatioForDeviceCore,
+  effectiveRenderScaleForDevice as effectiveRenderScaleForDeviceCore,
+  mobilePerformanceProfileActive as mobilePerformanceProfileActiveCore,
+  mobilePerformanceProfileState as mobilePerformanceProfileStateCore,
+} from './performance-mobile.js';
+import {
   LAB_EQUALIZER_ANALYSER_MAX_DB,
   LAB_EQUALIZER_ANALYSER_MIN_DB,
   LAB_EQUALIZER_ANALYSER_SMOOTHING,
@@ -15309,33 +15316,15 @@ function syncBloomTemporalBudget() {
 }
 
 function mobilePerformanceProfileState() {
-  const mediaQueryMatches = Boolean(mobilePerformanceQuery.matches);
-  const touchPoints = Number.isFinite(navigator.maxTouchPoints) ? navigator.maxTouchPoints : 0;
-  const touchActive = touchPoints > 0;
-  const widthActive = window.innerWidth <= 760;
-  const reasons = [];
-  if (mediaQueryMatches) reasons.push('media-query');
-  if (touchActive) reasons.push('touch');
-  if (widthActive) reasons.push('width');
-  return {
-    active: reasons.length > 0,
-    mediaQueryMatches,
-    touchPoints,
-    touchActive,
-    widthActive,
-    reasons,
-  };
+  return mobilePerformanceProfileStateCore(mobilePerformanceQuery);
 }
 
 function mobilePerformanceProfileActive() {
-  const touchPoints = Number.isFinite(navigator.maxTouchPoints) ? navigator.maxTouchPoints : 0;
-  return Boolean(mobilePerformanceQuery.matches || touchPoints > 0 || window.innerWidth <= 760);
+  return mobilePerformanceProfileActiveCore(mobilePerformanceQuery);
 }
 
 function effectiveRenderScaleForDevice(baseScale = manualRenderScale) {
-  return mobilePerformanceProfileActive()
-    ? Math.min(baseScale, MOBILE_PERFORMANCE_RENDER_SCALE_CAP)
-    : baseScale;
+  return effectiveRenderScaleForDeviceCore(mobilePerformanceProfileActive(), baseScale, MOBILE_PERFORMANCE_RENDER_SCALE_CAP);
 }
 
 function cityRevealPerformanceWindowActive() {
@@ -15358,15 +15347,11 @@ function syncCityRevealPerformanceProfile() {
 }
 
 function effectivePixelRatioForDevice(basePixelRatio = requestedPixelRatio) {
-  return mobilePerformanceProfileActive()
-    ? Math.min(basePixelRatio, MOBILE_PERFORMANCE_PIXEL_RATIO_CAP)
-    : basePixelRatio;
+  return effectivePixelRatioForDeviceCore(mobilePerformanceProfileActive(), basePixelRatio, MOBILE_PERFORMANCE_PIXEL_RATIO_CAP);
 }
 
 function effectiveBloomScaleForDevice(baseScale = requestedBloomResolutionScale) {
-  return mobilePerformanceProfileActive()
-    ? Math.min(baseScale, MOBILE_PERFORMANCE_BLOOM_SCALE_CAP)
-    : baseScale;
+  return effectiveBloomScaleForDeviceCore(mobilePerformanceProfileActive(), baseScale, MOBILE_PERFORMANCE_BLOOM_SCALE_CAP);
 }
 
 function mobilePerformanceProfileInspect() {
