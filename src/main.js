@@ -9099,13 +9099,15 @@ function tronRunnerSurfaceYAt(x = tronRunnerWalker.position.x, z = tronRunnerWal
   return tronRunnerState.surfaceY;
 }
 
+const tronRunnerSurfaceScratch = { y: 0, groundY: 0, surface: '' };
 function tronRunnerSurfaceYForPoint(x, z) {
+  // Reused scratch: all callers consume the result synchronously in sequential tick phases.
   const padHit = basePadAtPoint(x, z);
-  return {
-    y: (padHit?.topY ?? roadTileTopY()) + TRON_RUNNER_CROWD_GROUND_OFFSET,
-    groundY: padHit?.topY ?? roadTileTopY(),
-    surface: padHit ? 'sidewalk' : 'road-fallback',
-  };
+  const groundY = padHit?.topY ?? roadTileTopY();
+  tronRunnerSurfaceScratch.y = groundY + TRON_RUNNER_CROWD_GROUND_OFFSET;
+  tronRunnerSurfaceScratch.groundY = groundY;
+  tronRunnerSurfaceScratch.surface = padHit ? 'sidewalk' : 'road-fallback';
+  return tronRunnerSurfaceScratch;
 }
 
 function tronRunnerCrowdFallbackPlacement(index) {
@@ -9940,6 +9942,7 @@ function tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ,
   return tronRunnerCrowdTryDeadlockNudgeCore(member, current, nextPoint, dirX, dirZ, distance, collided, now, tronRunnerCrowdDeadlockDeps);
 }
 
+const tronRunnerCrowdNextPointScratch = { x: 0, z: 0 };
 function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   normalizeTronRunnerCrowdState(member, now);
   const route = member.route;
@@ -9962,10 +9965,9 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   const dirZ = dz / Math.max(distance, 0.001);
   const stateSpeedScale = member.state === 'turn' ? 0.56 : member.state === 'yield' ? 0.34 : 1;
   const baseStep = Math.max(0, member.speed * Math.min(dt, 0.08) * stateSpeedScale);
-  const nextPoint = {
-    x: current.x + dirX * Math.min(distance, baseStep),
-    z: current.z + dirZ * Math.min(distance, baseStep),
-  };
+  const nextPoint = tronRunnerCrowdNextPointScratch;
+  nextPoint.x = current.x + dirX * Math.min(distance, baseStep);
+  nextPoint.z = current.z + dirZ * Math.min(distance, baseStep);
   const avoidance = tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, now);
   if (avoidance.speedScale < 1) {
     nextPoint.x = current.x + dirX * Math.min(distance, baseStep * avoidance.speedScale);

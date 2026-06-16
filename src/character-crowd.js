@@ -136,19 +136,26 @@ export function prepareTronRunnerCrowdSpatialGrid(spatialGrid, crowd, stats, cul
   stats.gridCells = spatialGrid.size;
 }
 
+const nearbyTronRunnerCrowdMembersScratch = [];
 export function nearbyTronRunnerCrowdMembers(x, z, spatialGrid, gridCoord, gridKey) {
   const cx = gridCoord(x);
   const cz = gridCoord(z);
-  const members = [];
+  // Reused scratch: the single caller (tronRunnerCrowdAvoidance) iterates the result
+  // fully before the next call, and the scan is not reentrant.
+  const members = nearbyTronRunnerCrowdMembersScratch;
+  members.length = 0;
   for (let dz = -1; dz <= 1; dz += 1) {
     for (let dx = -1; dx <= 1; dx += 1) {
       const bucket = spatialGrid.get(gridKey(cx + dx, cz + dz));
-      if (bucket) members.push(...bucket);
+      if (bucket) {
+        for (const member of bucket) members.push(member);
+      }
     }
   }
   return members;
 }
 
+const tronRunnerCrowdAvoidanceResult = { x: 0, z: 0, speedScale: 1 };
 export function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, now, deps) {
   const {
     intelligenceEnabled,
@@ -163,8 +170,12 @@ export function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ,
   } = deps;
   member.avoidanceNeighbors = 0;
   member.avoidanceOverlap = 0;
+  const result = tronRunnerCrowdAvoidanceResult;
   if (!intelligenceEnabled || !avoidanceEnabled) {
-    return { x: 0, z: 0, speedScale: 1 };
+    result.x = 0;
+    result.z = 0;
+    result.speedScale = 1;
+    return result;
   }
   let pushX = 0;
   let pushZ = 0;
@@ -207,11 +218,10 @@ export function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ,
       }
     }
   }
-  return {
-    x: pushX * strength * dt,
-    z: pushZ * strength * dt,
-    speedScale,
-  };
+  result.x = pushX * strength * dt;
+  result.z = pushZ * strength * dt;
+  result.speedScale = speedScale;
+  return result;
 }
 
 export function tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ, distance, collided, now, deps) {
