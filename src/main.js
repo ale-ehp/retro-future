@@ -318,6 +318,10 @@ import {
   TRON_SYNTH_MUSIC_PATTERN_STEPS,
   TRON_SYNTH_MUSIC_SCHEDULE_AHEAD,
   TRON_SYNTH_MUSIC_STEP_SEC,
+  createTronIntroBitcrushCurve as createTronIntroBitcrushCurveCore,
+  createTronIntroDistortionCurve as createTronIntroDistortionCurveCore,
+  createTronIntroNoiseBuffer,
+  createTronSynthNoiseBuffer,
 } from './audio.js';
 import {
   LAB_EQUALIZER_ANALYSER_MAX_DB,
@@ -1741,18 +1745,6 @@ function ensureTronAudioContext() {
   return footstepAudioContext;
 }
 
-function createTronSynthNoiseBuffer(ctx) {
-  const length = Math.max(1, Math.floor(ctx.sampleRate * 0.45));
-  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-  const channel = buffer.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < length; i += 1) {
-    last = last * 0.72 + (Math.random() * 2 - 1) * 0.28;
-    channel[i] = last;
-  }
-  return buffer;
-}
-
 function setupTronSynthMusicGraph(ctx) {
   if (tronSynthMusic.masterGain) return true;
   const masterGain = ctx.createGain();
@@ -1799,48 +1791,11 @@ function createTronSoundtrackElement() {
 }
 
 function createTronIntroBitcrushCurve(bitDepth, crusher) {
-  const safeBits = THREE.MathUtils.clamp(Math.round(bitDepth), 2, 16);
-  const safeCrusher = THREE.MathUtils.clamp(Number(crusher) || 0, 0, 1);
-  const key = `${safeBits}:${safeCrusher.toFixed(3)}`;
-  if (tronSoundtrack.introBitcrushCurveKey === key && tronSoundtrack.introBitcrushCurve) return tronSoundtrack.introBitcrushCurve;
-  const levels = Math.max(2, 2 ** safeBits);
-  const curve = new Float32Array(TRON_SOUNDTRACK_INTRO_FX_CURVE_SIZE);
-  for (let i = 0; i < curve.length; i += 1) {
-    const x = (i / (curve.length - 1)) * 2 - 1;
-    const crushed = Math.round(x * levels) / levels;
-    curve[i] = THREE.MathUtils.lerp(x, crushed, safeCrusher);
-  }
-  tronSoundtrack.introBitcrushCurve = curve;
-  tronSoundtrack.introBitcrushCurveKey = key;
-  return curve;
+  return createTronIntroBitcrushCurveCore(bitDepth, crusher, tronSoundtrack);
 }
 
 function createTronIntroDistortionCurve(amount) {
-  const safeAmount = THREE.MathUtils.clamp(Number(amount) || 0, 0, 1);
-  const key = safeAmount.toFixed(3);
-  if (tronSoundtrack.introDistortionCurveKey === key && tronSoundtrack.introDistortionCurve) return tronSoundtrack.introDistortionCurve;
-  const drive = 1 + safeAmount * 44;
-  const curve = new Float32Array(TRON_SOUNDTRACK_INTRO_FX_CURVE_SIZE);
-  for (let i = 0; i < curve.length; i += 1) {
-    const x = (i / (curve.length - 1)) * 2 - 1;
-    const shaped = (Math.atan(x * drive) / Math.atan(drive));
-    curve[i] = THREE.MathUtils.lerp(x, shaped, safeAmount);
-  }
-  tronSoundtrack.introDistortionCurve = curve;
-  tronSoundtrack.introDistortionCurveKey = key;
-  return curve;
-}
-
-function createTronIntroNoiseBuffer(ctx) {
-  const length = Math.max(1, Math.floor(ctx.sampleRate * 1.5));
-  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-  const channel = buffer.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < length; i += 1) {
-    last = last * 0.56 + (Math.random() * 2 - 1) * 0.44;
-    channel[i] = last;
-  }
-  return buffer;
+  return createTronIntroDistortionCurveCore(amount, tronSoundtrack);
 }
 
 function setAudioParamSmooth(param, value, seconds = 0.04) {
