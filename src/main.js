@@ -10070,15 +10070,66 @@ const TRON_RUNNER_GREET_DISTANCE = 4.0;
 const GREETER_HEAD_MAX_YAW = 1.3963; // +/-80deg => 160deg total head turn, no neck over-rotation
 const GREETER_HEAD_YAW_SIGN = 1;
 const greeterTargetScratch = { x: 0, z: 0 };
+// After the welcome bubble dissolves the greeter walks over to the departures board
+// (the "12 reparti" tabellone) and posts up just past its right-hand edge, facing the player.
+const GREETER_BOARD_SIDE_GAP = 2.4;  // clearance beyond the board's right edge (world units)
+const GREETER_BOARD_FRONT_GAP = 1.4; // step toward the player off the board plane (no clipping)
+const GREETER_BOARD_REACH = 0.8;     // arrival radius at the board anchor
+const greeterBoardAnchorScratch = { x: 0, z: 0 };
+
+// Right-hand edge of the primary departures board, in world space. The board is a plane
+// rotated yaw about Y (yaw is 0 or PI), so its local +X (width axis) maps to
+// (cos yaw, 0, -sin yaw) and its player-facing normal to (sin yaw, 0, cos yaw).
+function resolveGreeterBoardAnchor() {
+  const boards = typeof getCityDepartmentBoards === 'function' ? getCityDepartmentBoards() : null;
+  if (!boards || !boards.length) return null;
+  const board = boards.find((b) => b?.group?.visible && b?.boardPosition) || boards[0];
+  if (!board || !board.boardPosition) return null;
+  const yaw = board.yaw || 0;
+  const halfWidth = (board.boardWidth || 21) * 0.5;
+  const rightX = Math.cos(yaw);
+  const rightZ = -Math.sin(yaw);
+  const normalX = Math.sin(yaw);
+  const normalZ = Math.cos(yaw);
+  greeterBoardAnchorScratch.x = board.boardPosition.x + rightX * (halfWidth + GREETER_BOARD_SIDE_GAP) + normalX * GREETER_BOARD_FRONT_GAP;
+  greeterBoardAnchorScratch.z = board.boardPosition.z + rightZ * (halfWidth + GREETER_BOARD_SIDE_GAP) + normalZ * GREETER_BOARD_FRONT_GAP;
+  return greeterBoardAnchorScratch;
+}
+
+// Resume walking after the welcome: hard-switch idle->walk action weights (a crossfade
+// can't progress because distance-driven walk only calls mixer.update(0)).
+function startGreeterWalkingToBoard(member) {
+  member.greetPosed = false;
+  const walk = member.action;
+  const idle = member.idleAction;
+  if (walk) { walk.enabled = true; walk.setEffectiveTimeScale(1); walk.setEffectiveWeight(1); walk.play(); }
+  if (idle) { idle.stop(); idle.setEffectiveWeight(0); }
+  if (member.reflectionAction) { member.reflectionAction.enabled = true; member.reflectionAction.setEffectiveWeight(1); member.reflectionAction.play(); }
+  if (member.reflectionIdleAction) { member.reflectionIdleAction.stop(); member.reflectionIdleAction.setEffectiveWeight(0); }
+  if (member.reflectionLedAction) { member.reflectionLedAction.enabled = true; member.reflectionLedAction.setEffectiveWeight(1); member.reflectionLedAction.play(); }
+  if (member.reflectionLedIdleAction) { member.reflectionLedIdleAction.stop(); member.reflectionLedIdleAction.setEffectiveWeight(0); }
+}
 
 const tronRunnerCrowdNextPointScratch = { x: 0, z: 0 };
 function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   normalizeTronRunnerCrowdState(member, now);
   const route = member.route;
   const isGreeter = member.index === TRON_RUNNER_GREETER_INDEX;
-  if (isGreeter && member.greetDone) {
-    // Welcomed: freeze into a neutral standing pose (bind pose = straight legs, then arms
-    // crossed like the idle character) so we don't stop mid-stride with a leg raised.
+  // Once the welcome bubble has dissolved, leave the welcome stance and head for the
+  // departures board. Retries each frame until the board anchor resolves.
+  if (isGreeter && member.greetStage === 'welcome'
+      && member.greetAt && (now - member.greetAt) > GREETER_BUBBLE_DURATION_MS) {
+    const anchor = resolveGreeterBoardAnchor();
+    if (anchor) {
+      member.greetBoardAnchorX = anchor.x;
+      member.greetBoardAnchorZ = anchor.z;
+      member.greetStage = 'toBoard';
+      startGreeterWalkingToBoard(member);
+    }
+  }
+  if (isGreeter && (member.greetStage === 'welcome' || member.greetStage === 'atBoard')) {
+    // Welcomed/parked: freeze into a neutral standing pose (bind pose = straight legs, then
+    // arms crossed like the idle character) so we don't stop mid-stride with a leg raised.
     if (!member.greetPosed) {
       member.greetPosed = true;
       // Crossfade from walking into the soldier idle clip: a natural standing welcome
@@ -10109,7 +10160,9 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       }
     }
     member.lastMovedDistance = 0;
-    // Body stays put; only the head turns toward the player, clamped to +/-80deg.
+    // Turn the body to face the player (welcoming host), then the head tracks within +/-80deg.
+    const bodyFaceYaw = Math.atan2(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
+    member.group.rotation.y = lerpAngle(member.group.rotation.y, bodyFaceYaw, Math.min(1, dt * 4));
     if (!member.headBone) {
       member.model?.traverse((o) => { if (!member.headBone && o.isBone && /head$/i.test(o.name)) member.headBone = o; });
     }
@@ -10134,8 +10187,13 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   const current = member.group.position;
   let target;
   if (isGreeter) {
-    greeterTargetScratch.x = camera.position.x;
-    greeterTargetScratch.z = camera.position.z;
+    if (member.greetStage === 'toBoard') {
+      greeterTargetScratch.x = member.greetBoardAnchorX;
+      greeterTargetScratch.z = member.greetBoardAnchorZ;
+    } else {
+      greeterTargetScratch.x = camera.position.x;
+      greeterTargetScratch.z = camera.position.z;
+    }
     target = greeterTargetScratch;
   } else {
     target = route.points[member.waypointIndex % route.points.length];
@@ -10144,8 +10202,15 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   const dz = target.z - current.z;
   const distance = Math.hypot(dx, dz);
   if (isGreeter) {
-    if (distance <= TRON_RUNNER_GREET_DISTANCE) {
-      member.greetDone = true;
+    if (member.greetStage === 'toBoard') {
+      if (distance <= GREETER_BOARD_REACH) {
+        member.greetStage = 'atBoard'; // re-pose to idle + face player next frame
+        member.lastMovedDistance = 0;
+        return;
+      }
+    } else if (distance <= TRON_RUNNER_GREET_DISTANCE) {
+      member.greetDone = true;       // keeps the welcome bubble showing
+      member.greetStage = 'welcome';
       member.greetAt = now;
       member.lastMovedDistance = 0;
       return;
