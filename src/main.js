@@ -17257,51 +17257,114 @@ function buildAtmosphereParticles() {
 }
 buildAtmosphereParticles();
 
-// ---------- Greeter welcome speech bubble ----------
-let greeterSpeechBubble = null;
+// ---------- Greeter welcome speech bubble (3D world sprite, like the //error sign) ----------
+// A billboarded sprite anchored above the greeter in world space, NOT a screen-space DOM
+// overlay. It is locked to the character (body X/Z + head height), stays upright, and faces
+// the camera the same way the boundary //error panel does.
 const greeterBubbleWorldScratch = new THREE.Vector3();
 const greeterBubbleHeadScratch = new THREE.Vector3();
-const greeterBubbleViewScratch = new THREE.Vector3();
 const GREETER_BUBBLE_HEAD_Y = 5.0;
-const GREETER_BUBBLE_HEAD_GAP = 1.6;
-const GREETER_BUBBLE_REF_DIST = 7.0; // distance at which the bubble is shown at 1x
-const GREETER_BUBBLE_DURATION_MS = 3000; // welcome message dissolves after this
-function ensureGreeterSpeechBubble() {
-  if (greeterSpeechBubble) return greeterSpeechBubble;
-  const el = document.createElement('div');
-  el.innerHTML = 'Benvenuto in<br>avstudio.ai';
-  el.style.cssText = [
-    'position:fixed', 'left:0', 'top:0', 'transform-origin:50% 100%', 'transform:translate(-50%, -100%)',
-    'padding:7px 13px', 'border:1px solid rgba(143,252,255,0.85)', 'border-radius:9px',
-    'background:rgba(0,16,20,0.72)', 'color:#cdfcff', 'text-align:center', 'line-height:1.25',
-    "font:600 14px 'Menlo', Consolas, monospace", 'letter-spacing:0.02em', 'white-space:nowrap',
-    'pointer-events:none', 'z-index:40', 'box-shadow:0 0 14px rgba(98,247,255,0.45)',
-    'text-shadow:0 0 6px rgba(98,247,255,0.6)', 'opacity:0', 'transition:opacity 0.45s ease',
-  ].join(';');
-  document.body.appendChild(el);
-  greeterSpeechBubble = el;
-  return el;
+const GREETER_BUBBLE_HEAD_GAP = 1.1;       // world units above the head
+const GREETER_BUBBLE_WORLD_HEIGHT = 1.5;   // sprite height in world units at sizeScale 1
+const GREETER_BUBBLE_DURATION_MS = 3000;   // welcome message dissolves after this
+let greeterBubbleSprite = null;
+const greeterBubbleTextureCache = new Map();
+
+function makeGreeterBubbleTexture(html) {
+  const lines = String(html).split(/<br\s*\/?>/i).map((s) => s.trim());
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 320;
+  const ctx = canvas.getContext('2d');
+  const pad = 30;
+  const maxTextW = canvas.width - pad * 2 - 36;
+  let fontPx = 74;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const widest = () => {
+    ctx.font = `700 ${fontPx}px Menlo, Consolas, monospace`;
+    return Math.max(...lines.map((l) => ctx.measureText(l).width));
+  };
+  while (fontPx > 28 && widest() > maxTextW) fontPx -= 2;
+  const lineH = fontPx * 1.24;
+  const blockH = lineH * lines.length;
+  const panelH = blockH + 56;
+  const panelW = Math.min(canvas.width - pad, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 88);
+  const px = (canvas.width - panelW) / 2;
+  const py = (canvas.height - panelH) / 2;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // panel
+  ctx.save();
+  ctx.shadowColor = 'rgba(98,247,255,0.55)';
+  ctx.shadowBlur = 26;
+  ctx.fillStyle = 'rgba(0,16,20,0.78)';
+  ctx.beginPath();
+  ctx.roundRect(px, py, panelW, panelH, 18);
+  ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(143,252,255,0.9)';
+  ctx.lineWidth = 3;
+  ctx.shadowColor = 'rgba(98,247,255,0.8)';
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.roundRect(px, py, panelW, panelH, 18);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  // text
+  ctx.font = `700 ${fontPx}px Menlo, Consolas, monospace`;
+  ctx.fillStyle = 'rgba(205,252,255,0.98)';
+  ctx.shadowColor = 'rgba(98,247,255,0.7)';
+  ctx.shadowBlur = 10;
+  const cy = canvas.height / 2 - blockH / 2 + lineH / 2;
+  lines.forEach((line, i) => ctx.fillText(line, canvas.width / 2, cy + i * lineH));
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 1);
+  texture.__aspect = canvas.width / canvas.height;
+  return texture;
 }
+
+function getGreeterBubbleTexture(html) {
+  let tex = greeterBubbleTextureCache.get(html);
+  if (!tex) { tex = makeGreeterBubbleTexture(html); greeterBubbleTextureCache.set(html, tex); }
+  return tex;
+}
+
+function ensureGreeterBubbleSprite() {
+  if (greeterBubbleSprite) return greeterBubbleSprite;
+  greeterBubbleSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+    depthTest: false,
+    toneMapped: false,
+  }));
+  greeterBubbleSprite.visible = false;
+  greeterBubbleSprite.renderOrder = 26;
+  greeterBubbleSprite.frustumCulled = false;
+  scene.add(greeterBubbleSprite);
+  return greeterBubbleSprite;
+}
+
 function updateGreeterSpeechBubble() {
   const greeter = tronRunnerCrowd[TRON_RUNNER_GREETER_INDEX];
-  const el = ensureGreeterSpeechBubble();
+  const sprite = ensureGreeterBubbleSprite();
   if (!greeter || !tronRunnerCrowdGroup.visible || !cityRevealComplete
       || !greeter.bubbleText || !greeter.bubbleUntil || performance.now() > greeter.bubbleUntil) {
-    el.style.opacity = '0'; // no active message
+    sprite.visible = false; // no active message
     return;
   }
-  if (el.__bubbleText !== greeter.bubbleText) {
-    el.innerHTML = greeter.bubbleText;
-    el.__bubbleText = greeter.bubbleText;
-  }
+  const tex = getGreeterBubbleTexture(greeter.bubbleText);
+  if (sprite.material.map !== tex) { sprite.material.map = tex; sprite.material.needsUpdate = true; }
   if (!greeter.headBone) {
     greeter.model?.traverse((object) => {
       if (!greeter.headBone && object.isBone && /head$/i.test(object.name)) greeter.headBone = object;
     });
   }
-  // Anchor horizontally to the BODY (group), not the head bone: the head yaws +/-80deg to
-  // track the player, and anchoring there made the bubble swing toward the player/camera.
-  // Keep the head's height so the bubble still floats just above the head, dead straight.
+  // Anchor to the body (group X/Z), not the head bone (which yaws +/-80deg to track the player),
+  // at head height + a small gap. Sprite billboards upright toward the camera.
   greeter.group.getWorldPosition(greeterBubbleWorldScratch);
   let bubbleHeadY = greeterBubbleWorldScratch.y + GREETER_BUBBLE_HEAD_Y;
   if (greeter.headBone) {
@@ -17309,17 +17372,11 @@ function updateGreeterSpeechBubble() {
     bubbleHeadY = greeterBubbleHeadScratch.y;
   }
   greeterBubbleWorldScratch.y = bubbleHeadY + GREETER_BUBBLE_HEAD_GAP;
-  greeterBubbleViewScratch.copy(greeterBubbleWorldScratch).applyMatrix4(camera.matrixWorldInverse);
-  if (greeterBubbleViewScratch.z > -0.5) { el.style.opacity = '0'; return; } // behind/at camera
-  const dist = Math.max(0.5, -greeterBubbleViewScratch.z);
-  const scale = THREE.MathUtils.clamp(GREETER_BUBBLE_REF_DIST / dist, 0.45, 1.5) * (greeter.bubbleSizeScale || 1);
-  greeterBubbleWorldScratch.project(camera);
-  const x = (greeterBubbleWorldScratch.x * 0.5 + 0.5) * window.innerWidth;
-  const y = (-greeterBubbleWorldScratch.y * 0.5 + 0.5) * window.innerHeight;
-  el.style.left = `${x.toFixed(1)}px`;
-  el.style.top = `${y.toFixed(1)}px`;
-  el.style.transform = `translate(-50%, -100%) scale(${scale.toFixed(3)})`;
-  el.style.opacity = '1';
+  sprite.position.copy(greeterBubbleWorldScratch);
+  const h = GREETER_BUBBLE_WORLD_HEIGHT * (greeter.bubbleSizeScale || 1);
+  const aspect = tex.__aspect || 2;
+  sprite.scale.set(h * aspect, h, 1);
+  sprite.visible = true;
 }
 
 function tick(now) {
