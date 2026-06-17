@@ -10094,8 +10094,7 @@ const GREETER_BOARD_SIDE_GAP = 2.4;  // clearance beyond the board's right edge 
 const GREETER_BOARD_FRONT_GAP = 1.4; // step toward the player off the board plane (no clipping)
 const GREETER_BOARD_REACH = 0.8;     // arrival radius at the board anchor
 const GREETER_FOLLOW_DELAY_MS = 1000; // show "Seguimi" first, then start moving 1s later
-const GREETER_BOARD_BUBBLE_RANGE = 10.0; // "Questi sono i nostri reparti" shows within 10m of the greeter
-const GREETER_BOARD_BUBBLE_LINGER_MS = 500; // ...and lingers 0.5s after the player steps away
+const GREETER_BOARD_BUBBLE_RANGE = 16.0; // "Questi sono i nostri reparti" shows within 16m of the greeter
 const GREETER_BOARD_STANCE_DEG = 45; // at the board the body sits 45deg between player and board
 const greeterBoardAnchorScratch = { x: 0, z: 0, cx: 0, cz: 0 };
 
@@ -10187,6 +10186,7 @@ function setGreeterBubble(member, html, durationMs, now, sizeScale = 1) {
   member.bubbleText = html;
   member.bubbleUntil = now + durationMs;
   member.bubbleSizeScale = sizeScale;
+  member.bubbleProximity = false; // timed message (shows until bubbleUntil)
 }
 
 const tronRunnerCrowdNextPointScratch = { x: 0, z: 0 };
@@ -10199,7 +10199,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       && member.greetAt && (now - member.greetAt) > GREETER_BUBBLE_DURATION_MS) {
     member.greetStage = 'followPrompt';
     member.followPromptAt = now;
-    setGreeterBubble(member, 'Seguimi', 5000, now);
+    setGreeterBubble(member, 'Seguimi', 8000, now);
   }
   // ...then 1s later set off for the departures board (retry until the anchor resolves).
   if (isGreeter && member.greetStage === 'followPrompt'
@@ -10258,12 +10258,12 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       const rel = Math.atan2(Math.sin(yawToBoard - yawToPlayer), Math.cos(yawToBoard - yawToPlayer));
       const stance = THREE.MathUtils.degToRad(GREETER_BOARD_STANCE_DEG);
       bodyYaw = yawToPlayer + Math.sign(rel || 1) * Math.min(stance, Math.abs(rel));
-      // Proximity-gated bubble: refresh while within 3m; auto-expires 0.5s after I step away,
-      // reappears when I come back. (setGreeterBubble sets bubbleUntil = now + linger.)
+      // Proximity-gated bubble: the renderer eases opacity in/out over 0.5s as bubbleInRange flips.
       const distToPlayer = Math.hypot(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
-      if (distToPlayer <= GREETER_BOARD_BUBBLE_RANGE) {
-        setGreeterBubble(member, 'Questi sono i<br>nostri reparti', GREETER_BOARD_BUBBLE_LINGER_MS, now, 2);
-      }
+      member.bubbleText = 'Questi sono i<br>nostri reparti';
+      member.bubbleSizeScale = 2;
+      member.bubbleProximity = true;
+      member.bubbleInRange = distToPlayer <= GREETER_BOARD_BUBBLE_RANGE;
     }
     member.group.rotation.y = lerpAngle(member.group.rotation.y, bodyYaw, Math.min(1, dt * 4));
     applyGreeterHeadLook(member, dt);
@@ -17265,7 +17265,9 @@ const greeterBubbleWorldScratch = new THREE.Vector3();
 const GREETER_BUBBLE_HEAD_GAP = 1.1;       // world units above the head
 const GREETER_BUBBLE_WORLD_HEIGHT = 1.5;   // sprite height in world units at sizeScale 1
 const GREETER_BUBBLE_DURATION_MS = 3000;   // welcome message dissolves after this
+const GREETER_BUBBLE_FADE_SEC = 0.5;       // dissolve in/out time
 let greeterBubbleSprite = null;
+let greeterBubbleLastMs = 0;
 const greeterBubbleTextureCache = new Map();
 
 function makeGreeterBubbleTexture(html) {
@@ -17339,7 +17341,7 @@ function ensureGreeterBubbleSprite() {
     new THREE.PlaneGeometry(1, 1),
     new THREE.MeshBasicMaterial({
       transparent: true,
-      opacity: 1,
+      opacity: 0,
       depthWrite: false,
       depthTest: false,
       toneMapped: false,
@@ -17356,11 +17358,22 @@ function ensureGreeterBubbleSprite() {
 function updateGreeterSpeechBubble() {
   const greeter = tronRunnerCrowd[TRON_RUNNER_GREETER_INDEX];
   const sprite = ensureGreeterBubbleSprite();
-  if (!greeter || !tronRunnerCrowdGroup.visible || !cityRevealComplete
-      || !greeter.bubbleText || !greeter.bubbleUntil || performance.now() > greeter.bubbleUntil) {
-    sprite.visible = false; // no active message
-    return;
+  const nowMs = performance.now();
+  const fadeDt = greeterBubbleLastMs ? Math.min(0.1, (nowMs - greeterBubbleLastMs) / 1000) : 0;
+  greeterBubbleLastMs = nowMs;
+  // Decide whether the bubble should be shown: proximity messages follow bubbleInRange,
+  // timed messages follow bubbleUntil. Opacity then eases toward that over GREETER_BUBBLE_FADE_SEC.
+  let show = false;
+  if (greeter && tronRunnerCrowdGroup.visible && cityRevealComplete && greeter.bubbleText) {
+    show = greeter.bubbleProximity ? Boolean(greeter.bubbleInRange) : (greeter.bubbleUntil && nowMs < greeter.bubbleUntil);
   }
+  const target = show ? 1 : 0;
+  const stepOp = fadeDt > 0 ? fadeDt / GREETER_BUBBLE_FADE_SEC : (target ? 1 : 0);
+  let op = sprite.material.opacity ?? 0;
+  if (op < target) op = Math.min(target, op + stepOp);
+  else if (op > target) op = Math.max(target, op - stepOp);
+  sprite.material.opacity = op;
+  if (op <= 0.001 || !greeter || !greeter.bubbleText) { sprite.visible = false; return; }
   const tex = getGreeterBubbleTexture(greeter.bubbleText);
   if (sprite.material.map !== tex) { sprite.material.map = tex; sprite.material.needsUpdate = true; }
   // Anchor purely to the body (group world position) at a constant height above the head.
