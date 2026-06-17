@@ -8358,6 +8358,17 @@ const tronRunnerCrowd = [];
 const tronRunnerIdleCharacter = createTronRunnerIdleCharacter({
   group: tronRunnerIdleCharacterGroup,
 });
+// The stationary idle character (parked at civic 2) gets one ambient line on approach,
+// reusing the crowd speech-bubble pool. Shaped like a crowd talker (group + talk* fields).
+const tronRunnerIdleTalk = {
+  group: tronRunnerIdleCharacterGroup,
+  talkLines: ['Mi godo la pausa'],
+  talkCycle: 0,
+  talkArmed: true,
+  talkUntil: 0,
+  talkStart: 0,
+  talkText: '',
+};
 const tronRunnerCrowdBox = new THREE.Box3();
 const tronRunnerIdleCharacterBoundsCenter = new THREE.Vector3();
 const tronRunnerCrowdSize = new THREE.Vector3();
@@ -17559,6 +17570,23 @@ function updateTronRunnerCrowdSpeechBubbles() {
       const dx = camera.position.x - member.group.position.x;
       const dz = camera.position.z - member.group.position.z;
       crowdBubbleTalkers.push({ member, distSq: dx * dx + dz * dz });
+    }
+    // The stationary idle character at civic 2 (same approach trigger / hysteresis as the crowd).
+    if (tronRunnerIdleCharacterGroup.visible) {
+      const idle = tronRunnerIdleTalk;
+      tronRunnerIdleCharacterGroup.getWorldPosition(crowdBubbleWorldScratch);
+      const dx = camera.position.x - crowdBubbleWorldScratch.x;
+      const dz = camera.position.z - crowdBubbleWorldScratch.z;
+      const idleDistSq = dx * dx + dz * dz;
+      if (idle.talkArmed && idleDistSq <= TRON_RUNNER_CROWD_TALK_RANGE * TRON_RUNNER_CROWD_TALK_RANGE) {
+        idle.talkText = idle.talkLines[0];
+        idle.talkStart = nowMs;
+        idle.talkUntil = nowMs + TRON_RUNNER_CROWD_TALK_DURATION_MS;
+        idle.talkArmed = false;
+      } else if (!idle.talkArmed && idleDistSq > TRON_RUNNER_CROWD_TALK_REARM_RANGE * TRON_RUNNER_CROWD_TALK_REARM_RANGE) {
+        idle.talkArmed = true;
+      }
+      if (idle.talkText && nowMs < idle.talkUntil) crowdBubbleTalkers.push({ member: idle, distSq: idleDistSq });
     }
     crowdBubbleTalkers.sort((a, b) => a.distSq - b.distSq);
   }
