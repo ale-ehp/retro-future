@@ -10067,6 +10067,7 @@ const TRON_RUNNER_CROWD_PAUSE_MAX_MS = 2800;
 // then stays put. The cyan member behaves like a normal crowd member.
 const TRON_RUNNER_GREETER_INDEX = 1;
 const TRON_RUNNER_GREET_DISTANCE = 4.0;
+const GREETER_SPEED_MULTIPLIER = 1.15; // the greeter always moves 15% faster than the crowd
 const GREETER_HEAD_MAX_YAW = 1.3963; // +/-80deg => 160deg total head turn, no neck over-rotation
 const GREETER_HEAD_YAW_SIGN = 1;
 const greeterTargetScratch = { x: 0, z: 0 };
@@ -10110,6 +10111,31 @@ function startGreeterWalkingToBoard(member) {
   if (member.reflectionLedIdleAction) { member.reflectionLedIdleAction.stop(); member.reflectionLedIdleAction.setEffectiveWeight(0); }
 }
 
+// Head always tracks the player, clamped to the neck range, relative to the current body
+// facing. Works while standing AND while walking (body yaw changes, head re-tracks).
+function applyGreeterHeadLook(member, dt) {
+  if (!member.headBone) {
+    member.model?.traverse((o) => { if (!member.headBone && o.isBone && /head$/i.test(o.name)) member.headBone = o; });
+  }
+  if (!member.headBone) return;
+  const lookYaw = Math.atan2(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
+  let rel = lookYaw - member.group.rotation.y;
+  rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+  rel = THREE.MathUtils.clamp(rel, -GREETER_HEAD_MAX_YAW, GREETER_HEAD_MAX_YAW) * GREETER_HEAD_YAW_SIGN;
+  member.headLookYaw = lerpAngle(member.headLookYaw ?? 0, rel, Math.min(1, dt * 4));
+  member.headBone.rotation.y = member.headLookYaw;
+  if (!member.reflectionHeadBone && member.reflectionModel) {
+    member.reflectionModel.traverse((o) => { if (!member.reflectionHeadBone && o.isBone && /head$/i.test(o.name)) member.reflectionHeadBone = o; });
+  }
+  if (member.reflectionHeadBone) member.reflectionHeadBone.rotation.y = member.headLookYaw;
+}
+
+// Queue a timed speech bubble over the greeter's head (text + lifetime in ms).
+function setGreeterBubble(member, html, durationMs, now) {
+  member.bubbleText = html;
+  member.bubbleUntil = now + durationMs;
+}
+
 const tronRunnerCrowdNextPointScratch = { x: 0, z: 0 };
 function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   normalizeTronRunnerCrowdState(member, now);
@@ -10124,6 +10150,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       member.greetBoardAnchorX = anchor.x;
       member.greetBoardAnchorZ = anchor.z;
       member.greetStage = 'toBoard';
+      setGreeterBubble(member, 'Seguimi', 2000, now);
       startGreeterWalkingToBoard(member);
     }
   }
@@ -10163,21 +10190,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
     // Turn the body to face the player (welcoming host), then the head tracks within +/-80deg.
     const bodyFaceYaw = Math.atan2(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
     member.group.rotation.y = lerpAngle(member.group.rotation.y, bodyFaceYaw, Math.min(1, dt * 4));
-    if (!member.headBone) {
-      member.model?.traverse((o) => { if (!member.headBone && o.isBone && /head$/i.test(o.name)) member.headBone = o; });
-    }
-    if (member.headBone) {
-      const lookYaw = Math.atan2(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
-      let rel = lookYaw - member.group.rotation.y;
-      rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-      rel = THREE.MathUtils.clamp(rel, -GREETER_HEAD_MAX_YAW, GREETER_HEAD_MAX_YAW) * GREETER_HEAD_YAW_SIGN;
-      member.headLookYaw = lerpAngle(member.headLookYaw ?? 0, rel, Math.min(1, dt * 4));
-      member.headBone.rotation.y = member.headLookYaw;
-      if (!member.reflectionHeadBone && member.reflectionModel) {
-        member.reflectionModel.traverse((o) => { if (!member.reflectionHeadBone && o.isBone && /head$/i.test(o.name)) member.reflectionHeadBone = o; });
-      }
-      if (member.reflectionHeadBone) member.reflectionHeadBone.rotation.y = member.headLookYaw;
-    }
+    applyGreeterHeadLook(member, dt);
     return;
   }
   if (!isGreeter && !route?.points?.length) {
@@ -10205,6 +10218,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
     if (member.greetStage === 'toBoard') {
       if (distance <= GREETER_BOARD_REACH) {
         member.greetStage = 'atBoard'; // re-pose to idle + face player next frame
+        setGreeterBubble(member, 'Questi sono i nostri dipartimenti', 4000, now);
         member.lastMovedDistance = 0;
         return;
       }
@@ -10212,6 +10226,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       member.greetDone = true;       // keeps the welcome bubble showing
       member.greetStage = 'welcome';
       member.greetAt = now;
+      setGreeterBubble(member, 'Benvenuto in<br>avstudio.ai', GREETER_BUBBLE_DURATION_MS, now);
       member.lastMovedDistance = 0;
       return;
     }
@@ -10255,6 +10270,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   const surface = tronRunnerSurfaceYForPoint(nextPoint.x, nextPoint.z);
   member.group.position.set(nextPoint.x, surface.y, nextPoint.z);
   member.group.rotation.y = lerpAngle(member.group.rotation.y, Math.atan2(dirX, dirZ), Math.min(1, dt * 8));
+  if (isGreeter) applyGreeterHeadLook(member, dt); // head keeps tracking the player while walking
   member.surface = surface.surface;
   member.groundOffset = member.group.position.y - surface.groundY;
   member.distanceWalked += movedDistance;
@@ -10300,9 +10316,10 @@ function updateTronRunnerCrowd(dt) {
       member.reflectionLedAction?.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
       member.lastEffectiveAnimationSpeed = nextEffectiveAnimationSpeed;
     }
-    member.speed = tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (member.speedScaleOffset ?? 1);
     // The greeter always updates (even when off-screen) so it reliably walks over to greet the player.
     const isGreeterMember = member.index === TRON_RUNNER_GREETER_INDEX;
+    member.speed = tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (member.speedScaleOffset ?? 1)
+      * (isGreeterMember ? GREETER_SPEED_MULTIPLIER : 1);
     const cullingHidden = TRON_RUNNER_CROWD_CULLING_ENABLED && member.cullingVisible === false && !isGreeterMember;
     member.lodStride = isGreeterMember
       ? 1
@@ -17185,13 +17202,14 @@ function ensureGreeterSpeechBubble() {
 function updateGreeterSpeechBubble() {
   const greeter = tronRunnerCrowd[TRON_RUNNER_GREETER_INDEX];
   const el = ensureGreeterSpeechBubble();
-  if (!greeter || !greeter.greetDone || !tronRunnerCrowdGroup.visible || !cityRevealComplete) {
-    el.style.opacity = '0';
+  if (!greeter || !tronRunnerCrowdGroup.visible || !cityRevealComplete
+      || !greeter.bubbleText || !greeter.bubbleUntil || performance.now() > greeter.bubbleUntil) {
+    el.style.opacity = '0'; // no active message
     return;
   }
-  if (greeter.greetAt && performance.now() - greeter.greetAt > GREETER_BUBBLE_DURATION_MS) {
-    el.style.opacity = '0'; // dissolve after the welcome
-    return;
+  if (el.__bubbleText !== greeter.bubbleText) {
+    el.innerHTML = greeter.bubbleText;
+    el.__bubbleText = greeter.bubbleText;
   }
   if (!greeter.headBone) {
     greeter.model?.traverse((object) => {
