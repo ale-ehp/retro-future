@@ -409,6 +409,10 @@ import {
   updateAtmosphereParticles,
 } from './atmosphere-particles.js';
 import {
+  applyEdgePulseShader,
+  updateEdgePulse,
+} from './energy-pulse.js';
+import {
   LAB_EQUALIZER_ANALYSER_MAX_DB,
   LAB_EQUALIZER_ANALYSER_MIN_DB,
   LAB_EQUALIZER_ANALYSER_SMOOTHING,
@@ -5211,55 +5215,7 @@ crossStreetZ.forEach((z) => {
   addSideRoad(0, z);
 });
 
-// ---------- Tron energy pulses: bright bands travelling along the boulevard edge lines ----------
-const edgePulseState = {
-  speed: -30,
-  period: 42,
-  intensity: 2.0,
-};
-const edgePulseMaterials = [];
-function applyEdgePulseShader(material) {
-  // Inject a Z-axis travelling pulse into a MeshBasic edge material (same onBeforeCompile
-  // pattern as the facade vertical reveal). The pulse brightens the cyan as it passes so the
-  // bloom pass turns it into flowing energy. Tunable via edgePulseState.
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.uEdgePulseTime = { value: 0 };
-    shader.uniforms.uEdgePulseSpeed = { value: edgePulseState.speed };
-    shader.uniforms.uEdgePulsePeriod = { value: edgePulseState.period };
-    shader.uniforms.uEdgePulseIntensity = { value: edgePulseState.intensity };
-    material.userData.edgePulseTimeUniform = shader.uniforms.uEdgePulseTime;
-    // vEdgeAlong = signed distance along the strip's own length (world units, from its centre).
-    // The instance's local Z axis is the strip direction, scaled by the strip length.
-    shader.vertexShader = `varying float vEdgeAlong;\n${shader.vertexShader}`.replace(
-      '#include <begin_vertex>',
-      `#include <begin_vertex>
-#ifdef USE_INSTANCING
-vEdgeAlong = position.z * length(instanceMatrix[2].xyz);
-#else
-vEdgeAlong = position.z;
-#endif`
-    );
-    shader.fragmentShader = `uniform float uEdgePulseTime;
-uniform float uEdgePulseSpeed;
-uniform float uEdgePulsePeriod;
-uniform float uEdgePulseIntensity;
-varying float vEdgeAlong;
-${shader.fragmentShader}`.replace(
-      '#include <color_fragment>',
-      `#include <color_fragment>
-{
-  // Energy scrolls ALONG each strip's length (current flowing through the wire).
-  float edgeFlow = fract((vEdgeAlong - uEdgePulseTime * uEdgePulseSpeed) / max(uEdgePulsePeriod, 0.001));
-  // sawtooth ramp -> a bright head with a trailing fade travelling along the strip.
-  float edgeHead = smoothstep(0.0, 0.12, edgeFlow) * (1.0 - smoothstep(0.12, 1.0, edgeFlow));
-  diffuseColor.rgb += diffuseColor.rgb * edgeHead * uEdgePulseIntensity;
-}`
-    );
-  };
-  material.customProgramCacheKey = () => 'tron-edge-energy-flow-v4';
-  material.needsUpdate = true;
-  edgePulseMaterials.push(material);
-}
+// ---------- Tron energy pulses (extracted -> energy-pulse.js) ----------
 
 // ---------- RoadEdge EL strips (cyan tube borders between road and streetEdge) ----------
 const longitudinalRoadEdgeRecords = [];
@@ -17421,9 +17377,7 @@ function tick(now) {
     updateCityRoleBoard();
     flushHexTileBatchUploads();
     const edgePulseSeconds = now * 0.001;
-    for (const material of edgePulseMaterials) {
-      if (material.userData.edgePulseTimeUniform) material.userData.edgePulseTimeUniform.value = edgePulseSeconds;
-    }
+    updateEdgePulse(edgePulseSeconds);
     updateAtmosphereParticles(cityRevealComplete, edgePulseSeconds);
     updateGreeterSpeechBubble();
     updateTronRunnerCrowdSpeechBubbles();
