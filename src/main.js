@@ -2550,6 +2550,7 @@ function applyMovement(dt) {
   if (movementVelocity.lengthSq() <= 0.000001) {
     resolveCameraBuildingCollision();
     resolveCameraRoadHexBoundaryCollision();
+    resolveCameraCrowdCollision();
     resolveCameraWalkSurface(hasVerticalInput);
     return;
   }
@@ -2557,6 +2558,7 @@ function applyMovement(dt) {
   camera.position.addScaledVector(movementVelocity, dt);
   resolveCameraBuildingCollision();
   resolveCameraRoadHexBoundaryCollision();
+  resolveCameraCrowdCollision();
 
   resolveCameraWalkSurface(hasVerticalInput);
 }
@@ -5927,6 +5929,33 @@ function resolveCameraBuildingCollision() {
     const bottomY = c.y ?? 0;
     if (camera.position.y < bottomY - 2 || camera.position.y > bottomY + c.h + 4) continue;
     resolveRoundedRectCollider(c, padding);
+  }
+}
+
+// Player-vs-person stop distance (centre to centre). Tight so you can get nearly
+// shoulder-to-shoulder before being blocked, unlike the wall collision padding.
+const TRON_RUNNER_CROWD_PLAYER_COLLISION_DISTANCE = 1.6;
+function resolveCameraCrowdCollision() {
+  if (isCameraCollisionDisabled()) return;
+  if (!tronRunnerCrowdGroup.visible || !tronRunnerCrowd.length) return;
+  const minDist = TRON_RUNNER_CROWD_PLAYER_COLLISION_DISTANCE;
+  const minDistSq = minDist * minDist;
+  const px = camera.position.x;
+  const pz = camera.position.z;
+  for (const member of tronRunnerCrowd) {
+    const pos = member.group.position;
+    const dx = px - pos.x;
+    const dz = pz - pos.z;
+    const distSq = dx * dx + dz * dz;
+    if (distSq >= minDistSq) continue;
+    if (distSq < 1e-6) {
+      camera.position.x += minDist;
+      continue;
+    }
+    const dist = Math.sqrt(distSq);
+    const push = (minDist - dist) / dist;
+    camera.position.x += dx * push;
+    camera.position.z += dz * push;
   }
 }
 
