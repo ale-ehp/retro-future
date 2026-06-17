@@ -9935,6 +9935,48 @@ function tronRunnerCrowdRoadFacingStart(route, index, fallback) {
   });
 }
 
+// Ambient one-liners the crowd says when the player comes near. Mix of warm greetings,
+// slice-of-life, light avstudio worldbuilding and Tron flavour. No dashes, brand lowercase.
+const TRON_RUNNER_CROWD_LINES = [
+  'Hei, un viso nuovo!',
+  'Felice di incontrarti.',
+  'Benvenuto sulla griglia.',
+  'Ehi, ti aspettavamo.',
+  'Ciao, nuovo arrivato.',
+  'Bella serata, vero?',
+  'Oggi ho dimenticato il pranzo.',
+  'Che giornata lunga.',
+  'Adoro queste luci di notte.',
+  'Stavo giusto tornando a casa.',
+  'Hai visto che traffico di dati?',
+  'Mi servirebbe un caffè.',
+  'Qui costruiamo cose che funzionano.',
+  'Ogni luce è un processo che gira.',
+  'Lo ha disegnato lo studio.',
+  'Niente magia, solo lavoro fatto bene.',
+  'Il flusso è stabile stanotte.',
+  'Segui le linee.',
+  'La griglia ti riconosce.',
+  'Resta sul tracciato.',
+  'Energia al massimo.',
+];
+const TRON_RUNNER_CROWD_TALK_RANGE = 15;     // say something within this distance
+const TRON_RUNNER_CROWD_TALK_REARM_RANGE = 18; // re-arm once you step past this (hysteresis)
+const TRON_RUNNER_CROWD_TALK_DURATION_MS = 4000;
+const TRON_RUNNER_CROWD_TALK_LINES_PER_MEMBER = 3;
+// Deterministic per-index pick of N distinct lines (stable across reloads).
+function pickTronRunnerCrowdLines(index, pool, count) {
+  const out = [];
+  const used = new Set();
+  let s = (Math.imul(index + 1, 2654435761) >>> 0) || 1;
+  while (out.length < count && used.size < pool.length) {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    const k = s % pool.length;
+    if (!used.has(k)) { used.add(k); out.push(pool[k]); }
+  }
+  return out;
+}
+
 function buildTronRunnerCrowdMember(job, index) {
   const group = new THREE.Group();
   group.name = `tron-runner-crowd-${index + 1}`;
@@ -9994,6 +10036,12 @@ function buildTronRunnerCrowdMember(job, index) {
   });
   member.idleClip = job.animations?.find((clip) => /idle/i.test(clip.name)) || null;
   member.runClip = job.animations?.find((clip) => /run/i.test(clip.name)) || null;
+  member.talkLines = pickTronRunnerCrowdLines(index, TRON_RUNNER_CROWD_LINES, TRON_RUNNER_CROWD_TALK_LINES_PER_MEMBER);
+  member.talkCycle = 0;
+  member.talkArmed = true;
+  member.talkUntil = 0;
+  member.talkStart = 0;
+  member.talkText = '';
   tronRunnerCrowd.push(member);
   tronRunnerCrowdGroup.add(group);
 }
@@ -10434,6 +10482,22 @@ function updateTronRunnerCrowd(dt) {
   for (const member of tronRunnerCrowd) {
     // The greeter always updates (even when off-screen) so it reliably walks over to greet the player.
     const isGreeterMember = member.index === TRON_RUNNER_GREETER_INDEX;
+    // Ambient chatter: each non-greeter says one of its lines when the player comes within range,
+    // re-arming once the player steps away (hysteresis). Cycles through the member's lines.
+    if (!isGreeterMember && member.talkLines?.length) {
+      const talkDx = camera.position.x - member.group.position.x;
+      const talkDz = camera.position.z - member.group.position.z;
+      const talkDistSq = talkDx * talkDx + talkDz * talkDz;
+      if (member.talkArmed && talkDistSq <= TRON_RUNNER_CROWD_TALK_RANGE * TRON_RUNNER_CROWD_TALK_RANGE) {
+        member.talkText = member.talkLines[member.talkCycle % member.talkLines.length];
+        member.talkCycle += 1;
+        member.talkStart = now;
+        member.talkUntil = now + TRON_RUNNER_CROWD_TALK_DURATION_MS;
+        member.talkArmed = false;
+      } else if (!member.talkArmed && talkDistSq > TRON_RUNNER_CROWD_TALK_REARM_RANGE * TRON_RUNNER_CROWD_TALK_REARM_RANGE) {
+        member.talkArmed = true;
+      }
+    }
     // While running to the board the greeter's run clip is driven by its own fixed timescale,
     // so skip the crowd's walk-tuned timescale management and the distance-driven walk sync.
     const greeterRunning = isGreeterMember && member.greetStage === 'toBoard';
@@ -17438,6 +17502,63 @@ function updateGreeterSpeechBubble() {
   sprite.visible = true;
 }
 
+// ---------- Crowd ambient speech bubbles (pool of world sprites, like the greeter's) ----------
+const CROWD_BUBBLE_POOL_SIZE = 4; // only the nearest few talkers show at once (readability + perf)
+const crowdBubbleWorldScratch = new THREE.Vector3();
+let crowdBubbleSprites = null;
+const crowdBubbleTalkers = [];
+function ensureCrowdBubbleSprites() {
+  if (crowdBubbleSprites) return crowdBubbleSprites;
+  crowdBubbleSprites = [];
+  for (let i = 0; i < CROWD_BUBBLE_POOL_SIZE; i += 1) {
+    const sprite = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, depthTest: false, toneMapped: false, side: THREE.DoubleSide })
+    );
+    sprite.visible = false;
+    sprite.renderOrder = 26;
+    sprite.frustumCulled = false;
+    scene.add(sprite);
+    crowdBubbleSprites.push(sprite);
+  }
+  return crowdBubbleSprites;
+}
+function updateTronRunnerCrowdSpeechBubbles() {
+  const sprites = ensureCrowdBubbleSprites();
+  crowdBubbleTalkers.length = 0;
+  const nowMs = performance.now();
+  if (tronRunnerCrowdGroup.visible && cityRevealComplete) {
+    for (const member of tronRunnerCrowd) {
+      if (!member.talkText || nowMs >= member.talkUntil || !member.group.visible) continue;
+      const dx = camera.position.x - member.group.position.x;
+      const dz = camera.position.z - member.group.position.z;
+      crowdBubbleTalkers.push({ member, distSq: dx * dx + dz * dz });
+    }
+    crowdBubbleTalkers.sort((a, b) => a.distSq - b.distSq);
+  }
+  for (let i = 0; i < sprites.length; i += 1) {
+    const sprite = sprites[i];
+    const entry = crowdBubbleTalkers[i];
+    if (!entry) { sprite.visible = false; sprite.material.opacity = 0; continue; }
+    const member = entry.member;
+    // Time-based fade: in over 0.3s, out over 0.4s before talkUntil.
+    const fadeIn = (nowMs - member.talkStart) / 300;
+    const fadeOut = (member.talkUntil - nowMs) / 400;
+    const opacity = THREE.MathUtils.clamp(Math.min(fadeIn, fadeOut, 1), 0, 1);
+    if (opacity <= 0.001) { sprite.visible = false; sprite.material.opacity = 0; continue; }
+    const tex = getGreeterBubbleTexture(member.talkText);
+    if (sprite.material.map !== tex) { sprite.material.map = tex; sprite.material.needsUpdate = true; }
+    member.group.getWorldPosition(crowdBubbleWorldScratch);
+    crowdBubbleWorldScratch.y += TRON_RUNNER_TARGET_HEIGHT * member.group.scale.y + GREETER_BUBBLE_HEAD_GAP;
+    sprite.position.copy(crowdBubbleWorldScratch);
+    sprite.rotation.set(0, Math.atan2(camera.position.x - sprite.position.x, camera.position.z - sprite.position.z), 0);
+    const aspect = tex.__aspect || 2;
+    sprite.scale.set(GREETER_BUBBLE_WORLD_HEIGHT * aspect, GREETER_BUBBLE_WORLD_HEIGHT, 1);
+    sprite.material.opacity = opacity;
+    sprite.visible = true;
+  }
+}
+
 function tick(now) {
   requestAnimationFrame(tick);
   const frameStartedAt = performance.now();
@@ -17500,6 +17621,7 @@ function tick(now) {
       if (atmosphereParticleTimeUniform) atmosphereParticleTimeUniform.value = edgePulseSeconds;
     }
     updateGreeterSpeechBubble();
+    updateTronRunnerCrowdSpeechBubbles();
   }
   updateCityRevealWireframe(now);
   syncCityRevealPerformanceProfile();
