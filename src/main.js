@@ -10009,6 +10009,11 @@ function tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ,
   return tronRunnerCrowdTryDeadlockNudgeCore(member, current, nextPoint, dirX, dirZ, distance, collided, now, tronRunnerCrowdDeadlockDeps);
 }
 
+// Occasional standstill at a waypoint so the crowd reads as people, not marchers.
+// Distance-driven walk freezes the legs while paused (no moonwalk).
+const TRON_RUNNER_CROWD_PAUSE_CHANCE = 0.28;
+const TRON_RUNNER_CROWD_PAUSE_MIN_MS = 900;
+const TRON_RUNNER_CROWD_PAUSE_MAX_MS = 2800;
 const tronRunnerCrowdNextPointScratch = { x: 0, z: 0 };
 function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   normalizeTronRunnerCrowdState(member, now);
@@ -10024,13 +10029,18 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   const distance = Math.hypot(dx, dz);
   if (distance <= TRON_RUNNER_CROWD_REACH_RADIUS) {
     member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
-    setTronRunnerCrowdState(member, 'turn', now, TRON_RUNNER_CROWD_TURN_DURATION_MS);
+    if (Math.random() < TRON_RUNNER_CROWD_PAUSE_CHANCE) {
+      const pauseMs = TRON_RUNNER_CROWD_PAUSE_MIN_MS + Math.random() * (TRON_RUNNER_CROWD_PAUSE_MAX_MS - TRON_RUNNER_CROWD_PAUSE_MIN_MS);
+      setTronRunnerCrowdState(member, 'pause', now, pauseMs);
+    } else {
+      setTronRunnerCrowdState(member, 'turn', now, TRON_RUNNER_CROWD_TURN_DURATION_MS);
+    }
     member.lastMovedDistance = 0;
     return;
   }
   const dirX = dx / Math.max(distance, 0.001);
   const dirZ = dz / Math.max(distance, 0.001);
-  const stateSpeedScale = member.state === 'turn' ? 0.56 : member.state === 'yield' ? 0.34 : 1;
+  const stateSpeedScale = member.state === 'pause' ? 0 : member.state === 'turn' ? 0.56 : member.state === 'yield' ? 0.34 : 1;
   const baseStep = Math.max(0, member.speed * Math.min(dt, 0.08) * stateSpeedScale);
   const nextPoint = tronRunnerCrowdNextPointScratch;
   nextPoint.x = current.x + dirX * Math.min(distance, baseStep);
