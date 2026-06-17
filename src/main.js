@@ -33,8 +33,8 @@ import {
   MOBILE_PERFORMANCE_QUERY,
   MOBILE_PERFORMANCE_RENDER_SCALE_CAP,
   SECONDARY_EFFECT_UPDATE_STRIDE,
-} from './config.js';
-import { TRON_FSR_UPSCALE_SHADER } from './shaders.js';
+} from './world/config.js';
+import { TRON_FSR_UPSCALE_SHADER } from './engine/shaders.js';
 import {
   AUDIO_FX_FAST_CONTROL_IDS,
   BASE_PAD_MATERIAL_FAST_CONTROL_IDS,
@@ -52,7 +52,7 @@ import {
   SKY_FAST_CONTROL_IDS,
   WIREFRAME_FAST_CONTROL_IDS,
   createControlEls,
-} from './controls.js';
+} from './controls/controls.js';
 import {
   TRON_MAIN_PLAYER_BODY_BLACK_COLOR,
   TRON_MAIN_PLAYER_BODY_CAMERA_OFFSET,
@@ -195,24 +195,24 @@ import {
   TRON_RUNNER_SUIT_TEXTURE_MODE,
   TRON_RUNNER_TARGET_HEIGHT,
   TRON_RUNNER_WALK_CYCLE_DISTANCE,
-} from './characters.js';
+} from './character/characters.js';
 import {
   TRON_RUNNER_CROWD_COLOR_PLAN,
   TRON_RUNNER_CROWD_COLOR_PRESETS,
-} from './character-colors.js';
+} from './character/character-colors.js';
 import {
   createTronRunnerCrowdMemberRecord,
   fitTronRunnerModel as fitTronRunnerModelCore,
   makeTronRunnerActionSet,
   poseTronRunnerIdleCharacterArmsCrossed as poseTronRunnerIdleCharacterArmsCrossedCore,
-} from './character-build.js';
+} from './character/character-build.js';
 import {
   resolveTronRunnerCrowdCollision as resolveTronRunnerCrowdCollisionCore,
   resolveTronRunnerRoundedCollider,
   tronRunnerCrowdBuildingCollisionDiagnostic as tronRunnerCrowdBuildingCollisionDiagnosticCore,
   tronRunnerCrowdColliderLabel,
   tronRunnerCrowdPointInsideRoute as tronRunnerCrowdPointInsideRouteCore,
-} from './character-collision.js';
+} from './character/character-collision.js';
 import {
   nearbyTronRunnerCrowdMembers as nearbyTronRunnerCrowdMembersCore,
   prepareTronRunnerCrowdSpatialGrid as prepareTronRunnerCrowdSpatialGridCore,
@@ -223,7 +223,7 @@ import {
   tronRunnerCrowdTryDeadlockNudge as tronRunnerCrowdTryDeadlockNudgeCore,
   tronRunnerCrowdWalkCycleOffset,
   updateTronRunnerCrowdCullingState,
-} from './character-crowd.js';
+} from './character/character-crowd.js';
 import {
   makeTronMainPlayerBodyLedMaterial,
   makeTronMainPlayerBodySuitMaterial,
@@ -231,13 +231,13 @@ import {
   makeTronRunnerReflectionBodyMaterial as createTronRunnerReflectionBodyMaterial,
   makeTronRunnerReflectionLedMaterial as createTronRunnerReflectionLedMaterial,
   makeTronRunnerReflectionMaterial as createTronRunnerReflectionMaterial,
-} from './character-materials.js';
+} from './character/character-materials.js';
 import {
   applyTronRunnerCrowdReflectionState,
   emptyTronRunnerCrowdReflection,
   tronRunnerCrowdPostRevealReflectionRampLimit as tronRunnerCrowdPostRevealReflectionRampLimitCore,
   updateTronRunnerCrowdReflectionBudget as updateTronRunnerCrowdReflectionBudgetCore,
-} from './character-reflections.js';
+} from './character/character-reflections.js';
 import {
   countBy,
   inspectTronRunnerMaterials,
@@ -247,16 +247,16 @@ import {
   sideStreetGroupedSegments as buildSideStreetGroupedSegments,
   sumBy,
   tronRunnerIdleCharacterInspect as tronRunnerIdleCharacterInspectCore,
-} from './character-inspect.js';
+} from './character/character-inspect.js';
 import {
   tronRunnerWalkCycleFootstep as tronRunnerWalkCycleFootstepCore,
-} from './character-footsteps.js';
+} from './character/character-footsteps.js';
 import {
   computeTronRunnerEffectiveAnimationSpeed,
   syncTronRunnerWalkCycleToDistance as syncTronRunnerWalkCycleToDistanceCore,
   tronRunnerCrowdGridCoord as tronRunnerCrowdGridCoordCore,
   tronRunnerCrowdGridKey,
-} from './character-movement.js';
+} from './character/character-movement.js';
 import {
   tronRunnerCrowdCandidateRecords as tronRunnerCrowdCandidateRecordsCore,
   tronRunnerCrowdBuildRoute as tronRunnerCrowdBuildRouteCore,
@@ -275,13 +275,13 @@ import {
   tronRunnerCrowdSideStreetPairs as tronRunnerCrowdSideStreetPairsCore,
   tronRunnerCrowdSideStreetRouteForPair as tronRunnerCrowdSideStreetRouteForPairCore,
   tronRunnerCrowdStartPlayerRoute as tronRunnerCrowdStartPlayerRouteCore,
-} from './character-routes.js';
+} from './character/character-routes.js';
 import {
   makeTronRunnerShadowTexture,
   makeTronRunnerSuitEmissiveTexture,
   makeTronRunnerSuitLedMaskTexture,
   makeTronRunnerSuitTexture,
-} from './character-textures.js';
+} from './character/character-textures.js';
 import {
   createTronMainPlayerBodyState,
   createTronRunnerAutonomy,
@@ -293,11 +293,11 @@ import {
   createTronRunnerParts,
   createTronRunnerRevealVisualCache,
   createTronRunnerState,
-} from './runner-state.js';
+} from './character/runner-state.js';
 import {
   resetTronRunnerAutonomy,
   switchTronRunnerAction as switchTronRunnerActionCore,
-} from './runner-controller.js';
+} from './character/runner-controller.js';
 import {
   TRON_SOUNDTRACK_CROSSFADE_SECONDS,
   TRON_SOUNDTRACK_ENABLED,
@@ -343,23 +343,23 @@ import {
   startTronFileSoundtrack as startTronFileSoundtrackCore,
   stopTronFileSoundtrack as stopTronFileSoundtrackCore,
   setTronFileSoundtrackVolume as setTronFileSoundtrackVolumeCore,
-} from './audio.js';
+} from './audio/audio.js';
 import {
   footstepInverseDistanceGain,
   pickFootstepSample as pickFootstepSampleCore,
   setFootstepAudioParam,
   setFootstepPannerPosition,
-} from './footstep-audio.js';
+} from './audio/footstep-audio.js';
 import {
   mountSideFacadeLedControls as mountSideFacadeLedControlsCore,
-} from './facade-led-controls.js';
+} from './controls/facade-led-controls.js';
 import {
   effectiveBloomScaleForDevice as effectiveBloomScaleForDeviceCore,
   effectivePixelRatioForDevice as effectivePixelRatioForDeviceCore,
   effectiveRenderScaleForDevice as effectiveRenderScaleForDeviceCore,
   mobilePerformanceProfileActive as mobilePerformanceProfileActiveCore,
   mobilePerformanceProfileState as mobilePerformanceProfileStateCore,
-} from './performance-mobile.js';
+} from './engine/performance-mobile.js';
 import {
   CITY_DEPARTMENT_BOARD_ENABLED,
   addCityDepartmentFrame,
@@ -375,12 +375,12 @@ import {
   initCityRoleBoards,
   syncCityRoleBoardDoorPose,
   updateCityRoleBoard,
-} from './city-boards.js';
+} from './world/city-boards.js';
 import {
   initStaticCityCulling,
   staticCityCullStats,
   updateStaticCityCulling,
-} from './static-city-culling.js';
+} from './engine/static-city-culling.js';
 import {
   applyBridgeFixedDefaults,
   initBridgeControls,
@@ -388,7 +388,7 @@ import {
   readBridgeVisible,
   renderBridgeControls,
   updateBridgeControlOutputs,
-} from './bridge-controls.js';
+} from './controls/bridge-controls.js';
 import {
   applyWelcomeWindowInputMode as applyWelcomeWindowInputModeCore,
   dismissWelcomeWindow as dismissWelcomeWindowCore,
@@ -397,39 +397,39 @@ import {
   triggerWelcomeWindowTouch as triggerWelcomeWindowTouchCore,
   welcomeWindowUsesTouchPrompt as welcomeWindowUsesTouchPromptCore,
   welcomeWindowVisible as welcomeWindowVisibleCore,
-} from './welcome-ui.js';
+} from './controls/welcome-ui.js';
 import {
   initSpeechBubbles,
   updateGreeterSpeechBubble,
   updateTronRunnerCrowdSpeechBubbles,
-} from './speech-bubbles.js';
+} from './character/speech-bubbles.js';
 import {
   initAtmosphereParticles,
   updateAtmosphereParticles,
-} from './atmosphere-particles.js';
+} from './world/atmosphere-particles.js';
 import {
   applyEdgePulseShader,
   updateEdgePulse,
-} from './energy-pulse.js';
+} from './world/energy-pulse.js';
 import {
   initMaterialTextures,
   makeBasePadSurfaceTexture,
   makeRoadMicroNormalTexture,
   makeWetAsphaltFacadeTexture,
-} from './material-textures.js';
+} from './world/material-textures.js';
 import {
   groundShapeGeometry,
   setGroundLineLoop,
   setGroundSegment,
   setGroundShape,
-} from './ground-geometry.js';
+} from './world/ground-geometry.js';
 import {
   getReflectionEnvMap,
   getRoadReflectionEnvMap,
   initReflectionEnv,
   setRoadBuildingReflection,
-} from './reflection-env.js';
-import { mountFxCategoryPanels } from './fx-panels.js';
+} from './engine/reflection-env.js';
+import { mountFxCategoryPanels } from './controls/fx-panels.js';
 import {
   LAB_EQUALIZER_ANALYSER_MAX_DB,
   LAB_EQUALIZER_ANALYSER_MIN_DB,
@@ -482,7 +482,7 @@ import {
   labEqualizerAnalyserPresent,
   labEqualizerAnalyserSampleReady,
   labEqualizerLastSampleTime,
-} from './equalizer.js';
+} from './controls/equalizer.js';
 
 const CITY_REVEAL_SWEEP_NORMAL = new THREE.Vector3(0, -1, 1).normalize();
 let cityRevealDelayMs = CITY_REVEAL_DEFAULT_DELAY_MS;
