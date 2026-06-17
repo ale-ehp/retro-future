@@ -10060,6 +10060,8 @@ const TRON_RUNNER_CROWD_PAUSE_MAX_MS = 2800;
 // then stays put. The cyan member behaves like a normal crowd member.
 const TRON_RUNNER_GREETER_INDEX = 1;
 const TRON_RUNNER_GREET_DISTANCE = 4.0;
+const GREETER_HEAD_MAX_YAW = 1.3963; // +/-80deg => 160deg total head turn, no neck over-rotation
+const GREETER_HEAD_YAW_SIGN = 1;
 const greeterTargetScratch = { x: 0, z: 0 };
 
 const tronRunnerCrowdNextPointScratch = { x: 0, z: 0 };
@@ -10100,10 +10102,21 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       }
     }
     member.lastMovedDistance = 0;
-    const fdx = camera.position.x - member.group.position.x;
-    const fdz = camera.position.z - member.group.position.z;
-    if (fdx * fdx + fdz * fdz > 0.04) {
-      member.group.rotation.y = lerpAngle(member.group.rotation.y, Math.atan2(fdx, fdz), Math.min(1, dt * 4));
+    // Body stays put; only the head turns toward the player, clamped to +/-80deg.
+    if (!member.headBone) {
+      member.model?.traverse((o) => { if (!member.headBone && o.isBone && /head$/i.test(o.name)) member.headBone = o; });
+    }
+    if (member.headBone) {
+      const lookYaw = Math.atan2(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
+      let rel = lookYaw - member.group.rotation.y;
+      rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+      rel = THREE.MathUtils.clamp(rel, -GREETER_HEAD_MAX_YAW, GREETER_HEAD_MAX_YAW) * GREETER_HEAD_YAW_SIGN;
+      member.headLookYaw = lerpAngle(member.headLookYaw ?? 0, rel, Math.min(1, dt * 4));
+      member.headBone.rotation.y = member.headLookYaw;
+      if (!member.reflectionHeadBone && member.reflectionModel) {
+        member.reflectionModel.traverse((o) => { if (!member.reflectionHeadBone && o.isBone && /head$/i.test(o.name)) member.reflectionHeadBone = o; });
+      }
+      if (member.reflectionHeadBone) member.reflectionHeadBone.rotation.y = member.headLookYaw;
     }
     return;
   }
