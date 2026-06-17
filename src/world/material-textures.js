@@ -2,16 +2,17 @@ import * as THREE from 'three';
 
 // ---------- material texture helpers ----------
 // Procedural canvas-texture factories for the road/facade/base-pad surfaces. Pure apart from one
-// injected dep: the renderer (read for getMaxAnisotropy). main.js calls initMaterialTextures({getRenderer})
-// once, then builds the texture singletons (asphalt / roadMicroNormalTex / basePadSurfaceTex) from these.
+// dep: the renderer (read for getMaxAnisotropy), taken from the world ctx. main.js calls
+// initMaterialTextures(ctx) once, then builds the texture singletons (asphalt / roadMicroNormalTex /
+// basePadSurfaceTex) from these.
 
-let deps = null;
-export function initMaterialTextures(injected) { deps = injected; }
+let renderer = null;
+export function initMaterialTextures(ctx) { renderer = ctx.renderer; }
 
 function setupRepeatingTexture(texture, repeatX, repeatY, color = false) {
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(repeatX, repeatY);
-  texture.anisotropy = deps.getRenderer().capabilities.getMaxAnisotropy();
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   if (color) texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
@@ -63,7 +64,7 @@ export function makeRoadMicroNormalTexture(size = 256) {
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(18, 42);
-  tex.anisotropy = deps.getRenderer().capabilities.getMaxAnisotropy();
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   return tex;
 }
 
@@ -94,7 +95,7 @@ export function makeBasePadSurfaceTexture(size = 512) {
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = deps.getRenderer().capabilities.getMaxAnisotropy();
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   tex.needsUpdate = true;
   return tex;
 }
