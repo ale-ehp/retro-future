@@ -9907,7 +9907,7 @@ function buildTronRunnerCrowdMember(job, index) {
   if (index === TRON_RUNNER_GREETER_INDEX) {
     // The green companion starts a few metres in front of the landing so it reaches the
     // player quickly to greet them.
-    group.position.set((droneLandingPose?.x ?? 0) + 1.5, start.y, (droneLandingPose?.z ?? start.z) - 18);
+    group.position.set((droneLandingPose?.x ?? 0) + 3.5, start.y, (droneLandingPose?.z ?? start.z) - 13);
   }
   const member = createTronRunnerCrowdMemberRecord({
     index,
@@ -10126,6 +10126,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   if (isGreeter) {
     if (distance <= TRON_RUNNER_GREET_DISTANCE) {
       member.greetDone = true;
+      member.greetAt = now;
       member.lastMovedDistance = 0;
       return;
     }
@@ -17077,15 +17078,17 @@ let greeterSpeechBubble = null;
 const greeterBubbleWorldScratch = new THREE.Vector3();
 const greeterBubbleViewScratch = new THREE.Vector3();
 const GREETER_BUBBLE_HEAD_Y = 5.0;
-const GREETER_BUBBLE_HEAD_GAP = 0.7;
+const GREETER_BUBBLE_HEAD_GAP = 1.6;
+const GREETER_BUBBLE_REF_DIST = 7.0; // distance at which the bubble is shown at 1x
+const GREETER_BUBBLE_DURATION_MS = 3000; // welcome message dissolves after this
 function ensureGreeterSpeechBubble() {
   if (greeterSpeechBubble) return greeterSpeechBubble;
   const el = document.createElement('div');
-  el.textContent = 'Benvenuto in avstudio.ai';
+  el.innerHTML = 'Benvenuto in<br>avstudio.ai';
   el.style.cssText = [
-    'position:fixed', 'left:0', 'top:0', 'transform:translate(-50%, -100%)',
-    'padding:6px 12px', 'border:1px solid rgba(143,252,255,0.85)', 'border-radius:9px',
-    'background:rgba(0,16,20,0.72)', 'color:#cdfcff',
+    'position:fixed', 'left:0', 'top:0', 'transform-origin:50% 100%', 'transform:translate(-50%, -100%)',
+    'padding:7px 13px', 'border:1px solid rgba(143,252,255,0.85)', 'border-radius:9px',
+    'background:rgba(0,16,20,0.72)', 'color:#cdfcff', 'text-align:center', 'line-height:1.25',
     "font:600 14px 'Menlo', Consolas, monospace", 'letter-spacing:0.02em', 'white-space:nowrap',
     'pointer-events:none', 'z-index:40', 'box-shadow:0 0 14px rgba(98,247,255,0.45)',
     'text-shadow:0 0 6px rgba(98,247,255,0.6)', 'opacity:0', 'transition:opacity 0.45s ease',
@@ -17099,6 +17102,10 @@ function updateGreeterSpeechBubble() {
   const el = ensureGreeterSpeechBubble();
   if (!greeter || !greeter.greetDone || !tronRunnerCrowdGroup.visible || !cityRevealComplete) {
     el.style.opacity = '0';
+    return;
+  }
+  if (greeter.greetAt && performance.now() - greeter.greetAt > GREETER_BUBBLE_DURATION_MS) {
+    el.style.opacity = '0'; // dissolve after the welcome
     return;
   }
   if (!greeter.headBone) {
@@ -17115,11 +17122,14 @@ function updateGreeterSpeechBubble() {
   }
   greeterBubbleViewScratch.copy(greeterBubbleWorldScratch).applyMatrix4(camera.matrixWorldInverse);
   if (greeterBubbleViewScratch.z > -0.5) { el.style.opacity = '0'; return; } // behind/at camera
+  const dist = Math.max(0.5, -greeterBubbleViewScratch.z);
+  const scale = THREE.MathUtils.clamp(GREETER_BUBBLE_REF_DIST / dist, 0.45, 1.5);
   greeterBubbleWorldScratch.project(camera);
   const x = (greeterBubbleWorldScratch.x * 0.5 + 0.5) * window.innerWidth;
   const y = (-greeterBubbleWorldScratch.y * 0.5 + 0.5) * window.innerHeight;
   el.style.left = `${x.toFixed(1)}px`;
   el.style.top = `${y.toFixed(1)}px`;
+  el.style.transform = `translate(-50%, -100%) scale(${scale.toFixed(3)})`;
   el.style.opacity = '1';
 }
 
