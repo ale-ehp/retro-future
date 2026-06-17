@@ -8630,13 +8630,13 @@ function tronRunnerEffectiveAnimationSpeed() {
   });
 }
 
-function syncTronRunnerWalkCycleToDistance(mixer, action, distance, phaseOffset = 0) {
+function syncTronRunnerWalkCycleToDistance(mixer, action, distance, phaseOffset = 0, cycleDistance = TRON_RUNNER_WALK_CYCLE_DISTANCE) {
   return syncTronRunnerWalkCycleToDistanceCore({
     mixer,
     action,
     distance,
     phaseOffset,
-    cycleDistance: TRON_RUNNER_WALK_CYCLE_DISTANCE,
+    cycleDistance,
   });
 }
 
@@ -8670,6 +8670,21 @@ function syncTronRunnerCrowdWalkCycleToDistance(member) {
   if (member.dynamicReflectionBudgetActive) {
     syncTronRunnerWalkCycleToDistance(member.reflectionMixer, member.reflectionAction, distance, offset);
     syncTronRunnerWalkCycleToDistance(member.reflectionLedMixer, member.reflectionLedAction, distance, offset);
+  }
+  return synced;
+}
+
+// Same as the walk version but for the greeter's run clip: drive the run cycle by ground
+// distance (no foot-slide / moonwalk) using the run-specific cycle distance.
+function syncTronRunnerCrowdRunCycleToDistance(member) {
+  if (!member) return false;
+  const offset = member.walkCycleOffset || 0;
+  const distance = member.distanceWalked || 0;
+  const cycle = GREETER_RUN_CYCLE_DISTANCE;
+  const synced = syncTronRunnerWalkCycleToDistance(member.mixer, member.action, distance, offset, cycle);
+  if (member.dynamicReflectionBudgetActive) {
+    syncTronRunnerWalkCycleToDistance(member.reflectionMixer, member.reflectionAction, distance, offset, cycle);
+    syncTronRunnerWalkCycleToDistance(member.reflectionLedMixer, member.reflectionLedAction, distance, offset, cycle);
   }
   return synced;
 }
@@ -10068,7 +10083,7 @@ const TRON_RUNNER_CROWD_PAUSE_MAX_MS = 2800;
 // then stays put. The cyan member behaves like a normal crowd member.
 const TRON_RUNNER_GREETER_INDEX = 1;
 const TRON_RUNNER_GREET_DISTANCE = 4.0;
-const GREETER_SPEED_MULTIPLIER = 1.30; // the greeter always moves 30% faster than the crowd
+const GREETER_SPEED_MULTIPLIER = 1.65; // the greeter always moves 65% faster than the crowd
 const GREETER_HEAD_MAX_YAW = 1.3963; // +/-80deg => 160deg total head turn, no neck over-rotation
 const GREETER_HEAD_YAW_SIGN = 1;
 const greeterTargetScratch = { x: 0, z: 0 };
@@ -10098,33 +10113,35 @@ function resolveGreeterBoardAnchor() {
   return greeterBoardAnchorScratch;
 }
 
-const GREETER_RUN_TIMESCALE = 1.15; // run clip plays a touch faster than authored
+// Distance the greeter covers per full run cycle. The run clip is driven by ground distance
+// (like the crowd walk) so the feet plant instead of sliding/moonwalking. Tune this up if the
+// legs lag behind the motion (slide), down if they spin too fast. Run stride > walk stride.
+const GREETER_RUN_CYCLE_DISTANCE = TRON_RUNNER_WALK_CYCLE_DISTANCE * 1.55;
 
-// Resume locomotion after the welcome by switching into the RUN clip and crossfading from the
-// idle pose. While running, greeterRunning drives the mixer with real dt (not distance-driven),
-// so the crossfade progresses. member.action is repointed to the run clip so the arrival re-pose
-// (run -> idle) and timescale logic all target the right action.
-function crossFadeGreeterToRun(mixer, fromAction, runActionKey, member) {
+// Hard-switch idle -> run action weights (no crossfade): the run is distance-driven and the
+// distance sync only calls mixer.update(0), so a crossfade could not progress anyway. member's
+// run/walk/idle action weights are set directly; member.action is repointed to the run clip so
+// distance sync, arrival re-pose (run -> idle) and timescale logic all target it.
+function switchGreeterActionToRun(mixer, fromAction, runActionKey, member) {
   if (!mixer || !member.runClip) return null;
   const run = member[runActionKey] || mixer.clipAction(member.runClip);
   member[runActionKey] = run;
-  run.reset();
   run.enabled = true;
-  run.setEffectiveTimeScale(GREETER_RUN_TIMESCALE);
+  run.setEffectiveTimeScale(1);
   run.setEffectiveWeight(1);
   run.play();
-  if (fromAction) fromAction.crossFadeTo(run, 0.3, false);
+  if (fromAction && fromAction !== run) { fromAction.stop(); fromAction.setEffectiveWeight(0); }
   return run;
 }
 function startGreeterWalkingToBoard(member) {
   member.greetPosed = false;
   if (member.runClip && member.mixer) {
     member.walkAction = member.walkAction || member.action;
-    const run = crossFadeGreeterToRun(member.mixer, member.idleAction || member.walkAction, 'runAction', member);
+    const run = switchGreeterActionToRun(member.mixer, member.idleAction || member.walkAction, 'runAction', member);
     if (run) member.action = run;
-    const rRun = crossFadeGreeterToRun(member.reflectionMixer, member.reflectionIdleAction || member.reflectionAction, 'reflectionRunAction', member);
+    const rRun = switchGreeterActionToRun(member.reflectionMixer, member.reflectionIdleAction || member.reflectionAction, 'reflectionRunAction', member);
     if (rRun) member.reflectionAction = rRun;
-    const lRun = crossFadeGreeterToRun(member.reflectionLedMixer, member.reflectionLedIdleAction || member.reflectionLedAction, 'reflectionLedRunAction', member);
+    const lRun = switchGreeterActionToRun(member.reflectionLedMixer, member.reflectionLedIdleAction || member.reflectionLedAction, 'reflectionLedRunAction', member);
     if (lRun) member.reflectionLedAction = lRun;
     return;
   }
@@ -10366,7 +10383,7 @@ function updateTronRunnerCrowd(dt) {
       if (!cullingHidden) updateTronRunnerCrowdReflection(member);
       continue;
     }
-    const distanceDrivenWalk = TRON_RUNNER_CROWD_DISTANCE_DRIVEN_WALK_ENABLED && Boolean(member.action) && !member.greetPosed && !greeterRunning;
+    const distanceDrivenWalk = TRON_RUNNER_CROWD_DISTANCE_DRIVEN_WALK_ENABLED && Boolean(member.action) && !member.greetPosed;
     if (!cullingHidden && !distanceDrivenWalk) member.mixer?.update(member.mixerDt);
     if (!cullingHidden && member.dynamicReflectionBudgetActive && !distanceDrivenWalk) {
       member.reflectionMixer?.update(member.mixerDt);
@@ -10380,7 +10397,10 @@ function updateTronRunnerCrowd(dt) {
     }
     const movedThisUpdate = Math.max(0, (member.distanceWalked || 0) - distanceBefore);
     member.lastMovedDistance = movedThisUpdate;
-    if (!cullingHidden && distanceDrivenWalk && !member.greetPosed) syncTronRunnerCrowdWalkCycleToDistance(member);
+    if (!cullingHidden && distanceDrivenWalk && !member.greetPosed) {
+      if (greeterRunning) syncTronRunnerCrowdRunCycleToDistance(member);
+      else syncTronRunnerCrowdWalkCycleToDistance(member);
+    }
     if (!cullingHidden) updateTronRunnerCrowdReflection(member);
     member.mixerDt = 0;
     member.lodDt = 0;
