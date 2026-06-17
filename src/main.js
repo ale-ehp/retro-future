@@ -10084,6 +10084,7 @@ const TRON_RUNNER_CROWD_PAUSE_MAX_MS = 2800;
 const TRON_RUNNER_GREETER_INDEX = 1;
 const TRON_RUNNER_GREET_DISTANCE = 4.0;
 const GREETER_SPEED_MULTIPLIER = 1.65; // the greeter always moves 65% faster than the crowd
+const GREETER_RUN_SPEED_BOOST = 1.5;   // extra 50% while running to the board (legs stay synced)
 const GREETER_HEAD_MAX_YAW = 1.3963; // +/-80deg => 160deg total head turn, no neck over-rotation
 const GREETER_HEAD_YAW_SIGN = 1;
 const greeterTargetScratch = { x: 0, z: 0 };
@@ -10368,7 +10369,8 @@ function updateTronRunnerCrowd(dt) {
       member.lastEffectiveAnimationSpeed = nextEffectiveAnimationSpeed;
     }
     member.speed = tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (member.speedScaleOffset ?? 1)
-      * (isGreeterMember ? GREETER_SPEED_MULTIPLIER : 1);
+      * (isGreeterMember ? GREETER_SPEED_MULTIPLIER : 1)
+      * (greeterRunning ? GREETER_RUN_SPEED_BOOST : 1);
     const cullingHidden = TRON_RUNNER_CROWD_CULLING_ENABLED && member.cullingVisible === false && !isGreeterMember;
     member.lodStride = isGreeterMember
       ? 1
