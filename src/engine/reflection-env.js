@@ -3,11 +3,11 @@ import * as THREE from 'three';
 // ---------- Reflection environment maps ----------
 // Procedural equirectangular reflection maps baked once (sky gradient + building silhouettes drawn on a
 // 2D canvas), then PMREM-prefiltered into env targets at several "building reflection" levels. main.js
-// calls initReflectionEnv({getRenderer}) once, reads the base map via getReflectionEnvMap(), and picks a
+// calls initReflectionEnv(ctx) once, reads the base map via getReflectionEnvMap(), and picks a
 // road-level map via getRoadReflectionEnvMap(). The mutable road reflection level is owned here and
 // updated from the live controls via setRoadBuildingReflection(). bakeTronReflectionMap is pure/private.
 
-let deps = null;
+let renderer = null;
 let reflectionEnvMap = null;
 let roadReflectionEnvTargets = null;
 const ROAD_BUILDING_REFLECTION_LEVELS = [0, 0.2, 0.35, 0.5, 0.7, 1];
@@ -55,9 +55,9 @@ function bakeTronReflectionMap(width = 512, height = 256, buildingReflection = 1
   return tex;
 }
 
-export function initReflectionEnv(injected) {
-  deps = injected;
-  const pmrem = new THREE.PMREMGenerator(deps.getRenderer());
+export function initReflectionEnv(ctx) {
+  renderer = ctx.renderer;
+  const pmrem = new THREE.PMREMGenerator(renderer);
   pmrem.compileEquirectangularShader();
 
   const makeReflectionEnvTarget = (width, height, buildingReflection) => {

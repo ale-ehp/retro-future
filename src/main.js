@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createCtx } from './ctx.js';
 import {
   BLOOM_BYPASS_STRENGTH,
   BLOOM_OPTIMIZED_ACTIVE_MIPS,
@@ -689,6 +690,9 @@ let gpuTimerFrameIndex = 0;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(FIXED_CAMERA_FOV, window.innerWidth / window.innerHeight, 0.1, 10000);
+// World/context object (design §4). composer is created later in the deferred postprocessing setup,
+// so it is read through a late-bound getter. Subsystems are migrated onto ctx phase by phase.
+const ctx = createCtx({ scene, camera, renderer, getComposer: () => composer });
 camera.position.set(701.4907301468677, 591.0351224586902, 1110.9745792178219);
 camera.lookAt(0, 80, -300);
 
@@ -2691,7 +2695,7 @@ scene.add(domeMesh);
 skyDisplayColor.copy(skyPalette.storm);
 scene.background = skyDisplayColor;
 // ---------- Reflection environment maps (extracted -> reflection-env.js) ----------
-initReflectionEnv({ getRenderer: () => renderer });
+initReflectionEnv(ctx);
 const reflectionEnvMap = getReflectionEnvMap();
 scene.environment = null;
 scene.environmentIntensity = 1;
@@ -2748,7 +2752,7 @@ function applyStormControlsFromUI() {
 }
 
 // ---------- material texture helpers (extracted -> material-textures.js) ----------
-initMaterialTextures({ getRenderer: () => renderer });
+initMaterialTextures(ctx);
 const asphalt = makeWetAsphaltFacadeTexture();
 const roadMicroNormalTex = makeRoadMicroNormalTexture();
 const basePadSurfaceTex = makeBasePadSurfaceTexture();
