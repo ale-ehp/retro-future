@@ -490,8 +490,8 @@ const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
 let activePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO);
 let requestedPixelRatio = MAX_RENDER_PIXEL_RATIO;
 let manualRenderScale = 0.65;
-let requestedBloomResolutionScale = 0.35;
-let bloomResolutionScale = 0.35;
+let requestedBloomResolutionScale = 0.45;
+let bloomResolutionScale = 0.45;
 let bloomEnabled = true;
 let antialiasMode = 'fxaa';
 let fsrUpscaleEnabled = false;
@@ -5197,6 +5197,56 @@ crossStreetZ.forEach((z) => {
   addSideRoad(0, z);
 });
 
+// ---------- Tron energy pulses: bright bands travelling along the boulevard edge lines ----------
+const edgePulseState = {
+  speed: -30,
+  period: 42,
+  intensity: 2.0,
+};
+const edgePulseMaterials = [];
+function applyEdgePulseShader(material) {
+  // Inject a Z-axis travelling pulse into a MeshBasic edge material (same onBeforeCompile
+  // pattern as the facade vertical reveal). The pulse brightens the cyan as it passes so the
+  // bloom pass turns it into flowing energy. Tunable via edgePulseState.
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uEdgePulseTime = { value: 0 };
+    shader.uniforms.uEdgePulseSpeed = { value: edgePulseState.speed };
+    shader.uniforms.uEdgePulsePeriod = { value: edgePulseState.period };
+    shader.uniforms.uEdgePulseIntensity = { value: edgePulseState.intensity };
+    material.userData.edgePulseTimeUniform = shader.uniforms.uEdgePulseTime;
+    // vEdgeAlong = signed distance along the strip's own length (world units, from its centre).
+    // The instance's local Z axis is the strip direction, scaled by the strip length.
+    shader.vertexShader = `varying float vEdgeAlong;\n${shader.vertexShader}`.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+#ifdef USE_INSTANCING
+vEdgeAlong = position.z * length(instanceMatrix[2].xyz);
+#else
+vEdgeAlong = position.z;
+#endif`
+    );
+    shader.fragmentShader = `uniform float uEdgePulseTime;
+uniform float uEdgePulseSpeed;
+uniform float uEdgePulsePeriod;
+uniform float uEdgePulseIntensity;
+varying float vEdgeAlong;
+${shader.fragmentShader}`.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+{
+  // Energy scrolls ALONG each strip's length (current flowing through the wire).
+  float edgeFlow = fract((vEdgeAlong - uEdgePulseTime * uEdgePulseSpeed) / max(uEdgePulsePeriod, 0.001));
+  // sawtooth ramp -> a bright head with a trailing fade travelling along the strip.
+  float edgeHead = smoothstep(0.0, 0.12, edgeFlow) * (1.0 - smoothstep(0.12, 1.0, edgeFlow));
+  diffuseColor.rgb += diffuseColor.rgb * edgeHead * uEdgePulseIntensity;
+}`
+    );
+  };
+  material.customProgramCacheKey = () => 'tron-edge-energy-flow-v4';
+  material.needsUpdate = true;
+  edgePulseMaterials.push(material);
+}
+
 // ---------- RoadEdge EL strips (cyan tube borders between road and streetEdge) ----------
 const longitudinalRoadEdgeRecords = [];
 {
@@ -7096,6 +7146,7 @@ function buildSideBuildingEdgeBatch(group) {
     toneMapped: false,
     depthWrite: true,
   });
+  applyEdgePulseShader(material);
   const mesh = new THREE.InstancedMesh(geometry, material, sideBuildingEdgeSpecs.length);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = true;
@@ -7116,6 +7167,8 @@ function ensureBasePadLedMaterial() {
     transparent: true,
     opacity: 1,
   });
+  // Same travelling energy flow as the building edges (instanced strips, local Z = length).
+  applyEdgePulseShader(basePadLedBatch.material);
   return basePadLedBatch.material;
 }
 
@@ -7183,6 +7236,9 @@ function updateBasePadLedStrips(brightness, thickness, offset, hueDeg) {
     const baseX = pad.border.position.x;
     const baseZ = pad.border.position.z;
     let index = 0;
+    // Right-side buildings (even civic numbers 2, 4, 6, ...) flow the opposite way:
+    // swapping the strip endpoints reverses the local-Z the energy travels along.
+    const flipFlow = Number.isFinite(record.civicNumberValue) && record.civicNumberValue % 2 === 0;
     const addPadLoop = (loopPoints, loopTopY) => {
       const stripY = loopTopY + Math.max(0.01, thickness * 0.5) + 0.006;
       const orientation = polygonSignedArea(loopPoints) >= 0 ? 1 : -1;
@@ -7196,7 +7252,8 @@ function updateBasePadLedStrips(brightness, thickness, offset, hueDeg) {
         const normalZ = -orientation * dx / len;
         const p1 = [baseX + a[0] + normalX * offset, stripY, baseZ + a[1] + normalZ * offset];
         const p2 = [baseX + b[0] + normalX * offset, stripY, baseZ + b[1] + normalZ * offset];
-        setStripInstanceTransform(mesh, index, p1, p2, thickness);
+        if (flipFlow) setStripInstanceTransform(mesh, index, p2, p1, thickness);
+        else setStripInstanceTransform(mesh, index, p1, p2, thickness);
         index++;
       }
     };
@@ -16876,6 +16933,10 @@ function tick(now) {
     updateCityDepartmentBoards(now);
     updateCityRoleBoard();
     flushHexTileBatchUploads();
+    const edgePulseSeconds = now * 0.001;
+    for (const material of edgePulseMaterials) {
+      if (material.userData.edgePulseTimeUniform) material.userData.edgePulseTimeUniform.value = edgePulseSeconds;
+    }
   }
   updateCityRevealWireframe(now);
   syncCityRevealPerformanceProfile();
