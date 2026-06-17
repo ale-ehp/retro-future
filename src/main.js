@@ -10093,7 +10093,11 @@ const greeterTargetScratch = { x: 0, z: 0 };
 const GREETER_BOARD_SIDE_GAP = 2.4;  // clearance beyond the board's right edge (world units)
 const GREETER_BOARD_FRONT_GAP = 1.4; // step toward the player off the board plane (no clipping)
 const GREETER_BOARD_REACH = 0.8;     // arrival radius at the board anchor
-const greeterBoardAnchorScratch = { x: 0, z: 0 };
+const GREETER_FOLLOW_DELAY_MS = 1000; // show "Seguimi" first, then start moving 1s later
+const GREETER_BOARD_BUBBLE_RANGE = 3.0; // "Questi sono i nostri reparti" shows within 3m of the greeter
+const GREETER_BOARD_BUBBLE_LINGER_MS = 500; // ...and lingers 0.5s after the player steps away
+const GREETER_BOARD_STANCE_DEG = 45; // at the board the body sits 45deg between player and board
+const greeterBoardAnchorScratch = { x: 0, z: 0, cx: 0, cz: 0 };
 
 // Right-hand edge of the primary departures board, in world space. The board is a plane
 // rotated yaw about Y (yaw is 0 or PI), so its local +X (width axis) maps to
@@ -10111,6 +10115,8 @@ function resolveGreeterBoardAnchor() {
   const normalZ = Math.cos(yaw);
   greeterBoardAnchorScratch.x = board.boardPosition.x + rightX * (halfWidth + GREETER_BOARD_SIDE_GAP) + normalX * GREETER_BOARD_FRONT_GAP;
   greeterBoardAnchorScratch.z = board.boardPosition.z + rightZ * (halfWidth + GREETER_BOARD_SIDE_GAP) + normalZ * GREETER_BOARD_FRONT_GAP;
+  greeterBoardAnchorScratch.cx = board.boardPosition.x; // board centre, for the 45deg stance
+  greeterBoardAnchorScratch.cz = board.boardPosition.z;
   return greeterBoardAnchorScratch;
 }
 
@@ -10188,20 +10194,27 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   normalizeTronRunnerCrowdState(member, now);
   const route = member.route;
   const isGreeter = member.index === TRON_RUNNER_GREETER_INDEX;
-  // Once the welcome bubble has dissolved, leave the welcome stance and head for the
-  // departures board. Retries each frame until the board anchor resolves.
+  // Once the welcome bubble has dissolved, raise the "Seguimi" prompt and stand for a beat...
   if (isGreeter && member.greetStage === 'welcome'
       && member.greetAt && (now - member.greetAt) > GREETER_BUBBLE_DURATION_MS) {
+    member.greetStage = 'followPrompt';
+    member.followPromptAt = now;
+    setGreeterBubble(member, 'Seguimi', 5000, now);
+  }
+  // ...then 1s later set off for the departures board (retry until the anchor resolves).
+  if (isGreeter && member.greetStage === 'followPrompt'
+      && member.followPromptAt && (now - member.followPromptAt) >= GREETER_FOLLOW_DELAY_MS) {
     const anchor = resolveGreeterBoardAnchor();
     if (anchor) {
       member.greetBoardAnchorX = anchor.x;
       member.greetBoardAnchorZ = anchor.z;
+      member.greetBoardCenterX = anchor.cx;
+      member.greetBoardCenterZ = anchor.cz;
       member.greetStage = 'toBoard';
-      setGreeterBubble(member, 'Seguimi', 5000, now);
       startGreeterWalkingToBoard(member);
     }
   }
-  if (isGreeter && (member.greetStage === 'welcome' || member.greetStage === 'atBoard')) {
+  if (isGreeter && (member.greetStage === 'welcome' || member.greetStage === 'followPrompt' || member.greetStage === 'atBoard')) {
     // Welcomed/parked: freeze into a neutral standing pose (bind pose = straight legs, then
     // arms crossed like the idle character) so we don't stop mid-stride with a leg raised.
     if (!member.greetPosed) {
@@ -10234,9 +10247,25 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       }
     }
     member.lastMovedDistance = 0;
-    // Turn the body to face the player (welcoming host), then the head tracks within +/-80deg.
-    const bodyFaceYaw = Math.atan2(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
-    member.group.rotation.y = lerpAngle(member.group.rotation.y, bodyFaceYaw, Math.min(1, dt * 4));
+    const yawToPlayer = Math.atan2(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
+    let bodyYaw = yawToPlayer; // welcome/follow stance: face the player
+    if (member.greetStage === 'atBoard') {
+      // Parked: body sits 45deg off the player toward the board (presenting it); head tracks me.
+      const yawToBoard = Math.atan2(
+        (member.greetBoardCenterX ?? member.group.position.x) - member.group.position.x,
+        (member.greetBoardCenterZ ?? member.group.position.z) - member.group.position.z
+      );
+      const rel = Math.atan2(Math.sin(yawToBoard - yawToPlayer), Math.cos(yawToBoard - yawToPlayer));
+      const stance = THREE.MathUtils.degToRad(GREETER_BOARD_STANCE_DEG);
+      bodyYaw = yawToPlayer + Math.sign(rel || 1) * Math.min(stance, Math.abs(rel));
+      // Proximity-gated bubble: refresh while within 3m; auto-expires 0.5s after I step away,
+      // reappears when I come back. (setGreeterBubble sets bubbleUntil = now + linger.)
+      const distToPlayer = Math.hypot(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
+      if (distToPlayer <= GREETER_BOARD_BUBBLE_RANGE) {
+        setGreeterBubble(member, 'Questi sono i<br>nostri reparti', GREETER_BOARD_BUBBLE_LINGER_MS, now, 2);
+      }
+    }
+    member.group.rotation.y = lerpAngle(member.group.rotation.y, bodyYaw, Math.min(1, dt * 4));
     applyGreeterHeadLook(member, dt);
     return;
   }
@@ -10264,8 +10293,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   if (isGreeter) {
     if (member.greetStage === 'toBoard') {
       if (distance <= GREETER_BOARD_REACH) {
-        member.greetStage = 'atBoard'; // re-pose to idle + face player next frame
-        setGreeterBubble(member, 'Questi sono i<br>nostri dipartimenti', 4000, now, 2);
+        member.greetStage = 'atBoard'; // re-pose to idle + 45deg stance next frame
         member.lastMovedDistance = 0;
         return;
       }
