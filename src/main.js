@@ -9930,6 +9930,7 @@ function buildTronRunnerCrowdMember(job, index) {
     groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
   });
   member.idleClip = job.animations?.find((clip) => /idle/i.test(clip.name)) || null;
+  member.runClip = job.animations?.find((clip) => /run/i.test(clip.name)) || null;
   tronRunnerCrowd.push(member);
   tronRunnerCrowdGroup.add(group);
 }
@@ -10097,10 +10098,37 @@ function resolveGreeterBoardAnchor() {
   return greeterBoardAnchorScratch;
 }
 
-// Resume walking after the welcome: hard-switch idle->walk action weights (a crossfade
-// can't progress because distance-driven walk only calls mixer.update(0)).
+const GREETER_RUN_TIMESCALE = 1.15; // run clip plays a touch faster than authored
+
+// Resume locomotion after the welcome by switching into the RUN clip and crossfading from the
+// idle pose. While running, greeterRunning drives the mixer with real dt (not distance-driven),
+// so the crossfade progresses. member.action is repointed to the run clip so the arrival re-pose
+// (run -> idle) and timescale logic all target the right action.
+function crossFadeGreeterToRun(mixer, fromAction, runActionKey, member) {
+  if (!mixer || !member.runClip) return null;
+  const run = member[runActionKey] || mixer.clipAction(member.runClip);
+  member[runActionKey] = run;
+  run.reset();
+  run.enabled = true;
+  run.setEffectiveTimeScale(GREETER_RUN_TIMESCALE);
+  run.setEffectiveWeight(1);
+  run.play();
+  if (fromAction) fromAction.crossFadeTo(run, 0.3, false);
+  return run;
+}
 function startGreeterWalkingToBoard(member) {
   member.greetPosed = false;
+  if (member.runClip && member.mixer) {
+    member.walkAction = member.walkAction || member.action;
+    const run = crossFadeGreeterToRun(member.mixer, member.idleAction || member.walkAction, 'runAction', member);
+    if (run) member.action = run;
+    const rRun = crossFadeGreeterToRun(member.reflectionMixer, member.reflectionIdleAction || member.reflectionAction, 'reflectionRunAction', member);
+    if (rRun) member.reflectionAction = rRun;
+    const lRun = crossFadeGreeterToRun(member.reflectionLedMixer, member.reflectionLedIdleAction || member.reflectionLedAction, 'reflectionLedRunAction', member);
+    if (lRun) member.reflectionLedAction = lRun;
+    return;
+  }
+  // Fallback (no run clip): hard-switch idle->walk weights.
   const walk = member.action;
   const idle = member.idleAction;
   if (walk) { walk.enabled = true; walk.setEffectiveTimeScale(1); walk.setEffectiveWeight(1); walk.play(); }
@@ -10310,15 +10338,18 @@ function updateTronRunnerCrowd(dt) {
   updateTronRunnerCrowdReflectionBudget();
   prepareTronRunnerCrowdSpatialGrid();
   for (const member of tronRunnerCrowd) {
+    // The greeter always updates (even when off-screen) so it reliably walks over to greet the player.
+    const isGreeterMember = member.index === TRON_RUNNER_GREETER_INDEX;
+    // While running to the board the greeter's run clip is driven by its own fixed timescale,
+    // so skip the crowd's walk-tuned timescale management and the distance-driven walk sync.
+    const greeterRunning = isGreeterMember && member.greetStage === 'toBoard';
     const nextEffectiveAnimationSpeed = tronRunnerState.effectiveAnimationSpeed * (member.animationScaleOffset ?? 1);
-    if (member.action && Math.abs((member.lastEffectiveAnimationSpeed ?? -1) - nextEffectiveAnimationSpeed) > 0.0001) {
+    if (!greeterRunning && member.action && Math.abs((member.lastEffectiveAnimationSpeed ?? -1) - nextEffectiveAnimationSpeed) > 0.0001) {
       member.action.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
       member.reflectionAction?.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
       member.reflectionLedAction?.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
       member.lastEffectiveAnimationSpeed = nextEffectiveAnimationSpeed;
     }
-    // The greeter always updates (even when off-screen) so it reliably walks over to greet the player.
-    const isGreeterMember = member.index === TRON_RUNNER_GREETER_INDEX;
     member.speed = tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (member.speedScaleOffset ?? 1)
       * (isGreeterMember ? GREETER_SPEED_MULTIPLIER : 1);
     const cullingHidden = TRON_RUNNER_CROWD_CULLING_ENABLED && member.cullingVisible === false && !isGreeterMember;
@@ -10335,7 +10366,7 @@ function updateTronRunnerCrowd(dt) {
       if (!cullingHidden) updateTronRunnerCrowdReflection(member);
       continue;
     }
-    const distanceDrivenWalk = TRON_RUNNER_CROWD_DISTANCE_DRIVEN_WALK_ENABLED && Boolean(member.action) && !member.greetPosed;
+    const distanceDrivenWalk = TRON_RUNNER_CROWD_DISTANCE_DRIVEN_WALK_ENABLED && Boolean(member.action) && !member.greetPosed && !greeterRunning;
     if (!cullingHidden && !distanceDrivenWalk) member.mixer?.update(member.mixerDt);
     if (!cullingHidden && member.dynamicReflectionBudgetActive && !distanceDrivenWalk) {
       member.reflectionMixer?.update(member.mixerDt);
