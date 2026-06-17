@@ -9845,6 +9845,51 @@ function buildTronRunnerCrowdReflection(sourceModel, animations, index, colorPre
   };
 }
 
+// 2D (XZ) segment-vs-AABB slab test: does the camera->member line pass through this box?
+function tronRunnerSegmentHitsBoxXZ(ax, az, bx, bz, cx, cz, hw, hd) {
+  const dx = bx - ax;
+  const dz = bz - az;
+  let tmin = 0;
+  let tmax = 1;
+  if (Math.abs(dx) < 1e-6) {
+    if (ax < cx - hw || ax > cx + hw) return false;
+  } else {
+    let t1 = (cx - hw - ax) / dx;
+    let t2 = (cx + hw - ax) / dx;
+    if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
+    tmin = Math.max(tmin, t1);
+    tmax = Math.min(tmax, t2);
+    if (tmin > tmax) return false;
+  }
+  if (Math.abs(dz) < 1e-6) {
+    if (az < cz - hd || az > cz + hd) return false;
+  } else {
+    let t1 = (cz - hd - az) / dz;
+    let t2 = (cz + hd - az) / dz;
+    if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
+    tmin = Math.max(tmin, t1);
+    tmax = Math.min(tmax, t2);
+    if (tmin > tmax) return false;
+  }
+  return true;
+}
+
+// A crowd member whose floor reflection is drawn with depthTest:false bleeds THROUGH any
+// building standing between it and the camera (a ghost "inside the palazzo"). Detect that the
+// member is occluded by a building from the camera and drop its reflection.
+function tronRunnerCrowdReflectionOccludedByBuilding(member) {
+  const px = member.group.position.x;
+  const pz = member.group.position.z;
+  const camX = camera.position.x;
+  const camZ = camera.position.z;
+  for (const record of tronRunnerCrowdColliderRecords()) {
+    const c = record.collider;
+    if (!c) continue;
+    if (tronRunnerSegmentHitsBoxXZ(camX, camZ, px, pz, c.x, c.z, c.hw, c.hd)) return true;
+  }
+  return false;
+}
+
 function updateTronRunnerCrowdReflection(member) {
   const budgetActive = postRevealPerfIsolationState.crowdReflections && member.dynamicReflectionBudgetActive === true;
   // Most crowd members are outside the reflection budget (max 3 active). Once cleared, the
@@ -9853,8 +9898,11 @@ function updateTronRunnerCrowdReflection(member) {
   const group = member.reflectionGroup;
   const bodyMaterials = member.reflectionBodyMaterials || [];
   const ledMaterials = member.reflectionLedMaterials || [];
-  const bodyOpacity = budgetActive ? tronRunnerDynamicReflectionBodyOpacityForSurface(member.surface) : 0;
-  const ledOpacity = budgetActive ? tronRunnerDynamicReflectionLedOpacityForSurface(member.surface) : 0;
+  // Kill the reflection when a building occludes the member: depthTest:false would otherwise
+  // paint the reflection straight through the building face.
+  const occluded = budgetActive && tronRunnerCrowdReflectionOccludedByBuilding(member);
+  const bodyOpacity = budgetActive && !occluded ? tronRunnerDynamicReflectionBodyOpacityForSurface(member.surface) : 0;
+  const ledOpacity = budgetActive && !occluded ? tronRunnerDynamicReflectionLedOpacityForSurface(member.surface) : 0;
   const visible = Boolean(
     TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED &&
     postRevealPerfIsolationState.crowdReflections &&
