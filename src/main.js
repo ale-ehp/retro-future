@@ -17332,13 +17332,20 @@ function getGreeterBubbleTexture(html) {
 
 function ensureGreeterBubbleSprite() {
   if (greeterBubbleSprite) return greeterBubbleSprite;
-  greeterBubbleSprite = new THREE.Sprite(new THREE.SpriteMaterial({
-    transparent: true,
-    opacity: 1,
-    depthWrite: false,
-    depthTest: false,
-    toneMapped: false,
-  }));
+  // Plane mesh (not a Sprite): a Sprite is a spherical billboard that pitches to face the
+  // camera, so looking up/down tilted it. This Y-axis billboards (yaw to face the camera) and
+  // stays perfectly vertical no matter the camera pitch.
+  greeterBubbleSprite = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 1,
+      depthWrite: false,
+      depthTest: false,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+    })
+  );
   greeterBubbleSprite.visible = false;
   greeterBubbleSprite.renderOrder = 26;
   greeterBubbleSprite.frustumCulled = false;
@@ -17362,6 +17369,8 @@ function updateGreeterSpeechBubble() {
   greeter.group.getWorldPosition(greeterBubbleWorldScratch);
   greeterBubbleWorldScratch.y += TRON_RUNNER_TARGET_HEIGHT * greeter.group.scale.y + GREETER_BUBBLE_HEAD_GAP;
   sprite.position.copy(greeterBubbleWorldScratch);
+  // Y-only billboard: yaw to face the camera horizontally, stay upright (no pitch/roll tilt).
+  sprite.rotation.set(0, Math.atan2(camera.position.x - sprite.position.x, camera.position.z - sprite.position.z), 0);
   const h = GREETER_BUBBLE_WORLD_HEIGHT * (greeter.bubbleSizeScale || 1);
   const aspect = tex.__aspect || 2;
   sprite.scale.set(h * aspect, h, 1);
