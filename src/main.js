@@ -10067,7 +10067,7 @@ const TRON_RUNNER_CROWD_PAUSE_MAX_MS = 2800;
 // then stays put. The cyan member behaves like a normal crowd member.
 const TRON_RUNNER_GREETER_INDEX = 1;
 const TRON_RUNNER_GREET_DISTANCE = 4.0;
-const GREETER_SPEED_MULTIPLIER = 1.15; // the greeter always moves 15% faster than the crowd
+const GREETER_SPEED_MULTIPLIER = 1.30; // the greeter always moves 30% faster than the crowd
 const GREETER_HEAD_MAX_YAW = 1.3963; // +/-80deg => 160deg total head turn, no neck over-rotation
 const GREETER_HEAD_YAW_SIGN = 1;
 const greeterTargetScratch = { x: 0, z: 0 };
@@ -10131,9 +10131,10 @@ function applyGreeterHeadLook(member, dt) {
 }
 
 // Queue a timed speech bubble over the greeter's head (text + lifetime in ms).
-function setGreeterBubble(member, html, durationMs, now) {
+function setGreeterBubble(member, html, durationMs, now, sizeScale = 1) {
   member.bubbleText = html;
   member.bubbleUntil = now + durationMs;
+  member.bubbleSizeScale = sizeScale;
 }
 
 const tronRunnerCrowdNextPointScratch = { x: 0, z: 0 };
@@ -10150,7 +10151,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       member.greetBoardAnchorX = anchor.x;
       member.greetBoardAnchorZ = anchor.z;
       member.greetStage = 'toBoard';
-      setGreeterBubble(member, 'Seguimi', 2000, now);
+      setGreeterBubble(member, 'Seguimi', 5000, now);
       startGreeterWalkingToBoard(member);
     }
   }
@@ -10218,7 +10219,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
     if (member.greetStage === 'toBoard') {
       if (distance <= GREETER_BOARD_REACH) {
         member.greetStage = 'atBoard'; // re-pose to idle + face player next frame
-        setGreeterBubble(member, 'Questi sono i nostri dipartimenti', 4000, now);
+        setGreeterBubble(member, 'Questi sono i<br>nostri dipartimenti', 4000, now, 2);
         member.lastMovedDistance = 0;
         return;
       }
@@ -17226,7 +17227,7 @@ function updateGreeterSpeechBubble() {
   greeterBubbleViewScratch.copy(greeterBubbleWorldScratch).applyMatrix4(camera.matrixWorldInverse);
   if (greeterBubbleViewScratch.z > -0.5) { el.style.opacity = '0'; return; } // behind/at camera
   const dist = Math.max(0.5, -greeterBubbleViewScratch.z);
-  const scale = THREE.MathUtils.clamp(GREETER_BUBBLE_REF_DIST / dist, 0.45, 1.5);
+  const scale = THREE.MathUtils.clamp(GREETER_BUBBLE_REF_DIST / dist, 0.45, 1.5) * (greeter.bubbleSizeScale || 1);
   greeterBubbleWorldScratch.project(camera);
   const x = (greeterBubbleWorldScratch.x * 0.5 + 0.5) * window.innerWidth;
   const y = (-greeterBubbleWorldScratch.y * 0.5 + 0.5) * window.innerHeight;
