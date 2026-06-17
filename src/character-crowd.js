@@ -167,6 +167,10 @@ export function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ,
     stats,
     nearbyMembers,
     setState,
+    playerAvoidanceEnabled,
+    playerRadius,
+    playerStrength,
+    playerObject,
   } = deps;
   member.avoidanceNeighbors = 0;
   member.avoidanceOverlap = 0;
@@ -220,6 +224,23 @@ export function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ,
   }
   result.x = pushX * strength * dt;
   result.z = pushZ * strength * dt;
+  // The player is a single repulsor: when they invade a member's personal space the
+  // member steps aside (radial push away) and hesitates, so it reads as giving way
+  // rather than moonwalking through the player. Collision clamp keeps it on-route.
+  if (playerAvoidanceEnabled && playerObject) {
+    const pdx = nextPoint.x - playerObject.position.x;
+    const pdz = nextPoint.z - playerObject.position.z;
+    const pDistSq = pdx * pdx + pdz * pdz;
+    const pRadiusSq = playerRadius * playerRadius;
+    if (pDistSq > 0.0001 && pDistSq < pRadiusSq) {
+      const pDist = Math.sqrt(pDistSq);
+      const pWeight = (playerRadius - pDist) / playerRadius;
+      result.x += pdx / pDist * pWeight * playerStrength * dt;
+      result.z += pdz / pDist * pWeight * playerStrength * dt;
+      speedScale = Math.min(speedScale, 0.6);
+      member.avoidanceOverlap = Math.max(member.avoidanceOverlap, playerRadius - pDist);
+    }
+  }
   result.speedScale = speedScale;
   return result;
 }
