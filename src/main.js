@@ -17260,6 +17260,7 @@ buildAtmosphereParticles();
 // ---------- Greeter welcome speech bubble ----------
 let greeterSpeechBubble = null;
 const greeterBubbleWorldScratch = new THREE.Vector3();
+const greeterBubbleHeadScratch = new THREE.Vector3();
 const greeterBubbleViewScratch = new THREE.Vector3();
 const GREETER_BUBBLE_HEAD_Y = 5.0;
 const GREETER_BUBBLE_HEAD_GAP = 1.6;
@@ -17298,13 +17299,16 @@ function updateGreeterSpeechBubble() {
       if (!greeter.headBone && object.isBone && /head$/i.test(object.name)) greeter.headBone = object;
     });
   }
+  // Anchor horizontally to the BODY (group), not the head bone: the head yaws +/-80deg to
+  // track the player, and anchoring there made the bubble swing toward the player/camera.
+  // Keep the head's height so the bubble still floats just above the head, dead straight.
+  greeter.group.getWorldPosition(greeterBubbleWorldScratch);
+  let bubbleHeadY = greeterBubbleWorldScratch.y + GREETER_BUBBLE_HEAD_Y;
   if (greeter.headBone) {
-    greeter.headBone.getWorldPosition(greeterBubbleWorldScratch);
-    greeterBubbleWorldScratch.y += GREETER_BUBBLE_HEAD_GAP;
-  } else {
-    const pos = greeter.group.position;
-    greeterBubbleWorldScratch.set(pos.x, pos.y + GREETER_BUBBLE_HEAD_Y, pos.z);
+    greeter.headBone.getWorldPosition(greeterBubbleHeadScratch);
+    bubbleHeadY = greeterBubbleHeadScratch.y;
   }
+  greeterBubbleWorldScratch.y = bubbleHeadY + GREETER_BUBBLE_HEAD_GAP;
   greeterBubbleViewScratch.copy(greeterBubbleWorldScratch).applyMatrix4(camera.matrixWorldInverse);
   if (greeterBubbleViewScratch.z > -0.5) { el.style.opacity = '0'; return; } // behind/at camera
   const dist = Math.max(0.5, -greeterBubbleViewScratch.z);
