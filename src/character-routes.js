@@ -443,7 +443,7 @@ export function tronRunnerCrowdStartPlayerRoute({
   roadTopY,
   groundOffset,
 }) {
-  const laneXs = [-0.56, -0.28, 0, 0.28, 0.56].map((ratio) => (
+  const laneXs = [-0.28, 0.28, -0.56, 0.56, 0].map((ratio) => (
     THREE.MathUtils.clamp(
       ratio * roadHalf,
       limits.minX + gridBlock * 1.5,
