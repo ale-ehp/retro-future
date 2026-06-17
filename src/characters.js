@@ -121,6 +121,11 @@ export const TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED = true;
 export const TRON_RUNNER_CROWD_AVOIDANCE_ENABLED = true;
 export const TRON_RUNNER_CROWD_AVOIDANCE_RADIUS = 5.2;
 export const TRON_RUNNER_CROWD_AVOIDANCE_STRENGTH = 7.5;
+// Crowd reacts to the player: members veer aside when the player enters their personal
+// space. Stronger push than crowd-crowd jostling because the player reads as an intruder.
+export const TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_ENABLED = true;
+export const TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_RADIUS = 3.6;
+export const TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_STRENGTH = 12;
 export const TRON_RUNNER_CROWD_SPATIAL_CELL = 9.5;
 export const TRON_RUNNER_CROWD_TURN_DURATION_MS = 180;
 export const TRON_RUNNER_CROWD_YIELD_DURATION_MS = 260;

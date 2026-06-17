@@ -107,6 +107,9 @@ import {
   TRON_RUNNER_CROWD_MAX_MOVE_SUBSTEP,
   TRON_RUNNER_CROWD_PATH_MODE,
   TRON_RUNNER_CROWD_PASSING_PUSH,
+  TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_ENABLED,
+  TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_RADIUS,
+  TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_STRENGTH,
   TRON_RUNNER_CROWD_REACH_RADIUS,
   TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE,
   TRON_RUNNER_CROWD_REFLECTION_MIN_FPS,
@@ -10029,6 +10032,10 @@ const tronRunnerCrowdAvoidanceDeps = {
   stats: tronRunnerCrowdRuntimeStats,
   nearbyMembers: nearbyTronRunnerCrowdMembers,
   setState: setTronRunnerCrowdState,
+  playerAvoidanceEnabled: TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_ENABLED,
+  playerRadius: TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_RADIUS,
+  playerStrength: TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_STRENGTH,
+  playerObject: tronRunnerWalker,
 };
 
 function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, now) {
