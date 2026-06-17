@@ -17410,11 +17410,11 @@ const greeterBubbleTextureCache = new Map();
 function makeGreeterBubbleTexture(html) {
   const lines = String(html).split(/<br\s*\/?>/i).map((s) => s.trim());
   const canvas = document.createElement('canvas');
-  canvas.width = 640;
+  canvas.width = 768;
   canvas.height = 320;
   const ctx = canvas.getContext('2d');
   const pad = 30;
-  const maxTextW = canvas.width - pad * 2 - 36;
+  const maxTextW = canvas.width - pad * 2 - 120;
   let fontPx = 74;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -17426,7 +17426,7 @@ function makeGreeterBubbleTexture(html) {
   const lineH = fontPx * 1.24;
   const blockH = lineH * lines.length;
   const panelH = blockH + 56;
-  const panelW = Math.min(canvas.width - pad, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 88);
+  const panelW = Math.min(canvas.width - pad, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 150);
   const px = (canvas.width - panelW) / 2;
   const py = (canvas.height - panelH) / 2;
 
@@ -17529,6 +17529,7 @@ function updateGreeterSpeechBubble() {
 
 // ---------- Crowd ambient speech bubbles (pool of world sprites, like the greeter's) ----------
 const CROWD_BUBBLE_POOL_SIZE = 4; // only the nearest few talkers show at once (readability + perf)
+const CROWD_BUBBLE_SIZE_SCALE = 1.5; // crowd bubbles 50% larger than the base bubble height
 const crowdBubbleWorldScratch = new THREE.Vector3();
 let crowdBubbleSprites = null;
 const crowdBubbleTalkers = [];
@@ -17578,7 +17579,8 @@ function updateTronRunnerCrowdSpeechBubbles() {
     sprite.position.copy(crowdBubbleWorldScratch);
     sprite.rotation.set(0, Math.atan2(camera.position.x - sprite.position.x, camera.position.z - sprite.position.z), 0);
     const aspect = tex.__aspect || 2;
-    sprite.scale.set(GREETER_BUBBLE_WORLD_HEIGHT * aspect, GREETER_BUBBLE_WORLD_HEIGHT, 1);
+    const h = GREETER_BUBBLE_WORLD_HEIGHT * CROWD_BUBBLE_SIZE_SCALE;
+    sprite.scale.set(h * aspect, h, 1);
     sprite.material.opacity = opacity;
     sprite.visible = true;
   }
