@@ -123,9 +123,22 @@ export function tronRunnerCrowdLoopRouteForRecord({
 
   const y = (pad.innerTopY ?? pad.topY ?? roadTopY) + groundOffset;
   if (frontOnly) {
+    // Walk along the centre of the sidewalk strip, not hard against the building wall: the
+    // collider can be narrower than the rendered palazzo, so wall+guard could sit inside it.
+    // Bias ~60% from the building wall toward the pad's road edge so they read as on the
+    // sidewalk, well clear of the building.
+    const xs = polygon.map(([x]) => x);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const wallX = colliderX + roadDir * record.collider.hw;      // building road-facing wall (pad-local)
+    const padEdgeX = roadDir > 0 ? maxX : minX;                  // sidewalk/road boundary
+    const edgeInset = Math.max(collisionRadius + 0.8, 2);
+    let frontX = wallX + (padEdgeX - roadDir * edgeInset - wallX) * 0.62; // 62% toward the road edge
+    const minClearX = wallX + roadDir * guard;                   // never closer than guard to the wall
+    frontX = roadDir > 0 ? Math.max(frontX, minClearX) : Math.min(frontX, minClearX);
     const points = [
-      { x: pad.border.position.x + roadX, y, z: pad.border.position.z + nearZ },
-      { x: pad.border.position.x + roadX, y, z: pad.border.position.z + farZ },
+      { x: pad.border.position.x + frontX, y, z: pad.border.position.z + nearZ },
+      { x: pad.border.position.x + frontX, y, z: pad.border.position.z + farZ },
     ];
     if (index % 2) points.reverse();
     return {
