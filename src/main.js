@@ -17262,8 +17262,6 @@ buildAtmosphereParticles();
 // overlay. It is locked to the character (body X/Z + head height), stays upright, and faces
 // the camera the same way the boundary //error panel does.
 const greeterBubbleWorldScratch = new THREE.Vector3();
-const greeterBubbleHeadScratch = new THREE.Vector3();
-const GREETER_BUBBLE_HEAD_Y = 5.0;
 const GREETER_BUBBLE_HEAD_GAP = 1.1;       // world units above the head
 const GREETER_BUBBLE_WORLD_HEIGHT = 1.5;   // sprite height in world units at sizeScale 1
 const GREETER_BUBBLE_DURATION_MS = 3000;   // welcome message dissolves after this
@@ -17358,20 +17356,11 @@ function updateGreeterSpeechBubble() {
   }
   const tex = getGreeterBubbleTexture(greeter.bubbleText);
   if (sprite.material.map !== tex) { sprite.material.map = tex; sprite.material.needsUpdate = true; }
-  if (!greeter.headBone) {
-    greeter.model?.traverse((object) => {
-      if (!greeter.headBone && object.isBone && /head$/i.test(object.name)) greeter.headBone = object;
-    });
-  }
-  // Anchor to the body (group X/Z), not the head bone (which yaws +/-80deg to track the player),
-  // at head height + a small gap. Sprite billboards upright toward the camera.
+  // Anchor purely to the body (group world position) at a constant height above the head.
+  // No head bone: the head yaws to track the player and bobs with the animation, which made the
+  // bubble drift as you looked around. This keeps it dead fixed relative to the character.
   greeter.group.getWorldPosition(greeterBubbleWorldScratch);
-  let bubbleHeadY = greeterBubbleWorldScratch.y + GREETER_BUBBLE_HEAD_Y;
-  if (greeter.headBone) {
-    greeter.headBone.getWorldPosition(greeterBubbleHeadScratch);
-    bubbleHeadY = greeterBubbleHeadScratch.y;
-  }
-  greeterBubbleWorldScratch.y = bubbleHeadY + GREETER_BUBBLE_HEAD_GAP;
+  greeterBubbleWorldScratch.y += TRON_RUNNER_TARGET_HEIGHT * greeter.group.scale.y + GREETER_BUBBLE_HEAD_GAP;
   sprite.position.copy(greeterBubbleWorldScratch);
   const h = GREETER_BUBBLE_WORLD_HEIGHT * (greeter.bubbleSizeScale || 1);
   const aspect = tex.__aspect || 2;
