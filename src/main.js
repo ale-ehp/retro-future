@@ -490,8 +490,8 @@ const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
 let activePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO);
 let requestedPixelRatio = MAX_RENDER_PIXEL_RATIO;
 let manualRenderScale = 0.65;
-let requestedBloomResolutionScale = 0.45;
-let bloomResolutionScale = 0.45;
+let requestedBloomResolutionScale = 0.32;
+let bloomResolutionScale = 0.32;
 let bloomEnabled = true;
 let antialiasMode = 'fxaa';
 let fsrUpscaleEnabled = false;
@@ -9704,10 +9704,16 @@ function buildTronRunnerIdleCharacter(sourceModel) {
   syncTronRunnerIdleCharacterVisibility();
 }
 
+const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
+let tronRunnerCrowdAppearArmedAt = 0;
 function syncTronRunnerCrowdVisibility() {
   const visibleFactor = THREE.MathUtils.clamp(TRON_RUNNER_REVEAL_ENABLED ? tronRunnerRevealProgress : 1, 0, 1);
   const revealVisible = (visibleFactor > 0.002 || tronRunnerRevealActive || tronRunnerRevealComplete);
-  const visible = Boolean(TRON_RUNNER_CROWD_ENABLED && revealVisible && tronRunnerState.ready);
+  const wouldShow = Boolean(TRON_RUNNER_CROWD_ENABLED && revealVisible && tronRunnerState.ready);
+  // Hold the crowd back an extra second after it would normally appear.
+  if (!wouldShow) tronRunnerCrowdAppearArmedAt = 0;
+  else if (!tronRunnerCrowdAppearArmedAt) tronRunnerCrowdAppearArmedAt = performance.now();
+  const visible = wouldShow && (performance.now() - tronRunnerCrowdAppearArmedAt >= TRON_RUNNER_CROWD_APPEAR_DELAY_MS);
   const changed = tronRunnerCrowdGroup.visible !== visible;
   tronRunnerCrowdGroup.visible = visible;
   for (const member of tronRunnerCrowd) {
@@ -9898,6 +9904,11 @@ function buildTronRunnerCrowdMember(job, index) {
   const start = startInfo.placement;
   group.position.set(start.x, start.y, start.z);
   group.rotation.y = start.yaw ?? 0;
+  if (index === TRON_RUNNER_GREETER_INDEX) {
+    // The green companion starts a few metres in front of the landing so it reaches the
+    // player quickly to greet them.
+    group.position.set((droneLandingPose?.x ?? 0) + 1.5, start.y, (droneLandingPose?.z ?? start.z) - 18);
+  }
   const member = createTronRunnerCrowdMemberRecord({
     index,
     group,
@@ -9915,6 +9926,7 @@ function buildTronRunnerCrowdMember(job, index) {
     walkCycleOffset: tronRunnerCrowdWalkCycleOffset(index),
     groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
   });
+  member.idleClip = job.animations?.find((clip) => /idle/i.test(clip.name)) || null;
   tronRunnerCrowd.push(member);
   tronRunnerCrowdGroup.add(group);
 }
@@ -10043,20 +10055,81 @@ function tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ,
 const TRON_RUNNER_CROWD_PAUSE_CHANCE = 0.28;
 const TRON_RUNNER_CROWD_PAUSE_MIN_MS = 900;
 const TRON_RUNNER_CROWD_PAUSE_MAX_MS = 2800;
+// The green companion (member index 1) greets the player: it walks over at normal pace
+// when the city is revealed, stops at a welcoming distance and turns to face the player,
+// then stays put. The cyan member behaves like a normal crowd member.
+const TRON_RUNNER_GREETER_INDEX = 1;
+const TRON_RUNNER_GREET_DISTANCE = 4.0;
+const greeterTargetScratch = { x: 0, z: 0 };
+
 const tronRunnerCrowdNextPointScratch = { x: 0, z: 0 };
 function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   normalizeTronRunnerCrowdState(member, now);
   const route = member.route;
-  if (!route?.points?.length) {
+  const isGreeter = member.index === TRON_RUNNER_GREETER_INDEX;
+  if (isGreeter && member.greetDone) {
+    // Welcomed: freeze into a neutral standing pose (bind pose = straight legs, then arms
+    // crossed like the idle character) so we don't stop mid-stride with a leg raised.
+    if (!member.greetPosed) {
+      member.greetPosed = true;
+      // Crossfade from walking into the soldier idle clip: a natural standing welcome
+      // (alive, no mid-stride leg, no stiff pose). Mixer is driven per frame once greetPosed.
+      if (member.idleClip && member.mixer) {
+        member.idleAction = member.idleAction || member.mixer.clipAction(member.idleClip);
+        member.idleAction.reset();
+        member.idleAction.setEffectiveTimeScale(1);
+        member.idleAction.setEffectiveWeight(1);
+        member.idleAction.play();
+        if (member.action) member.action.crossFadeTo(member.idleAction, 0.45, false);
+        // Keep the floor reflection in sync with the body's idle (it was still walking).
+        if (member.reflectionMixer && member.reflectionAction) {
+          member.reflectionIdleAction = member.reflectionIdleAction || member.reflectionMixer.clipAction(member.idleClip);
+          member.reflectionIdleAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
+          member.reflectionAction.crossFadeTo(member.reflectionIdleAction, 0.45, false);
+        }
+        if (member.reflectionLedMixer && member.reflectionLedAction) {
+          member.reflectionLedIdleAction = member.reflectionLedIdleAction || member.reflectionLedMixer.clipAction(member.idleClip);
+          member.reflectionLedIdleAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
+          member.reflectionLedAction.crossFadeTo(member.reflectionLedIdleAction, 0.45, false);
+        }
+      } else if (member.action) {
+        member.action.stop();
+        member.model?.traverse((object) => {
+          if (object.isSkinnedMesh && object.skeleton) object.skeleton.pose();
+        });
+      }
+    }
+    member.lastMovedDistance = 0;
+    const fdx = camera.position.x - member.group.position.x;
+    const fdz = camera.position.z - member.group.position.z;
+    if (fdx * fdx + fdz * fdz > 0.04) {
+      member.group.rotation.y = lerpAngle(member.group.rotation.y, Math.atan2(fdx, fdz), Math.min(1, dt * 4));
+    }
+    return;
+  }
+  if (!isGreeter && !route?.points?.length) {
     member.lastMovedDistance = 0;
     return;
   }
-  const target = route.points[member.waypointIndex % route.points.length];
   const current = member.group.position;
+  let target;
+  if (isGreeter) {
+    greeterTargetScratch.x = camera.position.x;
+    greeterTargetScratch.z = camera.position.z;
+    target = greeterTargetScratch;
+  } else {
+    target = route.points[member.waypointIndex % route.points.length];
+  }
   const dx = target.x - current.x;
   const dz = target.z - current.z;
   const distance = Math.hypot(dx, dz);
-  if (distance <= TRON_RUNNER_CROWD_REACH_RADIUS) {
+  if (isGreeter) {
+    if (distance <= TRON_RUNNER_GREET_DISTANCE) {
+      member.greetDone = true;
+      member.lastMovedDistance = 0;
+      return;
+    }
+  } else if (distance <= TRON_RUNNER_CROWD_REACH_RADIUS) {
     member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
     if (Math.random() < TRON_RUNNER_CROWD_PAUSE_CHANCE) {
       const pauseMs = TRON_RUNNER_CROWD_PAUSE_MIN_MS + Math.random() * (TRON_RUNNER_CROWD_PAUSE_MAX_MS - TRON_RUNNER_CROWD_PAUSE_MIN_MS);
@@ -10069,25 +10142,29 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   }
   const dirX = dx / Math.max(distance, 0.001);
   const dirZ = dz / Math.max(distance, 0.001);
-  const stateSpeedScale = member.state === 'pause' ? 0 : member.state === 'turn' ? 0.56 : member.state === 'yield' ? 0.34 : 1;
+  const stateSpeedScale = isGreeter ? 1 : (member.state === 'pause' ? 0 : member.state === 'turn' ? 0.56 : member.state === 'yield' ? 0.34 : 1);
   const baseStep = Math.max(0, member.speed * Math.min(dt, 0.08) * stateSpeedScale);
   const nextPoint = tronRunnerCrowdNextPointScratch;
   nextPoint.x = current.x + dirX * Math.min(distance, baseStep);
   nextPoint.z = current.z + dirZ * Math.min(distance, baseStep);
-  const avoidance = tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, now);
-  if (avoidance.speedScale < 1) {
-    nextPoint.x = current.x + dirX * Math.min(distance, baseStep * avoidance.speedScale);
-    nextPoint.z = current.z + dirZ * Math.min(distance, baseStep * avoidance.speedScale);
+  let collided = false;
+  if (!isGreeter) {
+    // The greeter walks straight to the player at normal pace, ignoring crowd jostling.
+    const avoidance = tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, now);
+    if (avoidance.speedScale < 1) {
+      nextPoint.x = current.x + dirX * Math.min(distance, baseStep * avoidance.speedScale);
+      nextPoint.z = current.z + dirZ * Math.min(distance, baseStep * avoidance.speedScale);
+    }
+    nextPoint.x += avoidance.x;
+    nextPoint.z += avoidance.z;
+    collided = resolveTronRunnerCrowdCollision(member, nextPoint);
+    if (collided) {
+      member.collisionCount += 1;
+      member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
+      setTronRunnerCrowdState(member, 'avoid', now, TRON_RUNNER_CROWD_YIELD_DURATION_MS);
+    }
+    tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ, distance, collided, now);
   }
-  nextPoint.x += avoidance.x;
-  nextPoint.z += avoidance.z;
-  const collided = resolveTronRunnerCrowdCollision(member, nextPoint);
-  if (collided) {
-    member.collisionCount += 1;
-    member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
-    setTronRunnerCrowdState(member, 'avoid', now, TRON_RUNNER_CROWD_YIELD_DURATION_MS);
-  }
-  tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ, distance, collided, now);
   const movedDistance = Math.hypot(nextPoint.x - current.x, nextPoint.z - current.z);
   const surface = tronRunnerSurfaceYForPoint(nextPoint.x, nextPoint.z);
   member.group.position.set(nextPoint.x, surface.y, nextPoint.z);
@@ -10138,10 +10215,14 @@ function updateTronRunnerCrowd(dt) {
       member.lastEffectiveAnimationSpeed = nextEffectiveAnimationSpeed;
     }
     member.speed = tronRunnerWalkSpeed * TRON_RUNNER_CROWD_SPEED_SCALE * (member.speedScaleOffset ?? 1);
-    const cullingHidden = TRON_RUNNER_CROWD_CULLING_ENABLED && member.cullingVisible === false;
-    member.lodStride = cullingHidden
-      ? TRON_RUNNER_CROWD_CULLED_LOD_STRIDE
-      : (TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED ? tronRunnerCrowdLodStride(member) : 1);
+    // The greeter always updates (even when off-screen) so it reliably walks over to greet the player.
+    const isGreeterMember = member.index === TRON_RUNNER_GREETER_INDEX;
+    const cullingHidden = TRON_RUNNER_CROWD_CULLING_ENABLED && member.cullingVisible === false && !isGreeterMember;
+    member.lodStride = isGreeterMember
+      ? 1
+      : (cullingHidden
+        ? TRON_RUNNER_CROWD_CULLED_LOD_STRIDE
+        : (TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED ? tronRunnerCrowdLodStride(member) : 1));
     member.lodDt = Math.min(cullingHidden ? 0.34 : 0.14, (member.lodDt || 0) + step);
     member.mixerDt = Math.min(0.14, (member.mixerDt || 0) + step);
     const shouldUpdate = member.lodStride <= 1 || ((tronRunnerCrowdRuntimeStats.frame + member.index) % member.lodStride === 0);
@@ -10150,7 +10231,7 @@ function updateTronRunnerCrowd(dt) {
       if (!cullingHidden) updateTronRunnerCrowdReflection(member);
       continue;
     }
-    const distanceDrivenWalk = TRON_RUNNER_CROWD_DISTANCE_DRIVEN_WALK_ENABLED && Boolean(member.action);
+    const distanceDrivenWalk = TRON_RUNNER_CROWD_DISTANCE_DRIVEN_WALK_ENABLED && Boolean(member.action) && !member.greetPosed;
     if (!cullingHidden && !distanceDrivenWalk) member.mixer?.update(member.mixerDt);
     if (!cullingHidden && member.dynamicReflectionBudgetActive && !distanceDrivenWalk) {
       member.reflectionMixer?.update(member.mixerDt);
@@ -10164,7 +10245,7 @@ function updateTronRunnerCrowd(dt) {
     }
     const movedThisUpdate = Math.max(0, (member.distanceWalked || 0) - distanceBefore);
     member.lastMovedDistance = movedThisUpdate;
-    if (!cullingHidden && distanceDrivenWalk) syncTronRunnerCrowdWalkCycleToDistance(member);
+    if (!cullingHidden && distanceDrivenWalk && !member.greetPosed) syncTronRunnerCrowdWalkCycleToDistance(member);
     if (!cullingHidden) updateTronRunnerCrowdReflection(member);
     member.mixerDt = 0;
     member.lodDt = 0;
@@ -16920,7 +17001,7 @@ function updatePerformanceDiagnostics(measuredFps = latestMeasuredFps) {
 }
 
 // ---------- Atmospheric particles: dust/embers drifting in the boulevard fog ----------
-const ATMOSPHERE_PARTICLE_COUNT = 600;
+const ATMOSPHERE_PARTICLE_COUNT = 400;
 const ATMOSPHERE_PARTICLE_BOX = new THREE.Vector3(240, 95, 240);
 let atmosphereParticles = null;
 let atmosphereParticleTimeUniform = null;
@@ -16991,6 +17072,57 @@ function buildAtmosphereParticles() {
 }
 buildAtmosphereParticles();
 
+// ---------- Greeter welcome speech bubble ----------
+let greeterSpeechBubble = null;
+const greeterBubbleWorldScratch = new THREE.Vector3();
+const greeterBubbleViewScratch = new THREE.Vector3();
+const GREETER_BUBBLE_HEAD_Y = 5.0;
+const GREETER_BUBBLE_HEAD_GAP = 0.7;
+function ensureGreeterSpeechBubble() {
+  if (greeterSpeechBubble) return greeterSpeechBubble;
+  const el = document.createElement('div');
+  el.textContent = 'Benvenuto in avstudio.ai';
+  el.style.cssText = [
+    'position:fixed', 'left:0', 'top:0', 'transform:translate(-50%, -100%)',
+    'padding:6px 12px', 'border:1px solid rgba(143,252,255,0.85)', 'border-radius:9px',
+    'background:rgba(0,16,20,0.72)', 'color:#cdfcff',
+    "font:600 14px 'Menlo', Consolas, monospace", 'letter-spacing:0.02em', 'white-space:nowrap',
+    'pointer-events:none', 'z-index:40', 'box-shadow:0 0 14px rgba(98,247,255,0.45)',
+    'text-shadow:0 0 6px rgba(98,247,255,0.6)', 'opacity:0', 'transition:opacity 0.45s ease',
+  ].join(';');
+  document.body.appendChild(el);
+  greeterSpeechBubble = el;
+  return el;
+}
+function updateGreeterSpeechBubble() {
+  const greeter = tronRunnerCrowd[TRON_RUNNER_GREETER_INDEX];
+  const el = ensureGreeterSpeechBubble();
+  if (!greeter || !greeter.greetDone || !tronRunnerCrowdGroup.visible || !cityRevealComplete) {
+    el.style.opacity = '0';
+    return;
+  }
+  if (!greeter.headBone) {
+    greeter.model?.traverse((object) => {
+      if (!greeter.headBone && object.isBone && /head$/i.test(object.name)) greeter.headBone = object;
+    });
+  }
+  if (greeter.headBone) {
+    greeter.headBone.getWorldPosition(greeterBubbleWorldScratch);
+    greeterBubbleWorldScratch.y += GREETER_BUBBLE_HEAD_GAP;
+  } else {
+    const pos = greeter.group.position;
+    greeterBubbleWorldScratch.set(pos.x, pos.y + GREETER_BUBBLE_HEAD_Y, pos.z);
+  }
+  greeterBubbleViewScratch.copy(greeterBubbleWorldScratch).applyMatrix4(camera.matrixWorldInverse);
+  if (greeterBubbleViewScratch.z > -0.5) { el.style.opacity = '0'; return; } // behind/at camera
+  greeterBubbleWorldScratch.project(camera);
+  const x = (greeterBubbleWorldScratch.x * 0.5 + 0.5) * window.innerWidth;
+  const y = (-greeterBubbleWorldScratch.y * 0.5 + 0.5) * window.innerHeight;
+  el.style.left = `${x.toFixed(1)}px`;
+  el.style.top = `${y.toFixed(1)}px`;
+  el.style.opacity = '1';
+}
+
 function tick(now) {
   requestAnimationFrame(tick);
   const frameStartedAt = performance.now();
@@ -17052,6 +17184,7 @@ function tick(now) {
       atmosphereParticles.visible = cityRevealComplete;
       if (atmosphereParticleTimeUniform) atmosphereParticleTimeUniform.value = edgePulseSeconds;
     }
+    updateGreeterSpeechBubble();
   }
   updateCityRevealWireframe(now);
   syncCityRevealPerformanceProfile();
