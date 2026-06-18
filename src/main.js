@@ -485,6 +485,21 @@ import {
   requestLandscapeFullscreen,
 } from './controls/mobile-movement.js';
 import {
+  applyMovement,
+  clearMovementKeys,
+  clearVerticalMovementState,
+  initMovement,
+  movementBackMix,
+  movementForwardMix,
+  movementHorizontalSpeed,
+  movementRunMix,
+  movementStrafeDirection,
+  movementStrafeMix,
+  movementVelocity,
+  setMovementHorizontalSpeed,
+  setMovementRunMix,
+} from './controls/movement.js';
+import {
   getReflectionEnvMap,
   getRoadReflectionEnvMap,
   initReflectionEnv,
@@ -893,21 +908,6 @@ initDiscCursor({
   getUnlockedMouseLookActive,
 });
 
-function clearVerticalMovementState() {
-  keys.KeyE = false;
-  keys.Space = false;
-  keys.KeyQ = false;
-  keys.KeyC = false;
-  movementVelocity.y = 0;
-  desiredVelocity.y = 0;
-}
-
-function clearMovementKeys() {
-  for (const key in keys) keys[key] = false;
-  movementVelocity.set(0, 0, 0);
-  desiredVelocity.set(0, 0, 0);
-}
-
 function lerpAngle(from, to, t) {
   const delta = Math.atan2(Math.sin(to - from), Math.cos(to - from));
   return from + delta * t;
@@ -1030,18 +1030,6 @@ let headMotionSmoothing = 18;
 let stepPhase = 0;
 let headBobOffset = 0;
 let sideSwayOffset = 0;
-let movementRunMix = 0;
-let movementHorizontalSpeed = 0;
-let movementForwardMix = 0;
-let movementBackMix = 0;
-let movementStrafeMix = 0;
-let movementStrafeDirection = 0;
-const moveVec = new THREE.Vector3();
-const desiredVelocity = new THREE.Vector3();
-const movementVelocity = new THREE.Vector3();
-const forward = new THREE.Vector3();
-const right = new THREE.Vector3();
-const UP = new THREE.Vector3(0, 1, 0);
 const appliedHeadMotion = new THREE.Vector3();
 let walkSurfaceLift = 0;
 let walkSurfaceKind = 'road';
@@ -1637,88 +1625,6 @@ function updateWalkSimulation(dt) {
   viewRoll = THREE.MathUtils.lerp(viewRoll, targetRoll, smoothing);
   setFixedCameraFov();
   applyCameraLook();
-}
-
-function applyMovement(dt) {
-  desiredVelocity.set(0, 0, 0);
-  moveVec.set(0, 0, 0);
-  let mx = 0, mz = 0, my = 0;
-  if (keys['KeyW'] || keys['ArrowUp'])    mz -= 1;
-  if (keys['KeyS'] || keys['ArrowDown'])  mz += 1;
-  if (keys['KeyA'] || keys['ArrowLeft'])  mx -= 1;
-  if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
-  if (mobileTouchControlsState.movement.enabled && mobileTouchControlsState.movement.magnitude > 0) {
-    mx += mobileTouchControlsState.movement.x;
-    mz += mobileTouchControlsState.movement.z;
-  }
-  if (keys['KeyE'] || keys['Space'])      my += 1;
-  if (keys['KeyQ'] || keys['KeyC'])       my -= 1;
-
-  const hasHorizontalInput = mx !== 0 || mz !== 0;
-  const hasVerticalInput = my !== 0;
-  const hasInput = hasHorizontalInput || hasVerticalInput;
-  const speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? speedSprint : speedBase;
-
-  if (hasHorizontalInput) {
-    const forwardIntent = mz < 0 ? Math.abs(mz) : 0;
-    const backIntent = mz > 0 ? Math.abs(mz) : 0;
-    const strafeIntent = Math.abs(mx);
-    const intentTotal = Math.max(0.0001, forwardIntent + backIntent + strafeIntent);
-    movementForwardMix = forwardIntent / intentTotal;
-    movementBackMix = backIntent / intentTotal;
-    movementStrafeMix = strafeIntent / intentTotal;
-    movementStrafeDirection = mx === 0 ? 0 : Math.sign(mx);
-
-    camera.getWorldDirection(forward);
-    forward.y = 0;
-    if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
-    forward.normalize();
-    right.crossVectors(forward, UP).normalize();
-
-    moveVec.addScaledVector(forward, -mz);
-    moveVec.addScaledVector(right, mx);
-    moveVec.normalize();
-    const directionSpeedScale =
-      movementForwardMix +
-      movementBackMix * backwardSpeedScale +
-      movementStrafeMix * strafeSpeedScale;
-    const diagonalScale = mx !== 0 && mz !== 0 ? diagonalSpeedScale : 1;
-    const analogScale = THREE.MathUtils.clamp(Math.hypot(mx, mz), 0, 1);
-    desiredVelocity.addScaledVector(moveVec, speed * directionSpeedScale * diagonalScale * analogScale);
-  } else if (movementVelocity.lengthSq() < 0.0004) {
-    movementForwardMix = 0;
-    movementBackMix = 0;
-    movementStrafeMix = 0;
-    movementStrafeDirection = 0;
-  }
-
-  if (hasVerticalInput) desiredVelocity.y = my * verticalSpeed;
-
-  const response = hasInput ? movementAcceleration : movementDeceleration;
-  movementVelocity.lerp(desiredVelocity, Math.min(1, response * dt));
-  if (!hasInput && movementVelocity.lengthSq() < 0.0004) movementVelocity.set(0, 0, 0);
-
-  movementHorizontalSpeed = Math.hypot(movementVelocity.x, movementVelocity.z);
-  movementRunMix = THREE.MathUtils.clamp(
-    (movementHorizontalSpeed - speedBase * 0.65) / Math.max(1, speedSprint - speedBase * 0.65),
-    0,
-    1
-  );
-
-  if (movementVelocity.lengthSq() <= 0.000001) {
-    resolveCameraBuildingCollision();
-    resolveCameraRoadHexBoundaryCollision();
-    resolveCameraCrowdCollision();
-    resolveCameraWalkSurface(hasVerticalInput);
-    return;
-  }
-
-  camera.position.addScaledVector(movementVelocity, dt);
-  resolveCameraBuildingCollision();
-  resolveCameraRoadHexBoundaryCollision();
-  resolveCameraCrowdCollision();
-
-  resolveCameraWalkSurface(hasVerticalInput);
 }
 
 function updateHexRoadTiles(dt) {
@@ -3012,14 +2918,30 @@ initDroneIntro(ctx, {
   setViewRoll: (v) => { viewRoll = v; },
   setHeadBobOffset: (v) => { headBobOffset = v; },
   setSideSwayOffset: (v) => { sideSwayOffset = v; },
-  setMovementHorizontalSpeed: (v) => { movementHorizontalSpeed = v; },
-  setMovementRunMix: (v) => { movementRunMix = v; },
+  setMovementHorizontalSpeed,
+  setMovementRunMix,
   getLast: () => last,
   getDroneLandingPose: () => droneLandingPose,
   getSideBuildingRecords: () => sideBuildingRecords,
   getSideBuildingDepthScale: () => sideBuildingDepthScale,
   getDynamicRoadCenter: () => dynamicRoadCenter,
   getDynamicRoadLength: () => dynamicRoadLength,
+});
+
+initMovement(ctx, {
+  keys,
+  getSpeedBase: () => speedBase,
+  getSpeedSprint: () => speedSprint,
+  getBackwardSpeedScale: () => backwardSpeedScale,
+  getStrafeSpeedScale: () => strafeSpeedScale,
+  getDiagonalSpeedScale: () => diagonalSpeedScale,
+  getVerticalSpeed: () => verticalSpeed,
+  getMovementAcceleration: () => movementAcceleration,
+  getMovementDeceleration: () => movementDeceleration,
+  resolveCameraBuildingCollision,
+  resolveCameraCrowdCollision,
+  resolveCameraRoadHexBoundaryCollision,
+  resolveCameraWalkSurface,
 });
 
 // StreetEdges: same hex mesh system, but with muted blue-green Tron material.
