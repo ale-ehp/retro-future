@@ -463,6 +463,14 @@ import {
   updateDroneIntroFlight,
 } from './camera/drone-intro.js';
 import {
+  getPointerLocked,
+  getUnlockedMouseLookActive,
+  initMouseLook,
+  isMouseLookEnabled,
+  stopMouseLookInput,
+  updatePointerLockHint,
+} from './camera/mouse-look.js';
+import {
   getReflectionEnvMap,
   getRoadReflectionEnvMap,
   initReflectionEnv,
@@ -774,17 +782,6 @@ const keys = Object.create(null);
 const DEMO_START_KEY = 'Space';
 let backspaceIntroTriggered = false;
 let cameraCollisionUnlockedByBackspace = false;
-let pointerLocked = false;
-let dragging = false;
-let dragCandidate = false;
-let unlockedMouseLookActive = false;
-let lastX = 0, lastY = 0;
-let lookTouchIdentifier = null;
-let dragStartX = 0, dragStartY = 0;
-let suppressNextPointerLockMove = false;
-let pointerLockLookEnabledAt = 0;
-let pointerClickLookSuppressedUntil = 0;
-let ignoredPointerLookMoves = 0;
 let mouseSensitivityScale = 1;
 let cameraMinHeight = 1.8;
 let viewRoll = 0;
@@ -1053,7 +1050,7 @@ function isTronDiscCursorSurfaceEvent(event) {
 }
 
 function setTronDiscCursorVisible(visible) {
-  const shouldShow = Boolean(visible && !pointerLocked && !unlockedMouseLookActive);
+  const shouldShow = Boolean(visible && !getPointerLocked() && !getUnlockedMouseLookActive());
   tronDiscCursorState.visible = shouldShow;
   document.body.classList.toggle('tron-disc-cursor-visible', shouldShow);
   tronDiscCursor?.classList.toggle('is-hidden', !shouldShow);
@@ -1145,168 +1142,26 @@ function triggerBackspaceDroneIntro(source = 'backspace') {
   startDroneIntroFlight(source);
 }
 
-function suppressPointerLook(ms = POINTER_CLICK_SUPPRESS_MS, moveCount = 8) {
-  suppressNextPointerLockMove = true;
-  pointerClickLookSuppressedUntil = Math.max(pointerClickLookSuppressedUntil, performance.now() + ms);
-  ignoredPointerLookMoves = Math.max(ignoredPointerLookMoves, moveCount);
-}
-
-function isMouseLookEnabled() {
-  return cityRevealComplete;
-}
-
-function updatePointerLockHint() {
-  const lockHint = document.getElementById('lock-hint');
-  if (!lockHint) return;
-  if (welcomeWindowUsesTouchPrompt()) {
-    lockHint.textContent = isMouseLookEnabled()
-      ? 'trascina per guardare'
-      : 'touch attivo dopo il reveal';
-    return;
-  }
-  lockHint.textContent = isMouseLookEnabled()
-    ? (pointerLocked || unlockedMouseLookActive ? 'mouse look active · ESC to release' : 'click canvas to lock')
-    : 'mouse disabled until reveal complete';
-}
-
-function syncMouseLookCursorState() {
-  document.body.classList.toggle('mouse-look-engaged', pointerLocked || unlockedMouseLookActive);
-  lockEl.classList.toggle('dragging', pointerLocked || unlockedMouseLookActive);
-  setTronDiscCursorVisible(tronDiscCursorState.pointerInside);
-}
-
-function stopMouseLookInput() {
-  dragging = false;
-  dragCandidate = false;
-  lookTouchIdentifier = null;
-  unlockedMouseLookActive = false;
-  suppressNextPointerLockMove = false;
-  ignoredPointerLookMoves = 0;
-  if (document.pointerLockElement === lockEl) {
-    try { document.exitPointerLock?.(); } catch (_) {}
-  }
-  pointerLocked = false;
-  syncMouseLookCursorState();
-  updatePointerLockHint();
-}
-
-lockEl.addEventListener('click', (e) => {
-  if (!isMouseLookEnabled()) {
-    e.preventDefault();
-    stopMouseLookInput();
-    return;
-  }
-  suppressPointerLook();
-  clearVerticalMovementState();
-  if (!pointerLocked) {
-    dragging = false;
-    dragCandidate = false;
-    unlockedMouseLookActive = true;
-    lastX = e.clientX;
-    lastY = e.clientY;
-    pointerLockLookEnabledAt = performance.now() + POINTER_LOCK_SETTLE_MS;
-    syncMouseLookCursorState();
-    updatePointerLockHint();
-    try {
-      const lockRequest = lockEl.requestPointerLock?.();
-      lockRequest?.catch?.(() => {});
-    } catch (_) {}
-  }
-});
-document.addEventListener('pointerlockchange', () => {
-  pointerLocked = (document.pointerLockElement === lockEl);
-  clearVerticalMovementState();
-  if (pointerLocked) {
-    dragging = false;
-    dragCandidate = false;
-    unlockedMouseLookActive = false;
-    suppressPointerLook(POINTER_LOCK_SETTLE_MS, 8);
-    pointerLockLookEnabledAt = performance.now() + POINTER_LOCK_SETTLE_MS;
-  }
-  syncMouseLookCursorState();
-  updatePointerLockHint();
-});
-
-window.addEventListener('mousemove', (e) => {
-  handleTronDiscCursorMove(e);
-  if (!isMouseLookEnabled()) {
-    stopMouseLookInput();
-    return;
-  }
-  if (pointerLocked) {
-    if (
-      suppressNextPointerLockMove ||
-      ignoredPointerLookMoves > 0 ||
-      performance.now() < pointerLockLookEnabledAt ||
-      performance.now() < pointerClickLookSuppressedUntil
-    ) {
-      suppressNextPointerLockMove = false;
-      ignoredPointerLookMoves = Math.max(0, ignoredPointerLookMoves - 1);
-      return;
-    }
-    yaw   -= e.movementX * 0.0022 * mouseSensitivityScale;
-    pitch -= e.movementY * 0.0022 * mouseSensitivityScale;
-    pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
-    applyCameraLook();
-  } else if (unlockedMouseLookActive) {
-    const dx = e.clientX - lastX;
-    const dy = e.clientY - lastY;
-    lastX = e.clientX; lastY = e.clientY;
-    if (Math.abs(dx) <= 0.001 && Math.abs(dy) <= 0.001) return;
-    yaw   -= dx * 0.0035 * mouseSensitivityScale;
-    pitch -= dy * 0.0035 * mouseSensitivityScale;
-    pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
-    applyCameraLook();
-  } else if (dragCandidate || dragging) {
-    if (!dragging) {
-      const totalDx = e.clientX - dragStartX;
-      const totalDy = e.clientY - dragStartY;
-      if (Math.hypot(totalDx, totalDy) < DRAG_ACTIVATE_PX) return;
-      dragging = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
-      return;
-    }
-    const dx = e.clientX - lastX;
-    const dy = e.clientY - lastY;
-    lastX = e.clientX; lastY = e.clientY;
-    yaw   -= dx * 0.0035 * mouseSensitivityScale;
-    pitch -= dy * 0.0035 * mouseSensitivityScale;
-    pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
-    applyCameraLook();
-  }
-});
-document.addEventListener('pointerleave', () => setTronDiscCursorVisible(false), { passive: true });
-window.addEventListener('blur', () => setTronDiscCursorVisible(false));
-// fallback drag-rotate when pointer lock unavailable / declined
-lockEl.addEventListener('mousedown', (e) => {
-  if (e.button !== 0) return;
-  e.preventDefault();
-  if (!isMouseLookEnabled()) {
-    stopMouseLookInput();
-    return;
-  }
-  clearVerticalMovementState();
-  suppressPointerLook();
-  if (pointerLocked) return;
-  unlockedMouseLookActive = false;
-  // A tiny drag activates rotate-fallback when browser pointer lock is unavailable,
-  // declined, or not yet engaged after the click gesture.
-  dragCandidate = true;
-  dragging = false;
-  dragStartX = lastX = e.clientX;
-  dragStartY = lastY = e.clientY;
-});
-window.addEventListener('mouseup', () => {
-  if (pointerLocked) suppressPointerLook(180, 3);
-  dragging = false;
-  dragCandidate = false;
-});
-document.addEventListener('mousedown', (e) => {
-  if (e.target === lockEl) return;
-  unlockedMouseLookActive = false;
-  syncMouseLookCursorState();
-  updatePointerLockHint();
+initMouseLook(ctx, {
+  getYaw: () => yaw,
+  setYaw: (v) => { yaw = v; },
+  getPitch: () => pitch,
+  setPitch: (v) => { pitch = v; },
+  applyCameraLook,
+  PITCH_LIMIT,
+  lockEl,
+  DRAG_ACTIVATE_PX,
+  POINTER_LOCK_SETTLE_MS,
+  POINTER_CLICK_SUPPRESS_MS,
+  clearVerticalMovementState,
+  setTronDiscCursorVisible,
+  handleTronDiscCursorMove,
+  tronDiscCursorState,
+  welcomeWindowUsesTouchPrompt,
+  requestLandscapeFullscreen,
+  isMobileMovementControlTarget,
+  getCityRevealComplete: () => cityRevealComplete,
+  getMouseSensitivityScale: () => mouseSensitivityScale,
 });
 
 function isMobileMovementControlTarget(target) {
@@ -1362,59 +1217,6 @@ window.addEventListener('touchstart', (event) => {
   }
 }, { passive: true, capture: true });
 updateMobileTouchControlsState();
-
-// touch fallback (mobile)
-lockEl.addEventListener('touchstart', (e) => {
-  if (!isMouseLookEnabled()) {
-    stopMouseLookInput();
-    return;
-  }
-  if (lookTouchIdentifier !== null) return;
-  const touch = Array.from(e.changedTouches).find((item) => !isMobileMovementControlTarget(item.target)) || e.changedTouches[0];
-  if (!touch) return;
-  requestLandscapeFullscreen('look-touch');
-  lookTouchIdentifier = touch.identifier;
-  dragging = true;
-  lastX = touch.clientX;
-  lastY = touch.clientY;
-}, { passive: true });
-window.addEventListener('touchend', (e) => {
-  if (lookTouchIdentifier === null) {
-    dragging = false;
-    return;
-  }
-  const ended = Array.from(e.changedTouches).some((touch) => touch.identifier === lookTouchIdentifier);
-  if (ended) {
-    dragging = false;
-    lookTouchIdentifier = null;
-  }
-});
-window.addEventListener('touchcancel', (e) => {
-  if (lookTouchIdentifier === null) {
-    dragging = false;
-    return;
-  }
-  const cancelled = Array.from(e.changedTouches).some((touch) => touch.identifier === lookTouchIdentifier);
-  if (cancelled) {
-    dragging = false;
-    lookTouchIdentifier = null;
-  }
-});
-window.addEventListener('touchmove', (e) => {
-  if (!isMouseLookEnabled()) {
-    stopMouseLookInput();
-    return;
-  }
-  if (!dragging || lookTouchIdentifier === null) return;
-  const t = Array.from(e.touches).find((touch) => touch.identifier === lookTouchIdentifier);
-  if (!t) return;
-  const dx = t.clientX - lastX, dy = t.clientY - lastY;
-  lastX = t.clientX; lastY = t.clientY;
-  yaw   -= dx * 0.0035 * mouseSensitivityScale;
-  pitch -= dy * 0.0035 * mouseSensitivityScale;
-  pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
-  applyCameraLook();
-}, { passive: true });
 
 function isTextEditingTarget(target) {
   if (!target) return false;
@@ -14902,8 +14704,8 @@ window.__tronInspect = () => ({
     basePadNormal: Number(controlEls.basePadNormal.value),
     basePadTextureRepeat: Number(controlEls.basePadTextureRepeat.value),
   },
-  pointerLocked,
-  unlockedMouseLookActive,
+  pointerLocked: getPointerLocked(),
+  unlockedMouseLookActive: getUnlockedMouseLookActive(),
   tronDiscCursor: {
     visible: tronDiscCursorState.visible,
     pointerInside: tronDiscCursorState.pointerInside,
