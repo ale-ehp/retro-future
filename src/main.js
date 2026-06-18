@@ -23,8 +23,6 @@ import {
   CITY_REVEAL_DEFAULT_FADE_MS,
   CITY_REVEAL_MAX_SKY_BACKPLATE_OPACITY,
   CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP,
-  CITY_REVEAL_PROFILE_MAX_SAMPLES,
-  CITY_REVEAL_PROFILE_SAMPLE_MS,
   CITY_REVEAL_RENDER_ORDER,
   CITY_REVEAL_SWEEP_MARGIN_Z,
   CITY_REVEAL_SWEEP_MODE,
@@ -371,6 +369,7 @@ import {
   mobilePerformanceProfileActive as mobilePerformanceProfileActiveCore,
   mobilePerformanceProfileState as mobilePerformanceProfileStateCore,
 } from './engine/performance-mobile.js';
+import { createCityRevealProfiler } from './engine/city-reveal-profiler.js';
 import {
   CITY_DEPARTMENT_BOARD_ENABLED,
   addCityDepartmentFrame,
@@ -698,17 +697,6 @@ let cityRevealSweepProgress = 0;
 let cityRevealComplete = false;
 let cityRevealCompletedAt = 0;
 let cityRevealWaitingForVisibleFrame = false;
-const cityRevealProfileState = {
-  running: false,
-  completed: false,
-  startedAt: 0,
-  lastSampleAt: 0,
-  frameCount: 0,
-  samples: [],
-  bucket: null,
-  lastFrame: null,
-};
-
 // Postprocessing (optional bloom + FXAA). Best-effort — fallback to plain renderer if any module fails.
 let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null;
 let postEnabled = true;
@@ -8261,241 +8249,45 @@ function updateCityRevealWireObjectCulling() {
   }
 }
 
-function createCityRevealProfileBucket() {
-  return {
-    frames: 0,
-    rafDtMsSum: 0,
-    updateMsSum: 0,
-    renderMsSum: 0,
-    frameMsSum: 0,
-    updateMsMax: 0,
-    renderMsMax: 0,
-    frameMsMax: 0,
-    drawCallsSum: 0,
-    drawCallsMax: 0,
-    trianglesSum: 0,
-    trianglesMax: 0,
-    linesSum: 0,
-    pointsSum: 0,
-  };
-}
-
-function countVisibleRenderables(root) {
-  const result = { total: 0, visible: 0, hidden: 0, mesh: 0, line: 0, points: 0, instanced: 0 };
-  if (!root) return result;
-  root.traverse((object) => {
-    if (!object.isMesh && !object.isLine && !object.isPoints) return;
-    result.total++;
-    if (!object.visible) {
-      result.hidden++;
-      return;
-    }
-    result.visible++;
-    if (object.isInstancedMesh) result.instanced++;
-    else if (object.isMesh) result.mesh++;
-    else if (object.isLine) result.line++;
-    else if (object.isPoints) result.points++;
-  });
-  return result;
-}
-
-function cityRevealWireRenderablesSnapshot() {
-  return {
-    total: cityRevealWireCullStats.total,
-    visible: cityRevealWireCullStats.visible,
-    hidden: cityRevealWireCullStats.hidden,
-    mesh: cityRevealWireCullStats.solidVisible + cityRevealWireCullStats.roadFadeVisible,
-    line: cityRevealWireCullStats.wireVisible,
-    points: 0,
-    instanced: 0,
-  };
-}
-
-function cityRevealComposerPassProfile() {
-  const passes = {
-    sky: Boolean(cityRevealSkyPass?.enabled),
-    overlay: Boolean(cityRevealOverlayPass?.enabled),
-    wireframe: Boolean(cityRevealWirePass?.enabled),
-    roadGrid: Boolean(cityRevealRoadGridPass?.enabled),
-    wireAa: Boolean(cityRevealWireFxaaPass?.enabled),
-    realCity: Boolean(cityRevealScenePass?.enabled),
-    mainLedReveal: Boolean(cityRevealMainLedRevealPass?.enabled),
-    bloom: Boolean(bloomPass?.enabled),
-    fxaa: Boolean(fxaaPass?.enabled),
-    fsrUpscale: Boolean(fsrUpscalePass?.enabled),
-    output: Boolean(composer && !fsrUpscalePass),
-  };
-  const mainLedSceneRenders = passes.mainLedReveal ? 2 : 0;
-  const sceneRenderPasses = [
-    passes.sky,
-    passes.overlay,
-    passes.wireframe,
-    passes.roadGrid,
-    passes.realCity,
-  ].filter(Boolean).length + mainLedSceneRenders;
-  const postPasses = [passes.bloom, passes.fxaa, passes.fsrUpscale, passes.output].filter(Boolean).length;
-  return {
-    composer: shouldUseComposer(),
-    passes,
-    sceneRenderPasses,
-    postPasses,
-    estimatedPasses: sceneRenderPasses + postPasses,
-  };
-}
-
-function cityRevealProfileSceneSnapshot() {
-  return {
-    pipeline: cityRevealComposerPassProfile(),
-    renderables: {
-      scene: countVisibleRenderables(scene),
-      wire: cityRevealWireRenderablesSnapshot(),
-      roadGrid: countVisibleRenderables(cityRevealRoadGridGroup),
-      mainLedDepth: countVisibleRenderables(cityRevealMainLedDepthGroup),
-    },
-    reveal: {
-      started: cityRevealStartedAt > 0,
-      armed: cityRevealArmedAt > 0,
-      armedElapsedMs: cityRevealArmedAt > 0 ? Number((performance.now() - cityRevealArmedAt).toFixed(1)) : 0,
-      complete: cityRevealComplete,
-      completedAt: Number(cityRevealCompletedAt.toFixed(1)),
-      postRevealElapsedMs: Number(cityRevealPostRevealElapsedMs().toFixed(1)),
-      delayMs: cityRevealDelayMs,
-      extraDelayMs: CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS,
-      effectiveDelayMs: cityRevealEffectiveDelayMs(),
-      fadeMs: cityRevealFadeDurationMs(),
-      progress: Number(cityRevealSweepProgress.toFixed(4)),
-      wireAlpha: Number(cityRevealWireAlpha.toFixed(4)),
-      realRevealActive: isCityRevealRealRevealActive(),
-      mainLedRevealActive: isCityRevealMainLedRevealOverlayActive(),
-      visibleWireObjects: cityRevealEstimatedVisibleObjects(),
-      renderedWireObjects: cityRevealWireCullStats.visible,
-      hiddenWireObjects: cityRevealWireCullStats.hidden,
-      wireCull: { ...cityRevealWireCullStats },
-      totalWireObjects: cityRevealWireObjects.length,
-      solidObjects: cityRevealSolidObjects.length,
-      mainLedOverlayObjects: mainBuildingVerticalRevealOverlayObjects.size,
-      mainLedDepthProxyVisible: cityRevealMainLedDepthProxyVisibleCount,
-      mainLedDepthProxyMode: cityRevealMainLedDepthProxyLastMode,
-    },
-    crowd: {
-      count: tronRunnerCrowd.length,
-      visible: tronRunnerCrowdRuntimeStats.cullingVisibleCount,
-      hidden: tronRunnerCrowdRuntimeStats.cullingHiddenCount,
-      reflections: tronRunnerCrowdRuntimeStats.activeReflectionCount,
-      lastThinkMs: Number(tronRunnerCrowdRuntimeStats.lastThinkMs.toFixed(3)),
-    },
-    memory: { ...renderer.info.memory },
-  };
-}
-
-function resetCityRevealProfile(now = performance.now()) {
-  cityRevealProfileState.running = true;
-  cityRevealProfileState.completed = false;
-  cityRevealProfileState.startedAt = now;
-  cityRevealProfileState.lastSampleAt = now;
-  cityRevealProfileState.frameCount = 0;
-  cityRevealProfileState.samples = [];
-  cityRevealProfileState.bucket = createCityRevealProfileBucket();
-  cityRevealProfileState.lastFrame = null;
-}
-
-function cityRevealProfileShouldRun() {
-  return cityRevealStartedAt > 0 && !cityRevealComplete;
-}
-
-function pushCityRevealProfileSample(now, force = false) {
-  const bucket = cityRevealProfileState.bucket;
-  if (!bucket || bucket.frames <= 0) return;
-  if (!force && now - cityRevealProfileState.lastSampleAt < CITY_REVEAL_PROFILE_SAMPLE_MS) return;
-  const avg = (value) => Number((value / Math.max(1, bucket.frames)).toFixed(3));
-  const sample = {
-    elapsedMs: Number((now - cityRevealProfileState.startedAt).toFixed(1)),
-    frames: bucket.frames,
-    fps: Number((1000 / Math.max(0.001, avg(bucket.rafDtMsSum))).toFixed(1)),
-    updateMsAvg: avg(bucket.updateMsSum),
-    updateMsMax: Number(bucket.updateMsMax.toFixed(3)),
-    renderMsAvg: avg(bucket.renderMsSum),
-    renderMsMax: Number(bucket.renderMsMax.toFixed(3)),
-    frameMsAvg: avg(bucket.frameMsSum),
-    frameMsMax: Number(bucket.frameMsMax.toFixed(3)),
-    drawCallsAvg: avg(bucket.drawCallsSum),
-    drawCallsMax: bucket.drawCallsMax,
-    trianglesAvg: Math.round(bucket.trianglesSum / Math.max(1, bucket.frames)),
-    trianglesMax: bucket.trianglesMax,
-    linesAvg: Math.round(bucket.linesSum / Math.max(1, bucket.frames)),
-    pointsAvg: Math.round(bucket.pointsSum / Math.max(1, bucket.frames)),
-    ...cityRevealProfileSceneSnapshot(),
-  };
-  cityRevealProfileState.samples.push(sample);
-  if (cityRevealProfileState.samples.length > CITY_REVEAL_PROFILE_MAX_SAMPLES) {
-    cityRevealProfileState.samples.shift();
-  }
-  cityRevealProfileState.lastSampleAt = now;
-  cityRevealProfileState.bucket = createCityRevealProfileBucket();
-}
-
-function recordCityRevealProfileFrame({ now, dt, updateMs, renderMs, frameMs, renderInfo }) {
-  if (!cityRevealProfileShouldRun()) {
-    if (cityRevealProfileState.running) {
-      pushCityRevealProfileSample(performance.now(), true);
-      cityRevealProfileState.running = false;
-      cityRevealProfileState.completed = true;
-    }
-    return;
-  }
-  const profileNow = performance.now();
-  if (!cityRevealProfileState.running) resetCityRevealProfile(profileNow);
-  const bucket = cityRevealProfileState.bucket || createCityRevealProfileBucket();
-  cityRevealProfileState.bucket = bucket;
-  const rafDtMs = Math.max(0.001, dt * 1000);
-  const calls = renderInfo?.calls ?? 0;
-  const triangles = renderInfo?.triangles ?? 0;
-  bucket.frames++;
-  bucket.rafDtMsSum += rafDtMs;
-  bucket.updateMsSum += updateMs;
-  bucket.renderMsSum += renderMs;
-  bucket.frameMsSum += frameMs;
-  bucket.updateMsMax = Math.max(bucket.updateMsMax, updateMs);
-  bucket.renderMsMax = Math.max(bucket.renderMsMax, renderMs);
-  bucket.frameMsMax = Math.max(bucket.frameMsMax, frameMs);
-  bucket.drawCallsSum += calls;
-  bucket.drawCallsMax = Math.max(bucket.drawCallsMax, calls);
-  bucket.trianglesSum += triangles;
-  bucket.trianglesMax = Math.max(bucket.trianglesMax, triangles);
-  bucket.linesSum += renderInfo?.lines ?? 0;
-  bucket.pointsSum += renderInfo?.points ?? 0;
-  cityRevealProfileState.frameCount++;
-  cityRevealProfileState.lastFrame = {
-    now: Number(now.toFixed(1)),
-    updateMs: Number(updateMs.toFixed(3)),
-    renderMs: Number(renderMs.toFixed(3)),
-    frameMs: Number(frameMs.toFixed(3)),
-    renderInfo: { ...renderInfo },
-  };
-  pushCityRevealProfileSample(profileNow, cityRevealComplete);
-}
-
-function cityRevealProfileInspect() {
-  const samples = cityRevealProfileState.samples.map((sample) => ({ ...sample }));
-  const slowestRender = samples.reduce((best, sample) => (
-    !best || sample.renderMsMax > best.renderMsMax ? sample : best
-  ), null);
-  const slowestFrame = samples.reduce((best, sample) => (
-    !best || sample.frameMsMax > best.frameMsMax ? sample : best
-  ), null);
-  return {
-    running: cityRevealProfileState.running,
-    completed: cityRevealProfileState.completed,
-    sampleMs: CITY_REVEAL_PROFILE_SAMPLE_MS,
-    frameCount: cityRevealProfileState.frameCount,
-    sampleCount: samples.length,
-    lastFrame: cityRevealProfileState.lastFrame ? { ...cityRevealProfileState.lastFrame } : null,
-    latest: samples.at(-1) || cityRevealProfileSceneSnapshot(),
-    slowestRender,
-    slowestFrame,
-    samples,
-  };
-}
+const cityRevealProfiler = createCityRevealProfiler({
+  getCityRevealStartedAt: () => cityRevealStartedAt,
+  getCityRevealArmedAt: () => cityRevealArmedAt,
+  getCityRevealComplete: () => cityRevealComplete,
+  getCityRevealCompletedAt: () => cityRevealCompletedAt,
+  getCityRevealDelayMs: () => cityRevealDelayMs,
+  getCityRevealSweepProgress: () => cityRevealSweepProgress,
+  getCityRevealWireAlpha: () => cityRevealWireAlpha,
+  getCityRevealWireCullStats: () => cityRevealWireCullStats,
+  getCityRevealWireObjects: () => cityRevealWireObjects,
+  getCityRevealSolidObjects: () => cityRevealSolidObjects,
+  getCityRevealMainLedDepthProxyVisibleCount: () => cityRevealMainLedDepthProxyVisibleCount,
+  getCityRevealMainLedDepthProxyLastMode: () => cityRevealMainLedDepthProxyLastMode,
+  getMainBuildingVerticalRevealOverlayObjectCount: () => mainBuildingVerticalRevealOverlayObjects.size,
+  getTronRunnerCrowd: () => tronRunnerCrowd,
+  getTronRunnerCrowdRuntimeStats: () => tronRunnerCrowdRuntimeStats,
+  getRendererMemory: () => renderer.info.memory,
+  getScene: () => scene,
+  getCityRevealRoadGridGroup: () => cityRevealRoadGridGroup,
+  getCityRevealMainLedDepthGroup: () => cityRevealMainLedDepthGroup,
+  getComposer: () => composer,
+  getBloomPass: () => bloomPass,
+  getFxaaPass: () => fxaaPass,
+  getFsrUpscalePass: () => fsrUpscalePass,
+  getCityRevealSkyPass: () => cityRevealSkyPass,
+  getCityRevealOverlayPass: () => cityRevealOverlayPass,
+  getCityRevealWirePass: () => cityRevealWirePass,
+  getCityRevealRoadGridPass: () => cityRevealRoadGridPass,
+  getCityRevealWireFxaaPass: () => cityRevealWireFxaaPass,
+  getCityRevealScenePass: () => cityRevealScenePass,
+  getCityRevealMainLedRevealPass: () => cityRevealMainLedRevealPass,
+  cityRevealPostRevealElapsedMs,
+  cityRevealEffectiveDelayMs,
+  cityRevealFadeDurationMs,
+  isCityRevealRealRevealActive,
+  isCityRevealMainLedRevealOverlayActive,
+  cityRevealEstimatedVisibleObjects,
+  shouldUseComposer,
+});
 
 function buildCityRevealWireframe() {
   clearCityRevealWire();
@@ -11501,7 +11293,7 @@ window.__tronInspect = () => ({
   noclip: getTronNoclipEnabled(),
   cameraCollisionDisabled: isCameraCollisionDisabled(),
   mouseLookEnabled: isMouseLookEnabled(),
-  cityRevealProfile: cityRevealProfileInspect(),
+  cityRevealProfile: cityRevealProfiler.inspect(),
   sideBuildingCivicNumberCount: sideBuildingCivicNumberGroups.length,
   sideBuildingCivicNumberCulling: inspectSideBuildingCivicNumberCulling(),
   sideBuildingDoorBatching: inspectSideBuildingDoorBatching(),
@@ -11793,7 +11585,7 @@ window.__tronInspect = () => ({
   memory: { ...renderer.info.memory },
 });
 window.__tronRunnerInspect = tronRunnerInspect;
-window.__tronRevealProfile = cityRevealProfileInspect;
+window.__tronRevealProfile = cityRevealProfiler.inspect;
 window.__tronSpikeInspect = performanceSpikeSummary;
 window.__tronCaptureLiveSpawn = captureLivePlayerSpawn;
 window.__tronApplyPlayerSpawn = applyPlayerSpawn;
@@ -12124,7 +11916,7 @@ function recordPerformanceSpike({ now, rawRafDtMs, updateMs, renderMs, frameMs }
     bottleneck: performanceSpikeBottleneckLabel({ rawRafDtMs, frameMs, updateMs, renderMs, liveMetrics }),
     context,
     phase: performanceSpikePhaseLabel(),
-    composerPasses: cityRevealComposerPassProfile().estimatedPasses,
+    composerPasses: cityRevealProfiler.composerPassProfile().estimatedPasses,
     drawCalls: renderInfo.calls ?? 0,
     trianglesK: Math.round((renderInfo.triangles ?? 0) / 1000),
     lines: renderInfo.lines ?? 0,
@@ -12219,7 +12011,7 @@ function performanceDiagnosticsPixelPipeline() {
 }
 
 function performanceDiagnosticsComposerSummary() {
-  const profile = cityRevealComposerPassProfile();
+  const profile = cityRevealProfiler.composerPassProfile();
   const activePasses = Object.entries(profile.passes)
     .filter(([, enabled]) => enabled)
     .map(([name]) => name);
@@ -12540,7 +12332,7 @@ function tick(now) {
   }
   updateStaticCityCulling();
   const renderStartedAt = performance.now();
-  const captureRevealRenderInfo = cityRevealProfileShouldRun() || cityRevealProfileState.running;
+  const captureRevealRenderInfo = cityRevealProfiler.shouldRun() || cityRevealProfiler.isCapturing();
   const previousRendererInfoAutoReset = renderer.info.autoReset;
   if (captureRevealRenderInfo) {
     renderer.info.autoReset = false;
@@ -12567,7 +12359,7 @@ function tick(now) {
     renderMs: performanceDiagnosticsTiming.renderMs,
     frameMs: performanceDiagnosticsTiming.frameMs,
   });
-  recordCityRevealProfileFrame({
+  cityRevealProfiler.recordFrame({
     now,
     dt,
     updateMs: performanceDiagnosticsTiming.updateMs,
