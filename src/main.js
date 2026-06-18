@@ -490,8 +490,6 @@ import {
   clearVerticalMovementState,
   headBobOffset,
   initMovement,
-  movementBackMix,
-  movementForwardMix,
   movementHorizontalSpeed,
   movementRunMix,
   movementStrafeDirection,
