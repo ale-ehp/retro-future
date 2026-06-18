@@ -505,6 +505,22 @@ import {
 } from './controls/movement.js';
 import { initKeyboard, keys } from './controls/keyboard.js';
 import {
+  getHexTileHeightScale,
+  getHexTileScale,
+  hexTileColumnStep,
+  hexTileGeo,
+  hexTileHeight,
+  hexTileRadius,
+  hexTileRowStep,
+  hexTileSeedXStep,
+  hexTileSeedZStep,
+  roadTileTopY,
+  setHexTileGap,
+  setHexTileHeightScale,
+  setHexTileScale,
+  sidewalkMinSurfaceY,
+} from './world/hex-tiles.js';
+import {
   getReflectionEnvMap,
   getRoadReflectionEnvMap,
   initReflectionEnv,
@@ -2186,28 +2202,14 @@ const hexRoadTileBatches = [];
 const streetEdgeHexTiles = [];
 const streetEdgeHexTileBatches = [];
 const HEX_ROAD_CHUNK_LENGTH = GRID_BLOCK * 20;
-const hexTileRadius = 1.18 * 3 * 2;
-const hexTileHeight = 0.18 * 3;
-const HEX_GAP_MIN = -8;
-let hexTileGap = 0;
-function hexTileRowStep(gap = hexTileGap) {
-  return Math.sqrt(3) * hexTileRadius + gap;
-}
-function hexTileColumnStep(gap = hexTileGap) {
-  return hexTileRowStep(gap) * Math.sqrt(3) / 2;
-}
 function mainBuildingSideBoulevardExtension() {
   return MAIN_BUILDING_SIDE_HEX_EXTENSION_ROWS * Math.max(0.001, hexTileRowStep());
 }
-const hexTileSeedXStep = hexTileColumnStep(HEX_GAP_MIN);
-const hexTileSeedZStep = hexTileRowStep(HEX_GAP_MIN);
 let hexPassOffset = -0.22 * 3 * 2 * 2;
 let hexDepressRadius = 4.2 * 3 * 2 * 2;
 let hexDropDelay = 0;
 let hexDropSpeed = 18;
 let hexRecovery = 8.5;
-let hexTileHeightScale = 1;
-let hexTileScale = 1;
 let hexTileHitLight = 0.18;
 let hexPlayerTileLight = 0.45;
 const hexTileBaseColor = new THREE.Color(0x071116);
@@ -2220,29 +2222,6 @@ const hexTileDisplayBaseEmissive = new THREE.Color(0x061419);
 const hexTileDisplayHitEmissive = new THREE.Color(0x7df6ff);
 const streetEdgeHexInstanceColor = new THREE.Color(0x2a6371);
 let hexTileBaseEmissiveIntensity = 0.18;
-const hexTileGeo = new THREE.CylinderGeometry(hexTileRadius, hexTileRadius, hexTileHeight, 6, 1, false);
-hexTileGeo.rotateY(Math.PI / 6);
-function removeIndexedMaterialGroup(geometry, materialIndexToRemove) {
-  if (!geometry?.index || !geometry.groups?.length) return geometry;
-  const source = geometry.index.array;
-  const groups = geometry.groups.slice();
-  const nextIndex = [];
-  let nextStart = 0;
-  geometry.clearGroups();
-  for (const group of groups) {
-    if (group.materialIndex === materialIndexToRemove) continue;
-    for (let i = group.start; i < group.start + group.count; i += 1) {
-      nextIndex.push(source[i]);
-    }
-    geometry.addGroup(nextStart, group.count, group.materialIndex);
-    nextStart += group.count;
-  }
-  geometry.setIndex(new THREE.BufferAttribute(new source.constructor(nextIndex), 1));
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
-  return geometry;
-}
-removeIndexedMaterialGroup(hexTileGeo, 2);
 const hexTileInstanceMatrix = new THREE.Matrix4();
 const hexTileInstancePosition = new THREE.Vector3();
 const hexTileInstanceQuaternion = new THREE.Quaternion();
@@ -2251,7 +2230,6 @@ const hexTileInstanceColor = new THREE.Color();
 const basePadHexInstanceMatrix = new THREE.Matrix4();
 const basePadHexInstancePosition = new THREE.Vector3();
 const basePadHexInstanceScale = new THREE.Vector3();
-const SIDEWALK_CURB_REVEAL = 0.14;
 const SIDEWALK_CURB_OVERLAP = 0.035;
 const BASE_PAD_FRUSTUM_CULLING_ENABLED = true;
 const BASE_PAD_CULLING_BOUNDS_MARGIN = GRID_BLOCK * 3;
@@ -2269,15 +2247,6 @@ const hexRoadRuntimeStats = {
   pendingDirtyBatches: 0,
   uploadDeferredFrames: 0,
 };
-
-function roadTileTopY() {
-  const maxRoadTileBaseY = 0.03;
-  return maxRoadTileBaseY + (hexTileHeight * hexTileHeightScale * 0.5);
-}
-
-function sidewalkMinSurfaceY() {
-  return roadTileTopY() + SIDEWALK_CURB_REVEAL;
-}
 
 const hexTileMat = new THREE.MeshStandardMaterial({
   color: hexTileBaseColor,
@@ -2535,8 +2504,8 @@ function setHexTileLayoutPosition(tile, sync = true) {
 function syncHexTileInstance(tile, color = null) {
   if (tile.instanceId < 0) return;
   const visible = tile.visible !== false && tile.userData.visible !== false;
-  const scaleXZ = visible ? hexTileScale : 0.0001;
-  const scaleY = visible ? (tile.userData.interactive ? hexTileHeightScale : 1) : 0.0001;
+  const scaleXZ = visible ? getHexTileScale() : 0.0001;
+  const scaleY = visible ? (tile.userData.interactive ? getHexTileHeightScale() : 1) : 0.0001;
   const y = visible ? tile.userData.baseY + tile.userData.depression : -10000;
   hexTileInstancePosition.set(tile.userData.x, y, tile.userData.z);
   hexTileInstanceScale.set(scaleXZ, scaleY, scaleXZ);
@@ -2547,8 +2516,8 @@ function syncHexTileInstance(tile, color = null) {
   }
   if (tile.userData.basePadOverlayId >= 0 && basePadHexOverlay) {
     const overlayVisible = visible && (tile.userData.basePadLight || 0) > 0;
-    const overlayScaleXZ = overlayVisible ? hexTileScale : 0.0001;
-    const overlayScaleY = overlayVisible ? hexTileHeightScale : 0.0001;
+    const overlayScaleXZ = overlayVisible ? getHexTileScale() : 0.0001;
+    const overlayScaleY = overlayVisible ? getHexTileHeightScale() : 0.0001;
     const overlayY = overlayVisible ? y + 0.12 : -10000;
     basePadHexInstancePosition.set(tile.userData.x, overlayY, tile.userData.z);
     basePadHexInstanceScale.set(overlayScaleXZ, overlayScaleY, overlayScaleXZ);
@@ -2768,7 +2737,7 @@ function roadHexBoundaryLimits() {
   const halfW = dynamicRoadSurfaceWidth / 2;
   const halfL = dynamicRoadLength / 2;
   const centerZ = dynamicRoadCenter;
-  const margin = Math.max(roadBoundaryCollisionMargin, hexTileRadius * hexTileScale * 0.22);
+  const margin = Math.max(roadBoundaryCollisionMargin, hexTileRadius * getHexTileScale() * 0.22);
   return {
     minX: -halfW + margin,
     maxX: halfW - margin,
@@ -2783,12 +2752,7 @@ function roadHexBoundaryLimits() {
 
 const mainRoadTiles = addHexRoadTiles(MAIN_ROAD_TILE_SEED_WIDTH, DYNAMIC_ROAD_MAX_LENGTH, 0, MAIN_ROAD_Z);
 initBoundaryError(ctx, {
-  roadTileTopY,
   roadHexBoundaryLimits,
-  hexTileColumnStep,
-  hexTileRowStep,
-  hexTileGeo,
-  hexTileRadius,
   roadBoundaryHexRowOffsets,
   tunedColor,
   refreshCullingBounds,
@@ -2799,8 +2763,6 @@ initBoundaryError(ctx, {
   getDynamicRoadSurfaceWidth: () => dynamicRoadSurfaceWidth,
   getDynamicRoadLength: () => dynamicRoadLength,
   getDynamicRoadCenter: () => dynamicRoadCenter,
-  getHexTileScale: () => hexTileScale,
-  getHexTileHeightScale: () => hexTileHeightScale,
 });
 initDroneIntro(ctx, {
   controlEls,
@@ -3766,7 +3728,7 @@ function updateBuildingBasePad(record, x, z, widthScale, depthScale, sizeScale, 
     record.basePad.curbRadius = basePadCurbRadius;
   }
   record.basePad.hitPolygon = borderPoints.map((point) => [point.x, point.z]);
-  record.basePad.hitHalfSize = Math.max(width, depth) / 2 + hexTileRadius * Math.max(0.35, hexTileScale * 0.5);
+  record.basePad.hitHalfSize = Math.max(width, depth) / 2 + hexTileRadius * Math.max(0.35, getHexTileScale() * 0.5);
   record.basePad.width = width;
   record.basePad.depth = depth;
   record.basePad.cornerCut = cornerCut;
@@ -3847,7 +3809,7 @@ function clipPolygonToConvex(subject, clip) {
 function hexTilePolygonLocalToPad(tile, pad) {
   const localX = tile.userData.x - pad.border.position.x;
   const localZ = tile.userData.z - pad.border.position.z;
-  const radius = hexTileRadius * hexTileScale;
+  const radius = hexTileRadius * getHexTileScale();
   const points = [];
   for (let i = 0; i < 6; i++) {
     const angle = Math.PI / 6 + i * Math.PI / 3;
@@ -3861,7 +3823,7 @@ function hexTilePolygonLocalToPad(tile, pad) {
 
 function appendClippedHexSurface(positions, tile, pad, clippedPolygon) {
   if (clippedPolygon.length < 3) return false;
-  const y = tile.userData.baseY + tile.userData.depression + (hexTileHeight * hexTileHeightScale * 0.5) + 0.16;
+  const y = tile.userData.baseY + tile.userData.depression + (hexTileHeight * getHexTileHeightScale() * 0.5) + 0.16;
   const originX = pad.border.position.x;
   const originZ = pad.border.position.z;
   for (let i = 1; i < clippedPolygon.length - 1; i++) {
@@ -13509,9 +13471,9 @@ function applyLiveControls() {
   hexDropDelay = dropDelay;
   hexDropSpeed = dropSpeed;
   hexRecovery = recovery;
-  hexTileHeightScale = tileHeight;
-  hexTileScale = tileScale;
-  hexTileGap = hexGap;
+  setHexTileHeightScale(tileHeight);
+  setHexTileScale(tileScale);
+  setHexTileGap(hexGap);
   hexTileHitLight = tileHitLight;
   hexPlayerTileLight = playerTileLight;
   setRoadBuildingReflection(roadBuildingReflect);

@@ -1,4 +1,13 @@
 import * as THREE from 'three';
+import {
+  getHexTileHeightScale,
+  getHexTileScale,
+  hexTileColumnStep,
+  hexTileGeo,
+  hexTileRadius,
+  hexTileRowStep,
+  roadTileTopY,
+} from './hex-tiles.js';
 
 // ---------- boundary-error VISUAL subsystem ----------
 // The "//error" wall/sprite/overlay + glitch texture + floor-light + road-boundary pulse meshes +
@@ -21,12 +30,7 @@ let world = null;
 let scene = null;
 let camera = null;
 // injected under their original names → moved bodies stay verbatim
-let roadTileTopY = null;
 let roadHexBoundaryLimits = null;
-let hexTileColumnStep = null;
-let hexTileRowStep = null;
-let hexTileGeo = null;
-let hexTileRadius = 0;
 let roadBoundaryHexRowOffsets = null; // main owns the array (mutated by applyLiveControls); passed by ref
 let tunedColor = null;
 let refreshCullingBounds = null;
@@ -37,8 +41,6 @@ let cyan = 0x62f7ff;
 let getDynamicRoadSurfaceWidth = null;
 let getDynamicRoadLength = null;
 let getDynamicRoadCenter = null;
-let getHexTileScale = null;
-let getHexTileHeightScale = null;
 
 // ---------- module-private constants ----------
 const ROAD_BOUNDARY_PULSE_HEIGHT = 8;
@@ -764,12 +766,7 @@ export function initBoundaryError(ctx, injected) {
   scene = ctx.scene;
   camera = ctx.camera;
   ({
-    roadTileTopY,
     roadHexBoundaryLimits,
-    hexTileColumnStep,
-    hexTileRowStep,
-    hexTileGeo,
-    hexTileRadius,
     roadBoundaryHexRowOffsets,
     tunedColor,
     refreshCullingBounds,
@@ -779,8 +776,6 @@ export function initBoundaryError(ctx, injected) {
     getDynamicRoadSurfaceWidth,
     getDynamicRoadLength,
     getDynamicRoadCenter,
-    getHexTileScale,
-    getHexTileHeightScale,
   } = injected);
   const reflectionEnvMap = injected.reflectionEnvMap;
 
