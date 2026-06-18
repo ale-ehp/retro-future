@@ -66,3 +66,37 @@ export function getHexTileHeightScale() { return hexTileHeightScale; }
 export function setHexTileScale(v) { hexTileScale = v; }
 export function setHexTileHeightScale(v) { hexTileHeightScale = v; }
 export function setHexTileGap(v) { hexTileGap = v; }
+
+// ---------- hex-tile display colors (A3e-2a) ----------
+// hexTileBaseColor/hexTileActiveColor are immutable tuning seeds (read by main's scene-control
+// tunedColor + the hex material ctor). hexTileDisplayBaseColor/hexTileDisplayActiveColor are the LIVE
+// tuning targets: main's lighting applier .copy()s into them every frame and reads them back the same
+// frame, so they are exported BY REFERENCE (one shared mutable Color each — a clone would silently
+// freeze road tuning). player/basePad colors are read only by setHexTileDisplayColor (module-private).
+export const hexTileBaseColor = new THREE.Color(0x071116);
+export const hexTileActiveColor = new THREE.Color(0x15343b);
+const hexTilePlayerLightColor = new THREE.Color(0x4bdde6);
+const hexTileBasePadColor = new THREE.Color(0x6d7e84);
+export const hexTileDisplayBaseColor = hexTileBaseColor.clone();
+export const hexTileDisplayActiveColor = hexTileActiveColor.clone();
+
+// Pure color compositor: writes the resolved tile colour into the caller-provided target (the caller
+// owns the scratch); reads only the hex colours above.
+export function setHexTileDisplayColor(target, hitLight = 0, playerLight = 0, basePadLight = 0) {
+  const padAmount = THREE.MathUtils.clamp(basePadLight, 0, 1);
+  if (padAmount > 0.001) {
+    target.copy(hexTileBasePadColor);
+  } else {
+    target.copy(hexTileDisplayBaseColor);
+  }
+  target
+    .lerp(hexTileDisplayActiveColor, THREE.MathUtils.clamp(hitLight, 0, 1))
+    .lerp(hexTilePlayerLightColor, THREE.MathUtils.clamp(playerLight, 0, 1));
+  target.multiplyScalar(
+    1 +
+    padAmount * 0.34 +
+    THREE.MathUtils.clamp(hitLight, 0, 1) * 0.65 +
+    THREE.MathUtils.clamp(playerLight, 0, 1) * 0.9
+  );
+  return target;
+}
