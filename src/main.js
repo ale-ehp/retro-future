@@ -453,6 +453,16 @@ import {
   updateRoadBoundaryPulseLayout,
 } from './world/boundary-error.js';
 import {
+  computeDroneIntroTargetPose,
+  droneIntroInspect,
+  getDroneIntroActive,
+  getDroneIntroProgress,
+  initDroneIntro,
+  scheduleDroneIntroAutoFlight,
+  startDroneIntroFlight,
+  updateDroneIntroFlight,
+} from './camera/drone-intro.js';
+import {
   getReflectionEnvMap,
   getRoadReflectionEnvMap,
   initReflectionEnv,
@@ -761,32 +771,9 @@ let playerSpawn = { ...DEFAULT_PLAYER_SPAWN };
 let droneLandingPose = { ...DEFAULT_DRONE_LANDING_POSE };
 const PITCH_LIMIT = Math.PI * 0.49;
 const keys = Object.create(null);
-const DRONE_INTRO_DURATION_MS = 5600;
-const DRONE_INTRO_AUTO_DELAY_MS = 3000;
-const DRONE_INTRO_AUTO_ENABLED = false;
 const DEMO_START_KEY = 'Space';
-const DRONE_INTRO_TRIGGER_KEY = DEMO_START_KEY;
-const DRONE_INTRO_APPROACH_GAP = 18;
-const DRONE_INTRO_LOOK_HEIGHT = 22;
-const droneIntroStart = new THREE.Vector3();
-const droneIntroTarget = new THREE.Vector3();
-const droneIntroLookAt = new THREE.Vector3();
-let droneIntroAutoTimer = 0;
-let droneIntroAutoTriggered = false;
 let backspaceIntroTriggered = false;
 let cameraCollisionUnlockedByBackspace = false;
-const droneIntroFlight = {
-  active: false,
-  startedAt: 0,
-  durationMs: DRONE_INTRO_DURATION_MS,
-  source: 'manual',
-  startYaw: 0,
-  startPitch: 0,
-  targetYaw: 0,
-  targetPitch: 0,
-  arcLift: 0,
-  progress: 0,
-};
 let pointerLocked = false;
 let dragging = false;
 let dragCandidate = false;
@@ -1141,107 +1128,9 @@ function clearMovementKeys() {
   desiredVelocity.set(0, 0, 0);
 }
 
-function computeYawPitchForLookAt(position, target) {
-  const dx = target.x - position.x;
-  const dy = target.y - position.y;
-  const dz = target.z - position.z;
-  const horizontal = Math.max(0.0001, Math.hypot(dx, dz));
-  return {
-    yaw: Math.atan2(-dx, -dz),
-    pitch: THREE.MathUtils.clamp(Math.atan2(dy, horizontal), -PITCH_LIMIT, PITCH_LIMIT),
-  };
-}
-
 function lerpAngle(from, to, t) {
   const delta = Math.atan2(Math.sin(to - from), Math.cos(to - from));
   return from + delta * t;
-}
-
-function droneIntroEase(t) {
-  const clamped = THREE.MathUtils.clamp(t, 0, 1);
-  return clamped < 0.5
-    ? 4 * clamped * clamped * clamped
-    : 1 - Math.pow(-2 * clamped + 2, 3) / 2;
-}
-
-function computeDroneIntroTargetPose() {
-  if (droneLandingPose &&
-      Number.isFinite(droneLandingPose.x) &&
-      Number.isFinite(droneLandingPose.y) &&
-      Number.isFinite(droneLandingPose.z)) {
-    return {
-      x: droneLandingPose.x,
-      y: droneLandingPose.y,
-      z: droneLandingPose.z,
-      lookAtX: droneLandingPose.x,
-      lookAtY: droneLandingPose.y + DRONE_INTRO_LOOK_HEIGHT,
-      lookAtZ: droneLandingPose.z - GRID_BLOCK * 4,
-      targetYaw: Number.isFinite(droneLandingPose.spawnYaw) ? droneLandingPose.spawnYaw : null,
-      targetPitch: Number.isFinite(droneLandingPose.spawnPitch) ? droneLandingPose.spawnPitch : null,
-      pairZ: droneLandingPose.z - GRID_BLOCK * 4,
-      source: 'saved-landing',
-    };
-  }
-  const visibleRecords = sideBuildingRecords.filter((record) => record.mesh?.visible !== false);
-  const roadMaxZ = dynamicRoadCenter + dynamicRoadLength / 2 - GRID_BLOCK;
-  let pairZ = MAIN_ROAD_Z + MAIN_ROAD_LENGTH / 2 - START_SIDE_EXTENSION;
-  let pairHalfDepth = SIDE_BUILDING_BASE * sideBuildingDepthScale / 2;
-  if (visibleRecords.length) {
-    pairZ = Math.max(...visibleRecords.map((record) => record.collider.z));
-    const pairRecords = visibleRecords.filter((record) => Math.abs(record.collider.z - pairZ) < GRID_BLOCK);
-    pairHalfDepth = Math.max(...pairRecords.map((record) => record.collider.hd || pairHalfDepth));
-  }
-  const z = Math.min(pairZ + pairHalfDepth + DRONE_INTRO_APPROACH_GAP, roadMaxZ);
-  const y = cameraGroundHeightAt(0, z);
-  return {
-    x: 0,
-    y,
-    z,
-    lookAtX: 0,
-    lookAtY: y + DRONE_INTRO_LOOK_HEIGHT,
-    lookAtZ: pairZ,
-    targetYaw: null,
-    targetPitch: null,
-    pairZ,
-    source: 'auto-pair',
-  };
-}
-
-function startDroneIntroFlight(options = {}) {
-  const source = typeof options === 'string' ? options : 'manual';
-  if (source === 'auto') droneIntroAutoTriggered = true;
-  removeViewMotionOffset();
-  clearMovementKeys();
-  setTronNoclip(true, { silent: true });
-  const target = computeDroneIntroTargetPose();
-  droneIntroStart.copy(camera.position);
-  droneIntroTarget.set(target.x, target.y, target.z);
-  droneIntroLookAt.set(target.lookAtX, target.lookAtY, target.lookAtZ);
-  const look = computeYawPitchForLookAt(droneIntroTarget, droneIntroLookAt);
-  droneIntroFlight.active = true;
-  droneIntroFlight.startedAt = performance.now();
-  droneIntroFlight.durationMs = DRONE_INTRO_DURATION_MS;
-  droneIntroFlight.source = source;
-  droneIntroFlight.startYaw = yaw;
-  droneIntroFlight.startPitch = pitch;
-  droneIntroFlight.targetYaw = Number.isFinite(target.targetYaw) ? target.targetYaw : look.yaw;
-  droneIntroFlight.targetPitch = Number.isFinite(target.targetPitch) ? target.targetPitch : look.pitch;
-  droneIntroFlight.arcLift = Math.min(90, Math.max(24, droneIntroStart.distanceTo(droneIntroTarget) * 0.08));
-  droneIntroFlight.progress = 0;
-  if (controlEls.droneIntroFlight) setButtonFeedback(controlEls.droneIntroFlight, 'Drone in volo');
-  return window.__tronInspect?.();
-}
-
-function scheduleDroneIntroAutoFlight() {
-  if (droneIntroAutoTimer) window.clearTimeout(droneIntroAutoTimer);
-  droneIntroAutoTriggered = false;
-  if (!DRONE_INTRO_AUTO_ENABLED) return;
-  droneIntroAutoTimer = window.setTimeout(() => {
-    droneIntroAutoTimer = 0;
-    if (!droneIntroFlight.active && droneIntroFlight.progress < 1) {
-      startDroneIntroFlight('auto');
-    }
-  }, DRONE_INTRO_AUTO_DELAY_MS);
 }
 
 function triggerBackspaceDroneIntro(source = 'backspace') {
@@ -1255,39 +1144,6 @@ function triggerBackspaceDroneIntro(source = 'backspace') {
   startCityRevealWireTimer();
   startDroneIntroFlight(source);
 }
-
-function updateDroneIntroFlight(now) {
-  if (!droneIntroFlight.active) return false;
-  const raw = (now - droneIntroFlight.startedAt) / Math.max(1, droneIntroFlight.durationMs);
-  const t = THREE.MathUtils.clamp(raw, 0, 1);
-  const eased = droneIntroEase(t);
-  droneIntroFlight.progress = eased;
-  camera.position.lerpVectors(droneIntroStart, droneIntroTarget, eased);
-  camera.position.y += Math.sin(Math.PI * eased) * droneIntroFlight.arcLift;
-  yaw = lerpAngle(droneIntroFlight.startYaw, droneIntroFlight.targetYaw, eased);
-  pitch = THREE.MathUtils.lerp(droneIntroFlight.startPitch, droneIntroFlight.targetPitch, eased);
-  viewRoll = THREE.MathUtils.lerp(viewRoll, 0, Math.min(1, 8 * Math.min(0.05, (now - last) / 1000)));
-  headBobOffset = 0;
-  sideSwayOffset = 0;
-  movementHorizontalSpeed = 0;
-  movementRunMix = 0;
-  clearMovementKeys();
-  applyCameraLook();
-  if (t >= 1) {
-    droneIntroFlight.active = false;
-    droneIntroFlight.progress = 1;
-    camera.position.copy(droneIntroTarget);
-    yaw = droneIntroFlight.targetYaw;
-    pitch = droneIntroFlight.targetPitch;
-    viewRoll = 0;
-    setTronNoclip(false, { silent: true });
-    applyCameraLook();
-    updateStartPositionLiveLabel();
-  }
-  return true;
-}
-
-window.startDroneIntroFlight = startDroneIntroFlight;
 
 function suppressPointerLook(ms = POINTER_CLICK_SUPPRESS_MS, moveCount = 8) {
   suppressNextPointerLockMove = true;
@@ -3556,7 +3412,7 @@ let roadBoundaryCameraLead = 8;
 const roadBoundaryProbeVelocity = new THREE.Vector3();
 
 function isCameraCollisionDisabled() {
-  return !cameraCollisionUnlockedByBackspace || getTronNoclipEnabled() || Boolean(droneIntroFlight?.active);
+  return !cameraCollisionUnlockedByBackspace || getTronNoclipEnabled() || getDroneIntroActive();
 }
 
 function roadHexBoundaryLimits() {
@@ -3596,6 +3452,35 @@ initBoundaryError(ctx, {
   getDynamicRoadCenter: () => dynamicRoadCenter,
   getHexTileScale: () => hexTileScale,
   getHexTileHeightScale: () => hexTileHeightScale,
+});
+initDroneIntro(ctx, {
+  controlEls,
+  PITCH_LIMIT,
+  demoStartKey: DEMO_START_KEY,
+  lerpAngle,
+  applyCameraLook,
+  clearMovementKeys,
+  removeViewMotionOffset,
+  cameraGroundHeightAt,
+  setButtonFeedback,
+  updateStartPositionLiveLabel,
+  setTronNoclip,
+  getYaw: () => yaw,
+  setYaw: (v) => { yaw = v; },
+  getPitch: () => pitch,
+  setPitch: (v) => { pitch = v; },
+  getViewRoll: () => viewRoll,
+  setViewRoll: (v) => { viewRoll = v; },
+  setHeadBobOffset: (v) => { headBobOffset = v; },
+  setSideSwayOffset: (v) => { sideSwayOffset = v; },
+  setMovementHorizontalSpeed: (v) => { movementHorizontalSpeed = v; },
+  setMovementRunMix: (v) => { movementRunMix = v; },
+  getLast: () => last,
+  getDroneLandingPose: () => droneLandingPose,
+  getSideBuildingRecords: () => sideBuildingRecords,
+  getSideBuildingDepthScale: () => sideBuildingDepthScale,
+  getDynamicRoadCenter: () => dynamicRoadCenter,
+  getDynamicRoadLength: () => dynamicRoadLength,
 });
 
 // StreetEdges: same hex mesh system, but with muted blue-green Tron material.
@@ -12297,7 +12182,7 @@ function isBloomPassActive() {
 }
 
 function hasDroneIntroLanded() {
-  return Boolean(!droneIntroFlight.active && droneIntroFlight.progress >= 0.999);
+  return Boolean(!getDroneIntroActive() && getDroneIntroProgress() >= 0.999);
 }
 
 function shouldBypassBloomForRevealPerformance() {
@@ -12338,7 +12223,7 @@ function syncBloomTemporalBudget() {
     const moved = camera.position.distanceToSquared(bloomTemporalCameraPosition) > BLOOM_TEMPORAL_MOVE_EPS_SQ;
     const rotated = 1 - Math.abs(camera.quaternion.dot(bloomTemporalCameraQuaternion)) > BLOOM_TEMPORAL_ROTATE_EPS;
     const revealSweeping = cityRevealStartedAt > 0 && !cityRevealComplete;
-    cameraMoving = moved || rotated || droneIntroFlight.active || revealSweeping;
+    cameraMoving = moved || rotated || getDroneIntroActive() || revealSweeping;
   }
   const nextStride = cameraMoving ? 1 : BLOOM_OPTIMIZED_UPDATE_STRIDE;
   if (bloomPass.updateStride !== nextStride) {
@@ -15038,21 +14923,8 @@ window.__tronInspect = () => ({
   backspaceIntroTriggered,
   cameraCollisionUnlockedByBackspace,
   droneIntro: {
-    active: droneIntroFlight.active,
+    ...droneIntroInspect(),
     landed: hasDroneIntroLanded(),
-    progress: droneIntroFlight.progress,
-    durationMs: droneIntroFlight.durationMs,
-    triggerKey: DRONE_INTRO_TRIGGER_KEY,
-    autoEnabled: DRONE_INTRO_AUTO_ENABLED,
-    autoDelayMs: DRONE_INTRO_AUTO_DELAY_MS,
-    autoTriggered: droneIntroAutoTriggered,
-    autoPending: Boolean(droneIntroAutoTimer),
-    source: droneIntroFlight.source,
-    targetX: droneIntroTarget.x,
-    targetY: droneIntroTarget.y,
-    targetZ: droneIntroTarget.z,
-    targetYaw: droneIntroFlight.targetYaw,
-    targetPitch: droneIntroFlight.targetPitch,
     landingPose: { ...droneLandingPose },
   },
   playerSpawn: { ...playerSpawn },
