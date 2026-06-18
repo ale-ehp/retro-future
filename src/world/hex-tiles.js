@@ -172,3 +172,149 @@ export function initHexTileMaterials() {
     emissiveIntensity: 0.12,
   });
 }
+
+// ---------- hex-tile sync + dirty batch uploads (A3e-2c) ----------
+// Instance-matrix/color upload batching owns its scratch objects and dirty-map here. The base-pad overlay
+// remains in main/buildings for now, so syncHexTileInstance reads it through a getter until A2/A3e-3 move
+// that ownership boundary.
+export const HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED = true;
+export const HEX_ROAD_UPLOAD_BATCH_LIMIT = 10;
+const streetEdgeHexInstanceColor = new THREE.Color(0x2a6371);
+const hexTileInstanceMatrix = new THREE.Matrix4();
+const hexTileInstancePosition = new THREE.Vector3();
+const hexTileInstanceQuaternion = new THREE.Quaternion();
+const hexTileInstanceScale = new THREE.Vector3();
+const hexTileInstanceColor = new THREE.Color();
+const basePadHexInstanceMatrix = new THREE.Matrix4();
+const basePadHexInstancePosition = new THREE.Vector3();
+const basePadHexInstanceScale = new THREE.Vector3();
+const dirtyHexTileBatches = new Map();
+export const hexRoadRuntimeStats = {
+  lastCandidateCount: 0,
+  lastDirtyUploadCount: 0,
+  pendingDirtyBatches: 0,
+  uploadDeferredFrames: 0,
+};
+
+const hexTileSyncDeps = {
+  getBasePadHexOverlay: () => null,
+  refreshCullingBounds: () => {},
+};
+
+export function initHexTileSync(deps) {
+  hexTileSyncDeps.getBasePadHexOverlay = deps.getBasePadHexOverlay;
+  hexTileSyncDeps.refreshCullingBounds = deps.refreshCullingBounds;
+}
+
+function markHexTileBatchDirty(batch, colorChanged = false) {
+  dirtyHexTileBatches.set(batch, Boolean(dirtyHexTileBatches.get(batch) || colorChanged));
+}
+
+export function getDirtyHexTileBatchCount() {
+  return dirtyHexTileBatches.size;
+}
+
+export function flushHexTileBatchUploads() {
+  if (!dirtyHexTileBatches.size) return;
+  let uploaded = 0;
+  for (const [batch, colorChanged] of dirtyHexTileBatches) {
+    batch.instanceMatrix.needsUpdate = true;
+    if (colorChanged && batch.instanceColor) batch.instanceColor.needsUpdate = true;
+    dirtyHexTileBatches.delete(batch);
+    uploaded += 1;
+    if (uploaded >= HEX_ROAD_UPLOAD_BATCH_LIMIT) break;
+  }
+  hexRoadRuntimeStats.lastDirtyUploadCount = uploaded;
+  hexRoadRuntimeStats.pendingDirtyBatches = dirtyHexTileBatches.size;
+  if (dirtyHexTileBatches.size) hexRoadRuntimeStats.uploadDeferredFrames += 1;
+}
+
+export function hexRoadBatchStats(batchRecords) {
+  const stats = {
+    totalBatches: batchRecords.length,
+    activeBatches: 0,
+    emptyBatches: 0,
+    hiddenBatches: 0,
+    activeInstances: 0,
+    capacityInstances: 0,
+    dirtyBatches: 0,
+  };
+  for (const record of batchRecords) {
+    const count = record.mesh?.count ?? 0;
+    stats.capacityInstances += record.tiles.length;
+    stats.activeInstances += count;
+    if (count > 0) stats.activeBatches += 1;
+    else stats.emptyBatches += 1;
+    if (record.mesh?.visible === false) stats.hiddenBatches += 1;
+    if (dirtyHexTileBatches.has(record.mesh)) stats.dirtyBatches += 1;
+  }
+  return stats;
+}
+
+export function syncHexTileInstance(tile, color = null) {
+  if (tile.instanceId < 0) return;
+  const visible = tile.visible !== false && tile.userData.visible !== false;
+  const scaleXZ = visible ? getHexTileScale() : 0.0001;
+  const scaleY = visible ? (tile.userData.interactive ? getHexTileHeightScale() : 1) : 0.0001;
+  const y = visible ? tile.userData.baseY + tile.userData.depression : -10000;
+  hexTileInstancePosition.set(tile.userData.x, y, tile.userData.z);
+  hexTileInstanceScale.set(scaleXZ, scaleY, scaleXZ);
+  hexTileInstanceMatrix.compose(hexTileInstancePosition, hexTileInstanceQuaternion, hexTileInstanceScale);
+  tile.batch.setMatrixAt(tile.instanceId, hexTileInstanceMatrix);
+  if (color && tile.batch.setColorAt) {
+    tile.batch.setColorAt(tile.instanceId, color);
+  }
+  const basePadHexOverlay = hexTileSyncDeps.getBasePadHexOverlay();
+  if (tile.userData.basePadOverlayId >= 0 && basePadHexOverlay) {
+    const overlayVisible = visible && (tile.userData.basePadLight || 0) > 0;
+    const overlayScaleXZ = overlayVisible ? getHexTileScale() : 0.0001;
+    const overlayScaleY = overlayVisible ? getHexTileHeightScale() : 0.0001;
+    const overlayY = overlayVisible ? y + 0.12 : -10000;
+    basePadHexInstancePosition.set(tile.userData.x, overlayY, tile.userData.z);
+    basePadHexInstanceScale.set(overlayScaleXZ, overlayScaleY, overlayScaleXZ);
+    basePadHexInstanceMatrix.compose(basePadHexInstancePosition, hexTileInstanceQuaternion, basePadHexInstanceScale);
+    basePadHexOverlay.setMatrixAt(tile.userData.basePadOverlayId, basePadHexInstanceMatrix);
+    basePadHexOverlay.instanceMatrix.needsUpdate = true;
+  }
+  markHexTileBatchDirty(tile.batch, Boolean(color));
+}
+
+export function syncHexTileDisplayColor(tile, hitLight = 0, playerLight = 0, basePadLight = 0) {
+  setHexTileDisplayColor(hexTileInstanceColor, hitLight, playerLight, basePadLight);
+  syncHexTileInstance(tile, hexTileInstanceColor);
+}
+
+export function compactHexTileBatch(batchRecord) {
+  let writeIndex = 0;
+  for (const tile of batchRecord.tiles) {
+    const visible = tile.visible !== false && tile.userData.visible !== false;
+    tile.instanceId = visible ? writeIndex++ : -1;
+    if (!visible) continue;
+    if (batchRecord.interactive) {
+      syncHexTileDisplayColor(
+        tile,
+        tile.userData.hitLight || 0,
+        tile.userData.playerLight || 0,
+        tile.userData.basePadLight || 0
+      );
+    } else {
+      syncHexTileInstance(tile, streetEdgeHexInstanceColor);
+    }
+  }
+  batchRecord.mesh.count = writeIndex;
+  if (HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED) {
+    batchRecord.mesh.visible = writeIndex > 0;
+  }
+  hexTileSyncDeps.refreshCullingBounds(batchRecord.mesh);
+  if (writeIndex > 0) {
+    markHexTileBatchDirty(batchRecord.mesh, true);
+  } else {
+    dirtyHexTileBatches.delete(batchRecord.mesh);
+  }
+}
+
+export function compactHexTileBatchesForTiles(tiles) {
+  const batches = new Set();
+  for (const tile of tiles) batches.add(tile.batchRecord);
+  for (const batchRecord of batches) compactHexTileBatch(batchRecord);
+}
