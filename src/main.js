@@ -425,7 +425,6 @@ import {
 import {
   initMaterialTextures,
   makeBasePadSurfaceTexture,
-  makeRoadMicroNormalTexture,
   makeWetAsphaltFacadeTexture,
 } from './world/material-textures.js';
 import {
@@ -505,8 +504,10 @@ import {
 } from './controls/movement.js';
 import { initKeyboard, keys } from './controls/keyboard.js';
 import {
+  configureHexRoadMaterial,
   getHexTileHeightScale,
   getHexTileScale,
+  hexTileMat,
   hexTileActiveColor,
   hexTileBaseColor,
   hexTileColumnStep,
@@ -518,12 +519,16 @@ import {
   hexTileRowStep,
   hexTileSeedXStep,
   hexTileSeedZStep,
+  initHexTileMaterials,
+  roadMicroNormalTex,
   roadTileTopY,
   setHexTileDisplayColor,
   setHexTileGap,
   setHexTileHeightScale,
+  setHexRoadMaterialGlow,
   setHexTileScale,
   sidewalkMinSurfaceY,
+  streetEdgeHexMat,
 } from './world/hex-tiles.js';
 import {
   getReflectionEnvMap,
@@ -2006,7 +2011,7 @@ function applyStormControlsFromUI() {
 // ---------- material texture helpers (extracted -> material-textures.js) ----------
 initMaterialTextures(ctx);
 const asphalt = makeWetAsphaltFacadeTexture();
-const roadMicroNormalTex = makeRoadMicroNormalTexture();
+initHexTileMaterials();
 const basePadSurfaceTex = makeBasePadSurfaceTexture();
 
 // ---------- Exact boulevard map constants (pure values -> world/boulevard-constants.js) ----------
@@ -2247,27 +2252,6 @@ const hexRoadRuntimeStats = {
   uploadDeferredFrames: 0,
 };
 
-const hexTileMat = new THREE.MeshStandardMaterial({
-  color: hexTileBaseColor,
-  metalness: 0.88,
-  roughness: 0.16,
-  envMap: getRoadReflectionEnvMap(),
-  envMapIntensity: 1.15,
-  normalMap: roadMicroNormalTex,
-  normalScale: new THREE.Vector2(0, 0),
-  emissive: 0x061419,
-  emissiveIntensity: 0.18,
-});
-configureHexRoadMaterial(hexTileMat);
-const streetEdgeHexMat = new THREE.MeshStandardMaterial({
-  color: 0x2a6371,
-  metalness: 0.58,
-  roughness: 0.28,
-  envMap: reflectionEnvMap,
-  envMapIntensity: 0.88,
-  emissive: 0x061a20,
-  emissiveIntensity: 0.12,
-});
 const basePadHexMat = new THREE.MeshBasicMaterial({
   color: 0x6f8187,
   transparent: false,
@@ -2342,42 +2326,6 @@ function queueHexTileCandidate(tile) {
 
 function markHexTileBatchDirty(batch, colorChanged = false) {
   dirtyHexTileBatches.set(batch, Boolean(dirtyHexTileBatches.get(batch) || colorChanged));
-}
-
-function configureHexRoadMaterial(material) {
-  if (material.userData.hexRoadConfigured) return material;
-  material.userData.hexRoadConfigured = true;
-  material.userData.hexInstanceGlow = material.userData.hexInstanceGlow ?? 2.2;
-  material.userData.hexGlowBaseColor = material.userData.hexGlowBaseColor?.isColor
-    ? material.userData.hexGlowBaseColor
-    : hexTileDisplayBaseColor.clone();
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.hexInstanceGlow = { value: material.userData.hexInstanceGlow };
-    shader.uniforms.hexGlowBaseColor = { value: material.userData.hexGlowBaseColor };
-    material.userData.hexInstanceGlowUniform = shader.uniforms.hexInstanceGlow;
-    material.userData.hexGlowBaseColorUniform = shader.uniforms.hexGlowBaseColor;
-    shader.fragmentShader = `uniform float hexInstanceGlow;\nuniform vec3 hexGlowBaseColor;\n${shader.fragmentShader}`;
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <emissivemap_fragment>',
-      `#include <emissivemap_fragment>
-#ifdef USE_COLOR
-  vec3 hexInstanceGlowColor = max(vColor.rgb - hexGlowBaseColor, vec3(0.0));
-  totalEmissiveRadiance += hexInstanceGlowColor * hexInstanceGlow;
-#endif`
-    );
-  };
-  material.customProgramCacheKey = () => 'hex-road-instance-glow-v1';
-  material.needsUpdate = true;
-  return material;
-}
-
-function setHexRoadMaterialGlow(material, glowStrength, baseColor) {
-  configureHexRoadMaterial(material);
-  material.userData.hexInstanceGlow = glowStrength;
-  if (!material.userData.hexGlowBaseColor?.isColor) material.userData.hexGlowBaseColor = new THREE.Color();
-  material.userData.hexGlowBaseColor.copy(baseColor);
-  if (material.userData.hexInstanceGlowUniform) material.userData.hexInstanceGlowUniform.value = glowStrength;
-  if (material.userData.hexGlowBaseColorUniform) material.userData.hexGlowBaseColorUniform.value.copy(baseColor);
 }
 
 function refreshCullingBounds(object) {
