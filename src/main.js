@@ -421,6 +421,25 @@ import {
   updateEdgeStrips,
 } from './world/building-leds.js';
 import {
+  bridgeMaterials,
+  buildingColliders,
+  buildBuildingShells,
+  createWetAsphaltFacadeMaterial,
+  initBuildings,
+  mainBuildingColliders,
+  mainBuildingMaterials,
+  mainBuildingMeshes,
+  mainBuildingRecords,
+  makeChamferedBox,
+  sideBuildingColliders,
+  sideBuildingMaterials,
+  sideBuildingMeshes,
+  sideBuildingRecords,
+  updateBuildingFootprints,
+  updateBuildingMaterials,
+  updateBuildingScale,
+} from './world/buildings.js';
+import {
   MAIN_FACADE_VERTICAL_REVEAL_FEATHER,
   addTronFacadeTreatment,
   buildStaticFacadeStripBatches,
@@ -2409,21 +2428,20 @@ scene.add(dirKey);
 // ---------- Tron overlay buildings ----------
 const overlayGroup = new THREE.Group();
 scene.add(overlayGroup);
-const buildingColliders = [];
 let collisionPadding = 3;
-const sideBuildingMeshes = [];
-const mainBuildingMeshes = [];
-const sideBuildingRecords = [];
-const mainBuildingRecords = [];
-const sideBuildingColliders = [];
-const mainBuildingColliders = [];
 let tronRunnerCrowdColliderRecordCache = null;
 let tronRunnerCrowdColliderRecordCacheSourceLength = -1;
-const sideBuildingMaterials = [];
-const mainBuildingMaterials = [];
-const bridgeMaterials = [];
-const sideBuildingBasePadRecords = [];
-const mainBuildingBasePadRecords = [];
+initBuildings({
+  asphalt,
+  reflectionEnvMap,
+  defaultBuildingColor: PAL.buildingSkin,
+  tunedColor,
+  getRoadHalf: roadHalf,
+  updateBuildingBasePad,
+  updateSideBuildingDoorTransforms,
+  getCityRoleBoards,
+  syncCityRoleBoardDoorPose,
+});
 const cityRevealMainLedReveal = createCityRevealMainLed({
   scene,
   camera,
@@ -2519,12 +2537,6 @@ initBridgeControls({
   BRIDGE_PAIR_5_6_INDEX,
   BRIDGE_PAIR_5_6_Y_OFFSET,
 });
-
-function addBuildingCollider(x, z, w, d, h = Infinity, y = 0, role = 'side-building', chamfer = 0) {
-  const collider = { x, y, z, hw: w / 2, hd: d / 2, baseH: h, h, role, baseChamfer: chamfer, chamfer };
-  buildingColliders.push(collider);
-  return collider;
-}
 
 function resolveRoundedRectCollider(c, padding) {
   const dx = camera.position.x - c.x;
@@ -2676,32 +2688,6 @@ function resolveCameraRoadHexBoundaryCollision() {
   }
 }
 
-function makeChamferedBox(w, h, d, chamfer = 1.5) {
-  const c = Math.min(chamfer, w * 0.4, d * 0.4);
-  const hw = w / 2, hd = d / 2;
-  const shape = new THREE.Shape();
-  shape.moveTo(-hw + c, -hd);
-  shape.lineTo( hw - c, -hd);
-  shape.quadraticCurveTo( hw, -hd,  hw, -hd + c);
-  shape.lineTo( hw,  hd - c);
-  shape.quadraticCurveTo( hw,  hd,  hw - c,  hd);
-  shape.lineTo(-hw + c,  hd);
-  shape.quadraticCurveTo(-hw,  hd, -hw,  hd - c);
-  shape.lineTo(-hw, -hd + c);
-  shape.quadraticCurveTo(-hw, -hd, -hw + c, -hd);
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: h,
-    curveSegments: 18,
-    bevelEnabled: true,
-    bevelThickness: c * 0.6,
-    bevelSize: c * 0.6,
-    bevelSegments: 5,
-    steps: 1,
-  });
-  geo.rotateX(-Math.PI / 2);
-  return geo;
-}
-
 function buildingLedBatchInspect() {
   const sideRingBatches = Object.entries(sideHorizontalLedRingBatches).map(([band, batch]) => ({
     band,
@@ -2759,121 +2745,22 @@ function buildingLedBatchInspect() {
   };
 }
 
-// 6 + 6 side buildings + main hero — same layout as baseline tron-boulevard-map-walk.html
-// GRID_BLOCK 12, SIDE_BUILDING_BASE 72, SIDE_BUILDING_X 96
-// laneZ slots [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5] × 96 = [-240, -144, -48, 48, 144, 240]
-// heights = [220, 190, 172, 158, 145, 132]
-const SIDE_X = SIDE_BUILDING_X;
-const SIDE_BASE = SIDE_BUILDING_BASE;
-const sideHeights = [220, 190, 172, 158, 145, 132];
-
-function addRingStrip(group, w, d, x, y, z, color = PAL.cyan, thickness = 0.22) {
-  const hw = w / 2, hd = d / 2;
-  group.add(elStrip([x - hw, y, z - hd], [x + hw, y, z - hd], color, thickness));
-  group.add(elStrip([x + hw, y, z - hd], [x + hw, y, z + hd], color, thickness));
-  group.add(elStrip([x + hw, y, z + hd], [x - hw, y, z + hd], color, thickness));
-  group.add(elStrip([x - hw, y, z + hd], [x - hw, y, z - hd], color, thickness));
-}
-
-function addUndersideEdgeLine(group, w, d, x, y, z, color = PAL.tealLight, bevelPadding = 0) {
-  const thickness = 0.275;
-  const offset = Math.max(0, bevelPadding + thickness * 0.18);
-  const hw = w / 2 + offset;
-  const hd = d / 2 + offset;
-  const yu = y - offset;
-  const matOptions = { toneMapped: false, depthWrite: true };
-
-  group.add(elStrip([x - hw, yu, z - hd], [x + hw, yu, z - hd], color, thickness, matOptions));
-  group.add(elStrip([x + hw, yu, z - hd], [x + hw, yu, z + hd], color, thickness, matOptions));
-  group.add(elStrip([x + hw, yu, z + hd], [x - hw, yu, z + hd], color, thickness, matOptions));
-  group.add(elStrip([x - hw, yu, z + hd], [x - hw, yu, z - hd], color, thickness, matOptions));
-}
-
-function createWetAsphaltFacadeMaterial(color = PAL.buildingSkin, envMapIntensity = 1.3) {
-  return new THREE.MeshStandardMaterial({
-    map: asphalt,
-    color,
-    metalness: 0.94,
-    roughness: 0.10,
-    envMap: reflectionEnvMap,
-    envMapIntensity,
-    emissive: 0x000202,
-    emissiveIntensity: 0.035,
-  });
-}
-
-function buildSideBuilding(x, z, h) {
-  const chamfer = 11.5;
-  const geo = makeChamferedBox(SIDE_BASE, h, SIDE_BASE, chamfer);
-  const mat = createWetAsphaltFacadeMaterial(PAL.buildingSkin, 1.3);
-  const m = new THREE.Mesh(geo, mat);
-  addTronFacadeTreatment(m, SIDE_BASE, h, SIDE_BASE, {
-    face: 'x',
-    sign: x < 0 ? 1 : -1,
-    edgeRole: 'side-building',
-  });
-  m.position.set(x, 0, z);
-  overlayGroup.add(m);
-  sideBuildingMeshes.push(m);
-  sideBuildingMaterials.push(mat);
-  const collider = addBuildingCollider(x, z, SIDE_BASE, SIDE_BASE, h, 0, 'side-building', chamfer);
-  sideBuildingColliders.push(collider);
-  const basePad = createBuildingBasePad(overlayGroup, x, z);
-  const record = {
-    mesh: m,
-    collider,
-    basePad,
-    civicNumberValue: sideBuildingCivicNumberForBuildIndex(sideBuildingRecords.length),
-    sign: x < 0 ? -1 : 1,
-    zFactor: z / SIDE_BUILDING_SPACING,
-    baseW: SIDE_BASE,
-    baseD: SIDE_BASE,
-    footprintChamfer: chamfer,
-  };
-  sideBuildingRecords.push(record);
-  invalidateTronRunnerCrowdColliderRecords();
-  sideBuildingBasePadRecords.push(basePad);
-  buildSideBuildingDoor(record);
-  buildSideBuildingCivicNumber(record);
-  addBuildingEdges(overlayGroup, SIDE_BASE, h, SIDE_BASE, x, 0, z, PAL.tealLight, chamfer * 0.82, 'side-building', { footprintChamfer: chamfer });
-}
-
-laneZ.forEach((z, idx) => {
-  const h = sideHeights[idx];
-  buildSideBuilding(-SIDE_X, z, h);
-  buildSideBuilding( SIDE_X, z, h);
+buildBuildingShells({
+  overlayGroup,
+  PAL,
+  addTronFacadeTreatment,
+  createBuildingBasePad,
+  buildSideBuildingDoor,
+  buildSideBuildingCivicNumber,
+  buildSideBuildingDoorBatches,
+  updateSideBuildingDoorTransforms,
+  sideBuildingCivicNumberForBuildIndex,
+  addBuildingEdges,
+  buildSideBuildingEdgeBatch,
+  buildSideHorizontalLedRingBatches,
+  buildStaticFacadeStripBatches,
+  invalidateTronRunnerCrowdColliderRecords,
 });
-buildSideBuildingDoorBatches();
-updateSideBuildingDoorTransforms();
-buildSideBuildingEdgeBatch(overlayGroup);
-buildSideHorizontalLedRingBatches(overlayGroup);
-
-// Main hero — z=-301, base 100, h=230
-{
-  const w = MAIN_BUILDING_BASE, d = MAIN_BUILDING_BASE, h = 230;
-  const chamfer = 16.0;
-  const geo = makeChamferedBox(w, h, d, chamfer);
-  const mat = createWetAsphaltFacadeMaterial(PAL.mainSkin, 1.36);
-  const m = new THREE.Mesh(geo, mat);
-  addTronFacadeTreatment(m, w, h, d, {
-    face: 'z',
-    sign: 1,
-    edgeRole: 'main-building',
-  });
-  m.position.set(0, 0, MAIN_BUILDING_Z);
-  overlayGroup.add(m);
-  mainBuildingMeshes.push(m);
-  mainBuildingMaterials.push(mat);
-  const collider = addBuildingCollider(0, MAIN_BUILDING_Z, w, d, h, 0, 'main-building', chamfer);
-  mainBuildingColliders.push(collider);
-  const basePad = createBuildingBasePad(overlayGroup, 0, MAIN_BUILDING_Z);
-  mainBuildingRecords.push({ mesh: m, collider, basePad, baseW: w, baseD: d, footprintChamfer: chamfer });
-  invalidateTronRunnerCrowdColliderRecords();
-  mainBuildingBasePadRecords.push(basePad);
-  addBuildingEdges(overlayGroup, w, h, d, 0, 0, MAIN_BUILDING_Z, PAL.tealLight, chamfer * 0.82, 'main-building', { footprintChamfer: chamfer });
-}
-
-buildStaticFacadeStripBatches();
 
 // ---------- City department departures boards (extracted -> city-boards.js) ----------
 initCityDepartmentBoards({
@@ -8397,30 +8284,11 @@ function refreshRoadTileInstances() {
   }
 }
 
-function updateBuildingMaterials(materials, baseColor, brightness, hueDeg, metalness, roughness, reflect, emissive, lightResponse, saturation = 1.2) {
-  const color = tunedColor(new THREE.Color(baseColor), hueDeg, saturation, brightness * lightResponse.surface);
-  const glow = new THREE.Color(0x09363d).multiplyScalar(Math.max(0.5, brightness));
-  for (const material of materials) {
-    material.color.copy(color);
-    material.envMap = reflectionEnvMap;
-    material.metalness = metalness;
-    material.roughness = roughness;
-    material.envMapIntensity = reflect * lightResponse.reflection;
-    material.emissive.copy(glow);
-    material.emissiveIntensity = emissive * lightResponse.emissive + lightResponse.facadeFill;
-  }
-}
-
 function updateGroundLedMaterials(roadEdgeBrightness, medianBrightness, hueDeg) {
   for (const item of groundLedMaterials) {
     const amount = item.role === 'median' ? medianBrightness : roadEdgeBrightness;
     item.material.color.copy(tunedColor(item.baseColor, hueDeg, 1, amount));
   }
-}
-
-function updateBuildingScale(meshes, colliders, scaleY) {
-  for (const mesh of meshes) mesh.scale.y = scaleY;
-  for (const collider of colliders) collider.h = collider.baseH * scaleY;
 }
 
 function updateStreetEdgeTileBand(tiles, sign, width) {
@@ -8596,41 +8464,6 @@ function updateSideRoadLayout(nextSideSpacingScale, width) {
     updateIntersectionNode(record.intersection, z, width, width);
   }
   applyMainStreetEdgeIntersectionClips(nextSideSpacingScale);
-}
-
-function updateBuildingFootprints(nextSideWidthScale, nextSideDepthScale, nextMainWidthScale, nextMainDepthScale, nextSideSpacingScale, width, nextMainZ, nextMainY) {
-  const sideWidth = SIDE_BUILDING_BASE * nextSideWidthScale;
-  for (const record of sideBuildingRecords) {
-    const x = record.sign * (roadHalf() + width + sideWidth / 2);
-    const z = record.zFactor * SIDE_BUILDING_SPACING * nextSideSpacingScale;
-    record.mesh.scale.x = nextSideWidthScale;
-    record.mesh.scale.z = nextSideDepthScale;
-    record.mesh.position.x = x;
-    record.mesh.position.z = z;
-    record.collider.x = x;
-    record.collider.z = z;
-    record.collider.hw = record.baseW * nextSideWidthScale / 2;
-    record.collider.hd = record.baseD * nextSideDepthScale / 2;
-    record.collider.chamfer = (record.footprintChamfer || record.collider.baseChamfer || 0) * Math.min(nextSideWidthScale, nextSideDepthScale);
-    updateBuildingBasePad(record, x, z, nextSideWidthScale, nextSideDepthScale, sideBuildingBasePadScale, sideBuildingBasePadXScale, sideBuildingBasePadXScale, sideBuildingBasePadY, sideBuildingBasePadThickness, sideBuildingBasePadCut, sideBuildingBasePadRadius);
-  }
-  for (const record of mainBuildingRecords) {
-    record.mesh.scale.x = nextMainWidthScale;
-    record.mesh.scale.z = nextMainDepthScale;
-    record.mesh.position.y = nextMainY;
-    record.mesh.position.z = nextMainZ;
-    record.collider.y = nextMainY;
-    record.collider.z = nextMainZ;
-    record.collider.hw = record.baseW * nextMainWidthScale / 2;
-    record.collider.hd = record.baseD * nextMainDepthScale / 2;
-    record.collider.chamfer = (record.footprintChamfer || record.collider.baseChamfer || 0) * Math.min(nextMainWidthScale, nextMainDepthScale);
-    updateBuildingBasePad(record, 0, nextMainZ, nextMainWidthScale, nextMainDepthScale, mainBuildingBasePadScale, mainBuildingBasePadXScale, mainBuildingBasePadZScale, mainBuildingBasePadY, mainBuildingBasePadThickness, mainBuildingBasePadCut, mainBuildingBasePadRadius);
-  }
-  updateSideBuildingDoorTransforms();
-  const roleBoards = getCityRoleBoards();
-  if (roleBoards?.length) {
-    for (const board of roleBoards) syncCityRoleBoardDoorPose(board);
-  }
 }
 
 function updateControlTabs() {
@@ -10077,7 +9910,21 @@ function applyLiveControls() {
   updateBuildingMaterials(sideBuildingMaterials, PAL.buildingSkin, sideBuildingBrightness, sideBuildingHue, sideBuildingMetalness, sideBuildingRoughness, sideBuildingReflect, sideBuildingEmissive, lightResponse);
   updateBuildingMaterials(bridgeMaterials, PAL.buildingSkin, sideBuildingBrightness, sideBuildingHue, sideBuildingMetalness, sideBuildingRoughness, sideBuildingReflect, sideBuildingEmissive, lightResponse);
   updateBuildingMaterials(mainBuildingMaterials, PAL.mainSkin, mainBuildingBrightness, mainBuildingHue, mainBuildingMetalness, mainBuildingRoughness, mainBuildingReflect, mainBuildingEmissive, lightResponse, nextMainBuildingSaturation);
-  updateBuildingFootprints(nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextMainBuildingZ, nextMainBuildingY);
+  updateBuildingFootprints(nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextMainBuildingZ, nextMainBuildingY, {
+    sideBuildingBasePadScale,
+    sideBuildingBasePadXScale,
+    sideBuildingBasePadY,
+    sideBuildingBasePadThickness,
+    sideBuildingBasePadCut,
+    sideBuildingBasePadRadius,
+    mainBuildingBasePadScale,
+    mainBuildingBasePadXScale,
+    mainBuildingBasePadZScale,
+    mainBuildingBasePadY,
+    mainBuildingBasePadThickness,
+    mainBuildingBasePadCut,
+    mainBuildingBasePadRadius,
+  });
   updateBasePadLedStrips(basePadLedBrightness, basePadLedThickness, basePadLedOffset, basePadLedHue);
   updateBuildingScale(sideBuildingMeshes, sideBuildingColliders, sideBuildingScale);
   updateBuildingScale(mainBuildingMeshes, mainBuildingColliders, mainBuildingScale);
