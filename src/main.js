@@ -507,9 +507,8 @@ import {
   HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED,
   HEX_ROAD_UPLOAD_BATCH_LIMIT,
   compactHexTileBatchesForTiles,
-  HEX_TILE_BUCKET_SIZE,
   addHexRoadTiles,
-  beginHexTileCandidateFrame,
+  applyHexRuntimeSettings,
   flushHexTileBatchUploads,
   getDirtyHexTileBatchCount,
   getHexTileHeightScale,
@@ -518,7 +517,6 @@ import {
   hexRoadTileBuckets,
   hexRoadTiles,
   hexTileMat,
-  hexTileBucketKey,
   hexTileActiveColor,
   hexTileBaseColor,
   hexTileDisplayActiveColor,
@@ -529,11 +527,9 @@ import {
   hexTileRowStep,
   hexRoadBatchStats,
   hexRoadRuntimeStats,
-  hexTileCandidates,
   initHexTileMaterials,
   initHexTileLayout,
   initHexTileSync,
-  queueHexTileCandidate,
   recoveringHexTiles,
   roadMicroNormalTex,
   roadTileTopY,
@@ -543,6 +539,10 @@ import {
   setHexRoadMaterialGlow,
   setHexTileScale,
   sidewalkMinSurfaceY,
+  hexPlayerTileLight,
+  hexTileHitLight,
+  hexUpdateEnabled,
+  stepHexRoadTiles,
   streetEdgeHexTileBatches,
   streetEdgeHexTiles,
   syncHexTileDisplayColor,
@@ -644,9 +644,6 @@ const cityRevealProfileState = {
 // Postprocessing (optional bloom + FXAA). Best-effort — fallback to plain renderer if any module fails.
 let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null;
 let postEnabled = true;
-let hexUpdateEnabled = true;
-let hexRoadUpdateFrame = 0;
-let hexRoadAccumulatedDt = 0;
 let usePost = false;
 const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
 let activePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO);
@@ -1578,86 +1575,6 @@ function resolveCameraWalkSurface(hasVerticalInput) {
   walkSurfaceLift = Math.max(0, targetGroundY - cameraMinHeight);
 }
 
-function updateHexRoadTiles(dt) {
-  if (!hexRoadTiles.length) return;
-  const playerX = camera.position.x;
-  const playerZ = camera.position.z;
-  const dropDelaySeconds = hexDropDelay / 1000;
-  const dropStep = Math.min(1, hexDropSpeed * dt);
-  const recoveryStep = Math.min(1, hexRecovery * dt);
-  const updateRadius = hexDepressRadius + Math.abs(hexPassOffset) + hexTileRadius * 2;
-  const updateRadiusSq = updateRadius * updateRadius;
-  beginHexTileCandidateFrame();
-  const bucketRadius = Math.ceil(updateRadius / HEX_TILE_BUCKET_SIZE) + 1;
-  const centerIx = Math.floor(playerX / HEX_TILE_BUCKET_SIZE);
-  const centerIz = Math.floor(playerZ / HEX_TILE_BUCKET_SIZE);
-  for (let ix = centerIx - bucketRadius; ix <= centerIx + bucketRadius; ix++) {
-    for (let iz = centerIz - bucketRadius; iz <= centerIz + bucketRadius; iz++) {
-      const bucket = hexRoadTileBuckets.get(hexTileBucketKey(ix, iz));
-      if (!bucket) continue;
-      for (const tile of bucket) queueHexTileCandidate(tile);
-    }
-  }
-  for (const tile of recoveringHexTiles) queueHexTileCandidate(tile);
-  hexRoadRuntimeStats.lastCandidateCount = hexTileCandidates.length;
-
-  for (const tile of hexTileCandidates) {
-    if (!tile.visible || tile.userData.visible === false) {
-      recoveringHexTiles.delete(tile);
-      continue;
-    }
-    const dx = tile.userData.x - playerX;
-    const dz = tile.userData.z - playerZ;
-    const distSq = dx * dx + dz * dz;
-    const recovering = Math.abs(tile.userData.depression) > 0.001 || tile.userData.wasInfluenced;
-    if (distSq > updateRadiusSq && !recovering) continue;
-
-    const dist = distSq <= updateRadiusSq ? Math.sqrt(distSq) : hexDepressRadius + 1;
-    const influence = dist <= hexDepressRadius ? THREE.MathUtils.smoothstep(hexDepressRadius - dist, 0, hexDepressRadius) : 0;
-    const isInfluenced = influence > 0.001;
-    if (isInfluenced) {
-      tile.userData.hitTime = tile.userData.wasInfluenced ? tile.userData.hitTime + dt : 0;
-    } else {
-      tile.userData.hitTime = 0;
-    }
-    tile.userData.wasInfluenced = isInfluenced;
-
-    const previousDepression = tile.userData.depression;
-    const previousHitLight = tile.userData.hitLight;
-    const previousPlayerLight = tile.userData.playerLight || 0;
-    const targetDepth = isInfluenced && tile.userData.hitTime >= dropDelaySeconds ? hexPassOffset * influence : 0;
-    const step = targetDepth < tile.userData.depression ? dropStep : recoveryStep;
-    tile.userData.depression += (targetDepth - tile.userData.depression) * step;
-    const hitLight = THREE.MathUtils.clamp(influence * hexTileHitLight, 0, 1);
-    const playerLight = THREE.MathUtils.clamp(influence * hexPlayerTileLight, 0, 1);
-    tile.userData.hitLight = hitLight;
-    tile.userData.playerLight = playerLight;
-    if (Math.abs(tile.userData.depression - previousDepression) > 0.0005 ||
-      Math.abs(hitLight - previousHitLight) > 0.003 ||
-      Math.abs(playerLight - previousPlayerLight) > 0.003) {
-      syncHexTileDisplayColor(tile, hitLight, playerLight, tile.userData.basePadLight || 0);
-    }
-    if (Math.abs(tile.userData.depression) > 0.001 || isInfluenced) {
-      recoveringHexTiles.add(tile);
-    } else {
-      recoveringHexTiles.delete(tile);
-    }
-  }
-}
-
-function stepHexRoadTiles(dt) {
-  if (!hexUpdateEnabled) {
-    hexRoadUpdateFrame = 0;
-    hexRoadAccumulatedDt = 0;
-    return;
-  }
-  hexRoadAccumulatedDt = Math.min(MAX_HEX_ROAD_ACCUMULATED_DT, hexRoadAccumulatedDt + dt);
-  hexRoadUpdateFrame = (hexRoadUpdateFrame + 1) % HEX_ROAD_UPDATE_FRAME_STRIDE;
-  if (hexRoadUpdateFrame !== 0) return;
-  updateHexRoadTiles(hexRoadAccumulatedDt);
-  hexRoadAccumulatedDt = 0;
-}
-
 // ---------- reflection environment + solid visible sky ----------
 // bakeTronReflectionMap moved to ./reflection-env.js (see initReflectionEnv below).
 
@@ -2229,13 +2146,6 @@ const floorBoxLengthMeshes = [];
 function mainBuildingSideBoulevardExtension() {
   return MAIN_BUILDING_SIDE_HEX_EXTENSION_ROWS * Math.max(0.001, hexTileRowStep());
 }
-let hexPassOffset = -0.22 * 3 * 2 * 2;
-let hexDepressRadius = 4.2 * 3 * 2 * 2;
-let hexDropDelay = 0;
-let hexDropSpeed = 18;
-let hexRecovery = 8.5;
-let hexTileHitLight = 0.18;
-let hexPlayerTileLight = 0.45;
 const hexTileDisplayBaseEmissive = new THREE.Color(0x061419);
 const hexTileDisplayHitEmissive = new THREE.Color(0x7df6ff);
 let hexTileBaseEmissiveIntensity = 0.18;
@@ -12714,20 +12624,21 @@ function applyLightControlsFromUI() {
 }
 
 function applyHexRuntimeControlsFromUI() {
-  hexPassOffset = Number(controlEls.hexOffset.value);
-  hexDepressRadius = Number(controlEls.hexRadius.value);
-  hexDropDelay = Number(controlEls.hexDropDelay.value);
-  hexDropSpeed = Number(controlEls.hexDropSpeed.value);
-  hexRecovery = Number(controlEls.hexRecovery.value);
-  hexTileHitLight = Number(controlEls.tileHitLight.value);
-  hexPlayerTileLight = Number(controlEls.playerTileLight.value);
-  controlEls.hexOffsetVal.textContent = formatOffsetLabel(hexPassOffset);
-  controlEls.hexRadiusVal.textContent = hexDepressRadius.toFixed(1);
-  controlEls.hexDropDelayVal.textContent = `${hexDropDelay.toFixed(0)} ms`;
-  controlEls.hexDropSpeedVal.textContent = hexDropSpeed.toFixed(1);
-  controlEls.hexRecoveryVal.textContent = hexRecovery.toFixed(1);
-  controlEls.tileHitLightVal.textContent = hexTileHitLight.toFixed(2);
-  controlEls.playerTileLightVal.textContent = hexPlayerTileLight.toFixed(2);
+  const offset = Number(controlEls.hexOffset.value);
+  const radius = Number(controlEls.hexRadius.value);
+  const dropDelay = Number(controlEls.hexDropDelay.value);
+  const dropSpeed = Number(controlEls.hexDropSpeed.value);
+  const recovery = Number(controlEls.hexRecovery.value);
+  const tileHitLight = Number(controlEls.tileHitLight.value);
+  const playerTileLight = Number(controlEls.playerTileLight.value);
+  applyHexRuntimeSettings({ offset, radius, dropDelay, dropSpeed, recovery, tileHitLight, playerTileLight });
+  controlEls.hexOffsetVal.textContent = formatOffsetLabel(offset);
+  controlEls.hexRadiusVal.textContent = radius.toFixed(1);
+  controlEls.hexDropDelayVal.textContent = `${dropDelay.toFixed(0)} ms`;
+  controlEls.hexDropSpeedVal.textContent = dropSpeed.toFixed(1);
+  controlEls.hexRecoveryVal.textContent = recovery.toFixed(1);
+  controlEls.tileHitLightVal.textContent = tileHitLight.toFixed(2);
+  controlEls.playerTileLightVal.textContent = playerTileLight.toFixed(2);
 }
 
 function applyRoadMaterialControlsFromUI() {
@@ -13115,16 +13026,10 @@ function applyLiveControls() {
   controlEls.pixelRatio.value = pixelRatio.toFixed(2);
   const previousPerformanceMode = performanceMode;
 
-  hexPassOffset = offset;
-  hexDepressRadius = radius;
-  hexDropDelay = dropDelay;
-  hexDropSpeed = dropSpeed;
-  hexRecovery = recovery;
+  applyHexRuntimeSettings({ offset, radius, dropDelay, dropSpeed, recovery, tileHitLight, playerTileLight });
   setHexTileHeightScale(tileHeight);
   setHexTileScale(tileScale);
   setHexTileGap(hexGap);
-  hexTileHitLight = tileHitLight;
-  hexPlayerTileLight = playerTileLight;
   setRoadBuildingReflection(roadBuildingReflect);
   sideBuildingWidthScale = nextSideBuildingWidthScale;
   sideBuildingDepthScale = nextSideBuildingDepthScale;

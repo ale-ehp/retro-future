@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { GRID_BLOCK } from './boulevard-constants.js';
+import { HEX_ROAD_UPDATE_FRAME_STRIDE, MAX_HEX_ROAD_ACCUMULATED_DT } from './config.js';
 import { getReflectionEnvMap, getRoadReflectionEnvMap } from '../engine/reflection-env.js';
 import { makeRoadMicroNormalTexture } from './material-textures.js';
 
@@ -332,9 +333,11 @@ export const recoveringHexTiles = new Set();
 export const hexTileCandidates = [];
 let hexTileFrameId = 0;
 let hexTileScene = null;
+let hexTileCamera = null;
 
 export function initHexTileLayout(ctx) {
   hexTileScene = ctx.scene;
+  hexTileCamera = ctx.camera;
 }
 
 export function beginHexTileCandidateFrame() {
@@ -509,4 +512,114 @@ export function addHexRoadTiles(width, length, centerX, centerZ, axis = "z", mat
     rebuildHexRoadTileBuckets();
   }
   return createdTiles;
+}
+
+// ---------- hex-tile per-frame depression (A3e-4) ----------
+export let hexUpdateEnabled = true;
+let hexRoadUpdateFrame = 0;
+let hexRoadAccumulatedDt = 0;
+let hexPassOffset = -0.22 * 3 * 2 * 2;
+let hexDepressRadius = 4.2 * 3 * 2 * 2;
+let hexDropDelay = 0;
+let hexDropSpeed = 18;
+let hexRecovery = 8.5;
+export let hexTileHitLight = 0.18;
+export let hexPlayerTileLight = 0.45;
+
+export function applyHexRuntimeSettings({
+  offset = hexPassOffset,
+  radius = hexDepressRadius,
+  dropDelay = hexDropDelay,
+  dropSpeed = hexDropSpeed,
+  recovery = hexRecovery,
+  tileHitLight = hexTileHitLight,
+  playerTileLight = hexPlayerTileLight,
+} = {}) {
+  hexPassOffset = offset;
+  hexDepressRadius = radius;
+  hexDropDelay = dropDelay;
+  hexDropSpeed = dropSpeed;
+  hexRecovery = recovery;
+  hexTileHitLight = tileHitLight;
+  hexPlayerTileLight = playerTileLight;
+}
+
+function updateHexRoadTiles(dt) {
+  if (!hexRoadTiles.length) return;
+  const playerX = hexTileCamera.position.x;
+  const playerZ = hexTileCamera.position.z;
+  const dropDelaySeconds = hexDropDelay / 1000;
+  const dropStep = Math.min(1, hexDropSpeed * dt);
+  const recoveryStep = Math.min(1, hexRecovery * dt);
+  const updateRadius = hexDepressRadius + Math.abs(hexPassOffset) + hexTileRadius * 2;
+  const updateRadiusSq = updateRadius * updateRadius;
+  beginHexTileCandidateFrame();
+  const bucketRadius = Math.ceil(updateRadius / HEX_TILE_BUCKET_SIZE) + 1;
+  const centerIx = Math.floor(playerX / HEX_TILE_BUCKET_SIZE);
+  const centerIz = Math.floor(playerZ / HEX_TILE_BUCKET_SIZE);
+  for (let ix = centerIx - bucketRadius; ix <= centerIx + bucketRadius; ix++) {
+    for (let iz = centerIz - bucketRadius; iz <= centerIz + bucketRadius; iz++) {
+      const bucket = hexRoadTileBuckets.get(hexTileBucketKey(ix, iz));
+      if (!bucket) continue;
+      for (const tile of bucket) queueHexTileCandidate(tile);
+    }
+  }
+  for (const tile of recoveringHexTiles) queueHexTileCandidate(tile);
+  hexRoadRuntimeStats.lastCandidateCount = hexTileCandidates.length;
+
+  for (const tile of hexTileCandidates) {
+    if (!tile.visible || tile.userData.visible === false) {
+      recoveringHexTiles.delete(tile);
+      continue;
+    }
+    const dx = tile.userData.x - playerX;
+    const dz = tile.userData.z - playerZ;
+    const distSq = dx * dx + dz * dz;
+    const recovering = Math.abs(tile.userData.depression) > 0.001 || tile.userData.wasInfluenced;
+    if (distSq > updateRadiusSq && !recovering) continue;
+
+    const dist = distSq <= updateRadiusSq ? Math.sqrt(distSq) : hexDepressRadius + 1;
+    const influence = dist <= hexDepressRadius ? THREE.MathUtils.smoothstep(hexDepressRadius - dist, 0, hexDepressRadius) : 0;
+    const isInfluenced = influence > 0.001;
+    if (isInfluenced) {
+      tile.userData.hitTime = tile.userData.wasInfluenced ? tile.userData.hitTime + dt : 0;
+    } else {
+      tile.userData.hitTime = 0;
+    }
+    tile.userData.wasInfluenced = isInfluenced;
+
+    const previousDepression = tile.userData.depression;
+    const previousHitLight = tile.userData.hitLight;
+    const previousPlayerLight = tile.userData.playerLight || 0;
+    const targetDepth = isInfluenced && tile.userData.hitTime >= dropDelaySeconds ? hexPassOffset * influence : 0;
+    const step = targetDepth < tile.userData.depression ? dropStep : recoveryStep;
+    tile.userData.depression += (targetDepth - tile.userData.depression) * step;
+    const hitLight = THREE.MathUtils.clamp(influence * hexTileHitLight, 0, 1);
+    const playerLight = THREE.MathUtils.clamp(influence * hexPlayerTileLight, 0, 1);
+    tile.userData.hitLight = hitLight;
+    tile.userData.playerLight = playerLight;
+    if (Math.abs(tile.userData.depression - previousDepression) > 0.0005 ||
+      Math.abs(hitLight - previousHitLight) > 0.003 ||
+      Math.abs(playerLight - previousPlayerLight) > 0.003) {
+      syncHexTileDisplayColor(tile, hitLight, playerLight, tile.userData.basePadLight || 0);
+    }
+    if (Math.abs(tile.userData.depression) > 0.001 || isInfluenced) {
+      recoveringHexTiles.add(tile);
+    } else {
+      recoveringHexTiles.delete(tile);
+    }
+  }
+}
+
+export function stepHexRoadTiles(dt) {
+  if (!hexUpdateEnabled) {
+    hexRoadUpdateFrame = 0;
+    hexRoadAccumulatedDt = 0;
+    return;
+  }
+  hexRoadAccumulatedDt = Math.min(MAX_HEX_ROAD_ACCUMULATED_DT, hexRoadAccumulatedDt + dt);
+  hexRoadUpdateFrame = (hexRoadUpdateFrame + 1) % HEX_ROAD_UPDATE_FRAME_STRIDE;
+  if (hexRoadUpdateFrame !== 0) return;
+  updateHexRoadTiles(hexRoadAccumulatedDt);
+  hexRoadAccumulatedDt = 0;
 }
