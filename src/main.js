@@ -499,6 +499,7 @@ import {
   setMovementHorizontalSpeed,
   setMovementRunMix,
 } from './controls/movement.js';
+import { initKeyboard, keys } from './controls/keyboard.js';
 import {
   getReflectionEnvMap,
   getRoadReflectionEnvMap,
@@ -807,7 +808,6 @@ const DEFAULT_DRONE_LANDING_POSE = Object.freeze({
 let playerSpawn = { ...DEFAULT_PLAYER_SPAWN };
 let droneLandingPose = { ...DEFAULT_DRONE_LANDING_POSE };
 const PITCH_LIMIT = Math.PI * 0.49;
-const keys = Object.create(null);
 const DEMO_START_KEY = 'Space';
 let backspaceIntroTriggered = false;
 let cameraCollisionUnlockedByBackspace = false;
@@ -955,58 +955,6 @@ initMobileMovement({
   mobileMovementKnobEl,
 });
 
-function isTextEditingTarget(target) {
-  if (!target) return false;
-  if (target.isContentEditable) return true;
-  const tag = target.tagName;
-  if (tag === 'TEXTAREA') return true;
-  if (tag !== 'INPUT') return false;
-  const type = (target.type || 'text').toLowerCase();
-  return ['text', 'search', 'url', 'email', 'password', 'number', 'tel'].includes(type);
-}
-
-window.addEventListener('keydown', (e) => {
-  if (e.repeat) return;
-  if (e.code === 'Escape') {
-    stopMouseLookInput();
-    return;
-  }
-  if (e.code === DEMO_START_KEY && welcomeWindowVisible() && !isTextEditingTarget(e.target)) {
-    e.preventDefault();
-    ensureFootstepAudioReady();
-    triggerBackspaceDroneIntro('welcome-space');
-    return;
-  }
-  if (e.code === 'Backspace' && !isTextEditingTarget(e.target)) {
-    e.preventDefault();
-    return;
-  }
-  if (e.code === 'KeyH') {
-    e.preventDefault();
-    resetCameraHeightToDefault();
-    return;
-  }
-  if (e.code === 'KeyP') {
-    e.preventDefault();
-    captureLivePlayerSpawn();
-    return;
-  }
-  if (backspaceIntroTriggered && !isTextEditingTarget(e.target) && FOOTSTEP_AUDIO_USER_KEYS.has(e.code)) {
-    ensureFootstepAudioReady();
-  }
-  keys[e.code] = true;
-});
-window.addEventListener('keyup', (e) => {
-  keys[e.code] = false;
-});
-window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    for (const k in keys) keys[k] = false;
-    movementVelocity.y = 0;
-  }
-});
-
 // movement step in tick
 let speedBase = 28;       // units / sec
 let speedSprint = 90;
@@ -1050,11 +998,6 @@ const TRON_FOOTSTEP_BANKS = Object.freeze({
   ],
 });
 const FOOTSTEP_MIN_INTERVAL_MS = 105;
-const FOOTSTEP_AUDIO_USER_KEYS = new Set([
-  'KeyW', 'KeyA', 'KeyS', 'KeyD',
-  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  'ShiftLeft', 'ShiftRight',
-]);
 const FOOTSTEP_PLAYER_BUS = 'player-local';
 const FOOTSTEP_NPC_SPATIAL_BUS = 'npc-spatial';
 const FOOTSTEP_PLAYER_VOLUME_SCALE = 1.2;
@@ -2942,6 +2885,16 @@ initMovement(ctx, {
   resolveCameraCrowdCollision,
   resolveCameraRoadHexBoundaryCollision,
   resolveCameraWalkSurface,
+});
+
+initKeyboard({
+  DEMO_START_KEY,
+  welcomeWindowVisible,
+  ensureFootstepAudioReady,
+  triggerBackspaceDroneIntro,
+  resetCameraHeightToDefault,
+  captureLivePlayerSpawn,
+  getBackspaceIntroTriggered: () => backspaceIntroTriggered,
 });
 
 // StreetEdges: same hex mesh system, but with muted blue-green Tron material.
