@@ -20,8 +20,10 @@ import { mobileTouchControlsState } from './mobile-movement.js';
 export const movementVelocity = new THREE.Vector3();
 export let movementRunMix = 0;
 export let movementHorizontalSpeed = 0;
-export let movementForwardMix = 0;
-export let movementBackMix = 0;
+// forwardMix/backMix are read only inside this module (applyMovement + updateWalkSimulation), so
+// they stay module-private; strafeMix/strafeDirection are also read by main's player-body, so export.
+let movementForwardMix = 0;
+let movementBackMix = 0;
 export let movementStrafeMix = 0;
 export let movementStrafeDirection = 0;
 
