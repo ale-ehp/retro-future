@@ -29,6 +29,16 @@ export let movementStrafeDirection = 0;
 export function setMovementHorizontalSpeed(v) { movementHorizontalSpeed = v; }
 export function setMovementRunMix(v) { movementRunMix = v; }
 
+// Head-bob / walk-simulation state (A3c-3): walk-sim owns these. main's view-motion bracket
+// (applyViewMotionOffset) and footstep cadence read them via live bindings; drone-intro + spawn /
+// reset write headBobOffset/sideSwayOffset through the exported setters. viewRoll stays main-owned
+// (camera), reached here via injected get/setViewRoll.
+export let stepPhase = 0;
+export let headBobOffset = 0;
+export let sideSwayOffset = 0;
+export function setHeadBobOffset(v) { headBobOffset = v; }
+export function setSideSwayOffset(v) { sideSwayOffset = v; }
+
 // ---------- module-private scratch ----------
 const moveVec = new THREE.Vector3();
 const desiredVelocity = new THREE.Vector3();
@@ -51,6 +61,23 @@ let resolveCameraBuildingCollision = null;
 let resolveCameraCrowdCollision = null;
 let resolveCameraRoadHexBoundaryCollision = null;
 let resolveCameraWalkSurface = null;
+let getHeadMotionSmoothing = null;
+let getWalkBobAmount = null;
+let getRunBobAmount = null;
+let getStrafeBobScale = null;
+let getBackwardBobScale = null;
+let getWalkStepRate = null;
+let getRunStepRate = null;
+let getStepSnapAmount = null;
+let getMovementSwayAmount = null;
+let getMovementRollAmount = null;
+let getStrafeLeanAmount = null;
+let getViewRoll = null;
+let setViewRoll = null;
+let resetFootstepCadence = null;
+let updateFootstepAudioFromWalk = null;
+let setFixedCameraFov = null;
+let applyCameraLook = null;
 
 export function initMovement(ctx, deps) {
   camera = ctx.camera;
@@ -67,6 +94,23 @@ export function initMovement(ctx, deps) {
   resolveCameraCrowdCollision = deps.resolveCameraCrowdCollision;
   resolveCameraRoadHexBoundaryCollision = deps.resolveCameraRoadHexBoundaryCollision;
   resolveCameraWalkSurface = deps.resolveCameraWalkSurface;
+  getHeadMotionSmoothing = deps.getHeadMotionSmoothing;
+  getWalkBobAmount = deps.getWalkBobAmount;
+  getRunBobAmount = deps.getRunBobAmount;
+  getStrafeBobScale = deps.getStrafeBobScale;
+  getBackwardBobScale = deps.getBackwardBobScale;
+  getWalkStepRate = deps.getWalkStepRate;
+  getRunStepRate = deps.getRunStepRate;
+  getStepSnapAmount = deps.getStepSnapAmount;
+  getMovementSwayAmount = deps.getMovementSwayAmount;
+  getMovementRollAmount = deps.getMovementRollAmount;
+  getStrafeLeanAmount = deps.getStrafeLeanAmount;
+  getViewRoll = deps.getViewRoll;
+  setViewRoll = deps.setViewRoll;
+  resetFootstepCadence = deps.resetFootstepCadence;
+  updateFootstepAudioFromWalk = deps.updateFootstepAudioFromWalk;
+  setFixedCameraFov = deps.setFixedCameraFov;
+  applyCameraLook = deps.applyCameraLook;
 }
 
 export function clearVerticalMovementState() {
@@ -172,4 +216,58 @@ export function applyMovement(dt) {
   resolveCameraCrowdCollision();
 
   resolveCameraWalkSurface(hasVerticalInput);
+}
+
+export function updateWalkSimulation(dt) {
+  const speedBase = getSpeedBase();
+  const speedSprint = getSpeedSprint();
+  const movementDeceleration = getMovementDeceleration();
+  const headMotionSmoothing = getHeadMotionSmoothing();
+  const walkBobAmount = getWalkBobAmount();
+  const runBobAmount = getRunBobAmount();
+  const strafeBobScale = getStrafeBobScale();
+  const backwardBobScale = getBackwardBobScale();
+  const walkStepRate = getWalkStepRate();
+  const runStepRate = getRunStepRate();
+  const stepSnapAmount = getStepSnapAmount();
+  const movementSwayAmount = getMovementSwayAmount();
+  const movementRollAmount = getMovementRollAmount();
+  const strafeLeanAmount = getStrafeLeanAmount();
+  const moveFactor = THREE.MathUtils.clamp(movementHorizontalSpeed / Math.max(1, speedBase), 0, 1);
+  const smoothing = Math.min(1, headMotionSmoothing * dt);
+  if (moveFactor < 0.01) {
+    const settle = Math.min(1, movementDeceleration * dt);
+    headBobOffset = THREE.MathUtils.lerp(headBobOffset, 0, settle);
+    sideSwayOffset = THREE.MathUtils.lerp(sideSwayOffset, 0, settle);
+    setViewRoll(THREE.MathUtils.lerp(getViewRoll(), 0, settle));
+    resetFootstepCadence();
+    setFixedCameraFov();
+    applyCameraLook();
+    return;
+  }
+
+  const targetSpeed = THREE.MathUtils.lerp(speedBase, speedSprint, movementRunMix);
+  const cadence = THREE.MathUtils.lerp(walkStepRate, runStepRate, movementRunMix);
+  const pace = THREE.MathUtils.clamp(movementHorizontalSpeed / Math.max(1, targetSpeed), 0.35, 1.8);
+  stepPhase += dt * cadence * Math.PI * 2 * pace;
+  updateFootstepAudioFromWalk(moveFactor);
+
+  const directionBobScale = movementForwardMix +
+    movementStrafeMix * strafeBobScale +
+    movementBackMix * backwardBobScale;
+  const amount = THREE.MathUtils.lerp(walkBobAmount, runBobAmount, movementRunMix) * moveFactor * directionBobScale;
+  const snapPower = THREE.MathUtils.lerp(1.2, 4.2, stepSnapAmount);
+  const footPulse = Math.pow(Math.abs(Math.sin(stepPhase)), snapPower);
+  const targetHeadBob = footPulse * amount;
+
+  const swayStrength = movementSwayAmount * moveFactor * (0.85 + movementRunMix * 0.45);
+  const targetSideSway = Math.sin(stepPhase) * swayStrength;
+  const stepRoll = Math.sin(stepPhase) * movementRollAmount * moveFactor * (0.85 + movementRunMix * 0.65);
+  const targetRoll = stepRoll - movementStrafeDirection * strafeLeanAmount * moveFactor;
+
+  headBobOffset = THREE.MathUtils.lerp(headBobOffset, targetHeadBob, smoothing);
+  sideSwayOffset = THREE.MathUtils.lerp(sideSwayOffset, targetSideSway, smoothing);
+  setViewRoll(THREE.MathUtils.lerp(getViewRoll(), targetRoll, smoothing));
+  setFixedCameraFov();
+  applyCameraLook();
 }
