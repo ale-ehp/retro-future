@@ -507,7 +507,11 @@ import { initKeyboard, keys } from './controls/keyboard.js';
 import {
   getHexTileHeightScale,
   getHexTileScale,
+  hexTileActiveColor,
+  hexTileBaseColor,
   hexTileColumnStep,
+  hexTileDisplayActiveColor,
+  hexTileDisplayBaseColor,
   hexTileGeo,
   hexTileHeight,
   hexTileRadius,
@@ -515,6 +519,7 @@ import {
   hexTileSeedXStep,
   hexTileSeedZStep,
   roadTileTopY,
+  setHexTileDisplayColor,
   setHexTileGap,
   setHexTileHeightScale,
   setHexTileScale,
@@ -2212,12 +2217,6 @@ let hexDropSpeed = 18;
 let hexRecovery = 8.5;
 let hexTileHitLight = 0.18;
 let hexPlayerTileLight = 0.45;
-const hexTileBaseColor = new THREE.Color(0x071116);
-const hexTileActiveColor = new THREE.Color(0x15343b);
-const hexTilePlayerLightColor = new THREE.Color(0x4bdde6);
-const hexTileBasePadColor = new THREE.Color(0x6d7e84);
-const hexTileDisplayBaseColor = hexTileBaseColor.clone();
-const hexTileDisplayActiveColor = hexTileActiveColor.clone();
 const hexTileDisplayBaseEmissive = new THREE.Color(0x061419);
 const hexTileDisplayHitEmissive = new THREE.Color(0x7df6ff);
 const streetEdgeHexInstanceColor = new THREE.Color(0x2a6371);
@@ -2343,25 +2342,6 @@ function queueHexTileCandidate(tile) {
 
 function markHexTileBatchDirty(batch, colorChanged = false) {
   dirtyHexTileBatches.set(batch, Boolean(dirtyHexTileBatches.get(batch) || colorChanged));
-}
-
-function setHexTileDisplayColor(target, hitLight = 0, playerLight = 0, basePadLight = 0) {
-  const padAmount = THREE.MathUtils.clamp(basePadLight, 0, 1);
-  if (padAmount > 0.001) {
-    target.copy(hexTileBasePadColor);
-  } else {
-    target.copy(hexTileDisplayBaseColor);
-  }
-  target
-    .lerp(hexTileDisplayActiveColor, THREE.MathUtils.clamp(hitLight, 0, 1))
-    .lerp(hexTilePlayerLightColor, THREE.MathUtils.clamp(playerLight, 0, 1));
-  target.multiplyScalar(
-    1 +
-    padAmount * 0.34 +
-    THREE.MathUtils.clamp(hitLight, 0, 1) * 0.65 +
-    THREE.MathUtils.clamp(playerLight, 0, 1) * 0.9
-  );
-  return target;
 }
 
 function configureHexRoadMaterial(material) {
