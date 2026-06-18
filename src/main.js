@@ -488,6 +488,7 @@ import {
   applyMovement,
   clearMovementKeys,
   clearVerticalMovementState,
+  headBobOffset,
   initMovement,
   movementBackMix,
   movementForwardMix,
@@ -496,8 +497,13 @@ import {
   movementStrafeDirection,
   movementStrafeMix,
   movementVelocity,
+  setHeadBobOffset,
   setMovementHorizontalSpeed,
   setMovementRunMix,
+  setSideSwayOffset,
+  sideSwayOffset,
+  stepPhase,
+  updateWalkSimulation,
 } from './controls/movement.js';
 import { initKeyboard, keys } from './controls/keyboard.js';
 import {
@@ -975,9 +981,6 @@ let movementSwayAmount = 0.08;
 let movementRollAmount = 0.018;
 let strafeLeanAmount = 0.035;
 let headMotionSmoothing = 18;
-let stepPhase = 0;
-let headBobOffset = 0;
-let sideSwayOffset = 0;
 const appliedHeadMotion = new THREE.Vector3();
 let walkSurfaceLift = 0;
 let walkSurfaceKind = 'road';
@@ -1528,46 +1531,6 @@ function resolveCameraWalkSurface(hasVerticalInput) {
   }
 
   walkSurfaceLift = Math.max(0, targetGroundY - cameraMinHeight);
-}
-
-function updateWalkSimulation(dt) {
-  const moveFactor = THREE.MathUtils.clamp(movementHorizontalSpeed / Math.max(1, speedBase), 0, 1);
-  const smoothing = Math.min(1, headMotionSmoothing * dt);
-  if (moveFactor < 0.01) {
-    const settle = Math.min(1, movementDeceleration * dt);
-    headBobOffset = THREE.MathUtils.lerp(headBobOffset, 0, settle);
-    sideSwayOffset = THREE.MathUtils.lerp(sideSwayOffset, 0, settle);
-    viewRoll = THREE.MathUtils.lerp(viewRoll, 0, settle);
-    resetFootstepCadence();
-    setFixedCameraFov();
-    applyCameraLook();
-    return;
-  }
-
-  const targetSpeed = THREE.MathUtils.lerp(speedBase, speedSprint, movementRunMix);
-  const cadence = THREE.MathUtils.lerp(walkStepRate, runStepRate, movementRunMix);
-  const pace = THREE.MathUtils.clamp(movementHorizontalSpeed / Math.max(1, targetSpeed), 0.35, 1.8);
-  stepPhase += dt * cadence * Math.PI * 2 * pace;
-  updateFootstepAudioFromWalk(moveFactor);
-
-  const directionBobScale = movementForwardMix +
-    movementStrafeMix * strafeBobScale +
-    movementBackMix * backwardBobScale;
-  const amount = THREE.MathUtils.lerp(walkBobAmount, runBobAmount, movementRunMix) * moveFactor * directionBobScale;
-  const snapPower = THREE.MathUtils.lerp(1.2, 4.2, stepSnapAmount);
-  const footPulse = Math.pow(Math.abs(Math.sin(stepPhase)), snapPower);
-  const targetHeadBob = footPulse * amount;
-
-  const swayStrength = movementSwayAmount * moveFactor * (0.85 + movementRunMix * 0.45);
-  const targetSideSway = Math.sin(stepPhase) * swayStrength;
-  const stepRoll = Math.sin(stepPhase) * movementRollAmount * moveFactor * (0.85 + movementRunMix * 0.65);
-  const targetRoll = stepRoll - movementStrafeDirection * strafeLeanAmount * moveFactor;
-
-  headBobOffset = THREE.MathUtils.lerp(headBobOffset, targetHeadBob, smoothing);
-  sideSwayOffset = THREE.MathUtils.lerp(sideSwayOffset, targetSideSway, smoothing);
-  viewRoll = THREE.MathUtils.lerp(viewRoll, targetRoll, smoothing);
-  setFixedCameraFov();
-  applyCameraLook();
 }
 
 function updateHexRoadTiles(dt) {
@@ -2859,8 +2822,8 @@ initDroneIntro(ctx, {
   setPitch: (v) => { pitch = v; },
   getViewRoll: () => viewRoll,
   setViewRoll: (v) => { viewRoll = v; },
-  setHeadBobOffset: (v) => { headBobOffset = v; },
-  setSideSwayOffset: (v) => { sideSwayOffset = v; },
+  setHeadBobOffset,
+  setSideSwayOffset,
   setMovementHorizontalSpeed,
   setMovementRunMix,
   getLast: () => last,
@@ -2885,6 +2848,23 @@ initMovement(ctx, {
   resolveCameraCrowdCollision,
   resolveCameraRoadHexBoundaryCollision,
   resolveCameraWalkSurface,
+  getHeadMotionSmoothing: () => headMotionSmoothing,
+  getWalkBobAmount: () => walkBobAmount,
+  getRunBobAmount: () => runBobAmount,
+  getStrafeBobScale: () => strafeBobScale,
+  getBackwardBobScale: () => backwardBobScale,
+  getWalkStepRate: () => walkStepRate,
+  getRunStepRate: () => runStepRate,
+  getStepSnapAmount: () => stepSnapAmount,
+  getMovementSwayAmount: () => movementSwayAmount,
+  getMovementRollAmount: () => movementRollAmount,
+  getStrafeLeanAmount: () => strafeLeanAmount,
+  getViewRoll: () => viewRoll,
+  setViewRoll: (v) => { viewRoll = v; },
+  resetFootstepCadence,
+  updateFootstepAudioFromWalk,
+  setFixedCameraFov,
+  applyCameraLook,
 });
 
 initKeyboard({
@@ -12681,8 +12661,8 @@ function applyPlayerSpawn(spawn = playerSpawn, showFeedback = true) {
   yaw = nextSpawn.spawnYaw;
   pitch = nextSpawn.spawnPitch;
   viewRoll = 0;
-  headBobOffset = 0;
-  sideSwayOffset = 0;
+  setHeadBobOffset(0);
+  setSideSwayOffset(0);
   applyCameraLook();
   resolveCameraBuildingCollision();
   resolveCameraRoadHexBoundaryCollision();
@@ -12720,8 +12700,8 @@ function resetCameraHeightToDefault(showFeedback = true) {
   removeViewMotionOffset();
   camera.position.y = cameraGroundHeightAt(camera.position.x, camera.position.z);
   movementVelocity.y = 0;
-  headBobOffset = 0;
-  sideSwayOffset = 0;
+  setHeadBobOffset(0);
+  setSideSwayOffset(0);
   viewRoll = 0;
   applyCameraLook();
   keys.KeyE = false;
