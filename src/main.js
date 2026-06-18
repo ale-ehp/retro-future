@@ -506,39 +506,50 @@ import { initKeyboard, keys } from './controls/keyboard.js';
 import {
   HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED,
   HEX_ROAD_UPLOAD_BATCH_LIMIT,
-  compactHexTileBatch,
   compactHexTileBatchesForTiles,
-  configureHexRoadMaterial,
+  HEX_TILE_BUCKET_SIZE,
+  addHexRoadTiles,
+  beginHexTileCandidateFrame,
   flushHexTileBatchUploads,
   getDirtyHexTileBatchCount,
   getHexTileHeightScale,
   getHexTileScale,
+  hexRoadTileBatches,
+  hexRoadTileBuckets,
+  hexRoadTiles,
   hexTileMat,
+  hexTileBucketKey,
   hexTileActiveColor,
   hexTileBaseColor,
-  hexTileColumnStep,
   hexTileDisplayActiveColor,
   hexTileDisplayBaseColor,
   hexTileGeo,
   hexTileHeight,
   hexTileRadius,
   hexTileRowStep,
-  hexTileSeedXStep,
-  hexTileSeedZStep,
   hexRoadBatchStats,
   hexRoadRuntimeStats,
+  hexTileCandidates,
   initHexTileMaterials,
+  initHexTileLayout,
   initHexTileSync,
+  queueHexTileCandidate,
+  recoveringHexTiles,
   roadMicroNormalTex,
   roadTileTopY,
+  setHexTileLayoutPosition,
   setHexTileGap,
   setHexTileHeightScale,
   setHexRoadMaterialGlow,
   setHexTileScale,
   sidewalkMinSurfaceY,
+  streetEdgeHexTileBatches,
+  streetEdgeHexTiles,
   syncHexTileDisplayColor,
-  syncHexTileInstance,
   streetEdgeHexMat,
+  updateHexTileLayout,
+  updateStreetEdgeHexTileScale,
+  updateZTileBand,
 } from './world/hex-tiles.js';
 import {
   getReflectionEnvMap,
@@ -1576,8 +1587,7 @@ function updateHexRoadTiles(dt) {
   const recoveryStep = Math.min(1, hexRecovery * dt);
   const updateRadius = hexDepressRadius + Math.abs(hexPassOffset) + hexTileRadius * 2;
   const updateRadiusSq = updateRadius * updateRadius;
-  hexTileCandidates.length = 0;
-  hexTileFrameId++;
+  beginHexTileCandidateFrame();
   const bucketRadius = Math.ceil(updateRadius / HEX_TILE_BUCKET_SIZE) + 1;
   const centerIx = Math.floor(playerX / HEX_TILE_BUCKET_SIZE);
   const centerIz = Math.floor(playerZ / HEX_TILE_BUCKET_SIZE);
@@ -2216,11 +2226,6 @@ const floorPlaneLengthMeshes = [road];
 const floorBoxLengthMeshes = [];
 
 // Main road hex tiles: same design/function as mockup-hex-road-tiles.html.
-const hexRoadTiles = [];
-const hexRoadTileBatches = [];
-const streetEdgeHexTiles = [];
-const streetEdgeHexTileBatches = [];
-const HEX_ROAD_CHUNK_LENGTH = GRID_BLOCK * 20;
 function mainBuildingSideBoulevardExtension() {
   return MAIN_BUILDING_SIDE_HEX_EXTENSION_ROWS * Math.max(0.001, hexTileRowStep());
 }
@@ -2237,11 +2242,6 @@ let hexTileBaseEmissiveIntensity = 0.18;
 const SIDEWALK_CURB_OVERLAP = 0.035;
 const BASE_PAD_FRUSTUM_CULLING_ENABLED = true;
 const BASE_PAD_CULLING_BOUNDS_MARGIN = GRID_BLOCK * 3;
-const HEX_TILE_BUCKET_SIZE = 64;
-const hexRoadTileBuckets = new Map();
-const recoveringHexTiles = new Set();
-const hexTileCandidates = [];
-let hexTileFrameId = 0;
 
 const basePadHexMat = new THREE.MeshBasicMaterial({
   color: 0x6f8187,
@@ -2260,6 +2260,7 @@ initHexTileSync({
   getBasePadHexOverlay: () => basePadHexOverlay,
   refreshCullingBounds,
 });
+initHexTileLayout(ctx);
 const basePadHexClipMat = new THREE.MeshBasicMaterial({
   color: 0x6f8187,
   transparent: false,
@@ -2290,33 +2291,6 @@ function ensureBasePadHexOverlayCapacity(count) {
   basePadHexOverlay.frustumCulled = false;
   basePadHexOverlay.renderOrder = 3;
   scene.add(basePadHexOverlay);
-}
-
-function hexTileBucketKey(ix, iz) {
-  // Numeric key (no per-lookup string alloc); ix/iz are small floored bucket indices.
-  return (ix + 100000) * 1000000 + (iz + 100000);
-}
-
-function rebuildHexRoadTileBuckets() {
-  hexRoadTileBuckets.clear();
-  for (const tile of hexRoadTiles) {
-    if (!tile.visible || tile.userData.visible === false) continue;
-    const ix = Math.floor(tile.userData.x / HEX_TILE_BUCKET_SIZE);
-    const iz = Math.floor(tile.userData.z / HEX_TILE_BUCKET_SIZE);
-    const key = hexTileBucketKey(ix, iz);
-    let bucket = hexRoadTileBuckets.get(key);
-    if (!bucket) {
-      bucket = [];
-      hexRoadTileBuckets.set(key, bucket);
-    }
-    bucket.push(tile);
-  }
-}
-
-function queueHexTileCandidate(tile) {
-  if (!tile || tile.userData.frameId === hexTileFrameId) return;
-  tile.userData.frameId = hexTileFrameId;
-  hexTileCandidates.push(tile);
 }
 
 function refreshCullingBounds(object) {
@@ -2358,55 +2332,6 @@ function hexRoadInspect() {
   };
 }
 
-function setHexTileLayoutPosition(tile, sync = true) {
-  const xStep = hexTileColumnStep();
-  const zStep = hexTileRowStep();
-  const localX = tile.userData.col * xStep;
-  const zOffset = (tile.userData.col & 1) ? zStep * 0.5 : 0;
-  const localZ = tile.userData.row * zStep + zOffset;
-  const x = tile.userData.axis === "x" ? tile.userData.centerX + localZ : tile.userData.centerX + localX;
-  const z = tile.userData.axis === "x" ? tile.userData.centerZ + localX : tile.userData.centerZ + localZ;
-  const withinBounds = Math.abs(localX) <= tile.userData.halfW + tile.userData.edgeBleed &&
-    Math.abs(localZ) <= tile.userData.halfL + tile.userData.edgeBleed;
-  tile.userData.x = x;
-  tile.userData.z = z;
-  tile.visible = withinBounds;
-  tile.userData.visible = withinBounds;
-  if (!withinBounds) {
-    tile.userData.depression = 0;
-    tile.userData.hitLight = 0;
-    tile.userData.playerLight = 0;
-    tile.userData.basePadLight = 0;
-    tile.userData.wasInfluenced = false;
-    recoveringHexTiles.delete(tile);
-  }
-  if (sync) syncHexTileInstance(tile);
-}
-
-function updateHexTileLayout() {
-  for (const tile of hexRoadTiles) setHexTileLayoutPosition(tile, false);
-  for (const tile of streetEdgeHexTiles) setHexTileLayoutPosition(tile, false);
-  for (const batch of hexRoadTileBatches) compactHexTileBatch(batch);
-  for (const batch of streetEdgeHexTileBatches) compactHexTileBatch(batch);
-  rebuildHexRoadTileBuckets();
-}
-
-function updateStreetEdgeHexTileScale() {
-  for (const tile of streetEdgeHexTiles) syncHexTileInstance(tile);
-}
-
-function updateZTileBand(tiles, centerX, centerZ, width, length) {
-  for (const tile of tiles) {
-    tile.userData.centerX = centerX;
-    tile.userData.centerZ = centerZ;
-    tile.userData.halfW = width / 2;
-    tile.userData.halfL = length / 2;
-    setHexTileLayoutPosition(tile, false);
-  }
-  compactHexTileBatchesForTiles(tiles);
-  rebuildHexRoadTileBuckets();
-}
-
 function computeDynamicRoadBounds(nextSideSpacingScale, nextSideDepthScale, nextMainDepthScale) {
   let minZ = MAIN_ROAD_Z - MAIN_ROAD_LENGTH / 2;
   let maxZ = MAIN_ROAD_Z + MAIN_ROAD_LENGTH / 2;
@@ -2446,99 +2371,6 @@ function updateMainRoadLength(centerZ, length) {
   }
   syncRoadBacking();
   updateZTileBand(mainRoadTiles, 0, centerZ, dynamicRoadSurfaceWidth, length);
-}
-
-function addHexRoadTileBatch(batchSeeds, material, interactive, createdTiles) {
-  const batchMaterial = material.clone();
-  batchMaterial.vertexColors = true;
-  if (interactive) {
-    batchMaterial.userData.hexRoadConfigured = false;
-    configureHexRoadMaterial(batchMaterial);
-  }
-  const batch = new THREE.InstancedMesh(hexTileGeo, batchMaterial, Math.max(1, batchSeeds.length));
-  batch.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  batch.frustumCulled = true;
-  scene.add(batch);
-
-  const batchRecord = { mesh: batch, material: batchMaterial, tiles: [], interactive };
-  if (interactive) hexRoadTileBatches.push(batchRecord);
-  else streetEdgeHexTileBatches.push(batchRecord);
-
-  batchSeeds.forEach((seed, instanceId) => {
-    const tile = {
-      batch,
-      batchRecord,
-      instanceId,
-      visible: true,
-      material: batchMaterial,
-      userData: seed,
-    };
-    batchRecord.tiles.push(tile);
-    createdTiles.push(tile);
-    if (interactive) hexRoadTiles.push(tile);
-    else streetEdgeHexTiles.push(tile);
-    setHexTileLayoutPosition(tile, false);
-  });
-
-  compactHexTileBatch(batchRecord);
-  batch.instanceMatrix.needsUpdate = true;
-  if (batch.instanceColor) batch.instanceColor.needsUpdate = true;
-  return batchRecord;
-}
-
-function addHexRoadTiles(width, length, centerX, centerZ, axis = "z", material = hexTileMat, interactive = true, y = 0) {
-  const createdTiles = [];
-  const chunkCount = Math.max(1, Math.ceil(length / HEX_ROAD_CHUNK_LENGTH));
-  const chunkLength = length / chunkCount;
-  const tileSeedChunks = Array.from({ length: chunkCount }, () => []);
-  const halfW = width / 2;
-  const halfL = length / 2;
-  const maxCols = Math.ceil(halfW / hexTileSeedXStep) + 2;
-  const maxRows = Math.ceil(halfL / hexTileSeedZStep) + 2;
-  const edgeBleed = hexTileRadius * 0.08;
-  for (let col = -maxCols; col <= maxCols; col++) {
-    const localX = col * hexTileSeedXStep;
-    if (Math.abs(localX) > halfW + edgeBleed) continue;
-    const zOffset = (col & 1) ? hexTileSeedZStep * 0.5 : 0;
-    for (let row = -maxRows; row <= maxRows; row++) {
-      const localZ = row * hexTileSeedZStep + zOffset;
-      if (Math.abs(localZ) > halfL + edgeBleed) continue;
-      const x = axis === "x" ? centerX + localZ : centerX + localX;
-      const z = axis === "x" ? centerZ + localX : centerZ + localZ;
-      const chunkIndex = THREE.MathUtils.clamp(Math.floor((localZ + halfL) / chunkLength), 0, chunkCount - 1);
-      tileSeedChunks[chunkIndex].push({
-        x,
-        z,
-        col,
-        row,
-        axis,
-        centerX,
-        centerZ,
-        halfW,
-        halfL,
-        edgeBleed,
-        baseY: y,
-        depression: 0,
-        hitTime: 0,
-        wasInfluenced: false,
-        hitLight: 0,
-        playerLight: 0,
-        basePadLight: 0,
-        basePadOverlayId: -1,
-        interactive,
-        visible: true,
-      });
-    }
-  }
-
-  for (const chunkSeeds of tileSeedChunks) {
-    if (!chunkSeeds.length) continue;
-    addHexRoadTileBatch(chunkSeeds, material, interactive, createdTiles);
-  }
-  if (interactive) {
-    rebuildHexRoadTileBuckets();
-  }
-  return createdTiles;
 }
 
 const ROAD_BOUNDARY_ROW_MAX = 10;
