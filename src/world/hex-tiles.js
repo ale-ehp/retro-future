@@ -9,6 +9,8 @@
 // the getters); roadTileTopY reads hexTileHeightScale directly since it lives here.
 
 import * as THREE from 'three';
+import { getReflectionEnvMap, getRoadReflectionEnvMap } from '../engine/reflection-env.js';
+import { makeRoadMicroNormalTexture } from './material-textures.js';
 
 export const hexTileRadius = 1.18 * 3 * 2;
 export const hexTileHeight = 0.18 * 3;
@@ -99,4 +101,74 @@ export function setHexTileDisplayColor(target, hitLight = 0, playerLight = 0, ba
     THREE.MathUtils.clamp(playerLight, 0, 1) * 0.9
   );
   return target;
+}
+
+// ---------- hex-tile materials (A3e-2b) ----------
+// Material objects are live exported bindings: main and batch builders read the same objects after
+// initHexTileMaterials() runs during main's original material setup phase. roadMicroNormalTex is shared
+// with base-pad material controls, so it is exported as the exact texture instance created here.
+export let roadMicroNormalTex = null;
+export let hexTileMat = null;
+export let streetEdgeHexMat = null;
+
+export function configureHexRoadMaterial(material) {
+  if (material.userData.hexRoadConfigured) return material;
+  material.userData.hexRoadConfigured = true;
+  material.userData.hexInstanceGlow = material.userData.hexInstanceGlow ?? 2.2;
+  material.userData.hexGlowBaseColor = material.userData.hexGlowBaseColor?.isColor
+    ? material.userData.hexGlowBaseColor
+    : hexTileDisplayBaseColor.clone();
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.hexInstanceGlow = { value: material.userData.hexInstanceGlow };
+    shader.uniforms.hexGlowBaseColor = { value: material.userData.hexGlowBaseColor };
+    material.userData.hexInstanceGlowUniform = shader.uniforms.hexInstanceGlow;
+    material.userData.hexGlowBaseColorUniform = shader.uniforms.hexGlowBaseColor;
+    shader.fragmentShader = `uniform float hexInstanceGlow;\nuniform vec3 hexGlowBaseColor;\n${shader.fragmentShader}`;
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+#ifdef USE_COLOR
+  vec3 hexInstanceGlowColor = max(vColor.rgb - hexGlowBaseColor, vec3(0.0));
+  totalEmissiveRadiance += hexInstanceGlowColor * hexInstanceGlow;
+#endif`
+    );
+  };
+  material.customProgramCacheKey = () => 'hex-road-instance-glow-v1';
+  material.needsUpdate = true;
+  return material;
+}
+
+export function setHexRoadMaterialGlow(material, glowStrength, baseColor) {
+  configureHexRoadMaterial(material);
+  material.userData.hexInstanceGlow = glowStrength;
+  if (!material.userData.hexGlowBaseColor?.isColor) material.userData.hexGlowBaseColor = new THREE.Color();
+  material.userData.hexGlowBaseColor.copy(baseColor);
+  if (material.userData.hexInstanceGlowUniform) material.userData.hexInstanceGlowUniform.value = glowStrength;
+  if (material.userData.hexGlowBaseColorUniform) material.userData.hexGlowBaseColorUniform.value.copy(baseColor);
+}
+
+export function initHexTileMaterials() {
+  if (hexTileMat) return;
+  roadMicroNormalTex = makeRoadMicroNormalTexture();
+  hexTileMat = new THREE.MeshStandardMaterial({
+    color: hexTileBaseColor,
+    metalness: 0.88,
+    roughness: 0.16,
+    envMap: getRoadReflectionEnvMap(),
+    envMapIntensity: 1.15,
+    normalMap: roadMicroNormalTex,
+    normalScale: new THREE.Vector2(0, 0),
+    emissive: 0x061419,
+    emissiveIntensity: 0.18,
+  });
+  configureHexRoadMaterial(hexTileMat);
+  streetEdgeHexMat = new THREE.MeshStandardMaterial({
+    color: 0x2a6371,
+    metalness: 0.58,
+    roughness: 0.28,
+    envMap: getReflectionEnvMap(),
+    envMapIntensity: 0.88,
+    emissive: 0x061a20,
+    emissiveIntensity: 0.12,
+  });
 }
