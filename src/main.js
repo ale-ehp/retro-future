@@ -504,7 +504,13 @@ import {
 } from './controls/movement.js';
 import { initKeyboard, keys } from './controls/keyboard.js';
 import {
+  HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED,
+  HEX_ROAD_UPLOAD_BATCH_LIMIT,
+  compactHexTileBatch,
+  compactHexTileBatchesForTiles,
   configureHexRoadMaterial,
+  flushHexTileBatchUploads,
+  getDirtyHexTileBatchCount,
   getHexTileHeightScale,
   getHexTileScale,
   hexTileMat,
@@ -519,15 +525,19 @@ import {
   hexTileRowStep,
   hexTileSeedXStep,
   hexTileSeedZStep,
+  hexRoadBatchStats,
+  hexRoadRuntimeStats,
   initHexTileMaterials,
+  initHexTileSync,
   roadMicroNormalTex,
   roadTileTopY,
-  setHexTileDisplayColor,
   setHexTileGap,
   setHexTileHeightScale,
   setHexRoadMaterialGlow,
   setHexTileScale,
   sidewalkMinSurfaceY,
+  syncHexTileDisplayColor,
+  syncHexTileInstance,
   streetEdgeHexMat,
 } from './world/hex-tiles.js';
 import {
@@ -1615,8 +1625,7 @@ function updateHexRoadTiles(dt) {
     if (Math.abs(tile.userData.depression - previousDepression) > 0.0005 ||
       Math.abs(hitLight - previousHitLight) > 0.003 ||
       Math.abs(playerLight - previousPlayerLight) > 0.003) {
-      setHexTileDisplayColor(hexTileInstanceColor, hitLight, playerLight, tile.userData.basePadLight || 0);
-      syncHexTileInstance(tile, hexTileInstanceColor);
+      syncHexTileDisplayColor(tile, hitLight, playerLight, tile.userData.basePadLight || 0);
     }
     if (Math.abs(tile.userData.depression) > 0.001 || isInfluenced) {
       recoveringHexTiles.add(tile);
@@ -2224,33 +2233,15 @@ let hexTileHitLight = 0.18;
 let hexPlayerTileLight = 0.45;
 const hexTileDisplayBaseEmissive = new THREE.Color(0x061419);
 const hexTileDisplayHitEmissive = new THREE.Color(0x7df6ff);
-const streetEdgeHexInstanceColor = new THREE.Color(0x2a6371);
 let hexTileBaseEmissiveIntensity = 0.18;
-const hexTileInstanceMatrix = new THREE.Matrix4();
-const hexTileInstancePosition = new THREE.Vector3();
-const hexTileInstanceQuaternion = new THREE.Quaternion();
-const hexTileInstanceScale = new THREE.Vector3();
-const hexTileInstanceColor = new THREE.Color();
-const basePadHexInstanceMatrix = new THREE.Matrix4();
-const basePadHexInstancePosition = new THREE.Vector3();
-const basePadHexInstanceScale = new THREE.Vector3();
 const SIDEWALK_CURB_OVERLAP = 0.035;
 const BASE_PAD_FRUSTUM_CULLING_ENABLED = true;
 const BASE_PAD_CULLING_BOUNDS_MARGIN = GRID_BLOCK * 3;
 const HEX_TILE_BUCKET_SIZE = 64;
-const HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED = true;
-const HEX_ROAD_UPLOAD_BATCH_LIMIT = 10;
 const hexRoadTileBuckets = new Map();
 const recoveringHexTiles = new Set();
 const hexTileCandidates = [];
 let hexTileFrameId = 0;
-const dirtyHexTileBatches = new Map();
-const hexRoadRuntimeStats = {
-  lastCandidateCount: 0,
-  lastDirtyUploadCount: 0,
-  pendingDirtyBatches: 0,
-  uploadDeferredFrames: 0,
-};
 
 const basePadHexMat = new THREE.MeshBasicMaterial({
   color: 0x6f8187,
@@ -2265,6 +2256,10 @@ const basePadHexMat = new THREE.MeshBasicMaterial({
 });
 let basePadHexOverlay = null;
 let basePadHexOverlayCapacity = 0;
+initHexTileSync({
+  getBasePadHexOverlay: () => basePadHexOverlay,
+  refreshCullingBounds,
+});
 const basePadHexClipMat = new THREE.MeshBasicMaterial({
   color: 0x6f8187,
   transparent: false,
@@ -2324,10 +2319,6 @@ function queueHexTileCandidate(tile) {
   hexTileCandidates.push(tile);
 }
 
-function markHexTileBatchDirty(batch, colorChanged = false) {
-  dirtyHexTileBatches.set(batch, Boolean(dirtyHexTileBatches.get(batch) || colorChanged));
-}
-
 function refreshCullingBounds(object) {
   if (!object) return;
   if (object.isInstancedMesh && object.count <= 0) return;
@@ -2351,43 +2342,6 @@ function refreshCullingBoundsWithMargin(object, margin = 0) {
   if (object.geometry.boundingBox) object.geometry.boundingBox.expandByScalar(margin);
 }
 
-function flushHexTileBatchUploads() {
-  if (!dirtyHexTileBatches.size) return;
-  let uploaded = 0;
-  for (const [batch, colorChanged] of dirtyHexTileBatches) {
-    batch.instanceMatrix.needsUpdate = true;
-    if (colorChanged && batch.instanceColor) batch.instanceColor.needsUpdate = true;
-    dirtyHexTileBatches.delete(batch);
-    uploaded += 1;
-    if (uploaded >= HEX_ROAD_UPLOAD_BATCH_LIMIT) break;
-  }
-  hexRoadRuntimeStats.lastDirtyUploadCount = uploaded;
-  hexRoadRuntimeStats.pendingDirtyBatches = dirtyHexTileBatches.size;
-  if (dirtyHexTileBatches.size) hexRoadRuntimeStats.uploadDeferredFrames += 1;
-}
-
-function hexRoadBatchStats(batchRecords) {
-  const stats = {
-    totalBatches: batchRecords.length,
-    activeBatches: 0,
-    emptyBatches: 0,
-    hiddenBatches: 0,
-    activeInstances: 0,
-    capacityInstances: 0,
-    dirtyBatches: 0,
-  };
-  for (const record of batchRecords) {
-    const count = record.mesh?.count ?? 0;
-    stats.capacityInstances += record.tiles.length;
-    stats.activeInstances += count;
-    if (count > 0) stats.activeBatches += 1;
-    else stats.emptyBatches += 1;
-    if (record.mesh?.visible === false) stats.hiddenBatches += 1;
-    if (dirtyHexTileBatches.has(record.mesh)) stats.dirtyBatches += 1;
-  }
-  return stats;
-}
-
 function hexRoadInspect() {
   return {
     emptyBatchCulling: HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED,
@@ -2396,7 +2350,7 @@ function hexRoadInspect() {
     recoveringTiles: recoveringHexTiles.size,
     candidatesLastStep: hexRoadRuntimeStats.lastCandidateCount,
     uploadsLastFrame: hexRoadRuntimeStats.lastDirtyUploadCount,
-    pendingDirtyBatches: dirtyHexTileBatches.size,
+    pendingDirtyBatches: getDirtyHexTileBatchCount(),
     uploadDeferredFrames: hexRoadRuntimeStats.uploadDeferredFrames,
     interactive: hexRoadBatchStats(hexRoadTileBatches),
     streetEdge: hexRoadBatchStats(streetEdgeHexTileBatches),
@@ -2427,69 +2381,6 @@ function setHexTileLayoutPosition(tile, sync = true) {
     recoveringHexTiles.delete(tile);
   }
   if (sync) syncHexTileInstance(tile);
-}
-
-function syncHexTileInstance(tile, color = null) {
-  if (tile.instanceId < 0) return;
-  const visible = tile.visible !== false && tile.userData.visible !== false;
-  const scaleXZ = visible ? getHexTileScale() : 0.0001;
-  const scaleY = visible ? (tile.userData.interactive ? getHexTileHeightScale() : 1) : 0.0001;
-  const y = visible ? tile.userData.baseY + tile.userData.depression : -10000;
-  hexTileInstancePosition.set(tile.userData.x, y, tile.userData.z);
-  hexTileInstanceScale.set(scaleXZ, scaleY, scaleXZ);
-  hexTileInstanceMatrix.compose(hexTileInstancePosition, hexTileInstanceQuaternion, hexTileInstanceScale);
-  tile.batch.setMatrixAt(tile.instanceId, hexTileInstanceMatrix);
-  if (color && tile.batch.setColorAt) {
-    tile.batch.setColorAt(tile.instanceId, color);
-  }
-  if (tile.userData.basePadOverlayId >= 0 && basePadHexOverlay) {
-    const overlayVisible = visible && (tile.userData.basePadLight || 0) > 0;
-    const overlayScaleXZ = overlayVisible ? getHexTileScale() : 0.0001;
-    const overlayScaleY = overlayVisible ? getHexTileHeightScale() : 0.0001;
-    const overlayY = overlayVisible ? y + 0.12 : -10000;
-    basePadHexInstancePosition.set(tile.userData.x, overlayY, tile.userData.z);
-    basePadHexInstanceScale.set(overlayScaleXZ, overlayScaleY, overlayScaleXZ);
-    basePadHexInstanceMatrix.compose(basePadHexInstancePosition, hexTileInstanceQuaternion, basePadHexInstanceScale);
-    basePadHexOverlay.setMatrixAt(tile.userData.basePadOverlayId, basePadHexInstanceMatrix);
-    basePadHexOverlay.instanceMatrix.needsUpdate = true;
-  }
-  markHexTileBatchDirty(tile.batch, Boolean(color));
-}
-
-function compactHexTileBatch(batchRecord) {
-  let writeIndex = 0;
-  for (const tile of batchRecord.tiles) {
-    const visible = tile.visible !== false && tile.userData.visible !== false;
-    tile.instanceId = visible ? writeIndex++ : -1;
-    if (!visible) continue;
-    if (batchRecord.interactive) {
-      setHexTileDisplayColor(
-        hexTileInstanceColor,
-        tile.userData.hitLight || 0,
-        tile.userData.playerLight || 0,
-        tile.userData.basePadLight || 0
-      );
-      syncHexTileInstance(tile, hexTileInstanceColor);
-    } else {
-      syncHexTileInstance(tile, streetEdgeHexInstanceColor);
-    }
-  }
-  batchRecord.mesh.count = writeIndex;
-  if (HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED) {
-    batchRecord.mesh.visible = writeIndex > 0;
-  }
-  refreshCullingBounds(batchRecord.mesh);
-  if (writeIndex > 0) {
-    markHexTileBatchDirty(batchRecord.mesh, true);
-  } else {
-    dirtyHexTileBatches.delete(batchRecord.mesh);
-  }
-}
-
-function compactHexTileBatchesForTiles(tiles) {
-  const batches = new Set();
-  for (const tile of tiles) batches.add(tile.batchRecord);
-  for (const batchRecord of batches) compactHexTileBatch(batchRecord);
 }
 
 function updateHexTileLayout() {
@@ -3772,13 +3663,12 @@ function updateBasePadHexInfluence() {
     if ((tile.userData.basePadLight || 0) > 0 || tile.userData.basePadOverlayId >= 0) {
       tile.userData.basePadLight = 0;
       tile.userData.basePadOverlayId = -1;
-      setHexTileDisplayColor(
-        hexTileInstanceColor,
+      syncHexTileDisplayColor(
+        tile,
         tile.userData.hitLight || 0,
         tile.userData.playerLight || 0,
         0
       );
-      syncHexTileInstance(tile, hexTileInstanceColor);
     }
   }
   if (basePadHexOverlay) {
@@ -11700,8 +11590,7 @@ function refreshRoadTileInstances() {
     const hitLight = tile.userData.hitLight || 0;
     const playerLight = tile.userData.playerLight || 0;
     const basePadLight = tile.userData.basePadLight || 0;
-    setHexTileDisplayColor(hexTileInstanceColor, hitLight, playerLight, basePadLight);
-    syncHexTileInstance(tile, hexTileInstanceColor);
+    syncHexTileDisplayColor(tile, hitLight, playerLight, basePadLight);
   }
 }
 
