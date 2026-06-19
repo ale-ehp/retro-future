@@ -21,6 +21,38 @@ export function clearTronRunnerCrowdState({
   runtimeStats.performanceFreezeFrameCount = 0;
 }
 
+export function syncTronRunnerCrowdScaleAndGround({
+  crowd,
+  sourceScale,
+  surfaceYForPoint,
+  fallbackPlacement,
+  groundOffset,
+  updateReflection,
+  syncMemberMatrixUpdates,
+  syncIdlePose,
+}) {
+  for (const member of crowd) {
+    member.group.scale.copy(sourceScale);
+    const surface = member.route
+      ? surfaceYForPoint(member.group.position.x, member.group.position.z)
+      : null;
+    if (surface) {
+      member.group.position.y = surface.y;
+      member.surface = surface.surface;
+      member.groundOffset = member.group.position.y - surface.groundY;
+    } else {
+      const placement = fallbackPlacement(member.index);
+      member.group.position.set(placement.x, placement.y, placement.z);
+      member.group.rotation.y = placement.yaw;
+      member.surface = placement.surface;
+      member.groundOffset = groundOffset;
+    }
+    updateReflection(member);
+    syncMemberMatrixUpdates(member, true);
+  }
+  syncIdlePose();
+}
+
 export function createTronRunnerCrowdRuntime({
   crowd,
   group,
