@@ -158,3 +158,44 @@ export function updateTronRunnerCrowdReflectionBudget({
     stats.reflectionCandidateCount
   );
 }
+
+function tronRunnerSegmentHitsBoxXZ(ax, az, bx, bz, cx, cz, hw, hd) {
+  const dx = bx - ax;
+  const dz = bz - az;
+  let tmin = 0;
+  let tmax = 1;
+  if (Math.abs(dx) < 1e-6) {
+    if (ax < cx - hw || ax > cx + hw) return false;
+  } else {
+    let t1 = (cx - hw - ax) / dx;
+    let t2 = (cx + hw - ax) / dx;
+    if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
+    tmin = Math.max(tmin, t1);
+    tmax = Math.min(tmax, t2);
+    if (tmin > tmax) return false;
+  }
+  if (Math.abs(dz) < 1e-6) {
+    if (az < cz - hd || az > cz + hd) return false;
+  } else {
+    let t1 = (cz - hd - az) / dz;
+    let t2 = (cz + hd - az) / dz;
+    if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
+    tmin = Math.max(tmin, t1);
+    tmax = Math.min(tmax, t2);
+    if (tmin > tmax) return false;
+  }
+  return true;
+}
+
+export function tronRunnerCrowdReflectionOccludedByBuilding(member, cameraPosition, colliderRecords) {
+  const px = member.group.position.x;
+  const pz = member.group.position.z;
+  const camX = cameraPosition.x;
+  const camZ = cameraPosition.z;
+  for (const record of colliderRecords) {
+    const c = record.collider;
+    if (!c) continue;
+    if (tronRunnerSegmentHitsBoxXZ(camX, camZ, px, pz, c.x, c.z, c.hw, c.hd)) return true;
+  }
+  return false;
+}
