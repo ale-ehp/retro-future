@@ -252,6 +252,7 @@ import {
 import {
   clearTronRunnerCrowdState,
   createTronRunnerCrowdRuntime,
+  syncTronRunnerCrowdScaleAndGround,
 } from './character/runner-crowd-runtime.js';
 import {
   createTronRunnerCrowdRoutesRuntime,
@@ -3105,6 +3106,16 @@ const tronRunnerCrowdRoutes = createTronRunnerCrowdRoutesRuntime({
   gridBlock: GRID_BLOCK,
   sideBase: SIDE_BUILDING_BASE,
 });
+const tronRunnerCrowdScaleGroundState = {
+  crowd: tronRunnerCrowd,
+  sourceScale: tronRunnerWalker.scale,
+  surfaceYForPoint: tronRunnerSurfaceYForPoint,
+  fallbackPlacement: tronRunnerCrowdRoutes.fallbackPlacement,
+  groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
+  updateReflection: crowdRuntimeUpdateReflection,
+  syncMemberMatrixUpdates: syncTronRunnerCrowdMemberMatrixUpdates,
+  syncIdlePose: () => tronRunnerIdleCharacterRuntime.syncPose(),
+};
 const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   crowd: tronRunnerCrowd,
   group: tronRunnerCrowdGroup,
@@ -3114,7 +3125,7 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   buildImpl: crowdRuntimeBuild,
   updateImpl: crowdRuntimeUpdate,
   inspectImpl: crowdRuntimeInspect,
-  syncScaleAndGroundImpl: crowdRuntimeSyncScaleAndGround,
+  syncScaleAndGroundImpl: () => syncTronRunnerCrowdScaleAndGround(tronRunnerCrowdScaleGroundState),
 });
 const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerState: tronRunnerState,
@@ -3398,29 +3409,6 @@ function normalizeTronRunnerCrowdState(member, now) {
   }
 }
 
-function crowdRuntimeSyncScaleAndGround() {
-  for (const member of tronRunnerCrowd) {
-    member.group.scale.copy(tronRunnerWalker.scale);
-    const surface = member.route
-      ? tronRunnerSurfaceYForPoint(member.group.position.x, member.group.position.z)
-      : null;
-    if (surface) {
-      member.group.position.y = surface.y;
-      member.surface = surface.surface;
-      member.groundOffset = member.group.position.y - surface.groundY;
-    } else {
-      const placement = tronRunnerCrowdRoutes.fallbackPlacement(member.index);
-      member.group.position.set(placement.x, placement.y, placement.z);
-      member.group.rotation.y = placement.yaw;
-      member.surface = placement.surface;
-      member.groundOffset = TRON_RUNNER_CROWD_GROUND_OFFSET;
-    }
-    crowdRuntimeUpdateReflection(member);
-    syncTronRunnerCrowdMemberMatrixUpdates(member, true);
-  }
-  tronRunnerIdleCharacterRuntime.syncPose();
-}
-
 const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
 let tronRunnerCrowdAppearArmedAt = 0;
 
@@ -3655,7 +3643,7 @@ function processTronRunnerCrowdBuildQueue() {
   tronRunnerCrowdBuildStats.built = job.nextIndex;
   tronRunnerCrowdBuildStats.lastChunkMs = performance.now() - started;
   if (job.nextIndex < TRON_RUNNER_CROWD_COUNT) return;
-  crowdRuntimeSyncScaleAndGround();
+  tronRunnerCrowdRuntime.syncScaleAndGround();
   syncTronRunnerCrowdVisibility();
   tronRunnerCrowdBuildStats.status = 'done';
   tronRunnerCrowdBuildStats.durationMs = performance.now() - job.startedAt;
