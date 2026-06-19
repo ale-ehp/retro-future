@@ -164,10 +164,6 @@ import {
   TRON_RUNNER_WALK_CYCLE_DISTANCE,
 } from './character/characters.js';
 import {
-  TRON_RUNNER_CROWD_COLOR_PLAN,
-  TRON_RUNNER_CROWD_COLOR_PRESETS,
-} from './character/character-colors.js';
-import {
   createTronRunnerCrowdMemberRecord,
   fitTronRunnerModel as fitTronRunnerModelCore,
   makeTronRunnerActionSet,
@@ -190,9 +186,6 @@ import {
   tronRunnerCrowdWalkCycleOffset,
   updateTronRunnerCrowdCullingState,
 } from './character/character-crowd.js';
-import {
-  makeTronRunnerCrowdSuitMaterial as createTronRunnerCrowdSuitMaterial,
-} from './character/character-materials.js';
 import {
   createTronMainPlayerBodyRuntime,
 } from './character/main-player-body.js';
@@ -263,6 +256,9 @@ import {
 import {
   createTronRunnerCrowdRoutesRuntime,
 } from './character/runner-crowd-routes.js';
+import {
+  createTronRunnerCrowdMaterialsRuntime,
+} from './character/runner-crowd-materials.js';
 import {
   createTronRunnerReflectionRigRuntime,
 } from './character/runner-reflection-rig.js';
@@ -2955,27 +2951,6 @@ const tronMainPlayerBody = createTronMainPlayerBodyRuntime({
 });
 scene.add(tronMainPlayerBody.group);
 
-function tronRunnerCrowdColorPresetForIndex(index) {
-  // The two start-cluster companions on the road by the landing point are colour-locked:
-  // index 0 = cyan ('current'), index 1 = green. Everyone else follows the colour plan.
-  if (index === 0) return TRON_RUNNER_CROWD_COLOR_PRESETS.current;
-  if (index === 1) return TRON_RUNNER_CROWD_COLOR_PRESETS.green || TRON_RUNNER_CROWD_COLOR_PRESETS.current;
-  const key = TRON_RUNNER_CROWD_COLOR_PLAN[index % TRON_RUNNER_CROWD_COLOR_PLAN.length] || 'current';
-  return TRON_RUNNER_CROWD_COLOR_PRESETS[key] || TRON_RUNNER_CROWD_COLOR_PRESETS.current;
-}
-
-function makeTronRunnerCrowdSuitMaterial(colorPreset) {
-  return createTronRunnerCrowdSuitMaterial({
-    baseMaterial: tronRunnerSuitMat,
-    colorPreset,
-    emissiveIntensity: tronRunnerCrowdLedEmissiveIntensity({
-      ledBrightness: tronRunnerLedBrightness,
-      ledBloom: tronRunnerLedBloom,
-    }),
-    ledBloom: tronRunnerLedBloom,
-  });
-}
-
 const tronRunnerShadowMat = new THREE.MeshBasicMaterial({
   color: TRON_RUNNER_SHADOW_COLOR,
   alphaMap: tronRunnerShadowTextureState.texture,
@@ -3043,6 +3018,11 @@ let tronRunnerRimLight = 1;
 let tronRunnerFillLight = 1;
 let tronRunnerLedBrightness = TRON_RUNNER_CHARACTER_LED_BRIGHTNESS_MULTIPLIER;
 let tronRunnerLedBloom = TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST;
+const tronRunnerCrowdMaterials = createTronRunnerCrowdMaterialsRuntime({
+  baseMaterial: tronRunnerSuitMat,
+  getLedBrightness: () => tronRunnerLedBrightness,
+  getLedBloom: () => tronRunnerLedBloom,
+});
 let tronRunnerMaterialReflect = 0.06;
 let tronRunnerMaterialMetalness = 0.12;
 let tronRunnerMaterialRoughness = 0.92;
@@ -3071,8 +3051,8 @@ const tronRunnerIdleCharacterRuntime = createTronRunnerIdleCharacterRuntime({
   cloneRunnerSkeleton: () => cloneRunnerSkeleton,
   resolveRoundedCollider: resolveTronRunnerRoundedCollider,
   crowdRecordRoadDir: tronRunnerCrowdRecordRoadDir,
-  crowdColorPresetForIndex: tronRunnerCrowdColorPresetForIndex,
-  makeCrowdSuitMaterial: makeTronRunnerCrowdSuitMaterial,
+  crowdColorPresetForIndex: tronRunnerCrowdMaterials.colorPresetForIndex,
+  makeCrowdSuitMaterial: tronRunnerCrowdMaterials.makeSuitMaterial,
   surfaceYForPoint: tronRunnerSurfaceYForPoint,
   syncRevealIdleVisibility: () => tronRunnerReveal?.syncIdleVisibility(),
   getSideBuildingRecords: () => sideBuildingRecords,
@@ -3748,7 +3728,7 @@ function crowdRuntimeBuildMember(job, index) {
   group.name = `tron-runner-crowd-${index + 1}`;
   group.visible = false;
   group.scale.copy(tronRunnerWalker.scale);
-  const colorPreset = tronRunnerCrowdColorPresetForIndex(index);
+  const colorPreset = tronRunnerCrowdMaterials.colorPresetForIndex(index);
 
   const cloneModel = cloneRunnerSkeleton(job.sourceModel);
   cloneModel.name = `soldier-rigged-runner-crowd-${index + 1}`;
@@ -3761,7 +3741,7 @@ function crowdRuntimeBuildMember(job, index) {
     obj.layers.set(0);
     cloneMeshes.push(obj);
   });
-  const crowdMaterial = makeTronRunnerCrowdSuitMaterial(colorPreset);
+  const crowdMaterial = tronRunnerCrowdMaterials.makeSuitMaterial(colorPreset);
   cloneMeshes.forEach((mesh) => {
     mesh.material = crowdMaterial;
   });
