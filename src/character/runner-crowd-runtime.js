@@ -4,6 +4,7 @@ import {
   tronRunnerCrowdAvoidance as tronRunnerCrowdAvoidanceCore,
   tronRunnerCrowdDistanceToCamera as tronRunnerCrowdDistanceToCameraCore,
   tronRunnerCrowdLodStride as tronRunnerCrowdLodStrideCore,
+  tronRunnerCrowdTryDeadlockNudge as tronRunnerCrowdTryDeadlockNudgeCore,
   updateTronRunnerCrowdCullingState,
 } from './character-crowd.js';
 import {
@@ -13,6 +14,10 @@ import {
   tronRunnerCrowdColliderLabel,
   tronRunnerCrowdPointInsideRoute as tronRunnerCrowdPointInsideRouteCore,
 } from './character-collision.js';
+import {
+  tronRunnerCrowdPostRevealReflectionRampLimit as tronRunnerCrowdPostRevealReflectionRampLimitCore,
+  updateTronRunnerCrowdReflectionBudget as updateTronRunnerCrowdReflectionBudgetCore,
+} from './character-reflections.js';
 
 export function clearTronRunnerCrowdState({
   crowd,
@@ -269,6 +274,80 @@ export function tronRunnerCrowdAvoidanceRuntime(
   return tronRunnerCrowdAvoidanceCore(member, current, nextPoint, dirX, dirZ, dt, now, deps);
 }
 
+export function tronRunnerCrowdTryDeadlockNudgeRuntime(
+  deps,
+  member,
+  current,
+  nextPoint,
+  dirX,
+  dirZ,
+  distance,
+  collided,
+  now,
+) {
+  return tronRunnerCrowdTryDeadlockNudgeCore(member, current, nextPoint, dirX, dirZ, distance, collided, now, deps);
+}
+
+export function tronRunnerCrowdPostRevealReflectionRampLimitRuntime({
+  stats,
+  rampEnabled,
+  rampMs,
+  cityRevealWireframeEnabled,
+  getCityRevealComplete,
+  getCityRevealCompletedAt,
+  postRevealElapsedMs,
+}, maxLimit, now = performance.now()) {
+  return tronRunnerCrowdPostRevealReflectionRampLimitCore({
+    maxLimit,
+    now,
+    stats,
+    rampEnabled,
+    rampMs,
+    cityRevealWireframeEnabled,
+    cityRevealComplete: getCityRevealComplete(),
+    cityRevealCompletedAt: getCityRevealCompletedAt(),
+    postRevealElapsedMs,
+  });
+}
+
+export function updateTronRunnerCrowdReflectionBudgetRuntime({
+  stats,
+  crowd,
+  crowdGroup,
+  reflectionCandidates,
+  dynamicReflectionEnabled,
+  getCrowdReflectionsIsolation,
+  reflectionRevealEnabled,
+  reflectionMaxActive,
+  reflectionMinFps,
+  reflectionNearDistance,
+  getLatestMeasuredFps,
+  getCityRevealComplete,
+  postRevealElapsedMs,
+  isCityRevealPerformanceCritical,
+  distanceToCamera,
+  rampLimit,
+}) {
+  updateTronRunnerCrowdReflectionBudgetCore({
+    stats,
+    crowd,
+    crowdGroup,
+    reflectionCandidates,
+    dynamicReflectionEnabled,
+    crowdReflectionsIsolation: getCrowdReflectionsIsolation(),
+    reflectionRevealEnabled,
+    reflectionMaxActive,
+    reflectionMinFps,
+    reflectionNearDistance,
+    latestMeasuredFps: getLatestMeasuredFps(),
+    cityRevealComplete: getCityRevealComplete(),
+    postRevealElapsedMs,
+    isCityRevealPerformanceCritical,
+    distanceToCamera,
+    rampLimit,
+  });
+}
+
 export function createTronRunnerCrowdRuntime({
   crowd,
   group,
@@ -291,6 +370,9 @@ export function createTronRunnerCrowdRuntime({
   resolveCollisionImpl,
   buildingCollisionDiagnosticImpl,
   avoidanceImpl,
+  tryDeadlockNudgeImpl,
+  reflectionRampLimitImpl,
+  updateReflectionBudgetImpl,
 }) {
   function resolveCameraCollision() {
     if (isCameraCollisionDisabled()) return;
@@ -335,6 +417,9 @@ export function createTronRunnerCrowdRuntime({
     resolveCollision: resolveCollisionImpl,
     buildingCollisionDiagnostic: buildingCollisionDiagnosticImpl,
     avoidance: avoidanceImpl,
+    tryDeadlockNudge: tryDeadlockNudgeImpl,
+    reflectionRampLimit: reflectionRampLimitImpl,
+    updateReflectionBudget: updateReflectionBudgetImpl,
     resolveCameraCollision,
   };
 }

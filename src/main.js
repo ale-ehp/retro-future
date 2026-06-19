@@ -170,7 +170,6 @@ import {
   resolveTronRunnerRoundedCollider,
 } from './character/character-collision.js';
 import {
-  tronRunnerCrowdTryDeadlockNudge as tronRunnerCrowdTryDeadlockNudgeCore,
   tronRunnerCrowdWalkCycleOffset,
 } from './character/character-crowd.js';
 import {
@@ -200,8 +199,6 @@ import {
   applyTronRunnerCrowdReflectionState,
   buildTronRunnerCrowdReflection,
   tronRunnerCrowdReflectionOccludedByBuilding,
-  tronRunnerCrowdPostRevealReflectionRampLimit as tronRunnerCrowdPostRevealReflectionRampLimitCore,
-  updateTronRunnerCrowdReflectionBudget as updateTronRunnerCrowdReflectionBudgetCore,
 } from './character/character-reflections.js';
 import {
   countBy,
@@ -253,6 +250,9 @@ import {
   tronRunnerCrowdDistanceToCameraRuntime,
   tronRunnerCrowdLodStrideRuntime,
   tronRunnerCrowdPointInsideRouteRuntime,
+  tronRunnerCrowdPostRevealReflectionRampLimitRuntime,
+  tronRunnerCrowdTryDeadlockNudgeRuntime,
+  updateTronRunnerCrowdReflectionBudgetRuntime,
   updateTronRunnerCrowdCullingRuntime,
 } from './character/runner-crowd-runtime.js';
 import {
@@ -3179,6 +3179,33 @@ const tronRunnerCrowdBuildingCollisionDiagnosticState = {
   getColliderRecords: tronRunnerCrowdColliderRecords,
   padding: TRON_RUNNER_CROWD_BUILDING_GUARD,
 };
+const tronRunnerCrowdReflectionRampState = {
+  stats: tronRunnerCrowdRuntimeStats,
+  rampEnabled: TRON_RUNNER_CROWD_REFLECTION_POST_REVEAL_RAMP_ENABLED,
+  rampMs: TRON_RUNNER_CROWD_REFLECTION_POST_REVEAL_RAMP_MS,
+  cityRevealWireframeEnabled,
+  getCityRevealComplete: () => cityRevealComplete,
+  getCityRevealCompletedAt: () => cityRevealCompletedAt,
+  postRevealElapsedMs: cityRevealPostRevealElapsedMs,
+};
+const tronRunnerCrowdReflectionBudgetState = {
+  stats: tronRunnerCrowdRuntimeStats,
+  crowd: tronRunnerCrowd,
+  crowdGroup: tronRunnerCrowdGroup,
+  reflectionCandidates: tronRunnerCrowdReflectionCandidates,
+  dynamicReflectionEnabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
+  getCrowdReflectionsIsolation: () => postRevealPerfIsolationState.crowdReflections,
+  reflectionRevealEnabled: TRON_RUNNER_CROWD_REFLECTION_REVEAL_ENABLED,
+  reflectionMaxActive: TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE,
+  reflectionMinFps: TRON_RUNNER_CROWD_REFLECTION_MIN_FPS,
+  reflectionNearDistance: TRON_RUNNER_CROWD_REFLECTION_NEAR_DISTANCE,
+  getLatestMeasuredFps: () => latestMeasuredFps,
+  getCityRevealComplete: () => cityRevealComplete,
+  postRevealElapsedMs: cityRevealPostRevealElapsedMs,
+  isCityRevealPerformanceCritical,
+  distanceToCamera: (member) => tronRunnerCrowdRuntime.distanceToCamera(member),
+  rampLimit: (maxLimit, now) => tronRunnerCrowdRuntime.reflectionRampLimit(maxLimit, now),
+};
 const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   crowd: tronRunnerCrowd,
   group: tronRunnerCrowdGroup,
@@ -3203,6 +3230,13 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   avoidanceImpl: (member, current, nextPoint, dirX, dirZ, dt, now) => (
     tronRunnerCrowdAvoidanceRuntime(tronRunnerCrowdAvoidanceDeps, member, current, nextPoint, dirX, dirZ, dt, now)
   ),
+  tryDeadlockNudgeImpl: (member, current, nextPoint, dirX, dirZ, distance, collided, now) => (
+    tronRunnerCrowdTryDeadlockNudgeRuntime(tronRunnerCrowdDeadlockDeps, member, current, nextPoint, dirX, dirZ, distance, collided, now)
+  ),
+  reflectionRampLimitImpl: (maxLimit, now) => (
+    tronRunnerCrowdPostRevealReflectionRampLimitRuntime(tronRunnerCrowdReflectionRampState, maxLimit, now)
+  ),
+  updateReflectionBudgetImpl: () => updateTronRunnerCrowdReflectionBudgetRuntime(tronRunnerCrowdReflectionBudgetState),
 });
 const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerState: tronRunnerState,
@@ -3385,41 +3419,6 @@ function tronRunnerCrowdGridCoord(value) {
 function cityRevealPostRevealElapsedMs(now = performance.now()) {
   if (!cityRevealComplete || !cityRevealCompletedAt) return 0;
   return Math.max(0, now - cityRevealCompletedAt);
-}
-
-function tronRunnerCrowdPostRevealReflectionRampLimit(maxLimit, now = performance.now()) {
-  return tronRunnerCrowdPostRevealReflectionRampLimitCore({
-    maxLimit,
-    now,
-    stats: tronRunnerCrowdRuntimeStats,
-    rampEnabled: TRON_RUNNER_CROWD_REFLECTION_POST_REVEAL_RAMP_ENABLED,
-    rampMs: TRON_RUNNER_CROWD_REFLECTION_POST_REVEAL_RAMP_MS,
-    cityRevealWireframeEnabled,
-    cityRevealComplete,
-    cityRevealCompletedAt,
-    postRevealElapsedMs: cityRevealPostRevealElapsedMs,
-  });
-}
-
-function crowdRuntimeUpdateReflectionBudget() {
-  updateTronRunnerCrowdReflectionBudgetCore({
-    stats: tronRunnerCrowdRuntimeStats,
-    crowd: tronRunnerCrowd,
-    crowdGroup: tronRunnerCrowdGroup,
-    reflectionCandidates: tronRunnerCrowdReflectionCandidates,
-    dynamicReflectionEnabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
-    crowdReflectionsIsolation: postRevealPerfIsolationState.crowdReflections,
-    reflectionRevealEnabled: TRON_RUNNER_CROWD_REFLECTION_REVEAL_ENABLED,
-    reflectionMaxActive: TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE,
-    reflectionMinFps: TRON_RUNNER_CROWD_REFLECTION_MIN_FPS,
-    reflectionNearDistance: TRON_RUNNER_CROWD_REFLECTION_NEAR_DISTANCE,
-    latestMeasuredFps,
-    cityRevealComplete,
-    postRevealElapsedMs: cityRevealPostRevealElapsedMs,
-    isCityRevealPerformanceCritical,
-    distanceToCamera: tronRunnerCrowdRuntime.distanceToCamera,
-    rampLimit: tronRunnerCrowdPostRevealReflectionRampLimit,
-  });
 }
 
 function setTronRunnerSubtreeMatrixAutoUpdate(root, enabled) {
@@ -3658,10 +3657,6 @@ const tronRunnerCrowdDeadlockDeps = {
   resolveCollision: tronRunnerCrowdRuntime.resolveCollision,
   setState: tronRunnerCrowdRuntime.setState,
 };
-
-function tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ, distance, collided, now) {
-  return tronRunnerCrowdTryDeadlockNudgeCore(member, current, nextPoint, dirX, dirZ, distance, collided, now, tronRunnerCrowdDeadlockDeps);
-}
 
 // Occasional standstill at a waypoint so the crowd reads as people, not marchers.
 // Distance-driven walk freezes the legs while paused (no moonwalk).
@@ -3929,7 +3924,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
       tronRunnerCrowdRuntime.setState(member, 'avoid', now, TRON_RUNNER_CROWD_YIELD_DURATION_MS);
     }
-    tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ, distance, collided, now);
+    tronRunnerCrowdRuntime.tryDeadlockNudge(member, current, nextPoint, dirX, dirZ, distance, collided, now);
   }
   const movedDistance = Math.hypot(nextPoint.x - current.x, nextPoint.z - current.z);
   const surface = tronRunnerSurfaceYForPoint(nextPoint.x, nextPoint.z);
@@ -3971,7 +3966,7 @@ function crowdRuntimeUpdate(dt) {
   tronRunnerCrowdRuntimeStats.avoidancePairs = 0;
   tronRunnerCrowdRuntimeStats.maxAvoidanceOverlap = 0;
   tronRunnerCrowdRuntime.updateCulling();
-  crowdRuntimeUpdateReflectionBudget();
+  tronRunnerCrowdRuntime.updateReflectionBudget();
   for (const member of tronRunnerCrowd) syncTronRunnerCrowdMemberMatrixUpdates(member);
   tronRunnerCrowdRuntime.prepareSpatialGrid();
   for (const member of tronRunnerCrowd) {
