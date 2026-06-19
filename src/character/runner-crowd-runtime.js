@@ -1,11 +1,16 @@
 import {
   nearbyTronRunnerCrowdMembers,
   prepareTronRunnerCrowdSpatialGrid,
+  tronRunnerCrowdAvoidance as tronRunnerCrowdAvoidanceCore,
   tronRunnerCrowdDistanceToCamera as tronRunnerCrowdDistanceToCameraCore,
   tronRunnerCrowdLodStride as tronRunnerCrowdLodStrideCore,
   updateTronRunnerCrowdCullingState,
 } from './character-crowd.js';
 import {
+  resolveTronRunnerCrowdCollision as resolveTronRunnerCrowdCollisionCore,
+  resolveTronRunnerRoundedCollider,
+  tronRunnerCrowdBuildingCollisionDiagnostic as tronRunnerCrowdBuildingCollisionDiagnosticCore,
+  tronRunnerCrowdColliderLabel,
   tronRunnerCrowdPointInsideRoute as tronRunnerCrowdPointInsideRouteCore,
 } from './character-collision.js';
 
@@ -222,6 +227,48 @@ export function tronRunnerCrowdPointInsideRouteRuntime({
   });
 }
 
+export function resolveTronRunnerCrowdCollisionRuntime({
+  collisionsEnabled,
+  getColliderRecords,
+  buildingGuard,
+  pointInsideRoute,
+}, member, point) {
+  return resolveTronRunnerCrowdCollisionCore(
+    member,
+    point,
+    collisionsEnabled,
+    getColliderRecords,
+    buildingGuard,
+    pointInsideRoute,
+  );
+}
+
+export function tronRunnerCrowdBuildingCollisionDiagnosticRuntime({
+  getColliderRecords,
+  padding,
+}, member) {
+  return tronRunnerCrowdBuildingCollisionDiagnosticCore({
+    member,
+    records: getColliderRecords(),
+    padding,
+    resolveRoundedCollider: resolveTronRunnerRoundedCollider,
+    colliderLabel: tronRunnerCrowdColliderLabel,
+  });
+}
+
+export function tronRunnerCrowdAvoidanceRuntime(
+  deps,
+  member,
+  current,
+  nextPoint,
+  dirX,
+  dirZ,
+  dt,
+  now,
+) {
+  return tronRunnerCrowdAvoidanceCore(member, current, nextPoint, dirX, dirZ, dt, now, deps);
+}
+
 export function createTronRunnerCrowdRuntime({
   crowd,
   group,
@@ -241,6 +288,9 @@ export function createTronRunnerCrowdRuntime({
   setStateImpl,
   normalizeStateImpl,
   pointInsideRouteImpl,
+  resolveCollisionImpl,
+  buildingCollisionDiagnosticImpl,
+  avoidanceImpl,
 }) {
   function resolveCameraCollision() {
     if (isCameraCollisionDisabled()) return;
@@ -282,6 +332,9 @@ export function createTronRunnerCrowdRuntime({
     setState: setStateImpl,
     normalizeState: normalizeStateImpl,
     pointInsideRoute: pointInsideRouteImpl,
+    resolveCollision: resolveCollisionImpl,
+    buildingCollisionDiagnostic: buildingCollisionDiagnosticImpl,
+    avoidance: avoidanceImpl,
     resolveCameraCollision,
   };
 }

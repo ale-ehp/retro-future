@@ -167,13 +167,9 @@ import {
   makeTronRunnerActionSet,
 } from './character/character-build.js';
 import {
-  resolveTronRunnerCrowdCollision as resolveTronRunnerCrowdCollisionCore,
   resolveTronRunnerRoundedCollider,
-  tronRunnerCrowdBuildingCollisionDiagnostic as tronRunnerCrowdBuildingCollisionDiagnosticCore,
-  tronRunnerCrowdColliderLabel,
 } from './character/character-collision.js';
 import {
-  tronRunnerCrowdAvoidance as tronRunnerCrowdAvoidanceCore,
   tronRunnerCrowdTryDeadlockNudge as tronRunnerCrowdTryDeadlockNudgeCore,
   tronRunnerCrowdWalkCycleOffset,
 } from './character/character-crowd.js';
@@ -248,9 +244,12 @@ import {
   nearbyTronRunnerCrowdMembersRuntime,
   normalizeTronRunnerCrowdStateRuntime,
   prepareTronRunnerCrowdSpatialGridRuntime,
+  resolveTronRunnerCrowdCollisionRuntime,
   setTronRunnerCrowdStateRuntime,
   syncTronRunnerCrowdScaleAndGround,
   syncTronRunnerCrowdVisibilityState,
+  tronRunnerCrowdAvoidanceRuntime,
+  tronRunnerCrowdBuildingCollisionDiagnosticRuntime,
   tronRunnerCrowdDistanceToCameraRuntime,
   tronRunnerCrowdLodStrideRuntime,
   tronRunnerCrowdPointInsideRouteRuntime,
@@ -3170,6 +3169,16 @@ const tronRunnerCrowdStateMachineState = {
 const tronRunnerCrowdPointInsideRouteState = {
   pointInPolygon: pointInBasePadPolygon,
 };
+const tronRunnerCrowdCollisionState = {
+  collisionsEnabled: TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
+  getColliderRecords: tronRunnerCrowdColliderRecords,
+  buildingGuard: TRON_RUNNER_CROWD_BUILDING_GUARD,
+  pointInsideRoute: (member, x, z) => tronRunnerCrowdRuntime.pointInsideRoute(member, x, z),
+};
+const tronRunnerCrowdBuildingCollisionDiagnosticState = {
+  getColliderRecords: tronRunnerCrowdColliderRecords,
+  padding: TRON_RUNNER_CROWD_BUILDING_GUARD,
+};
 const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   crowd: tronRunnerCrowd,
   group: tronRunnerCrowdGroup,
@@ -3189,6 +3198,11 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   setStateImpl: setTronRunnerCrowdStateRuntime,
   normalizeStateImpl: (member, now) => normalizeTronRunnerCrowdStateRuntime(tronRunnerCrowdStateMachineState, member, now),
   pointInsideRouteImpl: (member, x, z) => tronRunnerCrowdPointInsideRouteRuntime(tronRunnerCrowdPointInsideRouteState, member, x, z),
+  resolveCollisionImpl: (member, point) => resolveTronRunnerCrowdCollisionRuntime(tronRunnerCrowdCollisionState, member, point),
+  buildingCollisionDiagnosticImpl: (member) => tronRunnerCrowdBuildingCollisionDiagnosticRuntime(tronRunnerCrowdBuildingCollisionDiagnosticState, member),
+  avoidanceImpl: (member, current, nextPoint, dirX, dirZ, dt, now) => (
+    tronRunnerCrowdAvoidanceRuntime(tronRunnerCrowdAvoidanceDeps, member, current, nextPoint, dirX, dirZ, dt, now)
+  ),
 });
 const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerState: tronRunnerState,
@@ -3618,27 +3632,6 @@ function tronRunnerCrowdColliderRecords() {
   return tronRunnerCrowdColliderRecordCache;
 }
 
-function crowdRuntimeResolveCollision(member, point) {
-  return resolveTronRunnerCrowdCollisionCore(
-    member,
-    point,
-    TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
-    tronRunnerCrowdColliderRecords,
-    TRON_RUNNER_CROWD_BUILDING_GUARD,
-    tronRunnerCrowdRuntime.pointInsideRoute,
-  );
-}
-
-function tronRunnerCrowdBuildingCollisionDiagnostic(member) {
-  return tronRunnerCrowdBuildingCollisionDiagnosticCore({
-    member,
-    records: tronRunnerCrowdColliderRecords(),
-    padding: TRON_RUNNER_CROWD_BUILDING_GUARD,
-    resolveRoundedCollider: resolveTronRunnerRoundedCollider,
-    colliderLabel: tronRunnerCrowdColliderLabel,
-  });
-}
-
 const tronRunnerCrowdAvoidanceDeps = {
   intelligenceEnabled: TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED,
   avoidanceEnabled: TRON_RUNNER_CROWD_AVOIDANCE_ENABLED,
@@ -3655,10 +3648,6 @@ const tronRunnerCrowdAvoidanceDeps = {
   playerObject: tronRunnerWalker,
 };
 
-function crowdRuntimeAvoidance(member, current, nextPoint, dirX, dirZ, dt, now) {
-  return tronRunnerCrowdAvoidanceCore(member, current, nextPoint, dirX, dirZ, dt, now, tronRunnerCrowdAvoidanceDeps);
-}
-
 const tronRunnerCrowdDeadlockDeps = {
   reachRadius: TRON_RUNNER_CROWD_REACH_RADIUS,
   deadlockMoveEps: TRON_RUNNER_CROWD_DEADLOCK_MOVE_EPS,
@@ -3666,7 +3655,7 @@ const tronRunnerCrowdDeadlockDeps = {
   deadlockNudge: TRON_RUNNER_CROWD_DEADLOCK_NUDGE,
   yieldDurationMs: TRON_RUNNER_CROWD_YIELD_DURATION_MS,
   pointInsideRoute: tronRunnerCrowdRuntime.pointInsideRoute,
-  resolveCollision: crowdRuntimeResolveCollision,
+  resolveCollision: tronRunnerCrowdRuntime.resolveCollision,
   setState: tronRunnerCrowdRuntime.setState,
 };
 
@@ -3927,14 +3916,14 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   let collided = false;
   if (!isGreeter) {
     // The greeter walks straight to the player at normal pace, ignoring crowd jostling.
-    const avoidance = crowdRuntimeAvoidance(member, current, nextPoint, dirX, dirZ, dt, now);
+    const avoidance = tronRunnerCrowdRuntime.avoidance(member, current, nextPoint, dirX, dirZ, dt, now);
     if (avoidance.speedScale < 1) {
       nextPoint.x = current.x + dirX * Math.min(distance, baseStep * avoidance.speedScale);
       nextPoint.z = current.z + dirZ * Math.min(distance, baseStep * avoidance.speedScale);
     }
     nextPoint.x += avoidance.x;
     nextPoint.z += avoidance.z;
-    collided = crowdRuntimeResolveCollision(member, nextPoint);
+    collided = tronRunnerCrowdRuntime.resolveCollision(member, nextPoint);
     if (collided) {
       member.collisionCount += 1;
       member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
@@ -4075,7 +4064,7 @@ function crowdRuntimeInspect() {
   const members = tronRunnerCrowd.map((member) => {
     tronRunnerCrowdBox.setFromObject(member.group);
     tronRunnerCrowdBox.getSize(tronRunnerCrowdSize);
-    const buildingCollision = tronRunnerCrowdBuildingCollisionDiagnostic(member);
+    const buildingCollision = tronRunnerCrowdRuntime.buildingCollisionDiagnostic(member);
     const heightFromRoad = member.group.position.y - roadTileTopY();
     const targetHeight = TRON_RUNNER_TARGET_HEIGHT * member.group.scale.y;
     const materialInspect = inspectTronRunnerMaterials(member.model);
