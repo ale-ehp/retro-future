@@ -78,7 +78,6 @@ import {
   TRON_RUNNER_CROWD_AVOIDANCE_STRENGTH,
   TRON_RUNNER_CROWD_BUILDING_GUARD,
   TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
-  TRON_RUNNER_CROWD_COLLISION_RADIUS,
   TRON_RUNNER_CROWD_COUNT,
   TRON_RUNNER_CROWD_CULLED_LOD_STRIDE,
   TRON_RUNNER_CROWD_CULLING_ENABLED,
@@ -90,12 +89,10 @@ import {
   TRON_RUNNER_CROWD_DISTANCE_CACHE_ENABLED,
   TRON_RUNNER_CROWD_DISTANCE_DRIVEN_WALK_ENABLED,
   TRON_RUNNER_CROWD_ENABLED,
-  TRON_RUNNER_CROWD_EXCLUDED_CIVICS,
   TRON_RUNNER_CROWD_GROUND_OFFSET,
   TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED,
   TRON_RUNNER_CROWD_LOD_MID_DISTANCE,
   TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE,
-  TRON_RUNNER_CROWD_LOOP_FRONT_ONLY,
   TRON_RUNNER_CROWD_MAX_ACCUMULATED_DT,
   TRON_RUNNER_CROWD_MAX_MOVE_SUBSTEP,
   TRON_RUNNER_CROWD_PATH_MODE,
@@ -110,14 +107,9 @@ import {
   TRON_RUNNER_CROWD_REFLECTION_POST_REVEAL_RAMP_ENABLED,
   TRON_RUNNER_CROWD_REFLECTION_POST_REVEAL_RAMP_MS,
   TRON_RUNNER_CROWD_REFLECTION_REVEAL_ENABLED,
-  TRON_RUNNER_CROWD_ROUTE_RECORD_SPREAD,
   TRON_RUNNER_CROWD_SCALE_LOCK,
-  TRON_RUNNER_CROWD_SIDEWALK_LANE_EDGE_INSET,
-  TRON_RUNNER_CROWD_SIDEWALK_ROUTE_END_INSET,
-  TRON_RUNNER_CROWD_SIDE_STREET_GROUP_EXTRA_COUNT,
   TRON_RUNNER_CROWD_SPATIAL_CELL,
   TRON_RUNNER_CROWD_SPEED_SCALE,
-  TRON_RUNNER_CROWD_START_CLUSTER_COUNT,
   TRON_RUNNER_CROWD_TARGET_FPS,
   TRON_RUNNER_CROWD_TURN_DURATION_MS,
   TRON_RUNNER_CROWD_UPDATE_INTERVAL,
@@ -245,23 +237,7 @@ import {
   tronRunnerCrowdGridKey,
 } from './character/character-movement.js';
 import {
-  tronRunnerCrowdCandidateRecords as tronRunnerCrowdCandidateRecordsCore,
-  tronRunnerCrowdBuildRoute as tronRunnerCrowdBuildRouteCore,
-  tronRunnerCrowdDetectedSideStreetLanes as tronRunnerCrowdDetectedSideStreetLanesCore,
-  tronRunnerCrowdFallbackPlacement as tronRunnerCrowdFallbackPlacementCore,
-  tronRunnerCrowdLoopRouteForRecord as tronRunnerCrowdLoopRouteForRecordCore,
   tronRunnerCrowdRecordRoadDir,
-  tronRunnerCrowdRoadFacingRoutePoint as tronRunnerCrowdRoadFacingRoutePointCore,
-  tronRunnerCrowdRoadFacingStart as tronRunnerCrowdRoadFacingStartCore,
-  tronRunnerCrowdRouteForRecord as tronRunnerCrowdRouteForRecordCore,
-  tronRunnerCrowdRouteStyleForIndex as tronRunnerCrowdRouteStyleForIndexCore,
-  tronRunnerCrowdRouteStyleOrdinal as tronRunnerCrowdRouteStyleOrdinalCore,
-  tronRunnerCrowdSecondaryStreetSummary as tronRunnerCrowdSecondaryStreetSummaryCore,
-  tronRunnerCrowdSideStreetLaneAssignment,
-  tronRunnerCrowdSideStreetLateralRoute as tronRunnerCrowdSideStreetLateralRouteCore,
-  tronRunnerCrowdSideStreetPairs as tronRunnerCrowdSideStreetPairsCore,
-  tronRunnerCrowdSideStreetRouteForPair as tronRunnerCrowdSideStreetRouteForPairCore,
-  tronRunnerCrowdStartPlayerRoute as tronRunnerCrowdStartPlayerRouteCore,
 } from './character/character-routes.js';
 import {
   makeTronRunnerSuitEmissiveTexture,
@@ -284,6 +260,9 @@ import {
 import {
   createTronRunnerCrowdRuntime,
 } from './character/runner-crowd-runtime.js';
+import {
+  createTronRunnerCrowdRoutesRuntime,
+} from './character/runner-crowd-routes.js';
 import {
   createTronRunnerReflectionRigRuntime,
 } from './character/runner-reflection-rig.js';
@@ -3114,6 +3093,21 @@ let tronRunnerCrowdBuildJob = null;
 const tronRunnerCrowdBuildStats = createTronRunnerCrowdBuildStats();
 const tronRunnerCrowdRuntimeStats = createTronRunnerCrowdRuntimeStats();
 const tronRunnerCrowdReflectionCandidates = [];
+const tronRunnerCrowdRoutes = createTronRunnerCrowdRoutesRuntime({
+  getSideBuildingRecords: () => sideBuildingRecords,
+  getDynamicRoadCenter: () => dynamicRoadCenter,
+  getDynamicRoadLength: () => dynamicRoadLength,
+  roadHexBoundaryLimits,
+  getRoadHalf: roadHalf,
+  getRoadTopY: roadTileTopY,
+  getStreetEdgeWidth: () => streetEdgeWidth,
+  getSideBuildingVisualWidth: sideBuildingVisualWidth,
+  getDroneAnchor: tronRunnerDroneAnchor,
+  pointInPolygon: pointInBasePadPolygon,
+  resolveRoundedCollider: resolveTronRunnerRoundedCollider,
+  gridBlock: GRID_BLOCK,
+  sideBase: SIDE_BUILDING_BASE,
+});
 const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   crowd: tronRunnerCrowd,
   group: tronRunnerCrowdGroup,
@@ -3299,162 +3293,6 @@ function tronRunnerSurfaceYForPoint(x, z) {
   return tronRunnerSurfaceScratch;
 }
 
-function tronRunnerCrowdFallbackPlacement(index) {
-  return tronRunnerCrowdFallbackPlacementCore({
-    index,
-    limits: roadHexBoundaryLimits(),
-    dynamicRoadCenter,
-    dynamicRoadLength,
-    gridBlock: GRID_BLOCK,
-    roadHalf: roadHalf(),
-    roadTopY: roadTileTopY(),
-    groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
-  });
-}
-
-function tronRunnerCrowdCandidateRecords() {
-  return tronRunnerCrowdCandidateRecordsCore({
-    records: sideBuildingRecords,
-    excludedCivics: TRON_RUNNER_CROWD_EXCLUDED_CIVICS,
-    gridBlock: GRID_BLOCK,
-  });
-}
-
-function tronRunnerCrowdLoopRouteForRecord(record, index) {
-  return tronRunnerCrowdLoopRouteForRecordCore({
-    record,
-    index,
-    buildingGuard: TRON_RUNNER_CROWD_BUILDING_GUARD,
-    collisionRadius: TRON_RUNNER_CROWD_COLLISION_RADIUS,
-    roadTopY: roadTileTopY(),
-    groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
-    frontOnly: TRON_RUNNER_CROWD_LOOP_FRONT_ONLY,
-  });
-}
-
-function tronRunnerCrowdSideStreetPairs(records) {
-  return tronRunnerCrowdSideStreetPairsCore(records, GRID_BLOCK);
-}
-
-function tronRunnerCrowdRoadFacingRoutePoint(record, offsetZ = 0) {
-  return tronRunnerCrowdRoadFacingRoutePointCore({
-    record,
-    offsetZ,
-    edgeInsetBase: TRON_RUNNER_CROWD_SIDEWALK_LANE_EDGE_INSET,
-    buildingGuard: TRON_RUNNER_CROWD_BUILDING_GUARD,
-    roadTopY: roadTileTopY(),
-    groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
-    pointInPolygon: pointInBasePadPolygon,
-    resolveRoundedCollider: resolveTronRunnerRoundedCollider,
-  });
-}
-
-function tronRunnerCrowdSideStreetRouteForPair(pair, index) {
-  return tronRunnerCrowdSideStreetRouteForPairCore({
-    pair,
-    index,
-    gridBlock: GRID_BLOCK,
-    sideBase: SIDE_BASE,
-    roadHalf: roadHalf(),
-    roadTopY: roadTileTopY(),
-    groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
-    roadFacingRoutePoint: tronRunnerCrowdRoadFacingRoutePoint,
-  });
-}
-
-function tronRunnerCrowdDetectedSideStreetLanes(records) {
-  return tronRunnerCrowdDetectedSideStreetLanesCore({
-    records,
-    collisionRadius: TRON_RUNNER_CROWD_COLLISION_RADIUS,
-    gridBlock: GRID_BLOCK,
-    roadHalf: roadHalf(),
-    streetEdgeWidth,
-    sideBuildingWidth: sideBuildingVisualWidth(),
-  });
-}
-
-function tronRunnerCrowdSecondaryStreetSummary(records) {
-  const lanes = tronRunnerCrowdDetectedSideStreetLanes(records);
-  return tronRunnerCrowdSecondaryStreetSummaryCore(lanes);
-}
-
-function tronRunnerCrowdRouteStyleOrdinal(routeIndex, style) {
-  return tronRunnerCrowdRouteStyleOrdinalCore({
-    routeIndex,
-    style,
-    routeStyleForIndex: tronRunnerCrowdRouteStyleForIndex,
-  });
-}
-
-function tronRunnerCrowdSideStreetLateralRoute(lane, index, ordinal = 0, assignment = null) {
-  return tronRunnerCrowdSideStreetLateralRouteCore({
-    lane,
-    ordinal,
-    assignment,
-    y: roadTileTopY() + TRON_RUNNER_CROWD_GROUND_OFFSET,
-    gridBlock: GRID_BLOCK,
-  });
-}
-
-function tronRunnerCrowdRouteStyleForIndex(routeIndex) {
-  const records = tronRunnerCrowdCandidateRecords();
-  const laneCount = tronRunnerCrowdDetectedSideStreetLanes(records).length;
-  return tronRunnerCrowdRouteStyleForIndexCore({
-    routeIndex,
-    laneCount,
-    sideStreetGroupExtraCount: TRON_RUNNER_CROWD_SIDE_STREET_GROUP_EXTRA_COUNT,
-    pathMode: TRON_RUNNER_CROWD_PATH_MODE,
-  });
-}
-
-function tronRunnerCrowdStartPlayerRoute(index) {
-  return tronRunnerCrowdStartPlayerRouteCore({
-    index,
-    anchor: tronRunnerDroneAnchor(),
-    limits: roadHexBoundaryLimits(),
-    roadHalf: roadHalf(),
-    gridBlock: GRID_BLOCK,
-    startClusterCount: TRON_RUNNER_CROWD_START_CLUSTER_COUNT,
-    roadTopY: roadTileTopY(),
-    groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
-  });
-}
-
-function tronRunnerCrowdRouteForRecord(record, index) {
-  return tronRunnerCrowdRouteForRecordCore({
-    record,
-    index,
-    pathMode: TRON_RUNNER_CROWD_PATH_MODE,
-    routeEndInset: TRON_RUNNER_CROWD_SIDEWALK_ROUTE_END_INSET,
-    reachRadius: TRON_RUNNER_CROWD_REACH_RADIUS,
-    laneEdgeInset: TRON_RUNNER_CROWD_SIDEWALK_LANE_EDGE_INSET,
-    buildingGuard: TRON_RUNNER_CROWD_BUILDING_GUARD,
-    roadTopY: roadTileTopY(),
-    groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
-    pointInPolygon: pointInBasePadPolygon,
-  });
-}
-
-function tronRunnerCrowdBuildRoute(index) {
-  const records = tronRunnerCrowdCandidateRecords();
-  return tronRunnerCrowdBuildRouteCore({
-    index,
-    records,
-    startClusterCount: TRON_RUNNER_CROWD_START_CLUSTER_COUNT,
-    routeRecordSpread: TRON_RUNNER_CROWD_ROUTE_RECORD_SPREAD,
-    startPlayerRoute: tronRunnerCrowdStartPlayerRoute,
-    routeStyleForIndex: tronRunnerCrowdRouteStyleForIndex,
-    sideStreetPairs: tronRunnerCrowdSideStreetPairs,
-    detectedSideStreetLanes: tronRunnerCrowdDetectedSideStreetLanes,
-    routeStyleOrdinal: tronRunnerCrowdRouteStyleOrdinal,
-    sideStreetLaneAssignment: tronRunnerCrowdSideStreetLaneAssignment,
-    loopRouteForRecord: tronRunnerCrowdLoopRouteForRecord,
-    sideStreetLateralRoute: tronRunnerCrowdSideStreetLateralRoute,
-    sideStreetRouteForPair: tronRunnerCrowdSideStreetRouteForPair,
-    routeForRecord: tronRunnerCrowdRouteForRecord,
-  });
-}
-
 function tronRunnerCrowdGridCoord(value) {
   return tronRunnerCrowdGridCoordCore(value, TRON_RUNNER_CROWD_SPATIAL_CELL);
 }
@@ -3591,7 +3429,7 @@ function crowdRuntimeSyncScaleAndGround() {
       member.surface = surface.surface;
       member.groundOffset = member.group.position.y - surface.groundY;
     } else {
-      const placement = tronRunnerCrowdFallbackPlacement(member.index);
+      const placement = tronRunnerCrowdRoutes.fallbackPlacement(member.index);
       member.group.position.set(placement.x, placement.y, placement.z);
       member.group.rotation.y = placement.yaw;
       member.surface = placement.surface;
@@ -3838,16 +3676,6 @@ function crowdRuntimeUpdateReflection(member) {
   });
 }
 
-function tronRunnerCrowdRoadFacingStart(route, index, fallback) {
-  return tronRunnerCrowdRoadFacingStartCore({
-    route,
-    index,
-    fallback,
-    collisionRadius: TRON_RUNNER_CROWD_COLLISION_RADIUS,
-    pointInPolygon: pointInBasePadPolygon,
-  });
-}
-
 // Ambient one-liners the crowd says when the player comes near. Mix of warm greetings,
 // slice-of-life, light avstudio worldbuilding and Tron flavour. No dashes, brand lowercase.
 // Mirror of public/tecnologie/retro-future/CROWD_LINES.md (edit there, then re-sync here).
@@ -3944,9 +3772,9 @@ function crowdRuntimeBuildMember(job, index) {
   const { mixer, action } = makeTronRunnerCrowdActionSet(cloneModel, job.animations, index);
   const reflection = crowdRuntimeBuildReflection(job.sourceModel, job.animations, index, colorPreset);
   if (reflection.group) group.add(reflection.group);
-  const route = tronRunnerCrowdBuildRoute(index);
-  const fallback = tronRunnerCrowdFallbackPlacement(index);
-  const startInfo = tronRunnerCrowdRoadFacingStart(route, index, fallback);
+  const route = tronRunnerCrowdRoutes.buildRoute(index);
+  const fallback = tronRunnerCrowdRoutes.fallbackPlacement(index);
+  const startInfo = tronRunnerCrowdRoutes.roadFacingStart(route, index, fallback);
   const start = startInfo.placement;
   group.position.set(start.x, start.y, start.z);
   group.rotation.y = start.yaw ?? 0;
@@ -4581,7 +4409,7 @@ function crowdRuntimeInspect() {
   const routeDistribution = countBy(members, (member) => member.routeMode || 'fallback-road');
   const lodStrideCounts = countBy(members, (member) => String(member.lodStride || 1));
   const colorCounts = countBy(members, (member) => member.colorPreset || 'current');
-  const sideStreetSummary = tronRunnerCrowdSecondaryStreetSummary(tronRunnerCrowdCandidateRecords());
+  const sideStreetSummary = tronRunnerCrowdRoutes.secondaryStreetSummary(tronRunnerCrowdRoutes.candidateRecords());
   const sideStreetCoverage = buildSideStreetCoverage(sideStreetSummary.streets, members);
   const sideStreetGroupedSegments = buildSideStreetGroupedSegments(sideStreetCoverage);
   const materialMinOpacity = minBy(members, (member) => member.materialMinOpacity, 1);
