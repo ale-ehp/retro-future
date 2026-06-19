@@ -174,7 +174,6 @@ import {
   tronRunnerCrowdPointInsideRoute as tronRunnerCrowdPointInsideRouteCore,
 } from './character/character-collision.js';
 import {
-  nearbyTronRunnerCrowdMembers as nearbyTronRunnerCrowdMembersCore,
   setTronRunnerCrowdFrameDistance as setTronRunnerCrowdFrameDistanceCore,
   tronRunnerCrowdAvoidance as tronRunnerCrowdAvoidanceCore,
   tronRunnerCrowdDistanceToCamera as tronRunnerCrowdDistanceToCameraCore,
@@ -250,6 +249,7 @@ import {
 import {
   clearTronRunnerCrowdState,
   createTronRunnerCrowdRuntime,
+  nearbyTronRunnerCrowdMembersRuntime,
   prepareTronRunnerCrowdSpatialGridRuntime,
   syncTronRunnerCrowdScaleAndGround,
   syncTronRunnerCrowdVisibilityState,
@@ -3166,6 +3166,7 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   syncVisibilityImpl: () => syncTronRunnerCrowdVisibilityState(tronRunnerCrowdVisibilityState),
   updateCullingImpl: () => updateTronRunnerCrowdCullingRuntime(tronRunnerCrowdCullingState),
   prepareSpatialGridImpl: () => prepareTronRunnerCrowdSpatialGridRuntime(tronRunnerCrowdSpatialGridState),
+  nearbyMembersImpl: (x, z) => nearbyTronRunnerCrowdMembersRuntime(tronRunnerCrowdSpatialGridState, x, z),
 });
 const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerState: tronRunnerState,
@@ -3357,16 +3358,6 @@ function tronRunnerCrowdDistanceToCamera(member) {
     frame: tronRunnerCrowdRuntimeStats.frame,
     distanceCacheEnabled: TRON_RUNNER_CROWD_DISTANCE_CACHE_ENABLED,
   });
-}
-
-function nearbyTronRunnerCrowdMembers(x, z) {
-  return nearbyTronRunnerCrowdMembersCore(
-    x,
-    z,
-    tronRunnerCrowdSpatialGrid,
-    tronRunnerCrowdGridCoord,
-    tronRunnerCrowdGridKey,
-  );
 }
 
 function tronRunnerCrowdLodStride(member) {
@@ -3685,7 +3676,7 @@ const tronRunnerCrowdAvoidanceDeps = {
   strength: TRON_RUNNER_CROWD_AVOIDANCE_STRENGTH,
   yieldDurationMs: TRON_RUNNER_CROWD_YIELD_DURATION_MS,
   stats: tronRunnerCrowdRuntimeStats,
-  nearbyMembers: nearbyTronRunnerCrowdMembers,
+  nearbyMembers: tronRunnerCrowdRuntime.nearbyMembers,
   setState: setTronRunnerCrowdState,
   playerAvoidanceEnabled: TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_ENABLED,
   playerRadius: TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_RADIUS,
