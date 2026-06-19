@@ -68,19 +68,6 @@ import {
 } from './controls/controls.js';
 import {
   TRON_RUNNER_BEAT_PULSE_AUDIO_KICK_ENABLED,
-  TRON_RUNNER_BEAT_PULSE_AUDIO_SAMPLE_MAX_AGE_MS,
-  TRON_RUNNER_BEAT_PULSE_BASS_BODY_GAIN,
-  TRON_RUNNER_BEAT_PULSE_BASS_BODY_THRESHOLD,
-  TRON_RUNNER_BEAT_PULSE_BPM,
-  TRON_RUNNER_BEAT_PULSE_DECAY,
-  TRON_RUNNER_BEAT_PULSE_DIVISION,
-  TRON_RUNNER_BEAT_PULSE_ENABLED,
-  TRON_RUNNER_BEAT_PULSE_INTENSITY,
-  TRON_RUNNER_BEAT_PULSE_LOW_BAND_ENABLED,
-  TRON_RUNNER_BEAT_PULSE_MATERIAL_EPS,
-  TRON_RUNNER_BEAT_PULSE_MATERIAL_SKIP_ENABLED,
-  TRON_RUNNER_BEAT_PULSE_MAX_MULTIPLIER,
-  TRON_RUNNER_BEAT_PULSE_OFFSET_SECONDS,
   TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST,
   TRON_RUNNER_CHARACTER_LED_BRIGHTNESS_MULTIPLIER,
   TRON_RUNNER_CHARACTER_LED_EMISSIVE_MAX,
@@ -241,6 +228,9 @@ import {
   createTronMainPlayerBodyRuntime,
 } from './character/main-player-body.js';
 import {
+  createTronRunnerBeatPulseRuntime,
+} from './character/runner-beat-pulse.js';
+import {
   applyTronRunnerCrowdReflectionState,
   emptyTronRunnerCrowdReflection,
   tronRunnerCrowdPostRevealReflectionRampLimit as tronRunnerCrowdPostRevealReflectionRampLimitCore,
@@ -292,8 +282,6 @@ import {
 } from './character/character-textures.js';
 import {
   createTronRunnerAutonomy,
-  createTronRunnerBeatPulseRuntimeStats,
-  createTronRunnerBeatPulseState,
   createTronRunnerCrowdBuildStats,
   createTronRunnerCrowdRuntimeStats,
   createTronRunnerIdleCharacter,
@@ -3089,12 +3077,6 @@ let tronRunnerRimLight = 1;
 let tronRunnerFillLight = 1;
 let tronRunnerLedBrightness = TRON_RUNNER_CHARACTER_LED_BRIGHTNESS_MULTIPLIER;
 let tronRunnerLedBloom = TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST;
-let tronRunnerBeatPulseEnabled = TRON_RUNNER_BEAT_PULSE_ENABLED;
-let tronRunnerBeatPulseBpm = TRON_RUNNER_BEAT_PULSE_BPM;
-let tronRunnerBeatPulseOffset = TRON_RUNNER_BEAT_PULSE_OFFSET_SECONDS;
-let tronRunnerBeatPulseIntensity = TRON_RUNNER_BEAT_PULSE_INTENSITY;
-let tronRunnerBeatPulseDecay = TRON_RUNNER_BEAT_PULSE_DECAY;
-let tronRunnerBeatPulseDivision = TRON_RUNNER_BEAT_PULSE_DIVISION;
 let tronRunnerMaterialReflect = 0.06;
 let tronRunnerMaterialMetalness = 0.12;
 let tronRunnerMaterialRoughness = 0.92;
@@ -3146,8 +3128,17 @@ let tronRunnerCrowdBuildJob = null;
 const tronRunnerCrowdBuildStats = createTronRunnerCrowdBuildStats();
 const tronRunnerCrowdRuntimeStats = createTronRunnerCrowdRuntimeStats();
 const tronRunnerCrowdReflectionCandidates = [];
-const tronRunnerBeatPulseState = createTronRunnerBeatPulseState();
-const tronRunnerBeatPulseRuntimeStats = createTronRunnerBeatPulseRuntimeStats();
+const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
+  runnerState: tronRunnerState,
+  runnerParts: tronRunnerParts,
+  getCrowd: () => tronRunnerCrowd,
+  getSoundtrack: () => tronSoundtrack,
+  getRevealComplete: () => tronRunnerRevealComplete,
+  labEqualizerAnalyserPresent,
+  labEqualizerLastSampleTime,
+  labEqualizerAnalyserSampleReady,
+  getLabEqualizerState: () => labEqualizerState,
+});
 
 function tronRunnerCharacterLedDefaultScale() {
   return TRON_RUNNER_CHARACTER_LED_BRIGHTNESS_MULTIPLIER * TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST;
@@ -3163,210 +3154,8 @@ function tronRunnerCrowdLedEmissiveIntensity() {
   return THREE.MathUtils.clamp(TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY * scale, 0, 12);
 }
 
-function tronRunnerSetBeatPulseState(nextState) {
-  Object.assign(tronRunnerBeatPulseState, nextState);
-  // Mutate the existing beatPulse object in place (allocated once in createTronRunnerState)
-  // instead of reassigning a fresh literal every frame; values stay byte-identical.
-  const beat = tronRunnerState.beatPulse || (tronRunnerState.beatPulse = {});
-  beat.enabled = tronRunnerBeatPulseEnabled;
-  beat.bpm = tronRunnerBeatPulseBpm;
-  beat.offsetSeconds = tronRunnerBeatPulseOffset;
-  beat.intensity = tronRunnerBeatPulseIntensity;
-  beat.decay = tronRunnerBeatPulseDecay;
-  beat.division = tronRunnerBeatPulseDivision;
-  beat.value = Number(tronRunnerBeatPulseState.value.toFixed(3));
-  beat.multiplier = Number(tronRunnerBeatPulseState.multiplier.toFixed(3));
-  beat.phase = Number(tronRunnerBeatPulseState.phase.toFixed(3));
-  beat.beatIndex = tronRunnerBeatPulseState.beatIndex;
-  beat.audioTime = Number(tronRunnerBeatPulseState.audioTime.toFixed(3));
-  beat.active = tronRunnerBeatPulseState.active;
-  beat.source = tronRunnerBeatPulseState.source || 'bpm';
-  beat.kickPulse = Number((tronRunnerBeatPulseState.kickPulse || 0).toFixed(3));
-  beat.bassPulse = Number((tronRunnerBeatPulseState.bassPulse || 0).toFixed(3));
-  beat.bassEnergy = Number((tronRunnerBeatPulseState.bassEnergy || 0).toFixed(3));
-  beat.lowBandDriven = Boolean(tronRunnerBeatPulseState.lowBandDriven);
-  beat.analyserReady = Boolean(tronRunnerBeatPulseState.analyserReady);
-  beat.sampleAgeMs = Number.isFinite(tronRunnerBeatPulseState.sampleAgeMs)
-    ? Number(tronRunnerBeatPulseState.sampleAgeMs.toFixed(1))
-    : null;
-  beat.materialUpdateOptimized = tronRunnerBeatPulseRuntimeStats.materialUpdateOptimized;
-  beat.materialPasses = tronRunnerBeatPulseRuntimeStats.materialPasses;
-  beat.materialSkips = tronRunnerBeatPulseRuntimeStats.materialSkips;
-  beat.materialCount = tronRunnerBeatPulseRuntimeStats.materialCount;
-  beat.baseRevision = tronRunnerBeatPulseRuntimeStats.baseRevision;
-}
-
-function tronRunnerSoundtrackTimeSeconds() {
-  const active = tronSoundtrack.elements?.[tronSoundtrack.activeIndex];
-  const time = Number(active?.currentTime);
-  return Number.isFinite(time) ? time : 0;
-}
-
-const tronRunnerBeatPulseValueScratch = {
-  value: 0,
-  multiplier: 1,
-  phase: 0,
-  beatIndex: 0,
-  audioTime: 0,
-  active: false,
-  source: 'inactive',
-  kickPulse: 0,
-  bassPulse: 0,
-  bassEnergy: 0,
-  lowBandDriven: false,
-  analyserReady: false,
-  sampleAgeMs: Infinity,
-};
-
-function tronRunnerBeatPulseValue(audioTime = tronRunnerSoundtrackTimeSeconds()) {
-  // Reused scratch: consumed synchronously by updateTronRunnerBeatPulse (Object.assign + reads).
-  const out = tronRunnerBeatPulseValueScratch;
-  if (!tronRunnerBeatPulseEnabled || !tronSoundtrack.playing || !tronRunnerRevealComplete) {
-    out.value = 0;
-    out.multiplier = 1;
-    out.phase = 0;
-    out.beatIndex = 0;
-    out.audioTime = audioTime;
-    out.active = false;
-    out.source = 'inactive';
-    out.kickPulse = 0;
-    out.bassPulse = 0;
-    out.bassEnergy = 0;
-    out.lowBandDriven = false;
-    out.analyserReady = labEqualizerAnalyserPresent();
-    out.sampleAgeMs = Infinity;
-    return out;
-  }
-  const now = performance.now();
-  const sampleAgeMs = Number.isFinite(labEqualizerLastSampleTime()) ? now - labEqualizerLastSampleTime() : Infinity;
-  const analyserReady = Boolean(labEqualizerAnalyserSampleReady() && labEqualizerState.sampleCount > 0);
-  const kickAvailable = Boolean(
-    TRON_RUNNER_BEAT_PULSE_AUDIO_KICK_ENABLED
-    && analyserReady
-    && labEqualizerState.playing
-    && sampleAgeMs <= TRON_RUNNER_BEAT_PULSE_AUDIO_SAMPLE_MAX_AGE_MS
-  );
-  if (kickAvailable) {
-    const kickPulse = THREE.MathUtils.clamp(labEqualizerState.beatPulse, 0, 1);
-    const bassEnergy = THREE.MathUtils.clamp(labEqualizerState.bassEnergy, 0, 1);
-    const bassBody = TRON_RUNNER_BEAT_PULSE_LOW_BAND_ENABLED
-      ? Math.max(0, bassEnergy - TRON_RUNNER_BEAT_PULSE_BASS_BODY_THRESHOLD) * TRON_RUNNER_BEAT_PULSE_BASS_BODY_GAIN
-      : 0;
-    const value = THREE.MathUtils.clamp(kickPulse * 1.08 + bassBody, 0, 1);
-    const multiplier = THREE.MathUtils.clamp(
-      1 + value * Math.max(0, tronRunnerBeatPulseIntensity),
-      1,
-      TRON_RUNNER_BEAT_PULSE_MAX_MULTIPLIER
-    );
-    out.value = value;
-    out.multiplier = multiplier;
-    out.phase = 0;
-    out.beatIndex = labEqualizerState.sampleCount;
-    out.audioTime = audioTime;
-    out.active = true;
-    out.source = 'audio-bass-kick';
-    out.kickPulse = kickPulse;
-    out.bassPulse = value;
-    out.bassEnergy = bassEnergy;
-    out.lowBandDriven = TRON_RUNNER_BEAT_PULSE_LOW_BAND_ENABLED;
-    out.analyserReady = analyserReady;
-    out.sampleAgeMs = sampleAgeMs;
-    return out;
-  }
-  const bpm = Math.max(1, tronRunnerBeatPulseBpm);
-  const division = Math.max(0.05, tronRunnerBeatPulseDivision);
-  const elapsedBeats = Math.max(0, (audioTime - tronRunnerBeatPulseOffset) * bpm / 60 * division);
-  const beatIndex = Math.floor(elapsedBeats);
-  const phase = elapsedBeats - beatIndex;
-  const value = THREE.MathUtils.clamp(Math.exp(-phase * Math.max(0.1, tronRunnerBeatPulseDecay)), 0, 1);
-  const multiplier = THREE.MathUtils.clamp(
-    1 + value * Math.max(0, tronRunnerBeatPulseIntensity),
-    1,
-    TRON_RUNNER_BEAT_PULSE_MAX_MULTIPLIER
-  );
-  out.value = value;
-  out.multiplier = multiplier;
-  out.phase = phase;
-  out.beatIndex = beatIndex;
-  out.audioTime = audioTime;
-  out.active = true;
-  out.source = analyserReady ? 'bpm-clock' : 'bpm-fallback';
-  out.kickPulse = 0;
-  out.bassPulse = 0;
-  out.bassEnergy = THREE.MathUtils.clamp(labEqualizerState.bassEnergy || 0, 0, 1);
-  out.lowBandDriven = false;
-  out.analyserReady = analyserReady;
-  out.sampleAgeMs = sampleAgeMs;
-  return out;
-}
-
-function applyTronRunnerBeatPulseToMaterial(material, multiplier) {
-  if (!material || !Number.isFinite(material.emissiveIntensity)) return;
-  const base = Number.isFinite(material.userData?.tronRunnerBaseEmissiveIntensity)
-    ? material.userData.tronRunnerBaseEmissiveIntensity
-    : material.emissiveIntensity;
-  const next = THREE.MathUtils.clamp(base * multiplier, 0, 24);
-  if (Math.abs(material.emissiveIntensity - next) < 0.0005) return;
-  material.emissiveIntensity = next;
-}
-
-function tronRunnerBeatPulseMaterialCount() {
-  let crowdMaterialCount = 0;
-  for (const member of tronRunnerCrowd) {
-    crowdMaterialCount += member.materials?.length || 0;
-  }
-  tronRunnerBeatPulseRuntimeStats.mainMaterialCount = tronRunnerParts.materials.length;
-  tronRunnerBeatPulseRuntimeStats.crowdMaterialCount = crowdMaterialCount;
-  tronRunnerBeatPulseRuntimeStats.materialCount = tronRunnerParts.materials.length + crowdMaterialCount;
-  return tronRunnerBeatPulseRuntimeStats.materialCount;
-}
-
-function shouldSkipTronRunnerBeatPulseMaterialUpdate(nextState, materialCount) {
-  if (!TRON_RUNNER_BEAT_PULSE_MATERIAL_SKIP_ENABLED) return false;
-  const stats = tronRunnerBeatPulseRuntimeStats;
-  if (materialCount !== stats.lastAppliedMaterialCount) return false;
-  if (stats.baseRevision !== stats.lastAppliedBaseRevision) return false;
-  if (nextState.active !== stats.lastAppliedActive) return false;
-  if ((nextState.source || '') !== stats.lastAppliedSource) return false;
-  if (nextState.beatIndex !== stats.lastAppliedBeatIndex) return false;
-  return Math.abs(nextState.multiplier - stats.lastAppliedMultiplier) < TRON_RUNNER_BEAT_PULSE_MATERIAL_EPS;
-}
-
-function recordTronRunnerBeatPulseMaterialPass(nextState, materialCount) {
-  const stats = tronRunnerBeatPulseRuntimeStats;
-  stats.materialPasses += 1;
-  stats.lastAppliedMultiplier = nextState.multiplier;
-  stats.lastAppliedBeatIndex = nextState.beatIndex;
-  stats.lastAppliedActive = nextState.active;
-  stats.lastAppliedSource = nextState.source || '';
-  stats.lastAppliedMaterialCount = materialCount;
-  stats.lastAppliedBaseRevision = stats.baseRevision;
-}
-
-function updateTronRunnerBeatPulse() {
-  const nextState = tronRunnerBeatPulseValue();
-  const materialCount = tronRunnerBeatPulseMaterialCount();
-  if (shouldSkipTronRunnerBeatPulseMaterialUpdate(nextState, materialCount)) {
-    tronRunnerBeatPulseRuntimeStats.materialSkips += 1;
-    tronRunnerSetBeatPulseState(nextState);
-    return;
-  }
-  recordTronRunnerBeatPulseMaterialPass(nextState, materialCount);
-  const multiplier = nextState.multiplier;
-  for (const material of tronRunnerParts.materials) {
-    applyTronRunnerBeatPulseToMaterial(material, multiplier);
-  }
-  for (const member of tronRunnerCrowd) {
-    const materials = member.materials?.length ? member.materials : [];
-    for (const material of materials) {
-      applyTronRunnerBeatPulseToMaterial(material, multiplier);
-    }
-  }
-  tronRunnerSetBeatPulseState(nextState);
-}
-
 function applyTronRunnerCrowdLedControls() {
-  tronRunnerBeatPulseRuntimeStats.baseRevision += 1;
+  tronRunnerBeatPulse.markBaseChanged();
   const emissiveIntensity = tronRunnerCrowdLedEmissiveIntensity();
   for (const member of tronRunnerCrowd) {
     const materials = member.materials?.length ? member.materials : [];
@@ -3387,7 +3176,7 @@ function applyTronRunnerCrowdLedControls() {
       material.needsUpdate = true;
     }
   }
-  updateTronRunnerBeatPulse();
+  tronRunnerBeatPulse.update();
 }
 
 const tronRunnerAutonomy = createTronRunnerAutonomy({
@@ -7570,12 +7359,14 @@ function applyCharacterControlsFromUI() {
   tronRunnerFillLight = Number(controlEls.runnerFillLight.value);
   tronRunnerLedBrightness = Number(controlEls.runnerLedBrightness.value);
   tronRunnerLedBloom = Number(controlEls.runnerLedBloom.value);
-  tronRunnerBeatPulseEnabled = controlEls.runnerBeatPulseEnabled.value === 'on';
-  tronRunnerBeatPulseBpm = Number(controlEls.runnerBeatPulseBpm.value);
-  tronRunnerBeatPulseOffset = Number(controlEls.runnerBeatPulseOffset.value);
-  tronRunnerBeatPulseIntensity = Number(controlEls.runnerBeatPulseIntensity.value);
-  tronRunnerBeatPulseDecay = Number(controlEls.runnerBeatPulseDecay.value);
-  tronRunnerBeatPulseDivision = Number(controlEls.runnerBeatPulseDivision.value);
+  tronRunnerBeatPulse.setControls({
+    enabled: controlEls.runnerBeatPulseEnabled.value === 'on',
+    bpm: Number(controlEls.runnerBeatPulseBpm.value),
+    offset: Number(controlEls.runnerBeatPulseOffset.value),
+    intensity: Number(controlEls.runnerBeatPulseIntensity.value),
+    decay: Number(controlEls.runnerBeatPulseDecay.value),
+    division: Number(controlEls.runnerBeatPulseDivision.value),
+  });
   tronRunnerMaterialReflect = Number(controlEls.runnerMaterialReflect.value);
   tronRunnerMaterialMetalness = Number(controlEls.runnerMaterialMetalness.value);
   tronRunnerMaterialRoughness = Number(controlEls.runnerMaterialRoughness.value);
@@ -7595,6 +7386,7 @@ function applyCharacterControlsFromUI() {
   tronRunnerWalkSpeed = Number(controlEls.runnerWalkSpeed.value);
   tronRunnerStrideSync = Number(controlEls.runnerStrideSync.value);
   applyTronRunnerVisualControls();
+  const beatPulseControls = tronRunnerBeatPulse.controlValues();
   controlEls.runnerBodyLightVal.textContent = tronRunnerBodyLight.toFixed(2);
   controlEls.runnerLineLightVal.textContent = tronRunnerLineLight.toFixed(2);
   controlEls.runnerKeyLightVal.textContent = tronRunnerKeyLight.toFixed(2);
@@ -7602,12 +7394,12 @@ function applyCharacterControlsFromUI() {
   controlEls.runnerFillLightVal.textContent = tronRunnerFillLight.toFixed(2);
   controlEls.runnerLedBrightnessVal.textContent = `${tronRunnerLedBrightness.toFixed(2)}x`;
   controlEls.runnerLedBloomVal.textContent = `${tronRunnerLedBloom.toFixed(2)}x`;
-  controlEls.runnerBeatPulseEnabledVal.textContent = tronRunnerBeatPulseEnabled ? 'on' : 'off';
-  controlEls.runnerBeatPulseBpmVal.textContent = tronRunnerBeatPulseBpm.toFixed(0);
-  controlEls.runnerBeatPulseOffsetVal.textContent = `${tronRunnerBeatPulseOffset.toFixed(2)} s`;
-  controlEls.runnerBeatPulseIntensityVal.textContent = `${tronRunnerBeatPulseIntensity.toFixed(2)}x`;
-  controlEls.runnerBeatPulseDecayVal.textContent = tronRunnerBeatPulseDecay.toFixed(1);
-  controlEls.runnerBeatPulseDivisionVal.textContent = `${tronRunnerBeatPulseDivision.toFixed(2)}x`;
+  controlEls.runnerBeatPulseEnabledVal.textContent = beatPulseControls.enabled ? 'on' : 'off';
+  controlEls.runnerBeatPulseBpmVal.textContent = beatPulseControls.bpm.toFixed(0);
+  controlEls.runnerBeatPulseOffsetVal.textContent = `${beatPulseControls.offset.toFixed(2)} s`;
+  controlEls.runnerBeatPulseIntensityVal.textContent = `${beatPulseControls.intensity.toFixed(2)}x`;
+  controlEls.runnerBeatPulseDecayVal.textContent = beatPulseControls.decay.toFixed(1);
+  controlEls.runnerBeatPulseDivisionVal.textContent = `${beatPulseControls.division.toFixed(2)}x`;
   controlEls.runnerMaterialReflectVal.textContent = tronRunnerMaterialReflect.toFixed(2);
   controlEls.runnerMaterialMetalnessVal.textContent = tronRunnerMaterialMetalness.toFixed(2);
   controlEls.runnerMaterialRoughnessVal.textContent = tronRunnerMaterialRoughness.toFixed(2);
@@ -9020,7 +8812,7 @@ function tick(now) {
       labEqualizerGroup.visible = false;
     }
     updateTronRunnerReveal(now);
-    updateTronRunnerBeatPulse();
+    tronRunnerBeatPulse.update();
     tronMainPlayerBody.update(dt);
     updateMainFacadeVerticalReveal();
   }
