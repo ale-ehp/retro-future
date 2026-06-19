@@ -1,3 +1,8 @@
+import * as THREE from 'three';
+
+import {
+  createTronRunnerCrowdMemberRecord,
+} from './character-build.js';
 import {
   nearbyTronRunnerCrowdMembers,
   prepareTronRunnerCrowdSpatialGrid,
@@ -5,6 +10,7 @@ import {
   tronRunnerCrowdDistanceToCamera as tronRunnerCrowdDistanceToCameraCore,
   tronRunnerCrowdLodStride as tronRunnerCrowdLodStrideCore,
   tronRunnerCrowdTryDeadlockNudge as tronRunnerCrowdTryDeadlockNudgeCore,
+  tronRunnerCrowdWalkCycleOffset,
   updateTronRunnerCrowdCullingState,
 } from './character-crowd.js';
 import {
@@ -15,7 +21,17 @@ import {
   tronRunnerCrowdPointInsideRoute as tronRunnerCrowdPointInsideRouteCore,
 } from './character-collision.js';
 import {
+  countBy,
+  inspectTronRunnerMaterials,
+  maxBy,
+  minBy,
+  sideStreetCoverage as buildSideStreetCoverage,
+  sideStreetGroupedSegments as buildSideStreetGroupedSegments,
+  sumBy,
+} from './character-inspect.js';
+import {
   applyTronRunnerCrowdReflectionState,
+  buildTronRunnerCrowdReflection,
   tronRunnerCrowdPostRevealReflectionRampLimit as tronRunnerCrowdPostRevealReflectionRampLimitCore,
   tronRunnerCrowdReflectionOccludedByBuilding,
   updateTronRunnerCrowdReflectionBudget as updateTronRunnerCrowdReflectionBudgetCore,
@@ -23,6 +39,18 @@ import {
 import {
   tronRunnerCrowdGridCoord as tronRunnerCrowdGridCoordCore,
 } from './character-movement.js';
+import {
+  syncTronRunnerCrowdRunCycleToDistance,
+  syncTronRunnerCrowdWalkCycleToDistance,
+  makeTronRunnerCrowdActionSet,
+} from './runner-animation.js';
+import {
+  tronRunnerCharacterLedDefaultScale,
+  tronRunnerCharacterLedScale,
+} from './runner-crowd-leds.js';
+import {
+  pickTronRunnerCrowdLines,
+} from './runner-crowd-lines.js';
 
 export function clearTronRunnerCrowdState({
   crowd,
@@ -318,6 +346,624 @@ export function updateTronRunnerCrowdReflectionRuntime({
     reflectionY,
     reflectionYScale,
   });
+}
+
+export function buildTronRunnerCrowdMemberRuntime({
+  crowd,
+  crowdGroup,
+  walker,
+  runnerState,
+  cloneRunnerSkeleton,
+  materials,
+  routes,
+  dynamicReflectionEnabled,
+  reflectionRig,
+  getWalkSpeed,
+  crowdSpeedScale,
+  groundOffset,
+  greeterIndex,
+  getDroneLandingPose,
+  crowdLines,
+  talkLinesPerMember,
+}, job, index) {
+  const group = new THREE.Group();
+  group.name = `tron-runner-crowd-${index + 1}`;
+  group.visible = false;
+  group.scale.copy(walker.scale);
+  const colorPreset = materials.colorPresetForIndex(index);
+
+  const cloneModel = cloneRunnerSkeleton(job.sourceModel);
+  cloneModel.name = `soldier-rigged-runner-crowd-${index + 1}`;
+  const cloneMeshes = [];
+  cloneModel.traverse((obj) => {
+    if (!obj.isMesh) return;
+    obj.frustumCulled = false;
+    obj.castShadow = false;
+    obj.receiveShadow = false;
+    obj.layers.set(0);
+    cloneMeshes.push(obj);
+  });
+  const crowdMaterial = materials.makeSuitMaterial(colorPreset);
+  cloneMeshes.forEach((mesh) => {
+    mesh.material = crowdMaterial;
+  });
+  group.add(cloneModel);
+
+  const animationScaleOffset = 0.92 + (index % 5) * 0.035;
+  const speedScaleOffset = 0.86 + (index % 5) * 0.035;
+  const { mixer, action } = makeTronRunnerCrowdActionSet({
+    model: cloneModel,
+    animations: job.animations,
+    offset: index,
+    effectiveAnimationSpeed: runnerState.effectiveAnimationSpeed,
+  });
+  const reflection = buildTronRunnerCrowdReflection({
+    sourceModel: job.sourceModel,
+    animations: job.animations,
+    index,
+    colorPreset,
+    dynamicReflectionEnabled,
+    cloneRunnerSkeleton,
+    reflectionRig,
+    effectiveAnimationSpeed: runnerState.effectiveAnimationSpeed,
+  });
+  if (reflection.group) group.add(reflection.group);
+  const route = routes.buildRoute(index);
+  const fallback = routes.fallbackPlacement(index);
+  const startInfo = routes.roadFacingStart(route, index, fallback);
+  const start = startInfo.placement;
+  group.position.set(start.x, start.y, start.z);
+  group.rotation.y = start.yaw ?? 0;
+  if (index === greeterIndex) {
+    // The green companion starts a few metres in front of the landing so it reaches the
+    // player quickly to greet them.
+    const droneLandingPose = getDroneLandingPose();
+    group.position.set((droneLandingPose?.x ?? 0) + 3.5, start.y, (droneLandingPose?.z ?? start.z) - 13);
+  }
+  const member = createTronRunnerCrowdMemberRecord({
+    index,
+    group,
+    model: cloneModel,
+    material: crowdMaterial,
+    mixer,
+    action,
+    colorPreset,
+    reflection,
+    route,
+    startInfo,
+    speed: getWalkSpeed() * crowdSpeedScale * speedScaleOffset,
+    speedScaleOffset,
+    animationScaleOffset,
+    walkCycleOffset: tronRunnerCrowdWalkCycleOffset(index),
+    groundOffset,
+  });
+  member.idleClip = job.animations?.find((clip) => /idle/i.test(clip.name)) || null;
+  member.runClip = job.animations?.find((clip) => /run/i.test(clip.name)) || null;
+  member.talkLines = pickTronRunnerCrowdLines(index, crowdLines, talkLinesPerMember);
+  member.talkCycle = 0;
+  member.talkArmed = true;
+  member.talkUntil = 0;
+  member.talkStart = 0;
+  member.talkText = '';
+  crowd.push(member);
+  crowdGroup.add(group);
+}
+
+const tronRunnerCrowdNextPointScratch = { x: 0, z: 0 };
+
+export function advanceTronRunnerCrowdMemberRuntime({
+  runtime,
+  camera,
+  surfaceYForPoint,
+  lerpAngle,
+  greeterIndex,
+  greeterBubbleDurationMs,
+  greeterFollowDelayMs,
+  greeterBoardReach,
+  greetDistance,
+  greeterBoardBubbleRange,
+  greeterBoardStanceDeg,
+  crowdReachRadius,
+  pauseChance,
+  pauseMinMs,
+  pauseMaxMs,
+  turnDurationMs,
+  yieldDurationMs,
+}, member, dt, now = performance.now()) {
+  const crowdRuntime = runtime();
+  crowdRuntime.normalizeState(member, now);
+  const route = member.route;
+  const isGreeter = member.index === greeterIndex;
+  // Once the welcome bubble has dissolved, raise the "Seguimi" prompt and stand for a beat...
+  if (isGreeter && member.greetStage === 'welcome'
+      && member.greetAt && (now - member.greetAt) > greeterBubbleDurationMs) {
+    member.greetStage = 'followPrompt';
+    member.followPromptAt = now;
+    crowdRuntime.setGreeterBubble(member, 'Seguimi', 8000, now);
+  }
+  // ...then 1s later set off for the departures board (retry until the anchor resolves).
+  if (isGreeter && member.greetStage === 'followPrompt'
+      && member.followPromptAt && (now - member.followPromptAt) >= greeterFollowDelayMs) {
+    const anchor = crowdRuntime.resolveGreeterBoardAnchor();
+    if (anchor) {
+      member.greetBoardAnchorX = anchor.x;
+      member.greetBoardAnchorZ = anchor.z;
+      member.greetBoardCenterX = anchor.cx;
+      member.greetBoardCenterZ = anchor.cz;
+      member.greetStage = 'toBoard';
+      crowdRuntime.startGreeterWalkingToBoard(member);
+    }
+  }
+  if (isGreeter && (member.greetStage === 'welcome' || member.greetStage === 'followPrompt' || member.greetStage === 'atBoard')) {
+    // Welcomed/parked: freeze into a neutral standing pose (bind pose = straight legs, then
+    // arms crossed like the idle character) so we don't stop mid-stride with a leg raised.
+    if (!member.greetPosed) {
+      member.greetPosed = true;
+      // Crossfade from walking into the soldier idle clip: a natural standing welcome
+      // (alive, no mid-stride leg, no stiff pose). Mixer is driven per frame once greetPosed.
+      if (member.idleClip && member.mixer) {
+        member.idleAction = member.idleAction || member.mixer.clipAction(member.idleClip);
+        member.idleAction.reset();
+        member.idleAction.setEffectiveTimeScale(1);
+        member.idleAction.setEffectiveWeight(1);
+        member.idleAction.play();
+        if (member.action) member.action.crossFadeTo(member.idleAction, 0.45, false);
+        // Keep the floor reflection in sync with the body's idle (it was still walking).
+        if (member.reflectionMixer && member.reflectionAction) {
+          member.reflectionIdleAction = member.reflectionIdleAction || member.reflectionMixer.clipAction(member.idleClip);
+          member.reflectionIdleAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
+          member.reflectionAction.crossFadeTo(member.reflectionIdleAction, 0.45, false);
+        }
+        if (member.reflectionLedMixer && member.reflectionLedAction) {
+          member.reflectionLedIdleAction = member.reflectionLedIdleAction || member.reflectionLedMixer.clipAction(member.idleClip);
+          member.reflectionLedIdleAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
+          member.reflectionLedAction.crossFadeTo(member.reflectionLedIdleAction, 0.45, false);
+        }
+      } else if (member.action) {
+        member.action.stop();
+        member.model?.traverse((object) => {
+          if (object.isSkinnedMesh && object.skeleton) object.skeleton.pose();
+        });
+      }
+    }
+    member.lastMovedDistance = 0;
+    const yawToPlayer = Math.atan2(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
+    let bodyYaw = yawToPlayer; // welcome/follow stance: face the player
+    if (member.greetStage === 'atBoard') {
+      // Parked: body sits 45deg off the player toward the board (presenting it); head tracks me.
+      const yawToBoard = Math.atan2(
+        (member.greetBoardCenterX ?? member.group.position.x) - member.group.position.x,
+        (member.greetBoardCenterZ ?? member.group.position.z) - member.group.position.z
+      );
+      const rel = Math.atan2(Math.sin(yawToBoard - yawToPlayer), Math.cos(yawToBoard - yawToPlayer));
+      const stance = THREE.MathUtils.degToRad(greeterBoardStanceDeg);
+      bodyYaw = yawToPlayer + Math.sign(rel || 1) * Math.min(stance, Math.abs(rel));
+      // Proximity-gated bubble: the renderer eases opacity in/out over 0.5s as bubbleInRange flips.
+      const distToPlayer = Math.hypot(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
+      member.bubbleText = 'Questi sono i<br>nostri reparti';
+      member.bubbleSizeScale = 2;
+      member.bubbleProximity = true;
+      member.bubbleInRange = distToPlayer <= greeterBoardBubbleRange;
+    }
+    member.group.rotation.y = lerpAngle(member.group.rotation.y, bodyYaw, Math.min(1, dt * 4));
+    crowdRuntime.applyGreeterHeadLook(member, dt);
+    return;
+  }
+  if (!isGreeter && !route?.points?.length) {
+    member.lastMovedDistance = 0;
+    return;
+  }
+  const current = member.group.position;
+  let target;
+  if (isGreeter) {
+    if (member.greetStage === 'toBoard') {
+      tronRunnerCrowdNextPointScratch.x = member.greetBoardAnchorX;
+      tronRunnerCrowdNextPointScratch.z = member.greetBoardAnchorZ;
+    } else {
+      tronRunnerCrowdNextPointScratch.x = camera.position.x;
+      tronRunnerCrowdNextPointScratch.z = camera.position.z;
+    }
+    target = tronRunnerCrowdNextPointScratch;
+  } else {
+    target = route.points[member.waypointIndex % route.points.length];
+  }
+  const dx = target.x - current.x;
+  const dz = target.z - current.z;
+  const distance = Math.hypot(dx, dz);
+  if (isGreeter) {
+    if (member.greetStage === 'toBoard') {
+      if (distance <= greeterBoardReach) {
+        member.greetStage = 'atBoard'; // re-pose to idle + 45deg stance next frame
+        member.lastMovedDistance = 0;
+        return;
+      }
+    } else if (distance <= greetDistance) {
+      member.greetDone = true;       // keeps the welcome bubble showing
+      member.greetStage = 'welcome';
+      member.greetAt = now;
+      crowdRuntime.setGreeterBubble(member, 'Benvenuto in<br>avstudio.ai', greeterBubbleDurationMs, now);
+      member.lastMovedDistance = 0;
+      return;
+    }
+  } else if (distance <= crowdReachRadius) {
+    member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
+    if (Math.random() < pauseChance) {
+      const pauseMs = pauseMinMs + Math.random() * (pauseMaxMs - pauseMinMs);
+      crowdRuntime.setState(member, 'pause', now, pauseMs);
+    } else {
+      crowdRuntime.setState(member, 'turn', now, turnDurationMs);
+    }
+    member.lastMovedDistance = 0;
+    return;
+  }
+  const dirX = dx / Math.max(distance, 0.001);
+  const dirZ = dz / Math.max(distance, 0.001);
+  const stateSpeedScale = isGreeter ? 1 : (member.state === 'pause' ? 0 : member.state === 'turn' ? 0.56 : member.state === 'yield' ? 0.34 : 1);
+  const baseStep = Math.max(0, member.speed * Math.min(dt, 0.08) * stateSpeedScale);
+  const nextPoint = tronRunnerCrowdNextPointScratch;
+  nextPoint.x = current.x + dirX * Math.min(distance, baseStep);
+  nextPoint.z = current.z + dirZ * Math.min(distance, baseStep);
+  let collided = false;
+  if (!isGreeter) {
+    // The greeter walks straight to the player at normal pace, ignoring crowd jostling.
+    const avoidance = crowdRuntime.avoidance(member, current, nextPoint, dirX, dirZ, dt, now);
+    if (avoidance.speedScale < 1) {
+      nextPoint.x = current.x + dirX * Math.min(distance, baseStep * avoidance.speedScale);
+      nextPoint.z = current.z + dirZ * Math.min(distance, baseStep * avoidance.speedScale);
+    }
+    nextPoint.x += avoidance.x;
+    nextPoint.z += avoidance.z;
+    collided = crowdRuntime.resolveCollision(member, nextPoint);
+    if (collided) {
+      member.collisionCount += 1;
+      member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
+      crowdRuntime.setState(member, 'avoid', now, yieldDurationMs);
+    }
+    crowdRuntime.tryDeadlockNudge(member, current, nextPoint, dirX, dirZ, distance, collided, now);
+  }
+  const movedDistance = Math.hypot(nextPoint.x - current.x, nextPoint.z - current.z);
+  const surface = surfaceYForPoint(nextPoint.x, nextPoint.z);
+  member.group.position.set(nextPoint.x, surface.y, nextPoint.z);
+  member.group.rotation.y = lerpAngle(member.group.rotation.y, Math.atan2(dirX, dirZ), Math.min(1, dt * 8));
+  if (isGreeter) crowdRuntime.applyGreeterHeadLook(member, dt); // head keeps tracking the player while walking
+  member.surface = surface.surface;
+  member.groundOffset = member.group.position.y - surface.groundY;
+  member.distanceWalked += movedDistance;
+  member.lastMovedDistance = movedDistance;
+  if (movedDistance > 0.0005) member.lastMovedAt = now;
+  member.lastCollision = collided;
+}
+
+export function updateTronRunnerCrowdRuntime(state, dt) {
+  if (!state.crowdEnabled) return;
+  const crowdRuntime = state.runtime();
+  const { crowd, crowdGroup, stats } = state;
+  crowdRuntime.processBuildQueue();
+  if (!crowd.length) return;
+  crowdRuntime.syncVisibility();
+  if (!crowdGroup.visible) {
+    state.accumulatedDt = 0;
+    return;
+  }
+  state.accumulatedDt = Math.min(
+    state.maxAccumulatedDt,
+    state.accumulatedDt + Math.min(dt, 0.05)
+  );
+  if (state.accumulatedDt < state.updateInterval) {
+    stats.skippedFrameCount += 1;
+    return;
+  }
+  const step = state.updateInterval;
+  state.accumulatedDt = Math.max(0, state.accumulatedDt - state.updateInterval);
+  const now = state.now();
+  const thinkStarted = now;
+  stats.frame += 1;
+  stats.updateCount += 1;
+  stats.lastStepDt = step;
+  stats.avoidancePairs = 0;
+  stats.maxAvoidanceOverlap = 0;
+  crowdRuntime.updateCulling();
+  crowdRuntime.updateReflectionBudget();
+  for (const member of crowd) state.syncMemberMatrixUpdates(member);
+  crowdRuntime.prepareSpatialGrid();
+  const talkRangeSq = state.talkRange * state.talkRange;
+  const talkRearmRangeSq = state.talkRearmRange * state.talkRearmRange;
+  for (const member of crowd) {
+    // The greeter always updates (even when off-screen) so it reliably walks over to greet the player.
+    const isGreeterMember = member.index === state.greeterIndex;
+    // Ambient chatter: each non-greeter says one of its lines when the player comes within range,
+    // re-arming once the player steps away (hysteresis). Cycles through the member's lines.
+    if (!isGreeterMember && member.talkLines?.length) {
+      const talkDx = state.camera.position.x - member.group.position.x;
+      const talkDz = state.camera.position.z - member.group.position.z;
+      const talkDistSq = talkDx * talkDx + talkDz * talkDz;
+      if (member.talkArmed && talkDistSq <= talkRangeSq) {
+        member.talkText = member.talkLines[member.talkCycle % member.talkLines.length];
+        member.talkCycle += 1;
+        member.talkStart = now;
+        member.talkUntil = now + state.talkDurationMs;
+        member.talkArmed = false;
+      } else if (!member.talkArmed && talkDistSq > talkRearmRangeSq) {
+        member.talkArmed = true;
+      }
+    }
+    // While running to the board the greeter's run clip is driven by its own fixed timescale,
+    // so skip the crowd's walk-tuned timescale management and the distance-driven walk sync.
+    const greeterRunning = isGreeterMember && member.greetStage === 'toBoard';
+    const nextEffectiveAnimationSpeed = state.runnerState.effectiveAnimationSpeed * (member.animationScaleOffset ?? 1);
+    if (!greeterRunning && member.action && Math.abs((member.lastEffectiveAnimationSpeed ?? -1) - nextEffectiveAnimationSpeed) > 0.0001) {
+      member.action.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
+      member.reflectionAction?.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
+      member.reflectionLedAction?.setEffectiveTimeScale(nextEffectiveAnimationSpeed);
+      member.lastEffectiveAnimationSpeed = nextEffectiveAnimationSpeed;
+    }
+    member.speed = state.getWalkSpeed() * state.crowdSpeedScale * (member.speedScaleOffset ?? 1)
+      * (isGreeterMember ? state.greeterSpeedMultiplier : 1)
+      * (greeterRunning ? state.greeterRunSpeedBoost : 1);
+    const cullingHidden = state.cullingEnabled && member.cullingVisible === false && !isGreeterMember;
+    member.lodStride = isGreeterMember
+      ? 1
+      : (cullingHidden
+        ? state.culledLodStride
+        : (state.intelligenceEnabled ? crowdRuntime.lodStride(member) : 1));
+    member.lodDt = Math.min(cullingHidden ? 0.34 : 0.14, (member.lodDt || 0) + step);
+    member.mixerDt = Math.min(0.14, (member.mixerDt || 0) + step);
+    const shouldUpdate = member.lodStride <= 1 || ((stats.frame + member.index) % member.lodStride === 0);
+    if (!shouldUpdate) {
+      member.lastMovedDistance = 0;
+      if (!cullingHidden) {
+        crowdRuntime.updateReflection(member);
+        state.syncMemberMatrixUpdates(member, true);
+      }
+      continue;
+    }
+    const distanceDrivenWalk = state.distanceDrivenWalkEnabled && Boolean(member.action) && !member.greetPosed;
+    if (!cullingHidden && !distanceDrivenWalk) member.mixer?.update(member.mixerDt);
+    if (!cullingHidden && member.dynamicReflectionBudgetActive && !distanceDrivenWalk) {
+      member.reflectionMixer?.update(member.mixerDt);
+      member.reflectionLedMixer?.update(member.mixerDt);
+    }
+    const moveSubsteps = Math.max(1, Math.ceil(member.lodDt / state.maxMoveSubstep));
+    const moveSubstepDt = member.lodDt / moveSubsteps;
+    const distanceBefore = member.distanceWalked || 0;
+    for (let stepIndex = 0; stepIndex < moveSubsteps; stepIndex += 1) {
+      advanceTronRunnerCrowdMemberRuntime(state.advanceState, member, moveSubstepDt, now);
+    }
+    const movedThisUpdate = Math.max(0, (member.distanceWalked || 0) - distanceBefore);
+    member.lastMovedDistance = movedThisUpdate;
+    if (cullingHidden) state.syncMemberMatrixUpdates(member, true);
+    if (!cullingHidden && distanceDrivenWalk && !member.greetPosed) {
+      if (greeterRunning) syncTronRunnerCrowdRunCycleToDistance(member, state.greeterRunCycleDistance);
+      else syncTronRunnerCrowdWalkCycleToDistance(member);
+    }
+    if (!cullingHidden) {
+      crowdRuntime.updateReflection(member);
+      state.syncMemberMatrixUpdates(member, true);
+    }
+    member.mixerDt = 0;
+    member.lodDt = 0;
+  }
+  stats.lastThinkMs = state.now() - thinkStarted;
+  stats.maxThinkMs = Math.max(
+    stats.maxThinkMs,
+    stats.lastThinkMs
+  );
+}
+
+export function inspectTronRunnerCrowdRuntime(state) {
+  const crowdRuntime = state.runtime();
+  const runnerScale = Number(state.runnerWalker.scale.x.toFixed(4));
+  const runnerTargetHeight = state.targetHeight * state.runnerWalker.scale.y;
+  const runnerHeightFromRoad = state.runnerWalker.position.y - state.roadTopY();
+  const now = state.now();
+  const members = state.crowd.map((member) => {
+    state.crowdBox.setFromObject(member.group);
+    state.crowdBox.getSize(state.crowdSize);
+    const buildingCollision = crowdRuntime.buildingCollisionDiagnostic(member);
+    const heightFromRoad = member.group.position.y - state.roadTopY();
+    const targetHeight = state.targetHeight * member.group.scale.y;
+    const materialInspect = inspectTronRunnerMaterials(member.model);
+    return {
+      index: member.index + 1,
+      visible: Boolean(state.crowdGroup.visible && member.group.visible),
+      x: Number(member.group.position.x.toFixed(2)),
+      y: Number(member.group.position.y.toFixed(2)),
+      z: Number(member.group.position.z.toFixed(2)),
+      scale: Number(member.group.scale.x.toFixed(4)),
+      targetHeight: Number(targetHeight.toFixed(3)),
+      heightFromRoad: Number(heightFromRoad.toFixed(3)),
+      groundOffset: Number((member.groundOffset ?? state.groundOffset).toFixed(3)),
+      surface: member.surface,
+      routeMode: member.route?.mode ?? 'fallback-road',
+      routeLabel: member.route?.label ?? 'fallback',
+      routeCluster: member.route?.cluster ?? 'city',
+      sideStreetId: member.route?.sideStreetId ?? '',
+      sideStreetSide: member.route?.sideStreetSide ?? '',
+      sideStreetLateralOrdinal: member.route?.sideStreetLateralOrdinal ?? null,
+      sideStreetGroupIndex: member.route?.sideStreetGroupIndex ?? null,
+      sideStreetGroupCount: member.route?.sideStreetGroupCount ?? null,
+      startMode: member.startMode ?? 'unknown',
+      colorPreset: member.colorPreset ?? 'current',
+      colorName: member.colorName ?? 'current cyan',
+      ...materialInspect,
+      walkActionTime: Number((member.action?.time ?? 0).toFixed(3)),
+      walkClipDuration: Number((member.action?.getClip?.()?.duration ?? 0).toFixed(3)),
+      walkCycleOffset: Number((member.walkCycleOffset ?? 0).toFixed(3)),
+      state: member.state ?? 'walk',
+      lodStride: member.lodStride ?? 1,
+      lodDistance: Number((member.lodDistance ?? 0).toFixed(1)),
+      cullingVisible: Boolean(member.cullingVisible),
+      cullingInFrustum: Boolean(member.cullingInFrustum),
+      cullingReason: member.cullingReason ?? 'unknown',
+      cullingDistance: Number((member.cullingDistance ?? 0).toFixed(1)),
+      avoidanceNeighbors: member.avoidanceNeighbors ?? 0,
+      avoidanceOverlap: Number((member.avoidanceOverlap ?? 0).toFixed(3)),
+      stuckMs: member.stuckSince ? Number(Math.max(0, now - member.stuckSince).toFixed(0)) : 0,
+      stuckEscapes: member.stuckEscapes ?? 0,
+      buildingCollision: buildingCollision.colliding,
+      buildingCollisionCorrection: Number(buildingCollision.correction.toFixed(3)),
+      buildingCollisionLabel: buildingCollision.label,
+      dynamicReflectionVisible: Boolean(member.dynamicReflectionVisible),
+      dynamicReflectionMode: member.reflectionGroup?.userData?.tronRunnerReflectionMode ?? 'mesh-clone',
+      dynamicReflectionBudgetActive: Boolean(member.dynamicReflectionBudgetActive),
+      dynamicReflectionRank: member.dynamicReflectionRank ?? null,
+      dynamicReflectionDistance: Number.isFinite(member.dynamicReflectionDistance)
+        ? Number(member.dynamicReflectionDistance.toFixed(1))
+        : null,
+      dynamicReflectionOpacity: Number((member.dynamicReflectionOpacity ?? 0).toFixed(3)),
+      dynamicReflectionBodyOpacity: Number((member.dynamicReflectionBodyOpacity ?? 0).toFixed(3)),
+      dynamicReflectionLedOpacity: Number((member.dynamicReflectionLedOpacity ?? 0).toFixed(3)),
+      dynamicReflectionMeshCount: member.dynamicReflectionMeshCount ?? 0,
+      dynamicReflectionLedMeshCount: member.dynamicReflectionLedMeshCount ?? 0,
+      waypointIndex: member.waypointIndex ?? 0,
+      distanceWalked: Number((member.distanceWalked ?? 0).toFixed(2)),
+      lastMovedDistance: Number((member.lastMovedDistance ?? 0).toFixed(4)),
+      recentlyMoved: now - (member.lastMovedAt || 0) < 360,
+      collisionCount: member.collisionCount ?? 0,
+      lastCollision: Boolean(member.lastCollision),
+      sizeY: Number(state.crowdSize.y.toFixed(3)),
+    };
+  });
+  const scaleDeltas = members.map((member) => Math.abs(member.scale - runnerScale));
+  const targetHeightDeltas = members.map((member) => Math.abs(member.targetHeight - runnerTargetHeight));
+  const heightFromRoadDeltas = members.map((member) => Math.abs(member.heightFromRoad - runnerHeightFromRoad));
+  const groundOffsetDeltas = members.map((member) => Math.abs(member.groundOffset - state.groundOffset));
+  const stateCounts = countBy(members, (member) => member.state);
+  const routeDistribution = countBy(members, (member) => member.routeMode || 'fallback-road');
+  const lodStrideCounts = countBy(members, (member) => String(member.lodStride || 1));
+  const colorCounts = countBy(members, (member) => member.colorPreset || 'current');
+  const sideStreetSummary = state.routes.secondaryStreetSummary(state.routes.candidateRecords());
+  const sideStreetCoverage = buildSideStreetCoverage(sideStreetSummary.streets, members);
+  const sideStreetGroupedSegments = buildSideStreetGroupedSegments(sideStreetCoverage);
+  const materialMinOpacity = minBy(members, (member) => member.materialMinOpacity, 1);
+  const materialMaxEmissiveIntensity = maxBy(members, (member) => member.materialMaxEmissiveIntensity, 0);
+  const transparentMaterialCount = sumBy(members, (member) => member.transparentMaterialCount);
+  return {
+    enabled: state.crowdEnabled,
+    mode: state.pathMode,
+    count: state.crowd.length,
+    visibleCount: members.filter((member) => member.visible).length,
+    colorCounts,
+    routeDistribution,
+    sideStreetDetectedStreetCount: sideStreetSummary.streetCount,
+    sideStreetDetectedLaneCount: sideStreetSummary.laneCount,
+    sideStreetDetectedStreets: sideStreetSummary.streets,
+    sideStreetCoverage,
+    sideStreetGroupedSegments,
+    materialMinOpacity: Number(materialMinOpacity.toFixed(3)),
+    materialMaxEmissiveIntensity: Number(materialMaxEmissiveIntensity.toFixed(3)),
+    crowdRevealMaterialOpacity: Number((state.runnerState.crowdRevealMaterialOpacity ?? 0).toFixed(3)),
+    characterLedBrightnessMultiplier: state.getLedBrightness(),
+    characterLedBloomBoost: state.getLedBloom(),
+    characterLedScale: Number(tronRunnerCharacterLedScale({
+      ledBrightness: state.getLedBrightness(),
+      ledBloom: state.getLedBloom(),
+    }).toFixed(3)),
+    characterLedDefaultScale: Number(tronRunnerCharacterLedDefaultScale().toFixed(3)),
+    characterLedEmissiveMax: Number((state.runnerState.ledEmissiveMax ?? state.characterLedEmissiveMax).toFixed(3)),
+    transparentMaterialCount,
+    sidewalkMembers: members.filter((member) => member.surface === 'sidewalk').length,
+    routeLoopMembers: members.filter((member) => member.routeMode === state.pathMode).length,
+    startClusterMembers: members.filter((member) => member.routeCluster === 'player-start').length,
+    sideStreetLateralMembers: members.filter((member) => (
+      member.routeMode === 'side-street-lateral' && Math.abs(member.x) > state.roadHalf()
+    )).length,
+    movingMembers: members.filter((member) => member.recentlyMoved).length,
+    stuckMembers: members.filter((member) => member.stuckMs > state.deadlockMs).length,
+    stuckEscapes: sumBy(members, (member) => member.stuckEscapes),
+    collisionEnabled: state.collisionEnabled,
+    collisionCount: sumBy(members, (member) => member.collisionCount),
+    buildingCollisionMembers: members.filter((member) => member.buildingCollision).length,
+    maxBuildingCollisionCorrection: Number(maxBy(members, (member) => member.buildingCollisionCorrection, 0).toFixed(3)),
+    requestedCount: state.requestedCount,
+    cloneSource: 'runner-post-fit-model',
+    skeletonClone: Boolean(state.getCloneRunnerSkeleton()),
+    sharedMaterial: true,
+    realShadows: false,
+    dynamicReflections: {
+      enabled: state.dynamicReflectionEnabled,
+      mode: 'mesh-clone',
+      maxActive: state.reflectionMaxActive,
+      budgetLimit: state.stats.reflectionBudgetLimit,
+      fpsBudgetLimit: state.stats.reflectionFpsBudgetLimit,
+      nearDistance: state.reflectionNearDistance,
+      minFps: state.reflectionMinFps,
+      postRevealRamp: {
+        enabled: state.reflectionPostRevealRampEnabled,
+        active: state.stats.reflectionPostRevealRampActive,
+        durationMs: state.reflectionPostRevealRampMs,
+        elapsedMs: Number(state.stats.reflectionPostRevealElapsedMs.toFixed(1)),
+        progress: Number(state.stats.reflectionPostRevealProgress.toFixed(3)),
+        rampLimit: state.stats.reflectionPostRevealRampLimit,
+      },
+      distanceSkippedCount: state.stats.reflectionDistanceSkippedCount,
+      budgetActiveCount: state.stats.activeReflectionCount,
+      candidateCount: state.stats.reflectionCandidateCount,
+      visibleCount: members.filter((member) => member.dynamicReflectionVisible).length,
+      meshCount: sumBy(members, (member) => member.dynamicReflectionMeshCount || 0),
+      ledMeshCount: sumBy(members, (member) => member.dynamicReflectionLedMeshCount || 0),
+      maxOpacity: Number(maxBy(members, (member) => member.dynamicReflectionOpacity || 0, 0).toFixed(3)),
+      bodyOpacity: Number(maxBy(members, (member) => member.dynamicReflectionBodyOpacity || 0, 0).toFixed(3)),
+      ledOpacity: Number(maxBy(members, (member) => member.dynamicReflectionLedOpacity || 0, 0).toFixed(3)),
+      yScale: state.reflectionYScale,
+    },
+    culling: {
+      enabled: state.cullingEnabled,
+      maxDistance: state.cullDistance,
+      radius: state.cullRadius,
+      culledLodStride: state.culledLodStride,
+      visibleCount: state.stats.cullingVisibleCount,
+      hiddenCount: state.stats.cullingHiddenCount,
+      distanceHiddenCount: state.stats.cullingDistanceHiddenCount,
+      frustumHiddenCount: state.stats.cullingFrustumHiddenCount,
+      minDistance: Number(state.stats.cullingMinDistance.toFixed(1)),
+      maxObservedDistance: Number(state.stats.cullingMaxDistance.toFixed(1)),
+    },
+    build: {
+      status: state.buildStats.status,
+      built: state.buildStats.built,
+      requested: state.buildStats.requested,
+      progress: Number((state.buildStats.built / Math.max(1, state.buildStats.requested)).toFixed(3)),
+      durationMs: Number(state.buildStats.durationMs.toFixed(2)),
+      lastChunkMs: Number(state.buildStats.lastChunkMs.toFixed(2)),
+      queued: Boolean(state.buildQueueState.job),
+    },
+    intelligence: {
+      enabled: state.intelligenceEnabled,
+      mode: 'waypoint-state-machine',
+      avoidanceEnabled: state.avoidanceEnabled,
+      avoidanceRadius: state.avoidanceRadius,
+      avoidancePairs: state.stats.avoidancePairs,
+      maxAvoidanceOverlap: Number(state.stats.maxAvoidanceOverlap.toFixed(3)),
+      spatialGridCell: state.spatialCell,
+      gridCells: state.stats.gridCells,
+      lodEnabled: state.intelligenceEnabled,
+      distanceReuseEnabled: state.distanceCacheEnabled,
+      distanceCalculations: state.stats.distanceCalculations,
+      distanceReuses: state.stats.distanceReuses,
+      lodNearDistance: state.lodNearDistance,
+      lodMidDistance: state.lodMidDistance,
+      lodStrideCounts,
+      targetFps: state.targetFps,
+      updateIntervalMs: Number((state.updateInterval * 1000).toFixed(2)),
+      updateCount: state.stats.updateCount,
+      skippedFrameCount: state.stats.skippedFrameCount,
+      performanceFreezeFrameCount: state.stats.performanceFreezeFrameCount,
+      lastStepMs: Number((state.stats.lastStepDt * 1000).toFixed(2)),
+      stateCounts,
+      lastThinkMs: Number(state.stats.lastThinkMs.toFixed(3)),
+      maxThinkMs: Number(state.stats.maxThinkMs.toFixed(3)),
+    },
+    scaleLock: state.scaleLock,
+    sourceScale: runnerScale,
+    sourceTargetHeight: Number(runnerTargetHeight.toFixed(3)),
+    sourceHeightFromRoad: Number(runnerHeightFromRoad.toFixed(3)),
+    maxScaleDelta: Number((scaleDeltas.length ? Math.max(...scaleDeltas) : 0).toFixed(4)),
+    maxTargetHeightDelta: Number((targetHeightDeltas.length ? Math.max(...targetHeightDeltas) : 0).toFixed(4)),
+    maxHeightFromRoadDelta: Number((heightFromRoadDeltas.length ? Math.max(...heightFromRoadDeltas) : 0).toFixed(4)),
+    maxGroundOffsetDelta: Number((groundOffsetDeltas.length ? Math.max(...groundOffsetDeltas) : 0).toFixed(4)),
+    members,
+  };
 }
 
 const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
