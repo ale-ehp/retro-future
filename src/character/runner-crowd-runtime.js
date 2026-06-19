@@ -109,6 +109,51 @@ export function tronRunnerCrowdColliderRecordsRuntime({
   return cache.records;
 }
 
+export function startTronRunnerCrowdBuildQueueRuntime(state, sourceModel, animations) {
+  state.job = null;
+  state.clearState();
+  if (!state.crowdEnabled || !sourceModel || !state.getCloneRunnerSkeleton()) return;
+  const sourceMeshes = [];
+  sourceModel.traverse((obj) => {
+    if (obj.isMesh) sourceMeshes.push(obj);
+  });
+  state.job = {
+    sourceModel,
+    sourceMeshes,
+    animations,
+    nextIndex: 0,
+    startedAt: state.now(),
+  };
+  state.buildStats.status = 'queued';
+  state.buildStats.startedAt = state.job.startedAt;
+  state.buildStats.built = 0;
+  state.buildStats.requested = state.requestedCount;
+}
+
+export function processTronRunnerCrowdBuildQueueRuntime(state) {
+  if (!state.job) return;
+  const job = state.job;
+  const started = state.now();
+  state.buildStats.status = 'building';
+  state.buildMember(job, job.nextIndex);
+  job.nextIndex += 1;
+  state.buildStats.built = job.nextIndex;
+  state.buildStats.lastChunkMs = state.now() - started;
+  if (job.nextIndex < state.requestedCount) return;
+  state.syncScaleAndGround();
+  state.syncVisibility();
+  state.buildStats.status = 'done';
+  state.buildStats.durationMs = state.now() - job.startedAt;
+  state.job = null;
+}
+
+export async function drainTronRunnerCrowdBuildQueueRuntime(state) {
+  while (state.job) {
+    state.processBuildQueue();
+    await state.waitForNextFrame();
+  }
+}
+
 const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
 
 export function syncTronRunnerCrowdVisibilityState({
@@ -392,6 +437,8 @@ export function createTronRunnerCrowdRuntime({
   buildImpl,
   updateImpl,
   inspectImpl,
+  processBuildQueueImpl,
+  drainBuildQueueImpl,
   syncScaleAndGroundImpl,
   syncVisibilityImpl,
   updateCullingImpl,
@@ -443,6 +490,8 @@ export function createTronRunnerCrowdRuntime({
     build: buildImpl,
     update: updateImpl,
     inspect: inspectImpl,
+    processBuildQueue: processBuildQueueImpl,
+    drainBuildQueue: drainBuildQueueImpl,
     syncScaleAndGround: syncScaleAndGroundImpl,
     syncVisibility: syncVisibilityImpl,
     updateCulling: updateCullingImpl,
