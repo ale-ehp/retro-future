@@ -171,12 +171,9 @@ import {
   resolveTronRunnerRoundedCollider,
   tronRunnerCrowdBuildingCollisionDiagnostic as tronRunnerCrowdBuildingCollisionDiagnosticCore,
   tronRunnerCrowdColliderLabel,
-  tronRunnerCrowdPointInsideRoute as tronRunnerCrowdPointInsideRouteCore,
 } from './character/character-collision.js';
 import {
-  setTronRunnerCrowdFrameDistance as setTronRunnerCrowdFrameDistanceCore,
   tronRunnerCrowdAvoidance as tronRunnerCrowdAvoidanceCore,
-  tronRunnerCrowdDistanceToCamera as tronRunnerCrowdDistanceToCameraCore,
   tronRunnerCrowdTryDeadlockNudge as tronRunnerCrowdTryDeadlockNudgeCore,
   tronRunnerCrowdWalkCycleOffset,
 } from './character/character-crowd.js';
@@ -249,10 +246,14 @@ import {
   clearTronRunnerCrowdState,
   createTronRunnerCrowdRuntime,
   nearbyTronRunnerCrowdMembersRuntime,
+  normalizeTronRunnerCrowdStateRuntime,
   prepareTronRunnerCrowdSpatialGridRuntime,
+  setTronRunnerCrowdStateRuntime,
   syncTronRunnerCrowdScaleAndGround,
   syncTronRunnerCrowdVisibilityState,
+  tronRunnerCrowdDistanceToCameraRuntime,
   tronRunnerCrowdLodStrideRuntime,
+  tronRunnerCrowdPointInsideRouteRuntime,
   updateTronRunnerCrowdCullingRuntime,
 } from './character/runner-crowd-runtime.js';
 import {
@@ -3153,10 +3154,21 @@ const tronRunnerCrowdSpatialGridState = {
   gridCoord: tronRunnerCrowdGridCoord,
   gridKey: tronRunnerCrowdGridKey,
 };
+const tronRunnerCrowdDistanceState = {
+  camera,
+  stats: tronRunnerCrowdRuntimeStats,
+  distanceCacheEnabled: TRON_RUNNER_CROWD_DISTANCE_CACHE_ENABLED,
+};
 const tronRunnerCrowdLodStrideState = {
-  distanceToCamera: tronRunnerCrowdDistanceToCamera,
+  distanceToCamera: (member) => tronRunnerCrowdDistanceToCameraRuntime(tronRunnerCrowdDistanceState, member),
   nearDistance: TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE,
   midDistance: TRON_RUNNER_CROWD_LOD_MID_DISTANCE,
+};
+const tronRunnerCrowdStateMachineState = {
+  intelligenceEnabled: TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED,
+};
+const tronRunnerCrowdPointInsideRouteState = {
+  pointInPolygon: pointInBasePadPolygon,
 };
 const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   crowd: tronRunnerCrowd,
@@ -3173,6 +3185,10 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   prepareSpatialGridImpl: () => prepareTronRunnerCrowdSpatialGridRuntime(tronRunnerCrowdSpatialGridState),
   nearbyMembersImpl: (x, z) => nearbyTronRunnerCrowdMembersRuntime(tronRunnerCrowdSpatialGridState, x, z),
   lodStrideImpl: (member) => tronRunnerCrowdLodStrideRuntime(tronRunnerCrowdLodStrideState, member),
+  distanceToCameraImpl: tronRunnerCrowdLodStrideState.distanceToCamera,
+  setStateImpl: setTronRunnerCrowdStateRuntime,
+  normalizeStateImpl: (member, now) => normalizeTronRunnerCrowdStateRuntime(tronRunnerCrowdStateMachineState, member, now),
+  pointInsideRouteImpl: (member, x, z) => tronRunnerCrowdPointInsideRouteRuntime(tronRunnerCrowdPointInsideRouteState, member, x, z),
 });
 const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerState: tronRunnerState,
@@ -3352,20 +3368,6 @@ function tronRunnerCrowdGridCoord(value) {
   return tronRunnerCrowdGridCoordCore(value, TRON_RUNNER_CROWD_SPATIAL_CELL);
 }
 
-function setTronRunnerCrowdFrameDistance(member, distance) {
-  setTronRunnerCrowdFrameDistanceCore(member, distance, tronRunnerCrowdRuntimeStats.frame);
-}
-
-function tronRunnerCrowdDistanceToCamera(member) {
-  return tronRunnerCrowdDistanceToCameraCore({
-    member,
-    cameraPosition: camera.position,
-    stats: tronRunnerCrowdRuntimeStats,
-    frame: tronRunnerCrowdRuntimeStats.frame,
-    distanceCacheEnabled: TRON_RUNNER_CROWD_DISTANCE_CACHE_ENABLED,
-  });
-}
-
 function cityRevealPostRevealElapsedMs(now = performance.now()) {
   if (!cityRevealComplete || !cityRevealCompletedAt) return 0;
   return Math.max(0, now - cityRevealCompletedAt);
@@ -3401,27 +3403,9 @@ function crowdRuntimeUpdateReflectionBudget() {
     cityRevealComplete,
     postRevealElapsedMs: cityRevealPostRevealElapsedMs,
     isCityRevealPerformanceCritical,
-    distanceToCamera: tronRunnerCrowdDistanceToCamera,
+    distanceToCamera: tronRunnerCrowdRuntime.distanceToCamera,
     rampLimit: tronRunnerCrowdPostRevealReflectionRampLimit,
   });
-}
-
-function setTronRunnerCrowdState(member, state, now, durationMs = 0) {
-  member.state = state;
-  member.stateUntil = durationMs > 0 ? now + durationMs : 0;
-}
-
-function normalizeTronRunnerCrowdState(member, now) {
-  if (!TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED) {
-    member.state = 'walk';
-    member.stateUntil = 0;
-    return;
-  }
-  if (!member.state) member.state = 'walk';
-  if (member.stateUntil && now >= member.stateUntil) {
-    member.state = 'walk';
-    member.stateUntil = 0;
-  }
 }
 
 function setTronRunnerSubtreeMatrixAutoUpdate(root, enabled) {
@@ -3620,15 +3604,6 @@ async function drainTronRunnerCrowdBuildQueue() {
   }
 }
 
-function tronRunnerCrowdPointInsideRoute(member, x, z) {
-  return tronRunnerCrowdPointInsideRouteCore({
-    member,
-    x,
-    z,
-    pointInPolygon: pointInBasePadPolygon,
-  });
-}
-
 function invalidateTronRunnerCrowdColliderRecords() {
   tronRunnerCrowdColliderRecordCache = null;
   tronRunnerCrowdColliderRecordCacheSourceLength = -1;
@@ -3650,7 +3625,7 @@ function crowdRuntimeResolveCollision(member, point) {
     TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
     tronRunnerCrowdColliderRecords,
     TRON_RUNNER_CROWD_BUILDING_GUARD,
-    tronRunnerCrowdPointInsideRoute,
+    tronRunnerCrowdRuntime.pointInsideRoute,
   );
 }
 
@@ -3673,7 +3648,7 @@ const tronRunnerCrowdAvoidanceDeps = {
   yieldDurationMs: TRON_RUNNER_CROWD_YIELD_DURATION_MS,
   stats: tronRunnerCrowdRuntimeStats,
   nearbyMembers: tronRunnerCrowdRuntime.nearbyMembers,
-  setState: setTronRunnerCrowdState,
+  setState: tronRunnerCrowdRuntime.setState,
   playerAvoidanceEnabled: TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_ENABLED,
   playerRadius: TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_RADIUS,
   playerStrength: TRON_RUNNER_CROWD_PLAYER_AVOIDANCE_STRENGTH,
@@ -3690,9 +3665,9 @@ const tronRunnerCrowdDeadlockDeps = {
   deadlockMs: TRON_RUNNER_CROWD_DEADLOCK_MS,
   deadlockNudge: TRON_RUNNER_CROWD_DEADLOCK_NUDGE,
   yieldDurationMs: TRON_RUNNER_CROWD_YIELD_DURATION_MS,
-  pointInsideRoute: tronRunnerCrowdPointInsideRoute,
+  pointInsideRoute: tronRunnerCrowdRuntime.pointInsideRoute,
   resolveCollision: crowdRuntimeResolveCollision,
-  setState: setTronRunnerCrowdState,
+  setState: tronRunnerCrowdRuntime.setState,
 };
 
 function tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ, distance, collided, now) {
@@ -3817,7 +3792,7 @@ function setGreeterBubble(member, html, durationMs, now, sizeScale = 1) {
 
 const tronRunnerCrowdNextPointScratch = { x: 0, z: 0 };
 function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
-  normalizeTronRunnerCrowdState(member, now);
+  tronRunnerCrowdRuntime.normalizeState(member, now);
   const route = member.route;
   const isGreeter = member.index === TRON_RUNNER_GREETER_INDEX;
   // Once the welcome bubble has dissolved, raise the "Seguimi" prompt and stand for a beat...
@@ -3935,9 +3910,9 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
     member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
     if (Math.random() < TRON_RUNNER_CROWD_PAUSE_CHANCE) {
       const pauseMs = TRON_RUNNER_CROWD_PAUSE_MIN_MS + Math.random() * (TRON_RUNNER_CROWD_PAUSE_MAX_MS - TRON_RUNNER_CROWD_PAUSE_MIN_MS);
-      setTronRunnerCrowdState(member, 'pause', now, pauseMs);
+      tronRunnerCrowdRuntime.setState(member, 'pause', now, pauseMs);
     } else {
-      setTronRunnerCrowdState(member, 'turn', now, TRON_RUNNER_CROWD_TURN_DURATION_MS);
+      tronRunnerCrowdRuntime.setState(member, 'turn', now, TRON_RUNNER_CROWD_TURN_DURATION_MS);
     }
     member.lastMovedDistance = 0;
     return;
@@ -3963,7 +3938,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
     if (collided) {
       member.collisionCount += 1;
       member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
-      setTronRunnerCrowdState(member, 'avoid', now, TRON_RUNNER_CROWD_YIELD_DURATION_MS);
+      tronRunnerCrowdRuntime.setState(member, 'avoid', now, TRON_RUNNER_CROWD_YIELD_DURATION_MS);
     }
     tronRunnerCrowdTryDeadlockNudge(member, current, nextPoint, dirX, dirZ, distance, collided, now);
   }

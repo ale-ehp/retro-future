@@ -1,9 +1,13 @@
 import {
   nearbyTronRunnerCrowdMembers,
   prepareTronRunnerCrowdSpatialGrid,
+  tronRunnerCrowdDistanceToCamera as tronRunnerCrowdDistanceToCameraCore,
   tronRunnerCrowdLodStride as tronRunnerCrowdLodStrideCore,
   updateTronRunnerCrowdCullingState,
 } from './character-crowd.js';
+import {
+  tronRunnerCrowdPointInsideRoute as tronRunnerCrowdPointInsideRouteCore,
+} from './character-collision.js';
 
 export function clearTronRunnerCrowdState({
   crowd,
@@ -173,6 +177,51 @@ export function tronRunnerCrowdLodStrideRuntime({
   return tronRunnerCrowdLodStrideCore(distance, nearDistance, midDistance);
 }
 
+export function tronRunnerCrowdDistanceToCameraRuntime({
+  camera,
+  stats,
+  distanceCacheEnabled,
+}, member) {
+  return tronRunnerCrowdDistanceToCameraCore({
+    member,
+    cameraPosition: camera.position,
+    stats,
+    frame: stats.frame,
+    distanceCacheEnabled,
+  });
+}
+
+export function setTronRunnerCrowdStateRuntime(member, state, now, durationMs = 0) {
+  member.state = state;
+  member.stateUntil = durationMs > 0 ? now + durationMs : 0;
+}
+
+export function normalizeTronRunnerCrowdStateRuntime({
+  intelligenceEnabled,
+}, member, now) {
+  if (!intelligenceEnabled) {
+    member.state = 'walk';
+    member.stateUntil = 0;
+    return;
+  }
+  if (!member.state) member.state = 'walk';
+  if (member.stateUntil && now >= member.stateUntil) {
+    member.state = 'walk';
+    member.stateUntil = 0;
+  }
+}
+
+export function tronRunnerCrowdPointInsideRouteRuntime({
+  pointInPolygon,
+}, member, x, z) {
+  return tronRunnerCrowdPointInsideRouteCore({
+    member,
+    x,
+    z,
+    pointInPolygon,
+  });
+}
+
 export function createTronRunnerCrowdRuntime({
   crowd,
   group,
@@ -188,6 +237,10 @@ export function createTronRunnerCrowdRuntime({
   prepareSpatialGridImpl,
   nearbyMembersImpl,
   lodStrideImpl,
+  distanceToCameraImpl,
+  setStateImpl,
+  normalizeStateImpl,
+  pointInsideRouteImpl,
 }) {
   function resolveCameraCollision() {
     if (isCameraCollisionDisabled()) return;
@@ -225,6 +278,10 @@ export function createTronRunnerCrowdRuntime({
     prepareSpatialGrid: prepareSpatialGridImpl,
     nearbyMembers: nearbyMembersImpl,
     lodStride: lodStrideImpl,
+    distanceToCamera: distanceToCameraImpl,
+    setState: setStateImpl,
+    normalizeState: normalizeStateImpl,
+    pointInsideRoute: pointInsideRouteImpl,
     resolveCameraCollision,
   };
 }
