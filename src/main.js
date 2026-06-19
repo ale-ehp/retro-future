@@ -93,7 +93,6 @@ import {
   TRON_RUNNER_CROWD_EXCLUDED_CIVICS,
   TRON_RUNNER_CROWD_GROUND_OFFSET,
   TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED,
-  TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY,
   TRON_RUNNER_CROWD_LOD_MID_DISTANCE,
   TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE,
   TRON_RUNNER_CROWD_LOOP_FRONT_ONLY,
@@ -231,6 +230,12 @@ import {
   applyTronRunnerVisualControls as applyTronRunnerVisualControlsCore,
   createTronRunnerShadowTextureState,
 } from './character/runner-visual-controls.js';
+import {
+  applyTronRunnerCrowdLedControls as applyTronRunnerCrowdLedControlsCore,
+  tronRunnerCharacterLedDefaultScale,
+  tronRunnerCharacterLedScale,
+  tronRunnerCrowdLedEmissiveIntensity,
+} from './character/runner-crowd-leds.js';
 import {
   applyTronRunnerCrowdReflectionState,
   emptyTronRunnerCrowdReflection,
@@ -3013,7 +3018,10 @@ function makeTronRunnerCrowdSuitMaterial(colorPreset) {
   return createTronRunnerCrowdSuitMaterial({
     baseMaterial: tronRunnerSuitMat,
     colorPreset,
-    emissiveIntensity: tronRunnerCrowdLedEmissiveIntensity(),
+    emissiveIntensity: tronRunnerCrowdLedEmissiveIntensity({
+      ledBrightness: tronRunnerLedBrightness,
+      ledBloom: tronRunnerLedBloom,
+    }),
     ledBloom: tronRunnerLedBloom,
   });
 }
@@ -3157,44 +3165,12 @@ tronRunnerReveal = createTronRunnerRevealRuntime({
   getCityRevealComplete: () => cityRevealComplete,
 });
 
-function tronRunnerCharacterLedDefaultScale() {
-  return TRON_RUNNER_CHARACTER_LED_BRIGHTNESS_MULTIPLIER * TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST;
-}
-
-function tronRunnerCharacterLedScale() {
-  return Math.max(0, tronRunnerLedBrightness) * Math.max(0, tronRunnerLedBloom);
-}
-
-function tronRunnerCrowdLedEmissiveIntensity() {
-  const defaultScale = tronRunnerCharacterLedDefaultScale();
-  const scale = defaultScale > 0 ? tronRunnerCharacterLedScale() / defaultScale : 1;
-  return THREE.MathUtils.clamp(TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY * scale, 0, 12);
-}
-
-function applyTronRunnerCrowdLedControls() {
-  tronRunnerBeatPulse.markBaseChanged();
-  const emissiveIntensity = tronRunnerCrowdLedEmissiveIntensity();
-  for (const member of tronRunnerCrowd) {
-    const materials = member.materials?.length ? member.materials : [];
-    if (!materials.length) {
-      member.model?.traverse((object) => {
-        const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
-        objectMaterials.forEach((material) => {
-          if (!material || !Number.isFinite(material.emissiveIntensity)) return;
-          materials.push(material);
-        });
-      });
-      member.materials = [...new Set(materials)];
-    }
-    for (const material of member.materials || []) {
-      if (!material || !Number.isFinite(material.emissiveIntensity)) continue;
-      material.emissiveIntensity = emissiveIntensity;
-      material.userData.tronRunnerBaseEmissiveIntensity = emissiveIntensity;
-      material.needsUpdate = true;
-    }
-  }
-  tronRunnerBeatPulse.update();
-}
+const applyTronRunnerCrowdLedControls = () => applyTronRunnerCrowdLedControlsCore({
+  crowd: tronRunnerCrowd,
+  ledBrightness: tronRunnerLedBrightness,
+  ledBloom: tronRunnerLedBloom,
+  beatPulse: tronRunnerBeatPulse,
+});
 
 const tronRunnerAutonomy = createTronRunnerAutonomy({
   footstepBus: FOOTSTEP_NPC_SPATIAL_BUS,
@@ -3250,7 +3226,10 @@ const applyTronRunnerVisualControls = () => applyTronRunnerVisualControlsCore({
   },
   visualDistanceWalked: tronRunnerVisualDistanceWalked,
   effectiveAnimationSpeed: tronRunnerEffectiveAnimationSpeed(),
-  ledScale: tronRunnerCharacterLedScale(),
+  ledScale: tronRunnerCharacterLedScale({
+    ledBrightness: tronRunnerLedBrightness,
+    ledBloom: tronRunnerLedBloom,
+  }),
   ledDefaultScale: tronRunnerCharacterLedDefaultScale(),
   applyCrowdLedControls: applyTronRunnerCrowdLedControls,
   syncCrowdScaleAndGround: syncTronRunnerCrowdScaleAndGround,
@@ -4866,7 +4845,10 @@ function tronRunnerCrowdInspect() {
     crowdRevealMaterialOpacity: Number((tronRunnerState.crowdRevealMaterialOpacity ?? 0).toFixed(3)),
     characterLedBrightnessMultiplier: tronRunnerLedBrightness,
     characterLedBloomBoost: tronRunnerLedBloom,
-    characterLedScale: Number(tronRunnerCharacterLedScale().toFixed(3)),
+    characterLedScale: Number(tronRunnerCharacterLedScale({
+      ledBrightness: tronRunnerLedBrightness,
+      ledBloom: tronRunnerLedBloom,
+    }).toFixed(3)),
     characterLedDefaultScale: Number(tronRunnerCharacterLedDefaultScale().toFixed(3)),
     characterLedEmissiveMax: Number((tronRunnerState.ledEmissiveMax ?? TRON_RUNNER_CHARACTER_LED_EMISSIVE_MAX).toFixed(3)),
     transparentMaterialCount,
