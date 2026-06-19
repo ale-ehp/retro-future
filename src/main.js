@@ -238,12 +238,15 @@ import {
   clearTronRunnerCrowdState,
   createTronRunnerCrowdRuntime,
   cityRevealPostRevealElapsedMsRuntime,
+  drainTronRunnerCrowdBuildQueueRuntime,
   invalidateTronRunnerCrowdColliderRecordsRuntime,
   nearbyTronRunnerCrowdMembersRuntime,
   normalizeTronRunnerCrowdStateRuntime,
   prepareTronRunnerCrowdSpatialGridRuntime,
+  processTronRunnerCrowdBuildQueueRuntime,
   resolveTronRunnerCrowdCollisionRuntime,
   setTronRunnerCrowdStateRuntime,
+  startTronRunnerCrowdBuildQueueRuntime,
   syncTronRunnerCrowdScaleAndGround,
   syncTronRunnerCrowdVisibilityState,
   tronRunnerCrowdAvoidanceRuntime,
@@ -3087,7 +3090,6 @@ const tronRunnerCrowdCullMatrix = new THREE.Matrix4();
 const tronRunnerCrowdCullFrustum = new THREE.Frustum();
 const tronRunnerCrowdCullSphere = new THREE.Sphere(new THREE.Vector3(), TRON_RUNNER_CROWD_CULL_RADIUS);
 const tronRunnerCrowdSpatialGrid = new Map();
-let tronRunnerCrowdBuildJob = null;
 const tronRunnerCrowdBuildStats = createTronRunnerCrowdBuildStats();
 const tronRunnerCrowdRuntimeStats = createTronRunnerCrowdRuntimeStats();
 const tronRunnerCrowdReflectionCandidates = [];
@@ -3098,6 +3100,20 @@ const tronRunnerCrowdClearState = {
   buildStats: tronRunnerCrowdBuildStats,
   runtimeStats: tronRunnerCrowdRuntimeStats,
   requestedCount: TRON_RUNNER_CROWD_COUNT,
+};
+const tronRunnerCrowdBuildQueueState = {
+  job: null,
+  buildStats: tronRunnerCrowdBuildStats,
+  requestedCount: TRON_RUNNER_CROWD_COUNT,
+  crowdEnabled: TRON_RUNNER_CROWD_ENABLED,
+  getCloneRunnerSkeleton: () => cloneRunnerSkeleton,
+  clearState: () => clearTronRunnerCrowdState(tronRunnerCrowdClearState),
+  buildMember: crowdRuntimeBuildMember,
+  syncScaleAndGround: () => tronRunnerCrowdRuntime.syncScaleAndGround(),
+  syncVisibility: () => tronRunnerCrowdRuntime.syncVisibility(),
+  processBuildQueue: () => tronRunnerCrowdRuntime.processBuildQueue(),
+  waitForNextFrame,
+  now: () => performance.now(),
 };
 const tronRunnerCrowdRoutes = createTronRunnerCrowdRoutesRuntime({
   getSideBuildingRecords: () => sideBuildingRecords,
@@ -3231,9 +3247,13 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   camera,
   playerCollisionDistance: TRON_RUNNER_CROWD_PLAYER_COLLISION_DISTANCE,
   isCameraCollisionDisabled,
-  buildImpl: crowdRuntimeBuild,
+  buildImpl: (sourceModel, animations) => (
+    startTronRunnerCrowdBuildQueueRuntime(tronRunnerCrowdBuildQueueState, sourceModel, animations)
+  ),
   updateImpl: crowdRuntimeUpdate,
   inspectImpl: crowdRuntimeInspect,
+  processBuildQueueImpl: () => processTronRunnerCrowdBuildQueueRuntime(tronRunnerCrowdBuildQueueState),
+  drainBuildQueueImpl: () => drainTronRunnerCrowdBuildQueueRuntime(tronRunnerCrowdBuildQueueState),
   syncScaleAndGroundImpl: () => syncTronRunnerCrowdScaleAndGround(tronRunnerCrowdScaleGroundState),
   syncVisibilityImpl: () => syncTronRunnerCrowdVisibilityState(tronRunnerCrowdVisibilityState),
   updateCullingImpl: () => updateTronRunnerCrowdCullingRuntime(tronRunnerCrowdCullingState),
@@ -3588,51 +3608,6 @@ function crowdRuntimeBuildMember(job, index) {
   tronRunnerCrowdGroup.add(group);
 }
 
-function crowdRuntimeBuild(sourceModel, animations) {
-  tronRunnerCrowdBuildJob = null;
-  clearTronRunnerCrowdState(tronRunnerCrowdClearState);
-  if (!TRON_RUNNER_CROWD_ENABLED || !sourceModel || !cloneRunnerSkeleton) return;
-  const sourceMeshes = [];
-  sourceModel.traverse((obj) => {
-    if (obj.isMesh) sourceMeshes.push(obj);
-  });
-  tronRunnerCrowdBuildJob = {
-    sourceModel,
-    sourceMeshes,
-    animations,
-    nextIndex: 0,
-    startedAt: performance.now(),
-  };
-  tronRunnerCrowdBuildStats.status = 'queued';
-  tronRunnerCrowdBuildStats.startedAt = tronRunnerCrowdBuildJob.startedAt;
-  tronRunnerCrowdBuildStats.built = 0;
-  tronRunnerCrowdBuildStats.requested = TRON_RUNNER_CROWD_COUNT;
-}
-
-function processTronRunnerCrowdBuildQueue() {
-  if (!tronRunnerCrowdBuildJob) return;
-  const job = tronRunnerCrowdBuildJob;
-  const started = performance.now();
-  tronRunnerCrowdBuildStats.status = 'building';
-  crowdRuntimeBuildMember(job, job.nextIndex);
-  job.nextIndex += 1;
-  tronRunnerCrowdBuildStats.built = job.nextIndex;
-  tronRunnerCrowdBuildStats.lastChunkMs = performance.now() - started;
-  if (job.nextIndex < TRON_RUNNER_CROWD_COUNT) return;
-  tronRunnerCrowdRuntime.syncScaleAndGround();
-  tronRunnerCrowdRuntime.syncVisibility();
-  tronRunnerCrowdBuildStats.status = 'done';
-  tronRunnerCrowdBuildStats.durationMs = performance.now() - job.startedAt;
-  tronRunnerCrowdBuildJob = null;
-}
-
-async function drainTronRunnerCrowdBuildQueue() {
-  while (tronRunnerCrowdBuildJob) {
-    processTronRunnerCrowdBuildQueue();
-    await waitForNextFrame();
-  }
-}
-
 const tronRunnerCrowdAvoidanceDeps = {
   intelligenceEnabled: TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED,
   avoidanceEnabled: TRON_RUNNER_CROWD_AVOIDANCE_ENABLED,
@@ -3943,7 +3918,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
 
 function crowdRuntimeUpdate(dt) {
   if (!TRON_RUNNER_CROWD_ENABLED) return;
-  processTronRunnerCrowdBuildQueue();
+  tronRunnerCrowdRuntime.processBuildQueue();
   if (!tronRunnerCrowd.length) return;
   tronRunnerCrowdRuntime.syncVisibility();
   if (!tronRunnerCrowdGroup.visible) {
@@ -4228,7 +4203,7 @@ function crowdRuntimeInspect() {
       progress: Number((tronRunnerCrowdBuildStats.built / Math.max(1, tronRunnerCrowdBuildStats.requested)).toFixed(3)),
       durationMs: Number(tronRunnerCrowdBuildStats.durationMs.toFixed(2)),
       lastChunkMs: Number(tronRunnerCrowdBuildStats.lastChunkMs.toFixed(2)),
-      queued: Boolean(tronRunnerCrowdBuildJob),
+      queued: Boolean(tronRunnerCrowdBuildQueueState.job),
     },
     intelligence: {
       enabled: TRON_RUNNER_CROWD_INTELLIGENCE_ENABLED,
@@ -6581,7 +6556,7 @@ async function bootSceneWithFinalDefaults() {
   applyPlayerSpawn(playerSpawn, false);
   await tronRunnerOrchestration.load();
   tronMainPlayerBody.build();
-  await drainTronRunnerCrowdBuildQueue();
+  await tronRunnerCrowdRuntime.drainBuildQueue();
   prewarmSkinnedMeshBoneTextures(scene);
   prewarmSceneTextureUploads(scene);
   prewarmPostProcessingPasses();
