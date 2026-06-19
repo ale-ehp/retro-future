@@ -124,15 +124,9 @@ import {
   TRON_RUNNER_CROWD_YIELD_DURATION_MS,
   TRON_RUNNER_DEFAULT_SPEED,
   TRON_RUNNER_DISTANCE_DRIVEN_WALK_ENABLED,
-  TRON_RUNNER_DYNAMIC_REFLECTION_BODY_MAX_OPACITY,
-  TRON_RUNNER_DYNAMIC_REFLECTION_BODY_OPACITY_MULTIPLIER,
   TRON_RUNNER_DYNAMIC_REFLECTION_BODY_RENDER_ORDER,
   TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
-  TRON_RUNNER_DYNAMIC_REFLECTION_LED_MAX_OPACITY,
-  TRON_RUNNER_DYNAMIC_REFLECTION_LED_OPACITY_MULTIPLIER,
   TRON_RUNNER_DYNAMIC_REFLECTION_LED_RENDER_ORDER,
-  TRON_RUNNER_DYNAMIC_REFLECTION_MAX_OPACITY,
-  TRON_RUNNER_DYNAMIC_REFLECTION_OPACITY_SCALE,
   TRON_RUNNER_DYNAMIC_REFLECTION_Y,
   TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
   TRON_RUNNER_ENABLED,
@@ -206,9 +200,6 @@ import {
 } from './character/character-crowd.js';
 import {
   makeTronRunnerCrowdSuitMaterial as createTronRunnerCrowdSuitMaterial,
-  makeTronRunnerReflectionBodyMaterial as createTronRunnerReflectionBodyMaterial,
-  makeTronRunnerReflectionLedMaterial as createTronRunnerReflectionLedMaterial,
-  makeTronRunnerReflectionMaterial as createTronRunnerReflectionMaterial,
 } from './character/character-materials.js';
 import {
   createTronMainPlayerBodyRuntime,
@@ -293,6 +284,9 @@ import {
 import {
   createTronRunnerCrowdRuntime,
 } from './character/runner-crowd-runtime.js';
+import {
+  createTronRunnerReflectionRigRuntime,
+} from './character/runner-reflection-rig.js';
 import {
   resetTronRunnerAutonomy,
 } from './character/runner-controller.js';
@@ -3003,21 +2997,6 @@ function makeTronRunnerCrowdSuitMaterial(colorPreset) {
   });
 }
 
-function makeTronRunnerReflectionMaterial() {
-  return createTronRunnerReflectionMaterial({ suitTexture: tronRunnerSuitTexture });
-}
-
-function makeTronRunnerReflectionBodyMaterial() {
-  return createTronRunnerReflectionBodyMaterial({ suitTexture: tronRunnerSuitTexture });
-}
-
-function makeTronRunnerReflectionLedMaterial(colorPreset = null) {
-  return createTronRunnerReflectionLedMaterial({
-    colorPreset,
-    ledMaskTexture: tronRunnerSuitLedMaskTexture,
-  });
-}
-
 const tronRunnerShadowMat = new THREE.MeshBasicMaterial({
   color: TRON_RUNNER_SHADOW_COLOR,
   alphaMap: tronRunnerShadowTextureState.texture,
@@ -3060,6 +3039,17 @@ const tronRunnerParts = createTronRunnerParts({
 });
 const tronRunnerState = createTronRunnerState({
   footstepBus: FOOTSTEP_NPC_SPATIAL_BUS,
+});
+const tronRunnerReflectionRig = createTronRunnerReflectionRigRuntime({
+  runnerWalker: tronRunnerWalker,
+  runnerParts: tronRunnerParts,
+  runnerState: tronRunnerState,
+  suitTexture: tronRunnerSuitTexture,
+  ledMaskTexture: tronRunnerSuitLedMaskTexture,
+  getBasePadMaterialResponse,
+  getRoadReflect: () => controlEls.roadReflect?.value,
+  getRoadRoughness: () => controlEls.roadRoughness?.value,
+  getRoadMetalness: () => controlEls.roadMetalness?.value,
 });
 const tronRunnerMotion = {
   elapsed: 0,
@@ -3262,8 +3252,8 @@ const tronRunnerOrchestration = createTronRunnerOrchestrationRuntime({
   applyVisualControls: applyTronRunnerVisualControls,
   buildCrowd: (model, animations) => tronRunnerCrowdRuntime.build(model, animations),
   buildIdleCharacter: (model) => tronRunnerIdleCharacterRuntime.build(model),
-  updateRealShadowRig: updateTronRunnerRealShadowRig,
-  updateDynamicReflection: updateTronRunnerDynamicReflection,
+  updateRealShadowRig: () => tronRunnerReflectionRig.updateRealShadowRig(),
+  updateDynamicReflection: () => tronRunnerReflectionRig.updateDynamicReflection(),
   surfaceYAt: tronRunnerSurfaceYAt,
   roadTileTopY,
   roadHexBoundaryLimits,
@@ -3286,96 +3276,9 @@ const tronRunnerOrchestration = createTronRunnerOrchestrationRuntime({
   sideBuildingSpacing: SIDE_BUILDING_SPACING,
   sideDoorFaceOffset,
   doorHalfHeight: () => sideDoorHeight * sideDoorScale * 0.5,
-  makeReflectionBodyMaterial: makeTronRunnerReflectionBodyMaterial,
-  makeReflectionLedMaterial: makeTronRunnerReflectionLedMaterial,
+  makeReflectionBodyMaterial: () => tronRunnerReflectionRig.makeBodyMaterial(),
+  makeReflectionLedMaterial: (colorPreset) => tronRunnerReflectionRig.makeLedMaterial(colorPreset),
 });
-
-function tronRunnerDynamicReflectionOpacity() {
-  return tronRunnerDynamicReflectionBodyOpacityForSurface(tronRunnerState.surface);
-}
-
-function tronRunnerDynamicReflectionOpacityForSurface(surface) {
-  if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED) return 0;
-  const isSidewalk = surface === 'sidewalk';
-  const basePadMaterial = getBasePadMaterialResponse();
-  const reflect = isSidewalk ? basePadMaterial.reflect : Number(controlEls.roadReflect?.value ?? 0);
-  const roughness = isSidewalk ? basePadMaterial.roughness : Number(controlEls.roadRoughness?.value ?? 1);
-  const metalness = isSidewalk ? basePadMaterial.metalness : Number(controlEls.roadMetalness?.value ?? 0);
-  const reflectLimit = isSidewalk ? 3.5 : 2.5;
-  const reflectAmount = THREE.MathUtils.clamp(reflect / Math.max(0.001, reflectLimit), 0, 1);
-  const smoothness = THREE.MathUtils.clamp(1 - roughness, 0, 1);
-  const materialResponse = THREE.MathUtils.lerp(0.86, 1.04, THREE.MathUtils.clamp(metalness, 0, 1));
-  const opacity = reflectAmount * smoothness * materialResponse * TRON_RUNNER_DYNAMIC_REFLECTION_MAX_OPACITY;
-  return THREE.MathUtils.clamp(opacity, 0, TRON_RUNNER_DYNAMIC_REFLECTION_MAX_OPACITY);
-}
-
-function tronRunnerDynamicReflectionBodyOpacityForSurface(surface) {
-  return Math.min(
-    TRON_RUNNER_DYNAMIC_REFLECTION_BODY_MAX_OPACITY,
-    tronRunnerDynamicReflectionOpacityForSurface(surface) * TRON_RUNNER_DYNAMIC_REFLECTION_BODY_OPACITY_MULTIPLIER
-  ) * TRON_RUNNER_DYNAMIC_REFLECTION_OPACITY_SCALE;
-}
-
-function tronRunnerDynamicReflectionLedOpacityForSurface(surface) {
-  return Math.min(
-    TRON_RUNNER_DYNAMIC_REFLECTION_LED_MAX_OPACITY,
-    tronRunnerDynamicReflectionOpacityForSurface(surface) * TRON_RUNNER_DYNAMIC_REFLECTION_LED_OPACITY_MULTIPLIER
-  ) * TRON_RUNNER_DYNAMIC_REFLECTION_OPACITY_SCALE;
-}
-
-function updateTronRunnerDynamicReflection() {
-  const group = tronRunnerParts.reflectionGroup;
-  const bodyMaterials = tronRunnerParts.reflectionBodyMaterials || [];
-  const ledMaterials = tronRunnerParts.reflectionLedMaterials || [];
-  const bodyOpacity = tronRunnerDynamicReflectionBodyOpacityForSurface(tronRunnerState.surface);
-  const ledOpacity = tronRunnerDynamicReflectionLedOpacityForSurface(tronRunnerState.surface);
-  const visible = Boolean(
-    TRON_RUNNER_SOURCE_CHARACTER_VISIBLE &&
-    TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED &&
-    group &&
-    tronRunnerParts.reflectionModel &&
-    bodyOpacity > 0.005
-  );
-  if (group) {
-    group.visible = visible;
-    group.position.y = TRON_RUNNER_DYNAMIC_REFLECTION_Y;
-    group.scale.set(1, -TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE, 1);
-  }
-  for (const material of bodyMaterials) {
-    material.userData.tronRunnerBaseOpacity = bodyOpacity;
-    material.opacity = bodyOpacity;
-    material.needsUpdate = true;
-  }
-  for (const material of ledMaterials) {
-    material.userData.tronRunnerBaseOpacity = ledOpacity;
-    material.opacity = ledOpacity;
-    material.needsUpdate = true;
-  }
-  tronRunnerState.dynamicReflectionVisible = visible;
-  tronRunnerState.dynamicReflectionOpacity = bodyOpacity;
-  tronRunnerState.dynamicReflectionBodyOpacity = bodyOpacity;
-  tronRunnerState.dynamicReflectionLedOpacity = ledOpacity;
-  tronRunnerState.dynamicReflectionSurface = tronRunnerState.surface;
-  tronRunnerState.dynamicReflectionMeshCount = tronRunnerParts.dynamicReflectionMeshCount;
-  tronRunnerState.dynamicReflectionLedMeshCount = tronRunnerParts.dynamicReflectionLedMeshCount;
-  tronRunnerState.dynamicReflectionAnimated = Boolean(tronRunnerParts.reflectionMixer && tronRunnerParts.reflectionLedMixer);
-}
-
-function updateTronRunnerRealShadowRig() {
-  if (!TRON_RUNNER_REAL_SHADOW_ENABLED || !tronRunnerParts.realShadowLight || !tronRunnerParts.realShadowTarget) return;
-  const light = tronRunnerParts.realShadowLight;
-  const target = tronRunnerParts.realShadowTarget;
-  const runnerX = tronRunnerWalker.position.x;
-  const runnerY = tronRunnerWalker.position.y;
-  const runnerZ = tronRunnerWalker.position.z;
-  light.position.set(runnerX - 7.5, runnerY + 18, runnerZ - 9.5);
-  target.position.set(runnerX + 0.5, runnerY + 1.4, runnerZ + 2.2);
-  light.target.updateMatrixWorld();
-  light.updateMatrixWorld();
-  if (tronRunnerParts.realShadowReceiver) {
-    tronRunnerParts.realShadowReceiver.position.y = 0.012;
-  }
-}
 
 function tronRunnerSurfaceYAt(x = tronRunnerWalker.position.x, z = tronRunnerWalker.position.z) {
   const padHit = basePadAtPoint(x, z);
@@ -3820,7 +3723,7 @@ function crowdRuntimeBuildReflection(sourceModel, animations, index, colorPreset
     obj.receiveShadow = false;
     obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_BODY_RENDER_ORDER;
     obj.layers.set(0);
-    obj.material = makeTronRunnerReflectionBodyMaterial();
+    obj.material = tronRunnerReflectionRig.makeBodyMaterial();
     bodyMaterials.push(obj.material);
     meshCount += 1;
   });
@@ -3831,7 +3734,7 @@ function crowdRuntimeBuildReflection(sourceModel, animations, index, colorPreset
     obj.receiveShadow = false;
     obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_LED_RENDER_ORDER;
     obj.layers.set(0);
-    obj.material = makeTronRunnerReflectionLedMaterial(colorPreset);
+    obj.material = tronRunnerReflectionRig.makeLedMaterial(colorPreset);
     ledMaterials.push(obj.material);
     ledMeshCount += 1;
   });
@@ -3911,8 +3814,8 @@ function crowdRuntimeUpdateReflection(member) {
   // Kill the reflection when a building occludes the member: depthTest:false would otherwise
   // paint the reflection straight through the building face.
   const occluded = budgetActive && tronRunnerCrowdReflectionOccludedByBuilding(member);
-  const bodyOpacity = budgetActive && !occluded ? tronRunnerDynamicReflectionBodyOpacityForSurface(member.surface) : 0;
-  const ledOpacity = budgetActive && !occluded ? tronRunnerDynamicReflectionLedOpacityForSurface(member.surface) : 0;
+  const bodyOpacity = budgetActive && !occluded ? tronRunnerReflectionRig.bodyOpacityForSurface(member.surface) : 0;
+  const ledOpacity = budgetActive && !occluded ? tronRunnerReflectionRig.ledOpacityForSurface(member.surface) : 0;
   const visible = Boolean(
     TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED &&
     postRevealPerfIsolationState.crowdReflections &&
