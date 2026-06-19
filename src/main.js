@@ -537,6 +537,7 @@ import {
   startCityRevealWireframe,
   updateCityRevealWireframe,
 } from './world/city-reveal-wireframe.js';
+import { createCityRevealRenderRuntime } from './world/city-reveal-render-runtime.js';
 import {
   BASE_PAD_CULLING_BOUNDS_MARGIN,
   BASE_PAD_FRUSTUM_CULLING_ENABLED,
@@ -782,12 +783,6 @@ import {
 
 // Postprocessing (optional bloom + FXAA). Best-effort — fallback to plain renderer if any module fails.
 let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null;
-let cityRevealSkyPass = null;
-let cityRevealOverlayPass = null;
-let cityRevealWirePass = null;
-let cityRevealRoadGridPass = null;
-let cityRevealWireFxaaPass = null;
-let cityRevealScenePass = null;
 let postEnabled = true;
 let usePost = false;
 const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
@@ -6637,11 +6632,30 @@ initCityRevealWireframe({
   scheduleTronSoundtrackIntroLofiStopForReveal,
 });
 
-const CITY_REVEAL_REAL_PREWARM_TARGET_SIZE = 4;
-let cityRevealRealPrewarmTarget = null;
-let cityRevealRealPrewarmStatus = 'pending';
-let cityRevealRealPrewarmMs = 0;
-let cityRevealRealPrewarmError = '';
+const cityRevealRender = createCityRevealRenderRuntime({
+  renderer,
+  scene,
+  camera,
+  domeMesh,
+  getComposer: () => composer,
+  cityRevealSkyScene,
+  cityRevealOverlayScene,
+  cityRevealOverlayCamera,
+  cityRevealWireScene,
+  cityRevealRoadGridScene,
+  cityRevealMainLedReveal,
+  cityRevealRealClipPlane,
+  refreshCityRevealSweepBounds,
+  setCityRevealSweepFront,
+  cityRevealFrontForProgress,
+  isCityRevealCompositeActive,
+  isCityRevealRealRevealActive,
+  isCityRevealBackplateActive,
+  syncCityRevealSkyDome,
+  renderCityRevealSkyBase,
+  syncGlobalFxaaPass,
+  shouldUseComposer,
+});
 
 function mainFacadeVerticalRevealProgress() {
   if (cityRevealComplete) return 1;
@@ -6719,12 +6733,12 @@ const cityRevealProfiler = createCityRevealProfiler({
   getBloomPass: () => bloomPass,
   getFxaaPass: () => fxaaPass,
   getFsrUpscalePass: () => fsrUpscalePass,
-  getCityRevealSkyPass: () => cityRevealSkyPass,
-  getCityRevealOverlayPass: () => cityRevealOverlayPass,
-  getCityRevealWirePass: () => cityRevealWirePass,
-  getCityRevealRoadGridPass: () => cityRevealRoadGridPass,
-  getCityRevealWireFxaaPass: () => cityRevealWireFxaaPass,
-  getCityRevealScenePass: () => cityRevealScenePass,
+  getCityRevealSkyPass: () => cityRevealRender.getSkyPass(),
+  getCityRevealOverlayPass: () => cityRevealRender.getOverlayPass(),
+  getCityRevealWirePass: () => cityRevealRender.getWirePass(),
+  getCityRevealRoadGridPass: () => cityRevealRender.getRoadGridPass(),
+  getCityRevealWireFxaaPass: () => cityRevealRender.getWireFxaaPass(),
+  getCityRevealScenePass: () => cityRevealRender.getScenePass(),
   getCityRevealMainLedRevealPass: cityRevealMainLedReveal.getPass,
   cityRevealPostRevealElapsedMs,
   cityRevealEffectiveDelayMs,
@@ -6738,154 +6752,6 @@ const cityRevealProfiler = createCityRevealProfiler({
 
 function shouldUpdateTronRunnerSourceCharacter() {
   return Boolean(TRON_RUNNER_SOURCE_CHARACTER_VISIBLE || TRON_MAIN_PLAYER_BODY_ENABLED);
-}
-
-function createCityRevealScenePass() {
-  return {
-    enabled: true,
-    needsSwap: false,
-    clear: true,
-    clearDepth: false,
-    clipReveal: false,
-    renderToScreen: false,
-    setSize() {},
-    render(rendererInstance, writeBuffer, readBuffer) {
-      const previousAutoClear = rendererInstance.autoClear;
-      const previousClippingPlanes = rendererInstance.clippingPlanes;
-      const previousSceneBackground = scene.background;
-      const previousDomeVisible = domeMesh.visible;
-      rendererInstance.autoClear = false;
-      rendererInstance.setRenderTarget(this.renderToScreen ? null : readBuffer);
-      if (this.clearDepth) rendererInstance.clearDepth();
-      if (this.clear) {
-        rendererInstance.clear(
-          rendererInstance.autoClearColor,
-          rendererInstance.autoClearDepth,
-          rendererInstance.autoClearStencil
-        );
-      }
-      rendererInstance.clippingPlanes = this.clipReveal ? [cityRevealRealClipPlane] : [];
-      if (this.clipReveal) {
-        scene.background = null;
-        domeMesh.visible = false;
-      }
-      rendererInstance.render(scene, camera);
-      scene.background = previousSceneBackground;
-      domeMesh.visible = previousDomeVisible;
-      rendererInstance.clippingPlanes = previousClippingPlanes;
-      rendererInstance.autoClear = previousAutoClear;
-    },
-  };
-}
-
-function syncCityRevealComposerPasses() {
-  if (!cityRevealScenePass) return;
-  const wireActive = isCityRevealCompositeActive();
-  const realRevealActive = isCityRevealRealRevealActive();
-  const mainLedRevealActive = cityRevealMainLedReveal.isOverlayActive();
-  cityRevealMainLedReveal.syncOverlayLayers();
-  syncGlobalFxaaPass();
-  if (cityRevealSkyPass) cityRevealSkyPass.enabled = wireActive;
-  if (cityRevealOverlayPass) cityRevealOverlayPass.enabled = wireActive && isCityRevealBackplateActive();
-  if (cityRevealWirePass) cityRevealWirePass.enabled = wireActive;
-  if (cityRevealRoadGridPass) cityRevealRoadGridPass.enabled = wireActive;
-  if (cityRevealWireFxaaPass) cityRevealWireFxaaPass.enabled = false;
-  cityRevealScenePass.enabled = !wireActive || realRevealActive;
-  cityRevealScenePass.clear = !wireActive;
-  cityRevealScenePass.clearDepth = realRevealActive;
-  cityRevealScenePass.clipReveal = realRevealActive;
-  cityRevealMainLedReveal.setPassEnabled(mainLedRevealActive);
-  if (!mainLedRevealActive) cityRevealMainLedReveal.resetScissorState();
-}
-
-function renderSceneWithCityRevealClip() {
-  const previousClippingPlanes = renderer.clippingPlanes;
-  const previousSceneBackground = scene.background;
-  const previousDomeVisible = domeMesh.visible;
-  renderer.clippingPlanes = [cityRevealRealClipPlane];
-  scene.background = null;
-  domeMesh.visible = false;
-  renderer.render(scene, camera);
-  scene.background = previousSceneBackground;
-  domeMesh.visible = previousDomeVisible;
-  renderer.clippingPlanes = previousClippingPlanes;
-}
-
-function prewarmCityRevealRealPass() {
-  if (cityRevealRealPrewarmStatus === 'done' || cityRevealRealPrewarmStatus === 'running') return;
-  cityRevealRealPrewarmStatus = 'running';
-  cityRevealRealPrewarmError = '';
-  const started = performance.now();
-  const previousTarget = renderer.getRenderTarget();
-  const previousAutoClear = renderer.autoClear;
-  const previousClippingPlanes = renderer.clippingPlanes;
-  const previousSceneBackground = scene.background;
-  const previousDomeVisible = domeMesh.visible;
-  const previousCameraLayerMask = camera.layers.mask;
-  try {
-    refreshCityRevealSweepBounds();
-    setCityRevealSweepFront(cityRevealFrontForProgress(0.04));
-    if (!cityRevealRealPrewarmTarget) {
-      cityRevealRealPrewarmTarget = new THREE.WebGLRenderTarget(
-        CITY_REVEAL_REAL_PREWARM_TARGET_SIZE,
-        CITY_REVEAL_REAL_PREWARM_TARGET_SIZE,
-        { depthBuffer: true, stencilBuffer: false }
-      );
-      cityRevealRealPrewarmTarget.texture.name = 'city-reveal-real-prewarm-target';
-    }
-    renderer.setRenderTarget(cityRevealRealPrewarmTarget);
-    renderer.autoClear = true;
-    renderer.clippingPlanes = [cityRevealRealClipPlane];
-    scene.background = null;
-    domeMesh.visible = false;
-    camera.layers.set(0);
-    renderer.compile(scene, camera);
-    renderer.render(scene, camera);
-    cityRevealRealPrewarmStatus = 'done';
-  } catch (error) {
-    cityRevealRealPrewarmStatus = 'error';
-    cityRevealRealPrewarmError = error?.message || String(error);
-    console.warn('[city-reveal-prewarm]', cityRevealRealPrewarmError);
-  } finally {
-    camera.layers.mask = previousCameraLayerMask;
-    scene.background = previousSceneBackground;
-    domeMesh.visible = previousDomeVisible;
-    renderer.clippingPlanes = previousClippingPlanes;
-    renderer.autoClear = previousAutoClear;
-    renderer.setRenderTarget(previousTarget);
-    cityRevealRealPrewarmMs = performance.now() - started;
-  }
-}
-
-function renderCityRevealCompositeFrame() {
-  const active = isCityRevealCompositeActive();
-  cityRevealMainLedReveal.syncOverlayLayers();
-  if (shouldUseComposer()) {
-    syncCityRevealComposerPasses();
-    if (active) syncCityRevealSkyDome();
-    composer.render();
-    return;
-  }
-
-  const previousAutoClear = renderer.autoClear;
-  if (!active) {
-    renderer.render(scene, camera);
-    renderer.autoClear = previousAutoClear;
-    return;
-  }
-
-  renderCityRevealSkyBase();
-  renderer.autoClear = false;
-  if (isCityRevealBackplateActive()) renderer.render(cityRevealOverlayScene, cityRevealOverlayCamera);
-  renderer.render(cityRevealRoadGridScene, camera);
-  renderer.render(cityRevealWireScene, camera);
-  const realRevealActive = isCityRevealRealRevealActive();
-  if (realRevealActive) {
-    renderer.clearDepth();
-    renderSceneWithCityRevealClip();
-    cityRevealMainLedReveal.renderOverlay(renderer);
-  }
-  renderer.autoClear = previousAutoClear;
 }
 
 // ---------- post (bloom) ----------
@@ -6937,7 +6803,7 @@ function resizeBloomTargets() {
 }
 
 function resizeFxaaTargets() {
-  if (!fxaaPass && !cityRevealWireFxaaPass) return;
+  if (!fxaaPass && !cityRevealRender.getWireFxaaPass()) return;
   const composerPixelRatio = effectiveComposerPixelRatio();
   const width = Math.max(1, Math.round(window.innerWidth * composerPixelRatio));
   const height = Math.max(1, Math.round(window.innerHeight * composerPixelRatio));
@@ -6945,7 +6811,7 @@ function resizeFxaaTargets() {
   if (key === lastFxaaTargetKey) return;
   lastFxaaTargetKey = key;
   fxaaPass?.setSize(width, height);
-  cityRevealWireFxaaPass?.setSize(width, height);
+  cityRevealRender.resizeWireFxaaTarget(width, height);
   resizeFsrUpscaleTarget();
 }
 
@@ -6968,13 +6834,7 @@ function disposeComposerTargets() {
   bloomPass = null;
   fxaaPass = null;
   fsrUpscalePass = null;
-  cityRevealSkyPass = null;
-  cityRevealOverlayPass = null;
-  cityRevealWirePass = null;
-  cityRevealRoadGridPass = null;
-  cityRevealWireFxaaPass = null;
-  cityRevealScenePass = null;
-  cityRevealMainLedReveal.clearPass();
+  cityRevealRender.clearComposerPasses();
   composer = null;
 }
 
@@ -6989,26 +6849,7 @@ function rebuildComposer() {
   lastFsrTargetKey = '';
   composer.setSize(window.innerWidth, window.innerHeight);
   composer.setPixelRatio(effectiveComposerPixelRatio());
-  cityRevealSkyPass = new RenderPass(cityRevealSkyScene, camera);
-  cityRevealSkyPass.clear = true;
-  cityRevealOverlayPass = new RenderPass(cityRevealOverlayScene, cityRevealOverlayCamera);
-  cityRevealOverlayPass.clear = false;
-  cityRevealWirePass = new RenderPass(cityRevealWireScene, camera);
-  cityRevealWirePass.clear = false;
-  cityRevealRoadGridPass = new RenderPass(cityRevealRoadGridScene, camera);
-  cityRevealRoadGridPass.clear = false;
-  cityRevealWireFxaaPass = new FXAAPass();
-  cityRevealWireFxaaPass.enabled = false;
-  cityRevealScenePass = createCityRevealScenePass();
-  cityRevealMainLedReveal.createPass();
-  syncCityRevealComposerPasses();
-  composer.addPass(cityRevealSkyPass);
-  composer.addPass(cityRevealOverlayPass);
-  composer.addPass(cityRevealRoadGridPass);
-  composer.addPass(cityRevealWirePass);
-  composer.addPass(cityRevealWireFxaaPass);
-  composer.addPass(cityRevealScenePass);
-  composer.addPass(cityRevealMainLedReveal.getPass());
+  cityRevealRender.addComposerPasses(composer, { RenderPass, FXAAPass });
   bloomPass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
     0.58,
@@ -9055,11 +8896,11 @@ function prewarmPostProcessingPasses() {
     postEnabled = true;
     if (bloomPass) bloomPass.enabled = true;
     if (fxaaPass) fxaaPass.enabled = antialiasMode === 'fxaa';
-    syncCityRevealComposerPasses();
+    cityRevealRender.syncComposerPasses();
     composer.render();
     postProcessingPrewarmStats.rendered = true;
     setCityRevealPostProcessingPrewarmState();
-    syncCityRevealComposerPasses();
+    cityRevealRender.syncComposerPasses();
     composer.render();
     postProcessingPrewarmStats.postRevealRendered = true;
   } catch {
@@ -9069,7 +8910,7 @@ function prewarmPostProcessingPasses() {
     postEnabled = previousPostEnabled;
     if (bloomPass) bloomPass.enabled = previousBloomEnabled;
     if (fxaaPass) fxaaPass.enabled = previousFxaaEnabled;
-    syncCityRevealComposerPasses();
+    cityRevealRender.syncComposerPasses();
     postProcessingPrewarmStats.durationMs = Number((performance.now() - started).toFixed(2));
     postProcessingPrewarmStats.texturesAfter = renderer.info.memory?.textures ?? 0;
     performanceDiagnostics.setLastTextureCount(postProcessingPrewarmStats.texturesAfter);
@@ -9095,7 +8936,7 @@ async function bootSceneWithFinalDefaults() {
   prewarmSceneTextureUploads(scene);
   prewarmPostProcessingPasses();
   await ensureFootstepAudioReady();
-  prewarmCityRevealRealPass();
+  cityRevealRender.prewarmRealPass();
   scheduleDroneIntroAutoFlight();
 }
 
@@ -9183,7 +9024,7 @@ window.__tronInspect = () => ({
   cityRevealWireAlpha,
   cityRevealBackplateAlpha: cityRevealBackplateMat.opacity,
   cityRevealBackplateVisible: cityRevealBackplate.visible,
-  cityRevealSkyPassActive: Boolean(cityRevealSkyPass?.enabled),
+  cityRevealSkyPassActive: Boolean(cityRevealRender.getSkyPass()?.enabled),
   ...skyDome.inspectRevealSky(),
   cityRevealSweepMode: CITY_REVEAL_SWEEP_MODE,
   cityRevealFrontZ,
@@ -9193,12 +9034,7 @@ window.__tronInspect = () => ({
   cityRevealArmed: cityRevealArmedAt > 0,
   cityRevealArmedElapsedMs: cityRevealArmedAt > 0 ? Number((performance.now() - cityRevealArmedAt).toFixed(1)) : 0,
   cityRevealMainBuildingSlow: cityRevealMainBuildingSlowDiagnostics(),
-  cityRevealRealPrewarm: {
-    status: cityRevealRealPrewarmStatus,
-    durationMs: Number(cityRevealRealPrewarmMs.toFixed(2)),
-    error: cityRevealRealPrewarmError,
-    targetSize: CITY_REVEAL_REAL_PREWARM_TARGET_SIZE,
-  },
+  cityRevealRealPrewarm: cityRevealRender.inspectRealPrewarm(),
   cityRevealMainFacadeVerticalLed: { ...mainFacadeVerticalRevealState },
   cityRevealStarted: cityRevealStartedAt > 0,
   cityRevealComplete,
@@ -9214,19 +9050,15 @@ window.__tronInspect = () => ({
   cityRevealRenderOrder: CITY_REVEAL_RENDER_ORDER,
   cityRevealCompositeActive: isCityRevealCompositeActive(),
   cityRevealRealRevealActive: isCityRevealRealRevealActive(),
-  cityRevealRealClipActive: Boolean(cityRevealScenePass?.clipReveal || isCityRevealRealRevealActive()),
+  cityRevealRealClipActive: Boolean(cityRevealRender.getScenePass()?.clipReveal || isCityRevealRealRevealActive()),
   cityRevealComposerPasses: {
-    overlay: Boolean(cityRevealOverlayPass?.enabled),
-    wireframe: Boolean(cityRevealWirePass?.enabled),
-    roadGrid: Boolean(cityRevealRoadGridPass?.enabled),
-    wireAa: Boolean(cityRevealWireFxaaPass?.enabled),
-    realCity: Boolean(cityRevealScenePass?.enabled),
+    ...cityRevealRender.inspectPasses(),
     mainLedReveal: Boolean(cityRevealMainLedReveal.getPass()?.enabled),
   },
   cityRevealScanGlow: cityRevealScanGlow.inspect(),
   ...cityRevealMainLedReveal.inspect(),
   cityRevealWireAaMode: 'global-fxaa-only',
-  cityRevealWireAaActive: Boolean(cityRevealWireFxaaPass?.enabled),
+  cityRevealWireAaActive: Boolean(cityRevealRender.getWireFxaaPass()?.enabled),
   cityRevealWireAaLocalized: false,
   cityRevealVisibleObjects: cityRevealEstimatedVisibleObjects(),
   cityRevealWireObjects: cityRevealWireObjects.length,
@@ -9531,7 +9363,7 @@ function tick(now) {
   performanceDiagnostics.pollGpuTimerSamples();
   performanceDiagnostics.beginGpuTimerSample();
   try {
-    renderCityRevealCompositeFrame();
+    cityRevealRender.renderCompositeFrame();
   } finally {
     performanceDiagnostics.endGpuTimerSample();
   }
