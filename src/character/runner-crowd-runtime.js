@@ -53,6 +53,51 @@ export function syncTronRunnerCrowdScaleAndGround({
   syncIdlePose();
 }
 
+const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
+
+export function syncTronRunnerCrowdVisibilityState({
+  crowd,
+  group,
+  state,
+  crowdEnabled,
+  cullingEnabled,
+  getVisibleFactor,
+  revealVisible,
+  isRunnerReady,
+  now,
+  updateReflection,
+  syncMemberMatrixUpdates,
+}) {
+  const visibleFactor = getVisibleFactor();
+  const revealIsVisible = revealVisible(visibleFactor);
+  const wouldShow = Boolean(crowdEnabled && revealIsVisible && isRunnerReady());
+  if (!wouldShow) state.appearArmedAt = 0;
+  else if (!state.appearArmedAt) state.appearArmedAt = now();
+  const visible = wouldShow && (now() - state.appearArmedAt >= TRON_RUNNER_CROWD_APPEAR_DELAY_MS);
+  const changed = group.visible !== visible;
+  group.visible = visible;
+  for (const member of crowd) {
+    member.baseVisible = visible;
+    if (!visible) {
+      const memberChanged = member.group.visible !== false;
+      member.group.visible = false;
+      member.cullingVisible = false;
+      member.cullingReason = 'group-hidden';
+      if (changed || memberChanged) updateReflection(member);
+      syncMemberMatrixUpdates(member, true);
+      continue;
+    }
+    if (!cullingEnabled) {
+      const memberChanged = member.group.visible !== true;
+      member.group.visible = true;
+      member.cullingVisible = true;
+      member.cullingReason = 'visible';
+      if (changed || memberChanged) updateReflection(member);
+      syncMemberMatrixUpdates(member, true);
+    }
+  }
+}
+
 export function createTronRunnerCrowdRuntime({
   crowd,
   group,
@@ -63,6 +108,7 @@ export function createTronRunnerCrowdRuntime({
   updateImpl,
   inspectImpl,
   syncScaleAndGroundImpl,
+  syncVisibilityImpl,
 }) {
   function resolveCameraCollision() {
     if (isCameraCollisionDisabled()) return;
@@ -95,6 +141,7 @@ export function createTronRunnerCrowdRuntime({
     update: updateImpl,
     inspect: inspectImpl,
     syncScaleAndGround: syncScaleAndGroundImpl,
+    syncVisibility: syncVisibilityImpl,
     resolveCameraCollision,
   };
 }
