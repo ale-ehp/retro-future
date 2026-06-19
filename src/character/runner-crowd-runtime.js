@@ -1,4 +1,5 @@
 import {
+  nearbyTronRunnerCrowdMembers,
   prepareTronRunnerCrowdSpatialGrid,
   updateTronRunnerCrowdCullingState,
 } from './character-crowd.js';
@@ -153,6 +154,14 @@ export function prepareTronRunnerCrowdSpatialGridRuntime({
   );
 }
 
+export function nearbyTronRunnerCrowdMembersRuntime({
+  spatialGrid,
+  gridCoord,
+  gridKey,
+}, x, z) {
+  return nearbyTronRunnerCrowdMembers(x, z, spatialGrid, gridCoord, gridKey);
+}
+
 export function createTronRunnerCrowdRuntime({
   crowd,
   group,
@@ -166,6 +175,7 @@ export function createTronRunnerCrowdRuntime({
   syncVisibilityImpl,
   updateCullingImpl,
   prepareSpatialGridImpl,
+  nearbyMembersImpl,
 }) {
   function resolveCameraCollision() {
     if (isCameraCollisionDisabled()) return;
@@ -201,6 +211,7 @@ export function createTronRunnerCrowdRuntime({
     syncVisibility: syncVisibilityImpl,
     updateCulling: updateCullingImpl,
     prepareSpatialGrid: prepareSpatialGridImpl,
+    nearbyMembers: nearbyMembersImpl,
     resolveCameraCollision,
   };
 }
