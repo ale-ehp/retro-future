@@ -253,6 +253,7 @@ import {
   clearTronRunnerCrowdState,
   createTronRunnerCrowdRuntime,
   syncTronRunnerCrowdScaleAndGround,
+  syncTronRunnerCrowdVisibilityState,
 } from './character/runner-crowd-runtime.js';
 import {
   createTronRunnerCrowdRoutesRuntime,
@@ -3116,6 +3117,19 @@ const tronRunnerCrowdScaleGroundState = {
   syncMemberMatrixUpdates: syncTronRunnerCrowdMemberMatrixUpdates,
   syncIdlePose: () => tronRunnerIdleCharacterRuntime.syncPose(),
 };
+const tronRunnerCrowdVisibilityState = {
+  crowd: tronRunnerCrowd,
+  group: tronRunnerCrowdGroup,
+  state: { appearArmedAt: 0 },
+  crowdEnabled: TRON_RUNNER_CROWD_ENABLED,
+  cullingEnabled: TRON_RUNNER_CROWD_CULLING_ENABLED,
+  getVisibleFactor: () => tronRunnerReveal?.visibleFactor() ?? (TRON_RUNNER_REVEAL_ENABLED ? 0 : 1),
+  revealVisible: (visibleFactor) => tronRunnerReveal?.revealVisible(visibleFactor) ?? !TRON_RUNNER_REVEAL_ENABLED,
+  isRunnerReady: () => tronRunnerState.ready,
+  now: () => performance.now(),
+  updateReflection: crowdRuntimeUpdateReflection,
+  syncMemberMatrixUpdates: syncTronRunnerCrowdMemberMatrixUpdates,
+};
 const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   crowd: tronRunnerCrowd,
   group: tronRunnerCrowdGroup,
@@ -3126,6 +3140,7 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   updateImpl: crowdRuntimeUpdate,
   inspectImpl: crowdRuntimeInspect,
   syncScaleAndGroundImpl: () => syncTronRunnerCrowdScaleAndGround(tronRunnerCrowdScaleGroundState),
+  syncVisibilityImpl: () => syncTronRunnerCrowdVisibilityState(tronRunnerCrowdVisibilityState),
 });
 const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerState: tronRunnerState,
@@ -3146,7 +3161,7 @@ tronRunnerReveal = createTronRunnerRevealRuntime({
   crowd: tronRunnerCrowd,
   idleCharacter: tronRunnerIdleCharacter,
   idleCharacterGroup: tronRunnerIdleCharacterGroup,
-  syncCrowdVisibility: syncTronRunnerCrowdVisibility,
+  syncCrowdVisibility: () => tronRunnerCrowdRuntime.syncVisibility(),
   getCityRevealComplete: () => cityRevealComplete,
 });
 
@@ -3409,9 +3424,6 @@ function normalizeTronRunnerCrowdState(member, now) {
   }
 }
 
-const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
-let tronRunnerCrowdAppearArmedAt = 0;
-
 function setTronRunnerSubtreeMatrixAutoUpdate(root, enabled) {
   if (!root || root.userData.tronRunnerMatrixAutoUpdateEnabled === enabled) return;
   if (!enabled) root.updateMatrixWorld(true);
@@ -3438,38 +3450,6 @@ function syncTronRunnerCrowdMemberMatrixUpdates(member, refreshHidden = false) {
   if (refreshHidden) {
     if (!characterVisible) refreshTronRunnerFrozenSubtreeMatrices(member.group);
     if (!reflectionVisible) refreshTronRunnerFrozenSubtreeMatrices(member.reflectionGroup);
-  }
-}
-
-function syncTronRunnerCrowdVisibility() {
-  const visibleFactor = tronRunnerReveal?.visibleFactor() ?? (TRON_RUNNER_REVEAL_ENABLED ? 0 : 1);
-  const revealVisible = tronRunnerReveal?.revealVisible(visibleFactor) ?? !TRON_RUNNER_REVEAL_ENABLED;
-  const wouldShow = Boolean(TRON_RUNNER_CROWD_ENABLED && revealVisible && tronRunnerState.ready);
-  // Hold the crowd back an extra second after it would normally appear.
-  if (!wouldShow) tronRunnerCrowdAppearArmedAt = 0;
-  else if (!tronRunnerCrowdAppearArmedAt) tronRunnerCrowdAppearArmedAt = performance.now();
-  const visible = wouldShow && (performance.now() - tronRunnerCrowdAppearArmedAt >= TRON_RUNNER_CROWD_APPEAR_DELAY_MS);
-  const changed = tronRunnerCrowdGroup.visible !== visible;
-  tronRunnerCrowdGroup.visible = visible;
-  for (const member of tronRunnerCrowd) {
-    member.baseVisible = visible;
-    if (!visible) {
-      const memberChanged = member.group.visible !== false;
-      member.group.visible = false;
-      member.cullingVisible = false;
-      member.cullingReason = 'group-hidden';
-      if (changed || memberChanged) crowdRuntimeUpdateReflection(member);
-      syncTronRunnerCrowdMemberMatrixUpdates(member, true);
-      continue;
-    }
-    if (!TRON_RUNNER_CROWD_CULLING_ENABLED) {
-      const memberChanged = member.group.visible !== true;
-      member.group.visible = true;
-      member.cullingVisible = true;
-      member.cullingReason = 'visible';
-      if (changed || memberChanged) crowdRuntimeUpdateReflection(member);
-      syncTronRunnerCrowdMemberMatrixUpdates(member, true);
-    }
   }
 }
 
@@ -3644,7 +3624,7 @@ function processTronRunnerCrowdBuildQueue() {
   tronRunnerCrowdBuildStats.lastChunkMs = performance.now() - started;
   if (job.nextIndex < TRON_RUNNER_CROWD_COUNT) return;
   tronRunnerCrowdRuntime.syncScaleAndGround();
-  syncTronRunnerCrowdVisibility();
+  tronRunnerCrowdRuntime.syncVisibility();
   tronRunnerCrowdBuildStats.status = 'done';
   tronRunnerCrowdBuildStats.durationMs = performance.now() - job.startedAt;
   tronRunnerCrowdBuildJob = null;
@@ -4021,7 +4001,7 @@ function crowdRuntimeUpdate(dt) {
   if (!TRON_RUNNER_CROWD_ENABLED) return;
   processTronRunnerCrowdBuildQueue();
   if (!tronRunnerCrowd.length) return;
-  syncTronRunnerCrowdVisibility();
+  tronRunnerCrowdRuntime.syncVisibility();
   if (!tronRunnerCrowdGroup.visible) {
     tronRunnerCrowdAccumulatedDt = 0;
     return;
