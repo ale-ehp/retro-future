@@ -15,7 +15,9 @@ import {
   tronRunnerCrowdPointInsideRoute as tronRunnerCrowdPointInsideRouteCore,
 } from './character-collision.js';
 import {
+  applyTronRunnerCrowdReflectionState,
   tronRunnerCrowdPostRevealReflectionRampLimit as tronRunnerCrowdPostRevealReflectionRampLimitCore,
+  tronRunnerCrowdReflectionOccludedByBuilding,
   updateTronRunnerCrowdReflectionBudget as updateTronRunnerCrowdReflectionBudgetCore,
 } from './character-reflections.js';
 import {
@@ -237,6 +239,85 @@ export function startGreeterWalkingToBoardRuntime(member) {
     member.reflectionLedIdleAction.stop();
     member.reflectionLedIdleAction.setEffectiveWeight(0);
   }
+}
+
+export function applyGreeterHeadLookRuntime({
+  camera,
+  maxYaw,
+  yawSign,
+  lerpAngle,
+}, member, dt) {
+  if (!member.headBone) {
+    member.model?.traverse((object) => {
+      if (!member.headBone && object.isBone && /head$/i.test(object.name)) member.headBone = object;
+    });
+  }
+  if (!member.headBone) return;
+  const lookYaw = Math.atan2(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
+  let rel = lookYaw - member.group.rotation.y;
+  rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+  rel = Math.min(maxYaw, Math.max(-maxYaw, rel)) * yawSign;
+  member.headLookYaw = lerpAngle(member.headLookYaw ?? 0, rel, Math.min(1, dt * 4));
+  member.headBone.rotation.y = member.headLookYaw;
+  if (!member.reflectionHeadBone && member.reflectionModel) {
+    member.reflectionModel.traverse((object) => {
+      if (!member.reflectionHeadBone && object.isBone && /head$/i.test(object.name)) {
+        member.reflectionHeadBone = object;
+      }
+    });
+  }
+  if (member.reflectionHeadBone) member.reflectionHeadBone.rotation.y = member.headLookYaw;
+}
+
+export function setGreeterBubbleRuntime(member, html, durationMs, now, sizeScale = 1) {
+  member.bubbleText = html;
+  member.bubbleUntil = now + durationMs;
+  member.bubbleSizeScale = sizeScale;
+  member.bubbleProximity = false;
+}
+
+export function updateTronRunnerCrowdReflectionRuntime({
+  getCrowdReflectionsIsolation,
+  camera,
+  getColliderRecords,
+  reflectionRig,
+  dynamicReflectionEnabled,
+  crowdGroup,
+  reflectionY,
+  reflectionYScale,
+}, member) {
+  const budgetActive = getCrowdReflectionsIsolation() && member.dynamicReflectionBudgetActive === true;
+  if (!budgetActive && member.dynamicReflectionVisible === false) return;
+  const group = member.reflectionGroup;
+  const bodyMaterials = member.reflectionBodyMaterials || [];
+  const ledMaterials = member.reflectionLedMaterials || [];
+  const occluded = budgetActive && tronRunnerCrowdReflectionOccludedByBuilding(
+    member,
+    camera.position,
+    getColliderRecords()
+  );
+  const bodyOpacity = budgetActive && !occluded ? reflectionRig.bodyOpacityForSurface(member.surface) : 0;
+  const ledOpacity = budgetActive && !occluded ? reflectionRig.ledOpacityForSurface(member.surface) : 0;
+  const visible = Boolean(
+    dynamicReflectionEnabled &&
+    getCrowdReflectionsIsolation() &&
+    crowdGroup.visible &&
+    member.group.visible &&
+    group &&
+    budgetActive &&
+    bodyOpacity > 0.005
+  );
+  applyTronRunnerCrowdReflectionState({
+    member,
+    group,
+    bodyMaterials,
+    ledMaterials,
+    visible,
+    bodyOpacity,
+    ledOpacity,
+    reflectionY,
+    reflectionYScale,
+  });
 }
 
 const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
@@ -526,6 +607,9 @@ export function createTronRunnerCrowdRuntime({
   drainBuildQueueImpl,
   resolveGreeterBoardAnchorImpl,
   startGreeterWalkingToBoardImpl,
+  applyGreeterHeadLookImpl,
+  setGreeterBubbleImpl,
+  updateReflectionImpl,
   syncScaleAndGroundImpl,
   syncVisibilityImpl,
   updateCullingImpl,
@@ -581,6 +665,9 @@ export function createTronRunnerCrowdRuntime({
     drainBuildQueue: drainBuildQueueImpl,
     resolveGreeterBoardAnchor: resolveGreeterBoardAnchorImpl,
     startGreeterWalkingToBoard: startGreeterWalkingToBoardImpl,
+    applyGreeterHeadLook: applyGreeterHeadLookImpl,
+    setGreeterBubble: setGreeterBubbleImpl,
+    updateReflection: updateReflectionImpl,
     syncScaleAndGround: syncScaleAndGroundImpl,
     syncVisibility: syncVisibilityImpl,
     updateCulling: updateCullingImpl,
