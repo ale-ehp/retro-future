@@ -196,9 +196,7 @@ import {
   updateTronRunnerAutonomyFootsteps as updateTronRunnerAutonomyFootstepsCore,
 } from './character/runner-footsteps.js';
 import {
-  applyTronRunnerCrowdReflectionState,
   buildTronRunnerCrowdReflection,
-  tronRunnerCrowdReflectionOccludedByBuilding,
 } from './character/character-reflections.js';
 import {
   countBy,
@@ -237,6 +235,7 @@ import {
 import {
   clearTronRunnerCrowdState,
   createTronRunnerCrowdRuntime,
+  applyGreeterHeadLookRuntime,
   cityRevealPostRevealElapsedMsRuntime,
   drainTronRunnerCrowdBuildQueueRuntime,
   invalidateTronRunnerCrowdColliderRecordsRuntime,
@@ -251,6 +250,7 @@ import {
   startTronRunnerCrowdBuildQueueRuntime,
   syncTronRunnerCrowdScaleAndGround,
   syncTronRunnerCrowdVisibilityState,
+  setGreeterBubbleRuntime,
   tronRunnerCrowdAvoidanceRuntime,
   tronRunnerCrowdBuildingCollisionDiagnosticRuntime,
   tronRunnerCrowdColliderRecordsRuntime,
@@ -262,6 +262,7 @@ import {
   tronRunnerCrowdTryDeadlockNudgeRuntime,
   updateTronRunnerCrowdReflectionBudgetRuntime,
   updateTronRunnerCrowdCullingRuntime,
+  updateTronRunnerCrowdReflectionRuntime,
 } from './character/runner-crowd-runtime.js';
 import {
   createTronRunnerCrowdRoutesRuntime,
@@ -3138,7 +3139,7 @@ const tronRunnerCrowdScaleGroundState = {
   surfaceYForPoint: tronRunnerSurfaceYForPoint,
   fallbackPlacement: tronRunnerCrowdRoutes.fallbackPlacement,
   groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
-  updateReflection: crowdRuntimeUpdateReflection,
+  updateReflection: (member) => tronRunnerCrowdRuntime.updateReflection(member),
   syncMemberMatrixUpdates: syncTronRunnerCrowdMemberMatrixUpdates,
   syncIdlePose: () => tronRunnerIdleCharacterRuntime.syncPose(),
 };
@@ -3152,7 +3153,7 @@ const tronRunnerCrowdVisibilityState = {
   revealVisible: (visibleFactor) => tronRunnerReveal?.revealVisible(visibleFactor) ?? !TRON_RUNNER_REVEAL_ENABLED,
   isRunnerReady: () => tronRunnerState.ready,
   now: () => performance.now(),
-  updateReflection: crowdRuntimeUpdateReflection,
+  updateReflection: (member) => tronRunnerCrowdRuntime.updateReflection(member),
   syncMemberMatrixUpdates: syncTronRunnerCrowdMemberMatrixUpdates,
 };
 const tronRunnerCrowdCullingState = {
@@ -3167,7 +3168,7 @@ const tronRunnerCrowdCullingState = {
   targetHeight: TRON_RUNNER_TARGET_HEIGHT,
   cullRadius: TRON_RUNNER_CROWD_CULL_RADIUS,
   cullDistance: TRON_RUNNER_CROWD_CULL_DISTANCE,
-  updateReflection: crowdRuntimeUpdateReflection,
+  updateReflection: (member) => tronRunnerCrowdRuntime.updateReflection(member),
 };
 const tronRunnerCrowdSpatialGridState = {
   spatialGrid: tronRunnerCrowdSpatialGrid,
@@ -3243,6 +3244,16 @@ const tronRunnerCrowdReflectionBudgetState = {
   distanceToCamera: (member) => tronRunnerCrowdRuntime.distanceToCamera(member),
   rampLimit: (maxLimit, now) => tronRunnerCrowdRuntime.reflectionRampLimit(maxLimit, now),
 };
+const tronRunnerCrowdReflectionUpdateState = {
+  getCrowdReflectionsIsolation: () => postRevealPerfIsolationState.crowdReflections,
+  camera,
+  getColliderRecords: () => tronRunnerCrowdRuntime.colliderRecords(),
+  reflectionRig: tronRunnerReflectionRig,
+  dynamicReflectionEnabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
+  crowdGroup: tronRunnerCrowdGroup,
+  reflectionY: TRON_RUNNER_DYNAMIC_REFLECTION_Y,
+  reflectionYScale: TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
+};
 const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   crowd: tronRunnerCrowd,
   group: tronRunnerCrowdGroup,
@@ -3258,6 +3269,9 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   drainBuildQueueImpl: () => drainTronRunnerCrowdBuildQueueRuntime(tronRunnerCrowdBuildQueueState),
   resolveGreeterBoardAnchorImpl: () => resolveGreeterBoardAnchorRuntime(tronRunnerGreeterBoardAnchorState),
   startGreeterWalkingToBoardImpl: startGreeterWalkingToBoardRuntime,
+  applyGreeterHeadLookImpl: (member, dt) => applyGreeterHeadLookRuntime(tronRunnerGreeterHeadLookState, member, dt),
+  setGreeterBubbleImpl: setGreeterBubbleRuntime,
+  updateReflectionImpl: (member) => updateTronRunnerCrowdReflectionRuntime(tronRunnerCrowdReflectionUpdateState, member),
   syncScaleAndGroundImpl: () => syncTronRunnerCrowdScaleAndGround(tronRunnerCrowdScaleGroundState),
   syncVisibilityImpl: () => syncTronRunnerCrowdVisibilityState(tronRunnerCrowdVisibilityState),
   updateCullingImpl: () => updateTronRunnerCrowdCullingRuntime(tronRunnerCrowdCullingState),
@@ -3490,45 +3504,6 @@ function syncTronRunnerCrowdMemberMatrixUpdates(member, refreshHidden = false) {
   }
 }
 
-function crowdRuntimeUpdateReflection(member) {
-  const budgetActive = postRevealPerfIsolationState.crowdReflections && member.dynamicReflectionBudgetActive === true;
-  // Most crowd members are outside the reflection budget (max 3 active). Once cleared, the
-  // applyTronRunnerCrowdReflectionState writes are idempotent (group hidden, opacities 0); skip them.
-  if (!budgetActive && member.dynamicReflectionVisible === false) return;
-  const group = member.reflectionGroup;
-  const bodyMaterials = member.reflectionBodyMaterials || [];
-  const ledMaterials = member.reflectionLedMaterials || [];
-  // Kill the reflection when a building occludes the member: depthTest:false would otherwise
-  // paint the reflection straight through the building face.
-  const occluded = budgetActive && tronRunnerCrowdReflectionOccludedByBuilding(
-    member,
-    camera.position,
-    tronRunnerCrowdRuntime.colliderRecords()
-  );
-  const bodyOpacity = budgetActive && !occluded ? tronRunnerReflectionRig.bodyOpacityForSurface(member.surface) : 0;
-  const ledOpacity = budgetActive && !occluded ? tronRunnerReflectionRig.ledOpacityForSurface(member.surface) : 0;
-  const visible = Boolean(
-    TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED &&
-    postRevealPerfIsolationState.crowdReflections &&
-    tronRunnerCrowdGroup.visible &&
-    member.group.visible &&
-    group &&
-    budgetActive &&
-    bodyOpacity > 0.005
-  );
-  applyTronRunnerCrowdReflectionState({
-    member,
-    group,
-    bodyMaterials,
-    ledMaterials,
-    visible,
-    bodyOpacity,
-    ledOpacity,
-    reflectionY: TRON_RUNNER_DYNAMIC_REFLECTION_Y,
-    reflectionYScale: TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
-  });
-}
-
 function crowdRuntimeBuildMember(job, index) {
   const group = new THREE.Group();
   group.name = `tron-runner-crowd-${index + 1}`;
@@ -3653,6 +3628,12 @@ const GREETER_SPEED_MULTIPLIER = 1.65; // the greeter always moves 65% faster th
 const GREETER_RUN_SPEED_BOOST = 1.65;  // extra 65% while running to the board (legs stay synced)
 const GREETER_HEAD_MAX_YAW = 1.3963; // +/-80deg => 160deg total head turn, no neck over-rotation
 const GREETER_HEAD_YAW_SIGN = 1;
+const tronRunnerGreeterHeadLookState = {
+  camera,
+  maxYaw: GREETER_HEAD_MAX_YAW,
+  yawSign: GREETER_HEAD_YAW_SIGN,
+  lerpAngle,
+};
 const greeterTargetScratch = { x: 0, z: 0 };
 // After the welcome bubble dissolves the greeter walks over to the departures board
 // (the "12 reparti" tabellone) and posts up just past its right-hand edge, facing the player.
@@ -3673,33 +3654,6 @@ const tronRunnerGreeterBoardAnchorState = {
 // legs lag behind the motion (slide), down if they spin too fast. Run stride > walk stride.
 const GREETER_RUN_CYCLE_DISTANCE = TRON_RUNNER_WALK_CYCLE_DISTANCE * 1.55;
 
-// Head always tracks the player, clamped to the neck range, relative to the current body
-// facing. Works while standing AND while walking (body yaw changes, head re-tracks).
-function applyGreeterHeadLook(member, dt) {
-  if (!member.headBone) {
-    member.model?.traverse((o) => { if (!member.headBone && o.isBone && /head$/i.test(o.name)) member.headBone = o; });
-  }
-  if (!member.headBone) return;
-  const lookYaw = Math.atan2(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
-  let rel = lookYaw - member.group.rotation.y;
-  rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-  rel = THREE.MathUtils.clamp(rel, -GREETER_HEAD_MAX_YAW, GREETER_HEAD_MAX_YAW) * GREETER_HEAD_YAW_SIGN;
-  member.headLookYaw = lerpAngle(member.headLookYaw ?? 0, rel, Math.min(1, dt * 4));
-  member.headBone.rotation.y = member.headLookYaw;
-  if (!member.reflectionHeadBone && member.reflectionModel) {
-    member.reflectionModel.traverse((o) => { if (!member.reflectionHeadBone && o.isBone && /head$/i.test(o.name)) member.reflectionHeadBone = o; });
-  }
-  if (member.reflectionHeadBone) member.reflectionHeadBone.rotation.y = member.headLookYaw;
-}
-
-// Queue a timed speech bubble over the greeter's head (text + lifetime in ms).
-function setGreeterBubble(member, html, durationMs, now, sizeScale = 1) {
-  member.bubbleText = html;
-  member.bubbleUntil = now + durationMs;
-  member.bubbleSizeScale = sizeScale;
-  member.bubbleProximity = false; // timed message (shows until bubbleUntil)
-}
-
 const tronRunnerCrowdNextPointScratch = { x: 0, z: 0 };
 function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   tronRunnerCrowdRuntime.normalizeState(member, now);
@@ -3710,7 +3664,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       && member.greetAt && (now - member.greetAt) > GREETER_BUBBLE_DURATION_MS) {
     member.greetStage = 'followPrompt';
     member.followPromptAt = now;
-    setGreeterBubble(member, 'Seguimi', 8000, now);
+    tronRunnerCrowdRuntime.setGreeterBubble(member, 'Seguimi', 8000, now);
   }
   // ...then 1s later set off for the departures board (retry until the anchor resolves).
   if (isGreeter && member.greetStage === 'followPrompt'
@@ -3777,7 +3731,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       member.bubbleInRange = distToPlayer <= GREETER_BOARD_BUBBLE_RANGE;
     }
     member.group.rotation.y = lerpAngle(member.group.rotation.y, bodyYaw, Math.min(1, dt * 4));
-    applyGreeterHeadLook(member, dt);
+    tronRunnerCrowdRuntime.applyGreeterHeadLook(member, dt);
     return;
   }
   if (!isGreeter && !route?.points?.length) {
@@ -3812,7 +3766,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
       member.greetDone = true;       // keeps the welcome bubble showing
       member.greetStage = 'welcome';
       member.greetAt = now;
-      setGreeterBubble(member, 'Benvenuto in<br>avstudio.ai', GREETER_BUBBLE_DURATION_MS, now);
+      tronRunnerCrowdRuntime.setGreeterBubble(member, 'Benvenuto in<br>avstudio.ai', GREETER_BUBBLE_DURATION_MS, now);
       member.lastMovedDistance = 0;
       return;
     }
@@ -3856,7 +3810,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   const surface = tronRunnerSurfaceYForPoint(nextPoint.x, nextPoint.z);
   member.group.position.set(nextPoint.x, surface.y, nextPoint.z);
   member.group.rotation.y = lerpAngle(member.group.rotation.y, Math.atan2(dirX, dirZ), Math.min(1, dt * 8));
-  if (isGreeter) applyGreeterHeadLook(member, dt); // head keeps tracking the player while walking
+  if (isGreeter) tronRunnerCrowdRuntime.applyGreeterHeadLook(member, dt); // head keeps tracking the player while walking
   member.surface = surface.surface;
   member.groundOffset = member.group.position.y - surface.groundY;
   member.distanceWalked += movedDistance;
@@ -3939,7 +3893,7 @@ function crowdRuntimeUpdate(dt) {
     if (!shouldUpdate) {
       member.lastMovedDistance = 0;
       if (!cullingHidden) {
-        crowdRuntimeUpdateReflection(member);
+        tronRunnerCrowdRuntime.updateReflection(member);
         syncTronRunnerCrowdMemberMatrixUpdates(member, true);
       }
       continue;
@@ -3964,7 +3918,7 @@ function crowdRuntimeUpdate(dt) {
       else syncTronRunnerCrowdWalkCycleToDistance(member);
     }
     if (!cullingHidden) {
-      crowdRuntimeUpdateReflection(member);
+      tronRunnerCrowdRuntime.updateReflection(member);
       syncTronRunnerCrowdMemberMatrixUpdates(member, true);
     }
     member.mixerDt = 0;
@@ -6841,8 +6795,8 @@ let latestMeasuredFps = 0;
 initAtmosphereParticles({ getScene: () => scene, cyan: PAL.cyan });
 
 // GREETER_BUBBLE_DURATION_MS stays here, not in ./speech-bubbles.js: it is consumed by the greeter
-// talk-trigger state machine (setGreeterBubble) that lives in main.js. The speech-bubble RENDERING
-// (greeter welcome sprite + crowd ambient sprite pool) moved to ./speech-bubbles.js.
+// talk-trigger state machine. Speech-bubble RENDERING (greeter welcome sprite + crowd ambient
+// sprite pool) moved to ./speech-bubbles.js; the greeter bubble setter lives in crowd runtime.
 const GREETER_BUBBLE_DURATION_MS = 3000;   // welcome message dissolves after this
 
 function tick(now) {
