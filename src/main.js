@@ -244,8 +244,10 @@ import {
   normalizeTronRunnerCrowdStateRuntime,
   prepareTronRunnerCrowdSpatialGridRuntime,
   processTronRunnerCrowdBuildQueueRuntime,
+  resolveGreeterBoardAnchorRuntime,
   resolveTronRunnerCrowdCollisionRuntime,
   setTronRunnerCrowdStateRuntime,
+  startGreeterWalkingToBoardRuntime,
   startTronRunnerCrowdBuildQueueRuntime,
   syncTronRunnerCrowdScaleAndGround,
   syncTronRunnerCrowdVisibilityState,
@@ -3254,6 +3256,8 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   inspectImpl: crowdRuntimeInspect,
   processBuildQueueImpl: () => processTronRunnerCrowdBuildQueueRuntime(tronRunnerCrowdBuildQueueState),
   drainBuildQueueImpl: () => drainTronRunnerCrowdBuildQueueRuntime(tronRunnerCrowdBuildQueueState),
+  resolveGreeterBoardAnchorImpl: () => resolveGreeterBoardAnchorRuntime(tronRunnerGreeterBoardAnchorState),
+  startGreeterWalkingToBoardImpl: startGreeterWalkingToBoardRuntime,
   syncScaleAndGroundImpl: () => syncTronRunnerCrowdScaleAndGround(tronRunnerCrowdScaleGroundState),
   syncVisibilityImpl: () => syncTronRunnerCrowdVisibilityState(tronRunnerCrowdVisibilityState),
   updateCullingImpl: () => updateTronRunnerCrowdCullingRuntime(tronRunnerCrowdCullingState),
@@ -3658,71 +3662,16 @@ const GREETER_BOARD_REACH = 0.8;     // arrival radius at the board anchor
 const GREETER_FOLLOW_DELAY_MS = 1000; // show "Seguimi" first, then start moving 1s later
 const GREETER_BOARD_BUBBLE_RANGE = 16.0; // "Questi sono i nostri reparti" shows within 16m of the greeter
 const GREETER_BOARD_STANCE_DEG = 45; // at the board the body sits 45deg between player and board
-const greeterBoardAnchorScratch = { x: 0, z: 0, cx: 0, cz: 0 };
-
-// Right-hand edge of the primary departures board, in world space. The board is a plane
-// rotated yaw about Y (yaw is 0 or PI), so its local +X (width axis) maps to
-// (cos yaw, 0, -sin yaw) and its player-facing normal to (sin yaw, 0, cos yaw).
-function resolveGreeterBoardAnchor() {
-  const boards = typeof getCityDepartmentBoards === 'function' ? getCityDepartmentBoards() : null;
-  if (!boards || !boards.length) return null;
-  const board = boards.find((b) => b?.group?.visible && b?.boardPosition) || boards[0];
-  if (!board || !board.boardPosition) return null;
-  const yaw = board.yaw || 0;
-  const halfWidth = (board.boardWidth || 21) * 0.5;
-  const rightX = Math.cos(yaw);
-  const rightZ = -Math.sin(yaw);
-  const normalX = Math.sin(yaw);
-  const normalZ = Math.cos(yaw);
-  greeterBoardAnchorScratch.x = board.boardPosition.x + rightX * (halfWidth + GREETER_BOARD_SIDE_GAP) + normalX * GREETER_BOARD_FRONT_GAP;
-  greeterBoardAnchorScratch.z = board.boardPosition.z + rightZ * (halfWidth + GREETER_BOARD_SIDE_GAP) + normalZ * GREETER_BOARD_FRONT_GAP;
-  greeterBoardAnchorScratch.cx = board.boardPosition.x; // board centre, for the 45deg stance
-  greeterBoardAnchorScratch.cz = board.boardPosition.z;
-  return greeterBoardAnchorScratch;
-}
+const tronRunnerGreeterBoardAnchorState = {
+  getCityDepartmentBoards: () => (typeof getCityDepartmentBoards === 'function' ? getCityDepartmentBoards() : null),
+  sideGap: GREETER_BOARD_SIDE_GAP,
+  frontGap: GREETER_BOARD_FRONT_GAP,
+};
 
 // Distance the greeter covers per full run cycle. The run clip is driven by ground distance
 // (like the crowd walk) so the feet plant instead of sliding/moonwalking. Tune this up if the
 // legs lag behind the motion (slide), down if they spin too fast. Run stride > walk stride.
 const GREETER_RUN_CYCLE_DISTANCE = TRON_RUNNER_WALK_CYCLE_DISTANCE * 1.55;
-
-// Hard-switch idle -> run action weights (no crossfade): the run is distance-driven and the
-// distance sync only calls mixer.update(0), so a crossfade could not progress anyway. member's
-// run/walk/idle action weights are set directly; member.action is repointed to the run clip so
-// distance sync, arrival re-pose (run -> idle) and timescale logic all target it.
-function switchGreeterActionToRun(mixer, fromAction, runActionKey, member) {
-  if (!mixer || !member.runClip) return null;
-  const run = member[runActionKey] || mixer.clipAction(member.runClip);
-  member[runActionKey] = run;
-  run.enabled = true;
-  run.setEffectiveTimeScale(1);
-  run.setEffectiveWeight(1);
-  run.play();
-  if (fromAction && fromAction !== run) { fromAction.stop(); fromAction.setEffectiveWeight(0); }
-  return run;
-}
-function startGreeterWalkingToBoard(member) {
-  member.greetPosed = false;
-  if (member.runClip && member.mixer) {
-    member.walkAction = member.walkAction || member.action;
-    const run = switchGreeterActionToRun(member.mixer, member.idleAction || member.walkAction, 'runAction', member);
-    if (run) member.action = run;
-    const rRun = switchGreeterActionToRun(member.reflectionMixer, member.reflectionIdleAction || member.reflectionAction, 'reflectionRunAction', member);
-    if (rRun) member.reflectionAction = rRun;
-    const lRun = switchGreeterActionToRun(member.reflectionLedMixer, member.reflectionLedIdleAction || member.reflectionLedAction, 'reflectionLedRunAction', member);
-    if (lRun) member.reflectionLedAction = lRun;
-    return;
-  }
-  // Fallback (no run clip): hard-switch idle->walk weights.
-  const walk = member.action;
-  const idle = member.idleAction;
-  if (walk) { walk.enabled = true; walk.setEffectiveTimeScale(1); walk.setEffectiveWeight(1); walk.play(); }
-  if (idle) { idle.stop(); idle.setEffectiveWeight(0); }
-  if (member.reflectionAction) { member.reflectionAction.enabled = true; member.reflectionAction.setEffectiveWeight(1); member.reflectionAction.play(); }
-  if (member.reflectionIdleAction) { member.reflectionIdleAction.stop(); member.reflectionIdleAction.setEffectiveWeight(0); }
-  if (member.reflectionLedAction) { member.reflectionLedAction.enabled = true; member.reflectionLedAction.setEffectiveWeight(1); member.reflectionLedAction.play(); }
-  if (member.reflectionLedIdleAction) { member.reflectionLedIdleAction.stop(); member.reflectionLedIdleAction.setEffectiveWeight(0); }
-}
 
 // Head always tracks the player, clamped to the neck range, relative to the current body
 // facing. Works while standing AND while walking (body yaw changes, head re-tracks).
@@ -3766,14 +3715,14 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   // ...then 1s later set off for the departures board (retry until the anchor resolves).
   if (isGreeter && member.greetStage === 'followPrompt'
       && member.followPromptAt && (now - member.followPromptAt) >= GREETER_FOLLOW_DELAY_MS) {
-    const anchor = resolveGreeterBoardAnchor();
+    const anchor = tronRunnerCrowdRuntime.resolveGreeterBoardAnchor();
     if (anchor) {
       member.greetBoardAnchorX = anchor.x;
       member.greetBoardAnchorZ = anchor.z;
       member.greetBoardCenterX = anchor.cx;
       member.greetBoardCenterZ = anchor.cz;
       member.greetStage = 'toBoard';
-      startGreeterWalkingToBoard(member);
+      tronRunnerCrowdRuntime.startGreeterWalkingToBoard(member);
     }
   }
   if (isGreeter && (member.greetStage === 'welcome' || member.greetStage === 'followPrompt' || member.greetStage === 'atBoard')) {

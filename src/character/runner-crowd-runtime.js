@@ -154,6 +154,91 @@ export async function drainTronRunnerCrowdBuildQueueRuntime(state) {
   }
 }
 
+const greeterBoardAnchorScratch = { x: 0, z: 0, cx: 0, cz: 0 };
+
+export function resolveGreeterBoardAnchorRuntime({
+  getCityDepartmentBoards,
+  sideGap,
+  frontGap,
+}) {
+  const boards = getCityDepartmentBoards();
+  if (!boards || !boards.length) return null;
+  const board = boards.find((b) => b?.group?.visible && b?.boardPosition) || boards[0];
+  if (!board || !board.boardPosition) return null;
+  const yaw = board.yaw || 0;
+  const halfWidth = (board.boardWidth || 21) * 0.5;
+  const rightX = Math.cos(yaw);
+  const rightZ = -Math.sin(yaw);
+  const normalX = Math.sin(yaw);
+  const normalZ = Math.cos(yaw);
+  greeterBoardAnchorScratch.x = board.boardPosition.x + rightX * (halfWidth + sideGap) + normalX * frontGap;
+  greeterBoardAnchorScratch.z = board.boardPosition.z + rightZ * (halfWidth + sideGap) + normalZ * frontGap;
+  greeterBoardAnchorScratch.cx = board.boardPosition.x;
+  greeterBoardAnchorScratch.cz = board.boardPosition.z;
+  return greeterBoardAnchorScratch;
+}
+
+export function switchGreeterActionToRunRuntime(mixer, fromAction, runActionKey, member) {
+  if (!mixer || !member.runClip) return null;
+  const run = member[runActionKey] || mixer.clipAction(member.runClip);
+  member[runActionKey] = run;
+  run.enabled = true;
+  run.setEffectiveTimeScale(1);
+  run.setEffectiveWeight(1);
+  run.play();
+  if (fromAction && fromAction !== run) {
+    fromAction.stop();
+    fromAction.setEffectiveWeight(0);
+  }
+  return run;
+}
+
+// Hard-switch idle -> run weights: the run clip is driven by ground distance,
+// so a crossfade would not progress when mixer.update(0) is used for sync.
+export function startGreeterWalkingToBoardRuntime(member) {
+  member.greetPosed = false;
+  if (member.runClip && member.mixer) {
+    member.walkAction = member.walkAction || member.action;
+    const run = switchGreeterActionToRunRuntime(member.mixer, member.idleAction || member.walkAction, 'runAction', member);
+    if (run) member.action = run;
+    const rRun = switchGreeterActionToRunRuntime(member.reflectionMixer, member.reflectionIdleAction || member.reflectionAction, 'reflectionRunAction', member);
+    if (rRun) member.reflectionAction = rRun;
+    const lRun = switchGreeterActionToRunRuntime(member.reflectionLedMixer, member.reflectionLedIdleAction || member.reflectionLedAction, 'reflectionLedRunAction', member);
+    if (lRun) member.reflectionLedAction = lRun;
+    return;
+  }
+  const walk = member.action;
+  const idle = member.idleAction;
+  if (walk) {
+    walk.enabled = true;
+    walk.setEffectiveTimeScale(1);
+    walk.setEffectiveWeight(1);
+    walk.play();
+  }
+  if (idle) {
+    idle.stop();
+    idle.setEffectiveWeight(0);
+  }
+  if (member.reflectionAction) {
+    member.reflectionAction.enabled = true;
+    member.reflectionAction.setEffectiveWeight(1);
+    member.reflectionAction.play();
+  }
+  if (member.reflectionIdleAction) {
+    member.reflectionIdleAction.stop();
+    member.reflectionIdleAction.setEffectiveWeight(0);
+  }
+  if (member.reflectionLedAction) {
+    member.reflectionLedAction.enabled = true;
+    member.reflectionLedAction.setEffectiveWeight(1);
+    member.reflectionLedAction.play();
+  }
+  if (member.reflectionLedIdleAction) {
+    member.reflectionLedIdleAction.stop();
+    member.reflectionLedIdleAction.setEffectiveWeight(0);
+  }
+}
+
 const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
 
 export function syncTronRunnerCrowdVisibilityState({
@@ -439,6 +524,8 @@ export function createTronRunnerCrowdRuntime({
   inspectImpl,
   processBuildQueueImpl,
   drainBuildQueueImpl,
+  resolveGreeterBoardAnchorImpl,
+  startGreeterWalkingToBoardImpl,
   syncScaleAndGroundImpl,
   syncVisibilityImpl,
   updateCullingImpl,
@@ -492,6 +579,8 @@ export function createTronRunnerCrowdRuntime({
     inspect: inspectImpl,
     processBuildQueue: processBuildQueueImpl,
     drainBuildQueue: drainBuildQueueImpl,
+    resolveGreeterBoardAnchor: resolveGreeterBoardAnchorImpl,
+    startGreeterWalkingToBoard: startGreeterWalkingToBoardImpl,
     syncScaleAndGround: syncScaleAndGroundImpl,
     syncVisibility: syncVisibilityImpl,
     updateCulling: updateCullingImpl,
