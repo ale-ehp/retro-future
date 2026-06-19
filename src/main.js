@@ -30,6 +30,10 @@ import {
   FSR_BENCHMARK_PRESET_KEYS,
   FSR_MANUAL_CONTROL_IDS,
   FSR_PRESETS,
+  FULL_HD_RENDER_HEIGHT,
+  FULL_HD_RENDER_WIDTH,
+  HD_READY_RENDER_HEIGHT,
+  HD_READY_RENDER_WIDTH,
   HEX_ROAD_UPDATE_FRAME_STRIDE,
   MAX_HEX_ROAD_ACCUMULATED_DT,
   MAX_RENDER_PIXEL_RATIO,
@@ -792,9 +796,53 @@ let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null;
 let postEnabled = true;
 let usePost = false;
 const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
-let activePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO);
+
+function physicalScreenSize() {
+  const dpr = window.devicePixelRatio || 1;
+  const screenWidth = Math.max(window.innerWidth, window.screen?.width || 0) * dpr;
+  const screenHeight = Math.max(window.innerHeight, window.screen?.height || 0) * dpr;
+  return {
+    width: Math.round(screenWidth),
+    height: Math.round(screenHeight),
+  };
+}
+
+function adaptiveRenderTarget() {
+  const screenSize = physicalScreenSize();
+  const longEdge = Math.max(screenSize.width, screenSize.height);
+  const shortEdge = Math.min(screenSize.width, screenSize.height);
+  const fullHd = longEdge >= FULL_HD_RENDER_WIDTH && shortEdge >= FULL_HD_RENDER_HEIGHT;
+  return fullHd
+    ? { key: 'full-hd', width: FULL_HD_RENDER_WIDTH, height: FULL_HD_RENDER_HEIGHT }
+    : { key: 'hd-ready', width: HD_READY_RENDER_WIDTH, height: HD_READY_RENDER_HEIGHT };
+}
+
+function adaptiveRenderTargetPixelRatio() {
+  const target = adaptiveRenderTarget();
+  const viewportWidth = Math.max(1, window.innerWidth || target.width);
+  const viewportHeight = Math.max(1, window.innerHeight || target.height);
+  return Math.max(
+    MIN_DYNAMIC_PIXEL_RATIO,
+    Math.min(
+      window.devicePixelRatio || 1,
+      target.width / viewportWidth,
+      target.height / viewportHeight
+    )
+  );
+}
+
+function adaptiveRenderTargetInspect() {
+  const target = adaptiveRenderTarget();
+  return {
+    ...target,
+    screen: physicalScreenSize(),
+    pixelRatioCap: Number(adaptiveRenderTargetPixelRatio().toFixed(3)),
+  };
+}
+
+let activePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO, adaptiveRenderTargetPixelRatio());
 let requestedPixelRatio = MAX_RENDER_PIXEL_RATIO;
-let manualRenderScale = 0.65;
+let manualRenderScale = 1;
 let requestedBloomResolutionScale = 0.32;
 let bloomResolutionScale = 0.32;
 let bloomEnabled = true;
@@ -4593,7 +4641,7 @@ function syncTronRunnerCrowdScaleAndGround() {
       member.groundOffset = TRON_RUNNER_CROWD_GROUND_OFFSET;
     }
     updateTronRunnerCrowdReflection(member);
-    syncTronRunnerCrowdMemberMatrixUpdates(member);
+    syncTronRunnerCrowdMemberMatrixUpdates(member, true);
   }
   syncTronRunnerIdleCharacterPose();
 }
@@ -4774,10 +4822,21 @@ function setTronRunnerSubtreeMatrixAutoUpdate(root, enabled) {
   if (enabled) root.updateMatrixWorld(true);
 }
 
-function syncTronRunnerCrowdMemberMatrixUpdates(member) {
+function refreshTronRunnerFrozenSubtreeMatrices(root) {
+  if (!root || root.userData.tronRunnerMatrixAutoUpdateEnabled !== false) return;
+  root.updateMatrix();
+  root.updateMatrixWorld(true);
+}
+
+function syncTronRunnerCrowdMemberMatrixUpdates(member, refreshHidden = false) {
   const characterVisible = Boolean(tronRunnerCrowdGroup.visible && member.group.visible);
+  const reflectionVisible = Boolean(member.reflectionGroup?.visible);
   setTronRunnerSubtreeMatrixAutoUpdate(member.group, characterVisible);
-  setTronRunnerSubtreeMatrixAutoUpdate(member.reflectionGroup, Boolean(member.reflectionGroup?.visible));
+  setTronRunnerSubtreeMatrixAutoUpdate(member.reflectionGroup, reflectionVisible);
+  if (refreshHidden) {
+    if (!characterVisible) refreshTronRunnerFrozenSubtreeMatrices(member.group);
+    if (!reflectionVisible) refreshTronRunnerFrozenSubtreeMatrices(member.reflectionGroup);
+  }
 }
 
 function syncTronRunnerCrowdVisibility() {
@@ -4798,7 +4857,7 @@ function syncTronRunnerCrowdVisibility() {
       member.cullingVisible = false;
       member.cullingReason = 'group-hidden';
       if (changed || memberChanged) updateTronRunnerCrowdReflection(member);
-      syncTronRunnerCrowdMemberMatrixUpdates(member);
+      syncTronRunnerCrowdMemberMatrixUpdates(member, true);
       continue;
     }
     if (!TRON_RUNNER_CROWD_CULLING_ENABLED) {
@@ -4807,7 +4866,7 @@ function syncTronRunnerCrowdVisibility() {
       member.cullingVisible = true;
       member.cullingReason = 'visible';
       if (changed || memberChanged) updateTronRunnerCrowdReflection(member);
-      syncTronRunnerCrowdMemberMatrixUpdates(member);
+      syncTronRunnerCrowdMemberMatrixUpdates(member, true);
     }
   }
 }
@@ -5608,7 +5667,7 @@ function updateTronRunnerCrowd(dt) {
       member.lastMovedDistance = 0;
       if (!cullingHidden) {
         updateTronRunnerCrowdReflection(member);
-        syncTronRunnerCrowdMemberMatrixUpdates(member);
+        syncTronRunnerCrowdMemberMatrixUpdates(member, true);
       }
       continue;
     }
@@ -5626,13 +5685,14 @@ function updateTronRunnerCrowd(dt) {
     }
     const movedThisUpdate = Math.max(0, (member.distanceWalked || 0) - distanceBefore);
     member.lastMovedDistance = movedThisUpdate;
+    if (cullingHidden) syncTronRunnerCrowdMemberMatrixUpdates(member, true);
     if (!cullingHidden && distanceDrivenWalk && !member.greetPosed) {
       if (greeterRunning) syncTronRunnerCrowdRunCycleToDistance(member);
       else syncTronRunnerCrowdWalkCycleToDistance(member);
     }
     if (!cullingHidden) {
       updateTronRunnerCrowdReflection(member);
-      syncTronRunnerCrowdMemberMatrixUpdates(member);
+      syncTronRunnerCrowdMemberMatrixUpdates(member, true);
     }
     member.mixerDt = 0;
     member.lodDt = 0;
@@ -7016,7 +7076,8 @@ function applyRenderResolution(requestedPixelRatio) {
     window.devicePixelRatio || 1,
     dynamicPixelRatio,
     MAX_RENDER_PIXEL_RATIO,
-    revealPixelRatioCap
+    revealPixelRatioCap,
+    adaptiveRenderTargetPixelRatio()
   );
   if (Math.abs(activePixelRatio - lastAppliedRendererPixelRatio) > 0.0001) {
     renderer.setPixelRatio(activePixelRatio);
@@ -9092,6 +9153,7 @@ window.__tronInspect = () => ({
     manualRenderScale,
     requestedPixelRatio,
     activePixelRatio,
+    adaptiveRenderTarget: adaptiveRenderTargetInspect(),
     mobileProfile: mobilePerformanceProfileInspect(),
   },
   wireframeFx: {
@@ -9119,6 +9181,7 @@ window.__tronPerfInspect = () => ({
   fps: fpsEl.textContent,
   pixelRatio: renderer.getPixelRatio(),
   activePixelRatio,
+  adaptiveRenderTarget: adaptiveRenderTargetInspect(),
   manualRenderScale,
   dynamicQualityScale,
   performanceMode,
