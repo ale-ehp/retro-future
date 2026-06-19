@@ -18,6 +18,9 @@ import {
   tronRunnerCrowdPostRevealReflectionRampLimit as tronRunnerCrowdPostRevealReflectionRampLimitCore,
   updateTronRunnerCrowdReflectionBudget as updateTronRunnerCrowdReflectionBudgetCore,
 } from './character-reflections.js';
+import {
+  tronRunnerCrowdGridCoord as tronRunnerCrowdGridCoordCore,
+} from './character-movement.js';
 
 export function clearTronRunnerCrowdState({
   crowd,
@@ -72,6 +75,38 @@ export function syncTronRunnerCrowdScaleAndGround({
     syncMemberMatrixUpdates(member, true);
   }
   syncIdlePose();
+}
+
+export function tronRunnerCrowdGridCoordRuntime({ cellSize }, value) {
+  return tronRunnerCrowdGridCoordCore(value, cellSize);
+}
+
+export function cityRevealPostRevealElapsedMsRuntime({
+  getCityRevealComplete,
+  getCityRevealCompletedAt,
+}, now = performance.now()) {
+  if (!getCityRevealComplete() || !getCityRevealCompletedAt()) return 0;
+  return Math.max(0, now - getCityRevealCompletedAt());
+}
+
+export function invalidateTronRunnerCrowdColliderRecordsRuntime(cache) {
+  cache.records = null;
+  cache.sourceLength = -1;
+}
+
+export function tronRunnerCrowdColliderRecordsRuntime({
+  cache,
+  getSideBuildingRecords,
+  getMainBuildingRecords,
+}) {
+  const sideRecords = getSideBuildingRecords();
+  const mainRecords = getMainBuildingRecords();
+  const sourceLength = sideRecords.length + mainRecords.length;
+  if (!cache.records || cache.sourceLength !== sourceLength) {
+    cache.records = [...sideRecords, ...mainRecords].filter((record) => record.collider);
+    cache.sourceLength = sourceLength;
+  }
+  return cache.records;
 }
 
 const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
@@ -360,6 +395,10 @@ export function createTronRunnerCrowdRuntime({
   syncScaleAndGroundImpl,
   syncVisibilityImpl,
   updateCullingImpl,
+  gridCoordImpl,
+  postRevealElapsedMsImpl,
+  colliderRecordsImpl,
+  invalidateColliderRecordsImpl,
   prepareSpatialGridImpl,
   nearbyMembersImpl,
   lodStrideImpl,
@@ -407,6 +446,10 @@ export function createTronRunnerCrowdRuntime({
     syncScaleAndGround: syncScaleAndGroundImpl,
     syncVisibility: syncVisibilityImpl,
     updateCulling: updateCullingImpl,
+    gridCoord: gridCoordImpl,
+    postRevealElapsedMs: postRevealElapsedMsImpl,
+    colliderRecords: colliderRecordsImpl,
+    invalidateColliderRecords: invalidateColliderRecordsImpl,
     prepareSpatialGrid: prepareSpatialGridImpl,
     nearbyMembers: nearbyMembersImpl,
     lodStride: lodStrideImpl,

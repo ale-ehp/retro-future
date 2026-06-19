@@ -211,7 +211,6 @@ import {
 } from './character/character-inspect.js';
 import {
   computeTronRunnerEffectiveAnimationSpeed,
-  tronRunnerCrowdGridCoord as tronRunnerCrowdGridCoordCore,
   tronRunnerCrowdGridKey,
 } from './character/character-movement.js';
 import {
@@ -238,6 +237,8 @@ import {
 import {
   clearTronRunnerCrowdState,
   createTronRunnerCrowdRuntime,
+  cityRevealPostRevealElapsedMsRuntime,
+  invalidateTronRunnerCrowdColliderRecordsRuntime,
   nearbyTronRunnerCrowdMembersRuntime,
   normalizeTronRunnerCrowdStateRuntime,
   prepareTronRunnerCrowdSpatialGridRuntime,
@@ -247,7 +248,9 @@ import {
   syncTronRunnerCrowdVisibilityState,
   tronRunnerCrowdAvoidanceRuntime,
   tronRunnerCrowdBuildingCollisionDiagnosticRuntime,
+  tronRunnerCrowdColliderRecordsRuntime,
   tronRunnerCrowdDistanceToCameraRuntime,
+  tronRunnerCrowdGridCoordRuntime,
   tronRunnerCrowdLodStrideRuntime,
   tronRunnerCrowdPointInsideRouteRuntime,
   tronRunnerCrowdPostRevealReflectionRampLimitRuntime,
@@ -2524,8 +2527,10 @@ scene.add(dirKey);
 const overlayGroup = new THREE.Group();
 scene.add(overlayGroup);
 let collisionPadding = 3;
-let tronRunnerCrowdColliderRecordCache = null;
-let tronRunnerCrowdColliderRecordCacheSourceLength = -1;
+const tronRunnerCrowdColliderRecordCache = {
+  records: null,
+  sourceLength: -1,
+};
 initBuildings({
   asphalt,
   reflectionEnvMap,
@@ -2840,7 +2845,9 @@ buildBuildingShells({
   buildSideBuildingEdgeBatch,
   buildSideHorizontalLedRingBatches,
   buildStaticFacadeStripBatches,
-  invalidateTronRunnerCrowdColliderRecords,
+  invalidateTronRunnerCrowdColliderRecords: () => (
+    invalidateTronRunnerCrowdColliderRecordsRuntime(tronRunnerCrowdColliderRecordCache)
+  ),
 });
 
 let tronRunnerReveal = null;
@@ -3150,7 +3157,7 @@ const tronRunnerCrowdSpatialGridState = {
   stats: tronRunnerCrowdRuntimeStats,
   cullingEnabled: TRON_RUNNER_CROWD_CULLING_ENABLED,
   lodNearDistance: TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE,
-  gridCoord: tronRunnerCrowdGridCoord,
+  gridCoord: (value) => tronRunnerCrowdRuntime.gridCoord(value),
   gridKey: tronRunnerCrowdGridKey,
 };
 const tronRunnerCrowdDistanceState = {
@@ -3169,14 +3176,26 @@ const tronRunnerCrowdStateMachineState = {
 const tronRunnerCrowdPointInsideRouteState = {
   pointInPolygon: pointInBasePadPolygon,
 };
+const tronRunnerCrowdGridCoordState = {
+  cellSize: TRON_RUNNER_CROWD_SPATIAL_CELL,
+};
+const cityRevealPostRevealElapsedMsState = {
+  getCityRevealComplete: () => cityRevealComplete,
+  getCityRevealCompletedAt: () => cityRevealCompletedAt,
+};
+const tronRunnerCrowdColliderRecordsState = {
+  cache: tronRunnerCrowdColliderRecordCache,
+  getSideBuildingRecords: () => sideBuildingRecords,
+  getMainBuildingRecords: () => mainBuildingRecords,
+};
 const tronRunnerCrowdCollisionState = {
   collisionsEnabled: TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
-  getColliderRecords: tronRunnerCrowdColliderRecords,
+  getColliderRecords: () => tronRunnerCrowdRuntime.colliderRecords(),
   buildingGuard: TRON_RUNNER_CROWD_BUILDING_GUARD,
   pointInsideRoute: (member, x, z) => tronRunnerCrowdRuntime.pointInsideRoute(member, x, z),
 };
 const tronRunnerCrowdBuildingCollisionDiagnosticState = {
-  getColliderRecords: tronRunnerCrowdColliderRecords,
+  getColliderRecords: () => tronRunnerCrowdRuntime.colliderRecords(),
   padding: TRON_RUNNER_CROWD_BUILDING_GUARD,
 };
 const tronRunnerCrowdReflectionRampState = {
@@ -3186,7 +3205,7 @@ const tronRunnerCrowdReflectionRampState = {
   cityRevealWireframeEnabled,
   getCityRevealComplete: () => cityRevealComplete,
   getCityRevealCompletedAt: () => cityRevealCompletedAt,
-  postRevealElapsedMs: cityRevealPostRevealElapsedMs,
+  postRevealElapsedMs: (now) => tronRunnerCrowdRuntime.postRevealElapsedMs(now),
 };
 const tronRunnerCrowdReflectionBudgetState = {
   stats: tronRunnerCrowdRuntimeStats,
@@ -3201,7 +3220,7 @@ const tronRunnerCrowdReflectionBudgetState = {
   reflectionNearDistance: TRON_RUNNER_CROWD_REFLECTION_NEAR_DISTANCE,
   getLatestMeasuredFps: () => latestMeasuredFps,
   getCityRevealComplete: () => cityRevealComplete,
-  postRevealElapsedMs: cityRevealPostRevealElapsedMs,
+  postRevealElapsedMs: (now) => tronRunnerCrowdRuntime.postRevealElapsedMs(now),
   isCityRevealPerformanceCritical,
   distanceToCamera: (member) => tronRunnerCrowdRuntime.distanceToCamera(member),
   rampLimit: (maxLimit, now) => tronRunnerCrowdRuntime.reflectionRampLimit(maxLimit, now),
@@ -3218,6 +3237,12 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   syncScaleAndGroundImpl: () => syncTronRunnerCrowdScaleAndGround(tronRunnerCrowdScaleGroundState),
   syncVisibilityImpl: () => syncTronRunnerCrowdVisibilityState(tronRunnerCrowdVisibilityState),
   updateCullingImpl: () => updateTronRunnerCrowdCullingRuntime(tronRunnerCrowdCullingState),
+  gridCoordImpl: (value) => tronRunnerCrowdGridCoordRuntime(tronRunnerCrowdGridCoordState, value),
+  postRevealElapsedMsImpl: (now) => cityRevealPostRevealElapsedMsRuntime(cityRevealPostRevealElapsedMsState, now),
+  colliderRecordsImpl: () => tronRunnerCrowdColliderRecordsRuntime(tronRunnerCrowdColliderRecordsState),
+  invalidateColliderRecordsImpl: () => (
+    invalidateTronRunnerCrowdColliderRecordsRuntime(tronRunnerCrowdColliderRecordCache)
+  ),
   prepareSpatialGridImpl: () => prepareTronRunnerCrowdSpatialGridRuntime(tronRunnerCrowdSpatialGridState),
   nearbyMembersImpl: (x, z) => nearbyTronRunnerCrowdMembersRuntime(tronRunnerCrowdSpatialGridState, x, z),
   lodStrideImpl: (member) => tronRunnerCrowdLodStrideRuntime(tronRunnerCrowdLodStrideState, member),
@@ -3412,15 +3437,6 @@ function tronRunnerSurfaceYForPoint(x, z) {
   return tronRunnerSurfaceScratch;
 }
 
-function tronRunnerCrowdGridCoord(value) {
-  return tronRunnerCrowdGridCoordCore(value, TRON_RUNNER_CROWD_SPATIAL_CELL);
-}
-
-function cityRevealPostRevealElapsedMs(now = performance.now()) {
-  if (!cityRevealComplete || !cityRevealCompletedAt) return 0;
-  return Math.max(0, now - cityRevealCompletedAt);
-}
-
 function setTronRunnerSubtreeMatrixAutoUpdate(root, enabled) {
   if (!root || root.userData.tronRunnerMatrixAutoUpdateEnabled === enabled) return;
   if (!enabled) root.updateMatrixWorld(true);
@@ -3463,7 +3479,7 @@ function crowdRuntimeUpdateReflection(member) {
   const occluded = budgetActive && tronRunnerCrowdReflectionOccludedByBuilding(
     member,
     camera.position,
-    tronRunnerCrowdColliderRecords()
+    tronRunnerCrowdRuntime.colliderRecords()
   );
   const bodyOpacity = budgetActive && !occluded ? tronRunnerReflectionRig.bodyOpacityForSurface(member.surface) : 0;
   const ledOpacity = budgetActive && !occluded ? tronRunnerReflectionRig.ledOpacityForSurface(member.surface) : 0;
@@ -3615,20 +3631,6 @@ async function drainTronRunnerCrowdBuildQueue() {
     processTronRunnerCrowdBuildQueue();
     await waitForNextFrame();
   }
-}
-
-function invalidateTronRunnerCrowdColliderRecords() {
-  tronRunnerCrowdColliderRecordCache = null;
-  tronRunnerCrowdColliderRecordCacheSourceLength = -1;
-}
-
-function tronRunnerCrowdColliderRecords() {
-  const sourceLength = sideBuildingRecords.length + mainBuildingRecords.length;
-  if (!tronRunnerCrowdColliderRecordCache || tronRunnerCrowdColliderRecordCacheSourceLength !== sourceLength) {
-    tronRunnerCrowdColliderRecordCache = [...sideBuildingRecords, ...mainBuildingRecords].filter((record) => record.collider);
-    tronRunnerCrowdColliderRecordCacheSourceLength = sourceLength;
-  }
-  return tronRunnerCrowdColliderRecordCache;
 }
 
 const tronRunnerCrowdAvoidanceDeps = {
@@ -4444,7 +4446,7 @@ const cityRevealProfiler = createCityRevealProfiler({
   getCityRevealWireFxaaPass: () => cityRevealRender.getWireFxaaPass(),
   getCityRevealScenePass: () => cityRevealRender.getScenePass(),
   getCityRevealMainLedRevealPass: cityRevealMainLedReveal.getPass,
-  cityRevealPostRevealElapsedMs,
+  cityRevealPostRevealElapsedMs: (now) => tronRunnerCrowdRuntime.postRevealElapsedMs(now),
   cityRevealEffectiveDelayMs,
   cityRevealFadeDurationMs,
   isCityRevealRealRevealActive,
