@@ -442,6 +442,11 @@ import {
   updateBuildingScale,
 } from './world/buildings.js';
 import {
+  BRIDGE_PAIR_5_6_INDEX,
+  BRIDGE_PAIR_5_6_Y_OFFSET,
+  createBridgeRuntime,
+} from './world/bridges.js';
+import {
   MAIN_FACADE_VERTICAL_REVEAL_FEATHER,
   addTronFacadeTreatment,
   buildStaticFacadeStripBatches,
@@ -2522,7 +2527,7 @@ const cityRevealMainLedReveal = createCityRevealMainLed({
   getMainFacadeVerticalRevealProgress: () => mainFacadeVerticalRevealProgress(),
   getSideBuildingRecords: () => sideBuildingRecords,
   getMainBuildingRecords: () => mainBuildingRecords,
-  getBridgeRecords: () => bridgeRecords,
+  getBridgeRecords: () => bridges.records,
 });
 
 const mainFacadeVerticalRevealState = {
@@ -2534,8 +2539,6 @@ const mainFacadeVerticalRevealState = {
   maxY: null,
   feather: MAIN_FACADE_VERTICAL_REVEAL_FEATHER,
 };
-const BRIDGE_PAIR_5_6_INDEX = 2;
-const BRIDGE_PAIR_5_6_Y_OFFSET = 66;
 let mainBuildingCollisionPadding = 7.4;
 initBuildingDoors({
   overlayGroup,
@@ -2559,18 +2562,33 @@ initFacadeLedTreatment({
   getMainBuildingWidthScale: () => mainBuildingWidthScale,
   getMainBuildingDepthScale: () => mainBuildingDepthScale,
 });
+const bridges = createBridgeRuntime({
+  overlayGroup,
+  PAL,
+  bridgeMaterials,
+  getRoadHalf: roadHalf,
+  getSideBuildingWidthScale: () => sideBuildingWidthScale,
+  getStreetEdgeWidth: () => streetEdgeWidth,
+  makeChamferedBox,
+  createWetAsphaltFacadeMaterial,
+  addBuildingEdges,
+  readBridgeNumber,
+  readBridgeVisible,
+  updateBridgeControlOutputs,
+});
+
 initBuildingLeds({
   PAL,
   roadHalf,
   getMainBuildingY: () => mainBuildingY,
   getMainBuildingZ: () => mainBuildingZ,
-  getBridgeXOffset: () => bridgeXOffset,
-  getBridgeZOffset: () => bridgeZOffset,
-  getBridgeYOffset: () => bridgeYOffset,
-  getBridgeSpanScale: () => bridgeSpanScale,
-  getBridgeHeightScale: () => bridgeHeightScale,
-  getBridgeDepthScale: () => bridgeDepthScale,
-  bridgeSpanLength,
+  getBridgeXOffset: bridges.getXOffset,
+  getBridgeZOffset: bridges.getZOffset,
+  getBridgeYOffset: bridges.getYOffset,
+  getBridgeSpanScale: bridges.getSpanScale,
+  getBridgeHeightScale: bridges.getHeightScale,
+  getBridgeDepthScale: bridges.getDepthScale,
+  bridgeSpanLength: bridges.spanLength,
   readBridgeNumber,
   readBridgeVisible,
   refreshCullingBounds,
@@ -2592,18 +2610,11 @@ initBasePads({
   sidewalkMinSurfaceY,
   tunedColor,
 });
-const bridgeRecords = [];
-let bridgeXOffset = 0;
-let bridgeZOffset = 0;
-let bridgeYOffset = 0;
-let bridgeSpanScale = 1;
-let bridgeHeightScale = 1;
-let bridgeDepthScale = 1;
 // ---------- Bridge control panel (extracted -> bridge-controls.js) ----------
 initBridgeControls({
   controlEls,
   scheduleLiveControls,
-  bridgeRecords,
+  bridgeRecords: bridges.records,
   BRIDGE_PAIR_5_6_INDEX,
   BRIDGE_PAIR_5_6_Y_OFFSET,
 });
@@ -6514,65 +6525,7 @@ function tronRunnerInspect() {
 }
 
 // ---------- Exact boulevard elevated links, rendered with demo-5 cubemap materials ----------
-function bridgeSpanLength(nextSideWidthScale = sideBuildingWidthScale, width = streetEdgeWidth) {
-  return 2 * (roadHalf() + width + SIDE_BUILDING_BASE * nextSideWidthScale / 2);
-}
-
-function updateBridgeLinks(nextSideWidthScale, nextSideSpacingScale, nextStreetEdgeWidth, nextXOffset, nextZOffset, nextYOffset, nextSpanScale, nextHeightScale, nextDepthScale) {
-  bridgeXOffset = nextXOffset;
-  bridgeZOffset = nextZOffset;
-  bridgeYOffset = nextYOffset;
-  bridgeSpanScale = nextSpanScale;
-  bridgeHeightScale = nextHeightScale;
-  bridgeDepthScale = nextDepthScale;
-  const span = bridgeSpanLength(nextSideWidthScale, nextStreetEdgeWidth);
-  for (const record of bridgeRecords) {
-    const visible = readBridgeVisible(record);
-    record.visible = visible;
-    record.mesh.position.set(
-      bridgeXOffset + readBridgeNumber(record, 'xOffset'),
-      record.baseY + bridgeYOffset + readBridgeNumber(record, 'yOffset'),
-      record.zFactor * SIDE_BUILDING_SPACING * nextSideSpacingScale + bridgeZOffset + readBridgeNumber(record, 'zOffset')
-    );
-    record.mesh.scale.set(
-      (span / record.baseWidth) * bridgeSpanScale * readBridgeNumber(record, 'spanScale'),
-      bridgeHeightScale * readBridgeNumber(record, 'heightScale'),
-      bridgeDepthScale * readBridgeNumber(record, 'depthScale')
-    );
-    record.mesh.visible = visible;
-  }
-  updateBridgeControlOutputs();
-}
-
-function addPortalFrame(z) {
-  const heroPortal = Math.abs(z - GRID_BLOCK * 4) < 0.1;
-  const linkWidth = bridgeSpanLength();
-  const linkBaseY = GRID_BLOCK * (heroPortal ? 7.4 : 6.2);
-  const linkHeight = GRID_BLOCK * (heroPortal ? 1.18 : 0.92);
-  const depth = GRID_BLOCK * (heroPortal ? 2.15 : 1.64);
-  const linkMat = createWetAsphaltFacadeMaterial(PAL.buildingSkin, 1.3);
-
-  const chamfer = 1.6;
-  const link = new THREE.Mesh(makeChamferedBox(linkWidth, linkHeight, depth, chamfer), linkMat);
-  link.position.set(0, linkBaseY, z);
-  overlayGroup.add(link);
-  bridgeMaterials.push(linkMat);
-  const record = {
-    index: bridgeRecords.length,
-    mesh: link,
-    visible: true,
-    baseZ: z,
-    zFactor: z / SIDE_BUILDING_SPACING,
-    baseY: linkBaseY,
-    baseWidth: linkWidth,
-    baseHeight: linkHeight,
-    baseDepth: depth,
-  };
-  bridgeRecords.push(record);
-  addBuildingEdges(overlayGroup, linkWidth, linkHeight, depth, 0, linkBaseY, z, PAL.tealLight, chamfer * 0.6, 'bridge', { bridgeRecord: record });
-}
-
-[-144, -48, 48, 144].forEach((z) => addPortalFrame(z));
+bridges.buildLinks([-144, -48, 48, 144]);
 
 // (Ground rungs / spine strips removed — replaced by roadEdge tubes + clean median above)
 
@@ -6580,7 +6533,7 @@ initStaticCityCulling({
   camera,
   sideBuildingRecords,
   mainBuildingRecords,
-  bridgeRecords,
+  bridgeRecords: bridges.records,
   cityDepartmentBoards: getCityDepartmentBoards(),
   cityRoleBoards: getCityRoleBoards(),
   edgeStripSpecs,
@@ -6624,7 +6577,7 @@ initCityRevealWireframe({
   getRoadTopY: roadTileTopY,
   getSideBuildingRecords: () => sideBuildingRecords,
   getMainBuildingRecords: () => mainBuildingRecords,
-  getBridgeRecords: () => bridgeRecords,
+  getBridgeRecords: () => bridges.records,
   getEdgeStripSpecs: () => edgeStripSpecs,
   stopMouseLookInput,
   updatePointerLockHint,
@@ -8503,7 +8456,7 @@ function applyLiveControls() {
     setHexRoadMaterialGlow(material, hexInstanceGlow, hexTileDisplayBaseColor);
   });
 
-  updateBridgeLinks(nextSideBuildingWidthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextBridgeXOffset, nextBridgeZOffset, nextBridgeYOffset, nextBridgeSpanScale, nextBridgeHeightScale, nextBridgeDepthScale);
+  bridges.updateLinks(nextSideBuildingWidthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextBridgeXOffset, nextBridgeZOffset, nextBridgeYOffset, nextBridgeSpanScale, nextBridgeHeightScale, nextBridgeDepthScale);
   updateEdgeStrips(ledBrightness, ledThickness, nextLedDistance, ledHue, mainBuildingLedBrightness, mainBuildingLedThickness, mainBuildingLedDistance, mainBuildingLedHue, nextBuildingHorizontalLedDistance, nextMainBuildingHorizontalLedDistance, nextBuildingHorizontalLedThickness, nextMainBuildingHorizontalLedThickness, nextBuildingHorizontalLedRadius, nextMainBuildingHorizontalLedRadius, buildingLowLedOffset, buildingHighLedOffset, bridgeLowLedOffset, bridgeHighLedOffset, mainBuildingLowLedOffset, mainBuildingHighLedOffset, nextBuildingVerticalLedLength, nextMainBuildingVerticalLedLength, nextBuildingVerticalLedY, nextBuildingLowLedY, nextBuildingHighLedY, nextMainBuildingVerticalLedY, nextMainBuildingLowLedY, nextMainBuildingHighLedY, sideBuildingScale, mainBuildingScale, nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, tunedColor);
   updateSideBuildingDoorMaterials(ledBrightness, ledHue);
   updateGroundLedMaterials(roadEdgeBrightness, medianBrightness, ledHue);
@@ -8965,15 +8918,7 @@ window.__tronInspect = () => ({
     scaleY: record.civicNumberGroup?.scale.y ?? null,
   })),
   sideBuildingLedLayouts: sideBuildingRecords.map((record) => sideBuildingLedLayoutInspect(record)),
-  bridgeLinks: bridgeRecords.map((record) => ({
-    index: record.index,
-    baseZ: record.baseZ,
-    visible: Boolean(record.mesh.visible),
-    yOffset: readBridgeNumber(record, 'yOffset'),
-    x: record.mesh.position.x,
-    y: record.mesh.position.y,
-    z: record.mesh.position.z,
-  })),
+  bridgeLinks: bridges.inspect(),
   tronRunner: tronRunnerInspect(),
   tronRunnerCrowd: tronRunnerCrowdInspect(),
   tronRunnerIdleCharacter: tronRunnerIdleCharacterInspect(),
