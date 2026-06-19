@@ -4593,6 +4593,7 @@ function syncTronRunnerCrowdScaleAndGround() {
       member.groundOffset = TRON_RUNNER_CROWD_GROUND_OFFSET;
     }
     updateTronRunnerCrowdReflection(member);
+    syncTronRunnerCrowdMemberMatrixUpdates(member);
   }
   syncTronRunnerIdleCharacterPose();
 }
@@ -4760,6 +4761,25 @@ function buildTronRunnerIdleCharacter(sourceModel) {
 
 const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
 let tronRunnerCrowdAppearArmedAt = 0;
+
+function setTronRunnerSubtreeMatrixAutoUpdate(root, enabled) {
+  if (!root || root.userData.tronRunnerMatrixAutoUpdateEnabled === enabled) return;
+  if (!enabled) root.updateMatrixWorld(true);
+  root.traverse((object) => {
+    object.matrixAutoUpdate = enabled;
+    object.matrixWorldAutoUpdate = enabled;
+    if (!enabled) object.matrixWorldNeedsUpdate = false;
+  });
+  root.userData.tronRunnerMatrixAutoUpdateEnabled = enabled;
+  if (enabled) root.updateMatrixWorld(true);
+}
+
+function syncTronRunnerCrowdMemberMatrixUpdates(member) {
+  const characterVisible = Boolean(tronRunnerCrowdGroup.visible && member.group.visible);
+  setTronRunnerSubtreeMatrixAutoUpdate(member.group, characterVisible);
+  setTronRunnerSubtreeMatrixAutoUpdate(member.reflectionGroup, Boolean(member.reflectionGroup?.visible));
+}
+
 function syncTronRunnerCrowdVisibility() {
   const visibleFactor = THREE.MathUtils.clamp(TRON_RUNNER_REVEAL_ENABLED ? tronRunnerRevealProgress : 1, 0, 1);
   const revealVisible = (visibleFactor > 0.002 || tronRunnerRevealActive || tronRunnerRevealComplete);
@@ -4778,6 +4798,7 @@ function syncTronRunnerCrowdVisibility() {
       member.cullingVisible = false;
       member.cullingReason = 'group-hidden';
       if (changed || memberChanged) updateTronRunnerCrowdReflection(member);
+      syncTronRunnerCrowdMemberMatrixUpdates(member);
       continue;
     }
     if (!TRON_RUNNER_CROWD_CULLING_ENABLED) {
@@ -4786,6 +4807,7 @@ function syncTronRunnerCrowdVisibility() {
       member.cullingVisible = true;
       member.cullingReason = 'visible';
       if (changed || memberChanged) updateTronRunnerCrowdReflection(member);
+      syncTronRunnerCrowdMemberMatrixUpdates(member);
     }
   }
 }
@@ -5539,6 +5561,7 @@ function updateTronRunnerCrowd(dt) {
   tronRunnerCrowdRuntimeStats.maxAvoidanceOverlap = 0;
   updateTronRunnerCrowdCulling();
   updateTronRunnerCrowdReflectionBudget();
+  for (const member of tronRunnerCrowd) syncTronRunnerCrowdMemberMatrixUpdates(member);
   prepareTronRunnerCrowdSpatialGrid();
   for (const member of tronRunnerCrowd) {
     // The greeter always updates (even when off-screen) so it reliably walks over to greet the player.
@@ -5583,7 +5606,10 @@ function updateTronRunnerCrowd(dt) {
     const shouldUpdate = member.lodStride <= 1 || ((tronRunnerCrowdRuntimeStats.frame + member.index) % member.lodStride === 0);
     if (!shouldUpdate) {
       member.lastMovedDistance = 0;
-      if (!cullingHidden) updateTronRunnerCrowdReflection(member);
+      if (!cullingHidden) {
+        updateTronRunnerCrowdReflection(member);
+        syncTronRunnerCrowdMemberMatrixUpdates(member);
+      }
       continue;
     }
     const distanceDrivenWalk = TRON_RUNNER_CROWD_DISTANCE_DRIVEN_WALK_ENABLED && Boolean(member.action) && !member.greetPosed;
@@ -5604,7 +5630,10 @@ function updateTronRunnerCrowd(dt) {
       if (greeterRunning) syncTronRunnerCrowdRunCycleToDistance(member);
       else syncTronRunnerCrowdWalkCycleToDistance(member);
     }
-    if (!cullingHidden) updateTronRunnerCrowdReflection(member);
+    if (!cullingHidden) {
+      updateTronRunnerCrowdReflection(member);
+      syncTronRunnerCrowdMemberMatrixUpdates(member);
+    }
     member.mixerDt = 0;
     member.lodDt = 0;
   }
