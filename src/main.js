@@ -185,7 +185,6 @@ import {
   createTronRunnerCrowdMemberRecord,
   fitTronRunnerModel as fitTronRunnerModelCore,
   makeTronRunnerActionSet,
-  poseTronRunnerIdleCharacterArmsCrossed as poseTronRunnerIdleCharacterArmsCrossedCore,
 } from './character/character-build.js';
 import {
   resolveTronRunnerCrowdCollision as resolveTronRunnerCrowdCollisionCore,
@@ -248,7 +247,6 @@ import {
   sideStreetCoverage as buildSideStreetCoverage,
   sideStreetGroupedSegments as buildSideStreetGroupedSegments,
   sumBy,
-  tronRunnerIdleCharacterInspect as tronRunnerIdleCharacterInspectCore,
 } from './character/character-inspect.js';
 import {
   computeTronRunnerEffectiveAnimationSpeed,
@@ -283,10 +281,18 @@ import {
   createTronRunnerAutonomy,
   createTronRunnerCrowdBuildStats,
   createTronRunnerCrowdRuntimeStats,
-  createTronRunnerIdleCharacter,
   createTronRunnerParts,
   createTronRunnerState,
 } from './character/runner-state.js';
+import {
+  createTronRunnerIdleCharacterRuntime,
+} from './character/runner-idle-character.js';
+import {
+  createTronRunnerOrchestrationRuntime,
+} from './character/runner-orchestration.js';
+import {
+  createTronRunnerCrowdRuntime,
+} from './character/runner-crowd-runtime.js';
 import {
   resetTronRunnerAutonomy,
 } from './character/runner-controller.js';
@@ -2710,27 +2716,7 @@ function resolveCameraBuildingCollision() {
 // shoulder-to-shoulder before being blocked, unlike the wall collision padding.
 const TRON_RUNNER_CROWD_PLAYER_COLLISION_DISTANCE = 1.6;
 function resolveCameraCrowdCollision() {
-  if (isCameraCollisionDisabled()) return;
-  if (!tronRunnerCrowdGroup.visible || !tronRunnerCrowd.length) return;
-  const minDist = TRON_RUNNER_CROWD_PLAYER_COLLISION_DISTANCE;
-  const minDistSq = minDist * minDist;
-  const px = camera.position.x;
-  const pz = camera.position.z;
-  for (const member of tronRunnerCrowd) {
-    const pos = member.group.position;
-    const dx = px - pos.x;
-    const dz = pz - pos.z;
-    const distSq = dx * dx + dz * dz;
-    if (distSq >= minDistSq) continue;
-    if (distSq < 1e-6) {
-      camera.position.x += minDist;
-      continue;
-    }
-    const dist = Math.sqrt(distSq);
-    const push = (minDist - dist) / dist;
-    camera.position.x += dx * push;
-    camera.position.z += dz * push;
-  }
+  tronRunnerCrowdRuntime?.resolveCameraCollision();
 }
 
 function hasRoadBoundaryLeadInput() {
@@ -2961,10 +2947,6 @@ const tronRunnerCrowdGroup = new THREE.Group();
 tronRunnerCrowdGroup.name = 'tron-runner-crowd';
 tronRunnerCrowdGroup.visible = false;
 scene.add(tronRunnerCrowdGroup);
-const tronRunnerIdleCharacterGroup = new THREE.Group();
-tronRunnerIdleCharacterGroup.name = 'tron-runner-idle-character';
-tronRunnerIdleCharacterGroup.visible = false;
-scene.add(tronRunnerIdleCharacterGroup);
 
 const tronRunnerShadowTextureState = createTronRunnerShadowTextureState(renderer);
 const tronRunnerSuitTexture = makeTronRunnerSuitTexture(renderer);
@@ -3079,12 +3061,12 @@ const tronRunnerParts = createTronRunnerParts({
 const tronRunnerState = createTronRunnerState({
   footstepBus: FOOTSTEP_NPC_SPATIAL_BUS,
 });
-const tronRunnerBox = new THREE.Box3();
-const tronRunnerSize = new THREE.Vector3();
-let tronRunnerElapsed = 0;
-let tronRunnerVisualDistanceWalked = 0;
-let tronRunnerYaw = 0;
-let tronRunnerTargetYaw = 0;
+const tronRunnerMotion = {
+  elapsed: 0,
+  visualDistanceWalked: 0,
+  yaw: 0,
+  targetYaw: 0,
+};
 let tronRunnerBodyLight = 1;
 let tronRunnerLineLight = 1;
 let tronRunnerKeyLight = 1;
@@ -3112,22 +3094,27 @@ let tronRunnerAnimationSpeed = 1;
 let tronRunnerStrideSync = 1;
 let tronRunnerCrowdAccumulatedDt = 0;
 const tronRunnerCrowd = [];
-const tronRunnerIdleCharacter = createTronRunnerIdleCharacter({
-  group: tronRunnerIdleCharacterGroup,
-});
-// The stationary idle character (parked at civic 2) gets one ambient line on approach,
-// reusing the crowd speech-bubble pool. Shaped like a crowd talker (group + talk* fields).
-const tronRunnerIdleTalk = {
-  group: tronRunnerIdleCharacterGroup,
-  talkLines: ['Mi godo la pausa'],
-  talkCycle: 0,
-  talkArmed: true,
-  talkUntil: 0,
-  talkStart: 0,
-  talkText: '',
-};
 const tronRunnerCrowdBox = new THREE.Box3();
-const tronRunnerIdleCharacterBoundsCenter = new THREE.Vector3();
+const tronRunnerIdleCharacterRuntime = createTronRunnerIdleCharacterRuntime({
+  scene,
+  runnerWalker: tronRunnerWalker,
+  crowdBox: tronRunnerCrowdBox,
+  cloneRunnerSkeleton: () => cloneRunnerSkeleton,
+  resolveRoundedCollider: resolveTronRunnerRoundedCollider,
+  crowdRecordRoadDir: tronRunnerCrowdRecordRoadDir,
+  crowdColorPresetForIndex: tronRunnerCrowdColorPresetForIndex,
+  makeCrowdSuitMaterial: makeTronRunnerCrowdSuitMaterial,
+  surfaceYForPoint: tronRunnerSurfaceYForPoint,
+  syncRevealIdleVisibility: () => tronRunnerReveal?.syncIdleVisibility(),
+  getSideBuildingRecords: () => sideBuildingRecords,
+  getPlayerSpawn: () => playerSpawn,
+  sideBuildingSpacing: SIDE_BUILDING_SPACING,
+  sideDoorFaceOffset,
+  gridBlock: GRID_BLOCK,
+});
+const tronRunnerIdleCharacterGroup = tronRunnerIdleCharacterRuntime.group;
+const tronRunnerIdleCharacter = tronRunnerIdleCharacterRuntime.character;
+const tronRunnerIdleTalk = tronRunnerIdleCharacterRuntime.talk;
 const tronRunnerCrowdSize = new THREE.Vector3();
 const tronRunnerCrowdCullMatrix = new THREE.Matrix4();
 const tronRunnerCrowdCullFrustum = new THREE.Frustum();
@@ -3137,6 +3124,17 @@ let tronRunnerCrowdBuildJob = null;
 const tronRunnerCrowdBuildStats = createTronRunnerCrowdBuildStats();
 const tronRunnerCrowdRuntimeStats = createTronRunnerCrowdRuntimeStats();
 const tronRunnerCrowdReflectionCandidates = [];
+const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
+  crowd: tronRunnerCrowd,
+  group: tronRunnerCrowdGroup,
+  camera,
+  playerCollisionDistance: TRON_RUNNER_CROWD_PLAYER_COLLISION_DISTANCE,
+  isCameraCollisionDisabled,
+  buildImpl: crowdRuntimeBuild,
+  updateImpl: crowdRuntimeUpdate,
+  inspectImpl: crowdRuntimeInspect,
+  syncScaleAndGroundImpl: crowdRuntimeSyncScaleAndGround,
+});
 const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerState: tronRunnerState,
   runnerParts: tronRunnerParts,
@@ -3233,7 +3231,7 @@ const applyTronRunnerVisualControls = () => applyTronRunnerVisualControlsCore({
     animationSpeed: tronRunnerAnimationSpeed,
     strideSync: tronRunnerStrideSync,
   },
-  visualDistanceWalked: tronRunnerVisualDistanceWalked,
+  visualDistanceWalked: tronRunnerMotion.visualDistanceWalked,
   effectiveAnimationSpeed: tronRunnerEffectiveAnimationSpeed(),
   ledScale: tronRunnerCharacterLedScale({
     ledBrightness: tronRunnerLedBrightness,
@@ -3241,8 +3239,55 @@ const applyTronRunnerVisualControls = () => applyTronRunnerVisualControlsCore({
   }),
   ledDefaultScale: tronRunnerCharacterLedDefaultScale(),
   applyCrowdLedControls: applyTronRunnerCrowdLedControls,
-  syncCrowdScaleAndGround: syncTronRunnerCrowdScaleAndGround,
+  syncCrowdScaleAndGround: () => tronRunnerCrowdRuntime.syncScaleAndGround(),
   applyRevealVisuals: () => tronRunnerReveal?.applyVisuals(),
+});
+
+const tronRunnerOrchestration = createTronRunnerOrchestrationRuntime({
+  runnerWalker: tronRunnerWalker,
+  runnerParts: tronRunnerParts,
+  runnerState: tronRunnerState,
+  runnerMotion: tronRunnerMotion,
+  autonomy: tronRunnerAutonomy,
+  footstepRuntime: tronRunnerFootstepRuntime,
+  npcSpatialBus: FOOTSTEP_NPC_SPATIAL_BUS,
+  renderer,
+  runnerSuitMaterial: tronRunnerSuitMat,
+  runnerShadowMaterial: tronRunnerShadowMat,
+  runnerRealShadowMaterial: tronRunnerRealShadowMat,
+  reveal: tronRunnerReveal,
+  loadGltfClass: () => RunnerGLTFLoader,
+  cloneRunnerSkeleton: () => cloneRunnerSkeleton,
+  effectiveAnimationSpeed: tronRunnerEffectiveAnimationSpeed,
+  applyVisualControls: applyTronRunnerVisualControls,
+  buildCrowd: (model, animations) => tronRunnerCrowdRuntime.build(model, animations),
+  buildIdleCharacter: (model) => tronRunnerIdleCharacterRuntime.build(model),
+  updateRealShadowRig: updateTronRunnerRealShadowRig,
+  updateDynamicReflection: updateTronRunnerDynamicReflection,
+  surfaceYAt: tronRunnerSurfaceYAt,
+  roadTileTopY,
+  roadHexBoundaryLimits,
+  resolveRoundedCollider: resolveTronRunnerRoundedCollider,
+  lerpAngle,
+  getWalkSpeed: () => tronRunnerWalkSpeed,
+  getFloorReflection: () => tronRunnerFloorReflection,
+  getShadowPulse: () => tronRunnerShadowPulse,
+  getDynamicRoadCenter: () => dynamicRoadCenter,
+  getDynamicRoadLength: () => dynamicRoadLength,
+  getGridBlock: () => GRID_BLOCK,
+  getRoadHalf: roadHalf,
+  getStreetEdgeWidth: () => streetEdgeWidth,
+  getSideBuildingRecords: () => sideBuildingRecords,
+  getMainBuildingRecords: () => mainBuildingRecords,
+  getBuildingColliders: () => buildingColliders,
+  getMainBuildingCollisionPadding: () => mainBuildingCollisionPadding,
+  getCollisionPadding: () => collisionPadding,
+  getPlayerSpawn: () => playerSpawn,
+  sideBuildingSpacing: SIDE_BUILDING_SPACING,
+  sideDoorFaceOffset,
+  doorHalfHeight: () => sideDoorHeight * sideDoorScale * 0.5,
+  makeReflectionBodyMaterial: makeTronRunnerReflectionBodyMaterial,
+  makeReflectionLedMaterial: makeTronRunnerReflectionLedMaterial,
 });
 
 function tronRunnerDynamicReflectionOpacity() {
@@ -3576,7 +3621,7 @@ function tronRunnerCrowdPostRevealReflectionRampLimit(maxLimit, now = performanc
   });
 }
 
-function updateTronRunnerCrowdReflectionBudget() {
+function crowdRuntimeUpdateReflectionBudget() {
   updateTronRunnerCrowdReflectionBudgetCore({
     stats: tronRunnerCrowdRuntimeStats,
     crowd: tronRunnerCrowd,
@@ -3632,44 +3677,7 @@ function clearTronRunnerCrowd() {
   tronRunnerCrowdRuntimeStats.performanceFreezeFrameCount = 0;
 }
 
-function clearTronRunnerIdleCharacter() {
-  while (tronRunnerIdleCharacterGroup.children.length) {
-    tronRunnerIdleCharacterGroup.remove(tronRunnerIdleCharacterGroup.children[0]);
-  }
-  Object.assign(tronRunnerIdleCharacter, {
-    built: false,
-    visible: false,
-    locked: false,
-    lockedPlacement: null,
-    recordCivic: null,
-    error: '',
-    poseApplied: false,
-    poseBoneCount: 0,
-    poseBoneNames: [],
-    upperArmPoseApplied: false,
-    model: null,
-    materials: [],
-    x: 0,
-    y: 0,
-    z: 0,
-    yaw: 0,
-    startSideSign: 1,
-    anchor: '',
-    perimeterClearance: TRON_RUNNER_IDLE_CHARACTER_BODY_CLEARANCE,
-    cornerFaceInset: 0,
-    roundedColliderResolved: false,
-    roundedRadius: 0,
-    cornerFlatInset: TRON_RUNNER_IDLE_CHARACTER_CORNER_FLAT_INSET,
-    frontWallClearance: TRON_RUNNER_IDLE_CHARACTER_FRONT_WALL_CLEARANCE,
-    wallContactEps: TRON_RUNNER_IDLE_CHARACTER_WALL_CONTACT_EPS,
-    roadDir: 0,
-    placementSource: '',
-    corner: '',
-  });
-  tronRunnerIdleCharacterGroup.visible = false;
-}
-
-function syncTronRunnerCrowdScaleAndGround() {
+function crowdRuntimeSyncScaleAndGround() {
   for (const member of tronRunnerCrowd) {
     member.group.scale.copy(tronRunnerWalker.scale);
     const surface = member.route
@@ -3686,171 +3694,10 @@ function syncTronRunnerCrowdScaleAndGround() {
       member.surface = placement.surface;
       member.groundOffset = TRON_RUNNER_CROWD_GROUND_OFFSET;
     }
-    updateTronRunnerCrowdReflection(member);
+    crowdRuntimeUpdateReflection(member);
     syncTronRunnerCrowdMemberMatrixUpdates(member, true);
   }
-  syncTronRunnerIdleCharacterPose();
-}
-
-function tronRunnerIdleTargetRecord() {
-  return sideBuildingRecords.find((record) => record.civicNumberValue === TRON_RUNNER_IDLE_CHARACTER_CIVIC) || null;
-}
-
-function tronRunnerIdleCharacterResolveStartWallPoint(record, faceSign, playerSideSign) {
-  const collider = record?.collider;
-  if (!collider) return null;
-  const padding = TRON_RUNNER_IDLE_CHARACTER_BODY_CLEARANCE;
-  const halfX = collider.hw;
-  const halfZ = collider.hd;
-  const roundedRadius = Math.max(0, collider.chamfer || 0);
-  const safeInset = THREE.MathUtils.clamp(
-    roundedRadius + TRON_RUNNER_IDLE_CHARACTER_CORNER_FLAT_INSET,
-    padding * 2,
-    Math.max(padding * 2, halfX - padding)
-  );
-  const point = {
-    x: collider.x + faceSign * (halfX + sideDoorFaceOffset + TRON_RUNNER_IDLE_CHARACTER_FRONT_WALL_CLEARANCE),
-    z: collider.z + playerSideSign * (halfZ - safeInset),
-  };
-  const beforeX = point.x;
-  const beforeZ = point.z;
-  const roundedColliderResolved = resolveTronRunnerRoundedCollider(point, collider, padding);
-  return {
-    x: point.x,
-    z: point.z,
-    roundedColliderResolved,
-    roundedCorrection: Math.hypot(point.x - beforeX, point.z - beforeZ),
-    roundedRadius,
-    cornerFlatInset: safeInset,
-    frontWallClearance: TRON_RUNNER_IDLE_CHARACTER_FRONT_WALL_CLEARANCE,
-    wallContactEps: TRON_RUNNER_IDLE_CHARACTER_WALL_CONTACT_EPS,
-    roadDir: faceSign,
-    source: 'buildingFacade',
-  };
-}
-
-function tronRunnerIdleCharacterPlacement(record = tronRunnerIdleTargetRecord()) {
-  const pad = record?.basePad;
-  const polygon = pad?.hitPolygon;
-  if (!record || !pad?.border || !polygon?.length || !record.collider) return null;
-  const isLeftBuilding = (record.mesh?.position?.x ?? 0) < 0;
-  const spawnReferenceZ = Number.isFinite(playerSpawn?.z)
-    ? playerSpawn.z
-    : ((record.mesh?.position?.z ?? 0) + SIDE_BUILDING_SPACING);
-  const playerSideSign = spawnReferenceZ >= record.mesh.position.z ? 1 : -1;
-  const faceSign = tronRunnerCrowdRecordRoadDir(record);
-  const wallPoint = tronRunnerIdleCharacterResolveStartWallPoint(record, faceSign, playerSideSign);
-  if (!wallPoint) return null;
-  const worldX = wallPoint.x;
-  const worldZ = wallPoint.z;
-  const surface = tronRunnerSurfaceYForPoint(worldX, worldZ);
-  const lookX = worldX + faceSign * GRID_BLOCK * 1.5;
-  const lookZ = worldZ;
-  return {
-    x: worldX,
-    y: surface.y + TRON_RUNNER_IDLE_CHARACTER_Y_LIFT,
-    z: worldZ,
-    yaw: Math.atan2(lookX - worldX, lookZ - worldZ),
-    surface: surface.surface,
-    startSideSign: playerSideSign,
-    anchor: 'building-facade-road-wall-start-corner',
-    perimeterClearance: TRON_RUNNER_IDLE_CHARACTER_BODY_CLEARANCE,
-    cornerFaceInset: wallPoint.cornerFlatInset,
-    roundedColliderResolved: wallPoint.roundedColliderResolved,
-    roundedCorrection: wallPoint.roundedCorrection,
-    roundedRadius: wallPoint.roundedRadius,
-    cornerFlatInset: wallPoint.cornerFlatInset,
-    frontWallClearance: wallPoint.frontWallClearance,
-    wallContactEps: wallPoint.wallContactEps,
-    roadDir: wallPoint.roadDir,
-    placementSource: wallPoint.source,
-    corner: `${isLeftBuilding ? 'left' : 'right'}-${playerSideSign > 0 ? 'start-max-z' : 'start-min-z'}-road-wall-building-facade`,
-  };
-}
-
-function syncTronRunnerIdleCharacterPose() {
-  if (!tronRunnerIdleCharacter.built) return;
-  const record = tronRunnerIdleTargetRecord();
-  let placement = TRON_RUNNER_IDLE_CHARACTER_STATIC ? tronRunnerIdleCharacter.lockedPlacement : null;
-  if (!placement) {
-    placement = tronRunnerIdleCharacterPlacement(record);
-    if (placement && TRON_RUNNER_IDLE_CHARACTER_STATIC) {
-      tronRunnerIdleCharacter.lockedPlacement = { ...placement };
-      tronRunnerIdleCharacter.locked = true;
-    }
-  }
-  if (!placement) {
-    tronRunnerIdleCharacter.error = `building-${TRON_RUNNER_IDLE_CHARACTER_CIVIC}-placement-missing`;
-    tronRunnerIdleCharacterGroup.visible = false;
-    tronRunnerIdleCharacter.visible = false;
-    return;
-  }
-  tronRunnerIdleCharacterGroup.scale.copy(tronRunnerWalker.scale);
-  tronRunnerIdleCharacterGroup.position.set(placement.x, placement.y, placement.z);
-  tronRunnerIdleCharacterGroup.rotation.set(0, placement.yaw, 0);
-  Object.assign(tronRunnerIdleCharacter, {
-    locked: Boolean(TRON_RUNNER_IDLE_CHARACTER_STATIC && tronRunnerIdleCharacter.lockedPlacement),
-    recordCivic: record?.civicNumberValue ?? TRON_RUNNER_IDLE_CHARACTER_CIVIC,
-    error: '',
-    x: Number(placement.x.toFixed(3)),
-    y: Number(placement.y.toFixed(3)),
-    z: Number(placement.z.toFixed(3)),
-    yaw: Number(placement.yaw.toFixed(3)),
-    surface: placement.surface,
-    startSideSign: placement.startSideSign,
-    anchor: placement.anchor,
-    perimeterClearance: placement.perimeterClearance,
-    cornerFaceInset: placement.cornerFaceInset,
-    roundedColliderResolved: placement.roundedColliderResolved,
-    roundedCorrection: placement.roundedCorrection,
-    roundedRadius: placement.roundedRadius,
-    cornerFlatInset: placement.cornerFlatInset,
-    frontWallClearance: placement.frontWallClearance,
-    wallContactEps: placement.wallContactEps,
-    roadDir: placement.roadDir,
-    placementSource: placement.placementSource,
-    corner: placement.corner,
-  });
-}
-
-function poseTronRunnerIdleCharacterArmsCrossed(model) {
-  return poseTronRunnerIdleCharacterArmsCrossedCore(model, tronRunnerIdleCharacter);
-}
-
-function buildTronRunnerIdleCharacter(sourceModel) {
-  clearTronRunnerIdleCharacter();
-  if (!TRON_RUNNER_IDLE_CHARACTER_ENABLED) return;
-  if (!sourceModel || !cloneRunnerSkeleton) {
-    tronRunnerIdleCharacter.error = 'source-model-missing';
-    return;
-  }
-  const record = tronRunnerIdleTargetRecord();
-  if (!record) {
-    tronRunnerIdleCharacter.error = `building-${TRON_RUNNER_IDLE_CHARACTER_CIVIC}-not-found`;
-    return;
-  }
-  const model = cloneRunnerSkeleton(sourceModel);
-  model.name = `soldier-rigged-runner-idle-building-${TRON_RUNNER_IDLE_CHARACTER_CIVIC}`;
-  model.traverse((obj) => {
-    if (!obj.isMesh) return;
-    obj.frustumCulled = false;
-    obj.castShadow = false;
-    obj.receiveShadow = false;
-    obj.layers.set(0);
-  });
-  const idleColorPreset = TRON_RUNNER_CROWD_COLOR_PRESETS[TRON_RUNNER_IDLE_CHARACTER_COLOR_PRESET] || tronRunnerCrowdColorPresetForIndex(0);
-  const material = makeTronRunnerCrowdSuitMaterial(idleColorPreset);
-  model.traverse((obj) => {
-    if (obj.isMesh) obj.material = material;
-  });
-  model.rotation.z += record.sign * tronRunnerIdleCharacter.leanRad;
-  tronRunnerIdleCharacterGroup.add(model);
-  tronRunnerIdleCharacter.model = model;
-  tronRunnerIdleCharacter.materials = [material];
-  tronRunnerIdleCharacter.built = true;
-  poseTronRunnerIdleCharacterArmsCrossed(model);
-  syncTronRunnerIdleCharacterPose();
-  tronRunnerReveal?.syncIdleVisibility();
+  tronRunnerIdleCharacterRuntime.syncPose();
 }
 
 const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
@@ -3902,7 +3749,7 @@ function syncTronRunnerCrowdVisibility() {
       member.group.visible = false;
       member.cullingVisible = false;
       member.cullingReason = 'group-hidden';
-      if (changed || memberChanged) updateTronRunnerCrowdReflection(member);
+      if (changed || memberChanged) crowdRuntimeUpdateReflection(member);
       syncTronRunnerCrowdMemberMatrixUpdates(member, true);
       continue;
     }
@@ -3911,13 +3758,13 @@ function syncTronRunnerCrowdVisibility() {
       member.group.visible = true;
       member.cullingVisible = true;
       member.cullingReason = 'visible';
-      if (changed || memberChanged) updateTronRunnerCrowdReflection(member);
+      if (changed || memberChanged) crowdRuntimeUpdateReflection(member);
       syncTronRunnerCrowdMemberMatrixUpdates(member, true);
     }
   }
 }
 
-function updateTronRunnerCrowdCulling() {
+function crowdRuntimeUpdateCulling() {
   updateTronRunnerCrowdCullingState({
     crowd: tronRunnerCrowd,
     groupVisible: tronRunnerCrowdGroup.visible,
@@ -3930,7 +3777,7 @@ function updateTronRunnerCrowdCulling() {
     targetHeight: TRON_RUNNER_TARGET_HEIGHT,
     cullRadius: TRON_RUNNER_CROWD_CULL_RADIUS,
     cullDistance: TRON_RUNNER_CROWD_CULL_DISTANCE,
-    updateReflection: updateTronRunnerCrowdReflection,
+    updateReflection: crowdRuntimeUpdateReflection,
   });
 }
 
@@ -3947,7 +3794,7 @@ function makeTronRunnerCrowdActionSet(model, animations, offset) {
   return { mixer, action };
 }
 
-function buildTronRunnerCrowdReflection(sourceModel, animations, index, colorPreset = null) {
+function crowdRuntimeBuildReflection(sourceModel, animations, index, colorPreset = null) {
   if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED || !sourceModel || !cloneRunnerSkeleton) {
     return emptyTronRunnerCrowdReflection();
   }
@@ -4053,7 +3900,7 @@ function tronRunnerCrowdReflectionOccludedByBuilding(member) {
   return false;
 }
 
-function updateTronRunnerCrowdReflection(member) {
+function crowdRuntimeUpdateReflection(member) {
   const budgetActive = postRevealPerfIsolationState.crowdReflections && member.dynamicReflectionBudgetActive === true;
   // Most crowd members are outside the reflection budget (max 3 active). Once cleared, the
   // applyTronRunnerCrowdReflectionState writes are idempotent (group hidden, opacities 0); skip them.
@@ -4165,7 +4012,7 @@ function pickTronRunnerCrowdLines(index, pool, count) {
   return out;
 }
 
-function buildTronRunnerCrowdMember(job, index) {
+function crowdRuntimeBuildMember(job, index) {
   const group = new THREE.Group();
   group.name = `tron-runner-crowd-${index + 1}`;
   group.visible = false;
@@ -4192,7 +4039,7 @@ function buildTronRunnerCrowdMember(job, index) {
   const animationScaleOffset = 0.92 + (index % 5) * 0.035;
   const speedScaleOffset = 0.86 + (index % 5) * 0.035;
   const { mixer, action } = makeTronRunnerCrowdActionSet(cloneModel, job.animations, index);
-  const reflection = buildTronRunnerCrowdReflection(job.sourceModel, job.animations, index, colorPreset);
+  const reflection = crowdRuntimeBuildReflection(job.sourceModel, job.animations, index, colorPreset);
   if (reflection.group) group.add(reflection.group);
   const route = tronRunnerCrowdBuildRoute(index);
   const fallback = tronRunnerCrowdFallbackPlacement(index);
@@ -4234,7 +4081,7 @@ function buildTronRunnerCrowdMember(job, index) {
   tronRunnerCrowdGroup.add(group);
 }
 
-function buildTronRunnerCrowd(sourceModel, animations) {
+function crowdRuntimeBuild(sourceModel, animations) {
   clearTronRunnerCrowd();
   if (!TRON_RUNNER_CROWD_ENABLED || !sourceModel || !cloneRunnerSkeleton) return;
   const sourceMeshes = [];
@@ -4259,12 +4106,12 @@ function processTronRunnerCrowdBuildQueue() {
   const job = tronRunnerCrowdBuildJob;
   const started = performance.now();
   tronRunnerCrowdBuildStats.status = 'building';
-  buildTronRunnerCrowdMember(job, job.nextIndex);
+  crowdRuntimeBuildMember(job, job.nextIndex);
   job.nextIndex += 1;
   tronRunnerCrowdBuildStats.built = job.nextIndex;
   tronRunnerCrowdBuildStats.lastChunkMs = performance.now() - started;
   if (job.nextIndex < TRON_RUNNER_CROWD_COUNT) return;
-  syncTronRunnerCrowdScaleAndGround();
+  crowdRuntimeSyncScaleAndGround();
   syncTronRunnerCrowdVisibility();
   tronRunnerCrowdBuildStats.status = 'done';
   tronRunnerCrowdBuildStats.durationMs = performance.now() - job.startedAt;
@@ -4301,7 +4148,7 @@ function tronRunnerCrowdColliderRecords() {
   return tronRunnerCrowdColliderRecordCache;
 }
 
-function resolveTronRunnerCrowdCollision(member, point) {
+function crowdRuntimeResolveCollision(member, point) {
   return resolveTronRunnerCrowdCollisionCore(
     member,
     point,
@@ -4338,7 +4185,7 @@ const tronRunnerCrowdAvoidanceDeps = {
   playerObject: tronRunnerWalker,
 };
 
-function tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, now) {
+function crowdRuntimeAvoidance(member, current, nextPoint, dirX, dirZ, dt, now) {
   return tronRunnerCrowdAvoidanceCore(member, current, nextPoint, dirX, dirZ, dt, now, tronRunnerCrowdAvoidanceDeps);
 }
 
@@ -4349,7 +4196,7 @@ const tronRunnerCrowdDeadlockDeps = {
   deadlockNudge: TRON_RUNNER_CROWD_DEADLOCK_NUDGE,
   yieldDurationMs: TRON_RUNNER_CROWD_YIELD_DURATION_MS,
   pointInsideRoute: tronRunnerCrowdPointInsideRoute,
-  resolveCollision: resolveTronRunnerCrowdCollision,
+  resolveCollision: crowdRuntimeResolveCollision,
   setState: setTronRunnerCrowdState,
 };
 
@@ -4610,14 +4457,14 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   let collided = false;
   if (!isGreeter) {
     // The greeter walks straight to the player at normal pace, ignoring crowd jostling.
-    const avoidance = tronRunnerCrowdAvoidance(member, current, nextPoint, dirX, dirZ, dt, now);
+    const avoidance = crowdRuntimeAvoidance(member, current, nextPoint, dirX, dirZ, dt, now);
     if (avoidance.speedScale < 1) {
       nextPoint.x = current.x + dirX * Math.min(distance, baseStep * avoidance.speedScale);
       nextPoint.z = current.z + dirZ * Math.min(distance, baseStep * avoidance.speedScale);
     }
     nextPoint.x += avoidance.x;
     nextPoint.z += avoidance.z;
-    collided = resolveTronRunnerCrowdCollision(member, nextPoint);
+    collided = crowdRuntimeResolveCollision(member, nextPoint);
     if (collided) {
       member.collisionCount += 1;
       member.waypointIndex = (member.waypointIndex + 1) % route.points.length;
@@ -4638,7 +4485,7 @@ function advanceTronRunnerCrowdMember(member, dt, now = performance.now()) {
   member.lastCollision = collided;
 }
 
-function updateTronRunnerCrowd(dt) {
+function crowdRuntimeUpdate(dt) {
   if (!TRON_RUNNER_CROWD_ENABLED) return;
   processTronRunnerCrowdBuildQueue();
   if (!tronRunnerCrowd.length) return;
@@ -4664,8 +4511,8 @@ function updateTronRunnerCrowd(dt) {
   tronRunnerCrowdRuntimeStats.lastStepDt = step;
   tronRunnerCrowdRuntimeStats.avoidancePairs = 0;
   tronRunnerCrowdRuntimeStats.maxAvoidanceOverlap = 0;
-  updateTronRunnerCrowdCulling();
-  updateTronRunnerCrowdReflectionBudget();
+  crowdRuntimeUpdateCulling();
+  crowdRuntimeUpdateReflectionBudget();
   for (const member of tronRunnerCrowd) syncTronRunnerCrowdMemberMatrixUpdates(member);
   prepareTronRunnerCrowdSpatialGrid();
   for (const member of tronRunnerCrowd) {
@@ -4712,7 +4559,7 @@ function updateTronRunnerCrowd(dt) {
     if (!shouldUpdate) {
       member.lastMovedDistance = 0;
       if (!cullingHidden) {
-        updateTronRunnerCrowdReflection(member);
+        crowdRuntimeUpdateReflection(member);
         syncTronRunnerCrowdMemberMatrixUpdates(member, true);
       }
       continue;
@@ -4737,7 +4584,7 @@ function updateTronRunnerCrowd(dt) {
       else syncTronRunnerCrowdWalkCycleToDistance(member);
     }
     if (!cullingHidden) {
-      updateTronRunnerCrowdReflection(member);
+      crowdRuntimeUpdateReflection(member);
       syncTronRunnerCrowdMemberMatrixUpdates(member, true);
     }
     member.mixerDt = 0;
@@ -4750,7 +4597,7 @@ function updateTronRunnerCrowd(dt) {
   );
 }
 
-function tronRunnerCrowdInspect() {
+function crowdRuntimeInspect() {
   const runnerScale = Number(tronRunnerWalker.scale.x.toFixed(4));
   const runnerTargetHeight = TRON_RUNNER_TARGET_HEIGHT * tronRunnerWalker.scale.y;
   const runnerHeightFromRoad = tronRunnerWalker.position.y - roadTileTopY();
@@ -4965,583 +4812,12 @@ function tronRunnerCrowdInspect() {
   };
 }
 
-function tronRunnerIdleCharacterInspect() {
-  return tronRunnerIdleCharacterInspectCore({
-    idleCharacter: tronRunnerIdleCharacter,
-    idleCharacterGroup: tronRunnerIdleCharacterGroup,
-    crowdBox: tronRunnerCrowdBox,
-    boundsCenter: tronRunnerIdleCharacterBoundsCenter,
-    enabled: TRON_RUNNER_IDLE_CHARACTER_ENABLED,
-    colorPreset: TRON_RUNNER_IDLE_CHARACTER_COLOR_PRESET,
-    liftPx: TRON_RUNNER_IDLE_CHARACTER_LIFT_PX,
-    yLift: TRON_RUNNER_IDLE_CHARACTER_Y_LIFT,
-    leanDeg: TRON_RUNNER_IDLE_CHARACTER_LEAN_DEG,
-  });
-}
-
 function tronRunnerDroneAnchor() {
   const target = computeDroneIntroTargetPose?.();
   if (target && Number.isFinite(target.x) && Number.isFinite(target.z)) return { x: target.x, z: target.z };
   return {
     x: Number.isFinite(playerSpawn?.x) ? playerSpawn.x : 0,
     z: Number.isFinite(playerSpawn?.z) ? playerSpawn.z : dynamicRoadCenter,
-  };
-}
-
-function tronRunnerWaypointForSideBuilding(record) {
-  const pad = record?.basePad;
-  const points = pad?.innerHitPolygon?.length ? pad.innerHitPolygon : pad?.hitPolygon;
-  if (!record || !pad?.border || !points?.length) return null;
-  const localXs = points.map(([x]) => x);
-  const localZs = points.map(([, z]) => z);
-  const roadFacingX = record.sign < 0 ? Math.max(...localXs) : Math.min(...localXs);
-  const safeX = roadFacingX + record.sign * TRON_RUNNER_FREE_ROAM_SIDEWALK_INSET;
-  const minZ = Math.min(...localZs) + 2;
-  const maxZ = Math.max(...localZs) - 2;
-  const localZ = THREE.MathUtils.clamp(0, minZ, maxZ);
-  return {
-    x: pad.border.position.x + safeX,
-    z: pad.border.position.z + localZ,
-    surface: 'sidewalk',
-    label: `sidewalk-${record.civicNumberValue ?? 'building'}`,
-  };
-}
-
-function tronRunnerRoadWaypoint(z, label = 'road') {
-  const limits = roadHexBoundaryLimits();
-  return {
-    x: THREE.MathUtils.clamp(0, limits.minX + 2, limits.maxX - 2),
-    z: THREE.MathUtils.clamp(z, limits.minZ + 2, limits.maxZ - 2),
-    surface: 'road',
-    label,
-  };
-}
-
-function rotateTronRunnerWaypointsToAnchor(waypoints, anchor) {
-  if (!waypoints.length) return waypoints;
-  let bestIndex = 0;
-  let bestDistance = Infinity;
-  waypoints.forEach((point, index) => {
-    const distance = Math.hypot(point.x - anchor.x, point.z - anchor.z);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestIndex = index;
-    }
-  });
-  return waypoints.slice(bestIndex).concat(waypoints.slice(0, bestIndex));
-}
-
-function tronRunnerFreeRoamRouteSpec() {
-  const rows = [...new Set(sideBuildingRecords
-    .filter((record) => record.mesh?.visible !== false && record.basePad?.hitPolygon?.length)
-    .map((record) => Number(record.mesh.position.z.toFixed(3))))]
-    .sort((a, b) => b - a);
-  const waypoints = [];
-  rows.forEach((z, index) => {
-    const rowRecords = sideBuildingRecords
-      .filter((record) => Math.abs(record.mesh.position.z - z) < GRID_BLOCK)
-      .sort((a, b) => a.sign - b.sign);
-    const left = rowRecords.find((record) => record.sign < 0);
-    const right = rowRecords.find((record) => record.sign > 0);
-    const firstSide = index % 2 === 0 ? left : right;
-    const secondSide = index % 2 === 0 ? right : left;
-    const first = tronRunnerWaypointForSideBuilding(firstSide);
-    const second = tronRunnerWaypointForSideBuilding(secondSide);
-    if (first) waypoints.push(first);
-    waypoints.push(tronRunnerRoadWaypoint(z, `road-${z}`));
-    if (second) waypoints.push(second);
-    waypoints.push(tronRunnerRoadWaypoint(z, `road-return-${z}`));
-  });
-  if (mainBuildingRecords[0]?.basePad?.hitPolygon?.length) {
-    const z = mainBuildingRecords[0].mesh.position.z + mainBuildingRecords[0].collider.hd + GRID_BLOCK * 1.5;
-    waypoints.push(tronRunnerRoadWaypoint(z, 'main-road-front'));
-  }
-  const anchor = tronRunnerDroneAnchor();
-  const rotated = rotateTronRunnerWaypointsToAnchor(waypoints.filter(Boolean), anchor);
-  if (!rotated.length) return null;
-  return {
-    mode: 'free-roam',
-    closed: true,
-    waypoints: rotated,
-    waypointCount: rotated.length,
-    x: rotated[0].x,
-    zA: rotated[0].z,
-    zB: rotated[1]?.z ?? rotated[0].z,
-    anchor,
-  };
-}
-
-function resolveTronRunnerAutonomyCollision(point) {
-  let collision = false;
-  if (TRON_RUNNER_FREE_ROAM_COLLISIONS_ENABLED) {
-    for (const collider of buildingColliders) {
-      const basePadding = collider.role === 'main-building' ? mainBuildingCollisionPadding : collisionPadding;
-      if (resolveTronRunnerRoundedCollider(point, collider, basePadding + TRON_RUNNER_FREE_ROAM_COLLISION_RADIUS)) {
-        collision = true;
-      }
-    }
-    const limits = roadHexBoundaryLimits();
-    const nextX = THREE.MathUtils.clamp(point.x, limits.minX, limits.maxX);
-    const nextZ = THREE.MathUtils.clamp(point.z, limits.minZ, limits.maxZ);
-    if (Math.abs(nextX - point.x) > 0.001 || Math.abs(nextZ - point.z) > 0.001) collision = true;
-    point.x = nextX;
-    point.z = nextZ;
-  }
-  return collision;
-}
-
-function updateTronRunnerAutonomyState(route, movedDistance = 0, collision = false) {
-  tronRunnerState.autonomy = {
-    mode: route?.mode || 'free-roam',
-    collisionEnabled: TRON_RUNNER_FREE_ROAM_COLLISIONS_ENABLED,
-    footstepsEnabled: TRON_RUNNER_FREE_ROAM_FOOTSTEPS_ENABLED,
-    waypointIndex: tronRunnerAutonomy.waypointIndex,
-    waypointCount: route?.waypointCount ?? route?.waypoints?.length ?? 0,
-    targetLabel: route?.waypoints?.[tronRunnerAutonomy.waypointIndex]?.label ?? '',
-    distanceWalked: Number(tronRunnerAutonomy.distanceWalked.toFixed(2)),
-    lastMoveDistance: Number(movedDistance.toFixed(3)),
-    collisionCount: tronRunnerAutonomy.collisionCount,
-    lastCollision: collision,
-    lastFootstepSurface: tronRunnerAutonomy.lastFootstepSurface,
-    lastFootstepSample: tronRunnerAutonomy.lastFootstepSample,
-    lastFootstepPlayed: tronRunnerAutonomy.lastFootstepPlayed,
-    audio: tronRunnerFootstepAudioStateCore(tronRunnerAutonomy, FOOTSTEP_NPC_SPATIAL_BUS),
-  };
-}
-
-function updateTronRunnerFreeRoam(dt, route) {
-  const waypoints = route?.waypoints || [];
-  if (!waypoints.length) return null;
-  if (!tronRunnerAutonomy.initialized) {
-    tronRunnerAutonomy.initialized = true;
-    tronRunnerAutonomy.waypointIndex = 1 % waypoints.length;
-    return {
-      x: waypoints[0].x,
-      z: waypoints[0].z,
-      directionX: 0,
-      directionZ: 1,
-      movedDistance: 0,
-      collision: false,
-    };
-  }
-
-  let target = waypoints[tronRunnerAutonomy.waypointIndex % waypoints.length];
-  let currentX = tronRunnerWalker.position.x;
-  let currentZ = tronRunnerWalker.position.z;
-  let dx = target.x - currentX;
-  let dz = target.z - currentZ;
-  let distance = Math.hypot(dx, dz);
-  if (distance <= TRON_RUNNER_FREE_ROAM_REACH_RADIUS) {
-    tronRunnerAutonomy.waypointIndex = (tronRunnerAutonomy.waypointIndex + 1) % waypoints.length;
-    target = waypoints[tronRunnerAutonomy.waypointIndex];
-    dx = target.x - currentX;
-    dz = target.z - currentZ;
-    distance = Math.hypot(dx, dz);
-  }
-  const directionX = distance > 0.001 ? dx / distance : Math.sin(tronRunnerYaw);
-  const directionZ = distance > 0.001 ? dz / distance : Math.cos(tronRunnerYaw);
-  const step = Math.min(distance, Math.max(0, tronRunnerWalkSpeed * dt));
-  const point = {
-    x: currentX + directionX * step,
-    z: currentZ + directionZ * step,
-  };
-  const collision = resolveTronRunnerAutonomyCollision(point);
-  const movedDistance = Math.hypot(point.x - currentX, point.z - currentZ);
-  tronRunnerAutonomy.distanceWalked += movedDistance;
-  if (collision) {
-    tronRunnerAutonomy.collisionCount += 1;
-    if (movedDistance < Math.max(0.02, step * 0.2)) {
-      tronRunnerAutonomy.waypointIndex = (tronRunnerAutonomy.waypointIndex + 1) % waypoints.length;
-    }
-  }
-  tronRunnerAutonomy.lastCollision = collision;
-  return {
-    x: point.x,
-    z: point.z,
-    directionX,
-    directionZ,
-    movedDistance,
-    collision,
-  };
-}
-
-function tronRunnerRouteSpec() {
-  if (TRON_RUNNER_FREE_ROAM_ENABLED) {
-    const freeRoamRoute = tronRunnerFreeRoamRouteSpec();
-    if (freeRoamRoute) return freeRoamRoute;
-  }
-  const minZ = dynamicRoadCenter - dynamicRoadLength * 0.5 + GRID_BLOCK * 5;
-  const maxZ = dynamicRoadCenter + dynamicRoadLength * 0.5 - GRID_BLOCK * 5;
-  const anchorZ = THREE.MathUtils.clamp((playerSpawn?.z ?? maxZ) - GRID_BLOCK * 8, minZ + GRID_BLOCK * 12, maxZ - GRID_BLOCK * 4);
-  const sidewalkRecords = sideBuildingRecords
-    .filter((record) => record.sign === TRON_RUNNER_SIDEWALK_SIGN && record.basePad?.hitPolygon?.length)
-    .sort((a, b) => Math.abs(a.mesh.position.z - anchorZ) - Math.abs(b.mesh.position.z - anchorZ));
-  const sidewalkRecord = sidewalkRecords[0];
-  const pad = sidewalkRecord?.basePad;
-  const padLocalXs = pad?.innerHitPolygon?.length ? pad.innerHitPolygon.map(([x]) => x) : pad?.hitPolygon?.map(([x]) => x);
-  const padLocalZs = pad?.innerHitPolygon?.length ? pad.innerHitPolygon.map(([, z]) => z) : pad?.hitPolygon?.map(([, z]) => z);
-  const padMinZ = padLocalZs?.length ? Math.min(...padLocalZs) + pad.border.position.z : minZ;
-  const padMaxZ = padLocalZs?.length ? Math.max(...padLocalZs) + pad.border.position.z : maxZ;
-  const padInnerEdgeX = padLocalXs?.length
-    ? (TRON_RUNNER_SIDEWALK_SIGN < 0 ? Math.max(...padLocalXs) : Math.min(...padLocalXs))
-    : 0;
-  const x = pad
-    ? pad.border.position.x + padInnerEdgeX + TRON_RUNNER_SIDEWALK_SIGN * TRON_RUNNER_SIDEWALK_INSET
-    : TRON_RUNNER_SIDEWALK_SIGN * Math.max(10, roadHalf() + streetEdgeWidth + TRON_RUNNER_SIDEWALK_INSET);
-  const padStartZ = THREE.MathUtils.clamp(anchorZ - GRID_BLOCK * 1.6, padMinZ + 2, padMaxZ - 2);
-  const padEndZ = THREE.MathUtils.clamp(anchorZ - GRID_BLOCK * 6.2, padMinZ + 2, padMaxZ - 2);
-  const zA = Math.abs(padStartZ - padEndZ) > 4 ? padStartZ : THREE.MathUtils.clamp(padMaxZ - 3, minZ, maxZ);
-  const zB = Math.abs(padStartZ - padEndZ) > 4 ? padEndZ : THREE.MathUtils.clamp(padMinZ + 3, minZ, maxZ);
-  return {
-    mode: 'sidewalk-line',
-    x,
-    zA,
-    zB,
-    padZ: sidewalkRecord?.mesh.position.z ?? null,
-  };
-}
-
-function fitTronRunnerModel(model) {
-  fitTronRunnerModelCore(model, TRON_RUNNER_TARGET_HEIGHT);
-}
-
-function loadTronRunnerGltf() {
-  return new Promise((resolve, reject) => {
-    new RunnerGLTFLoader().load(TRON_RUNNER_MODEL_URL, resolve, undefined, reject);
-  });
-}
-
-async function loadTronRunner() {
-  if (!TRON_RUNNER_ENABLED || !RunnerGLTFLoader) {
-    tronRunnerState.error = RunnerGLTFLoader ? '' : 'GLTF loader unavailable';
-    return false;
-  }
-  const route = tronRunnerRouteSpec();
-  tronRunnerState.route = route;
-  tronRunnerState.doorHalfHeight = tronRunnerDoorHalfHeight();
-  tronRunnerState.surfaceY = tronRunnerSurfaceYAt(route.x, route.zA);
-  resetTronRunnerAutonomy({
-    autonomy: tronRunnerAutonomy,
-    footstepBus: FOOTSTEP_NPC_SPATIAL_BUS,
-  });
-  updateTronRunnerAutonomyState(route);
-  try {
-    const sourceReflectionNeeded = TRON_RUNNER_SOURCE_CHARACTER_VISIBLE && TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED;
-    const [gltf, reflectionGltf] = await Promise.all([
-      loadTronRunnerGltf(),
-      sourceReflectionNeeded ? loadTronRunnerGltf() : Promise.resolve(null),
-    ]);
-    tronRunnerWalker.clear();
-    const model = gltf.scene;
-    model.name = 'soldier-rigged-runner-city';
-    model.rotation.y = Math.PI;
-    tronRunnerParts.materials = [];
-    tronRunnerParts.reflectionMaterials = [];
-    tronRunnerParts.reflectionBodyMaterials = [];
-    tronRunnerParts.reflectionLedMaterials = [];
-    tronRunnerParts.realShadowCasterCount = 0;
-    tronRunnerParts.dynamicReflectionMeshCount = 0;
-    tronRunnerParts.dynamicReflectionLedMeshCount = 0;
-    tronRunnerParts.revealScan = null;
-    model.traverse((obj) => {
-      if (!obj.isMesh) return;
-      obj.frustumCulled = false;
-      obj.castShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
-      obj.receiveShadow = false;
-      obj.layers.enable(TRON_RUNNER_REAL_SHADOW_LAYER);
-      if (TRON_RUNNER_REAL_SHADOW_ENABLED) tronRunnerParts.realShadowCasterCount += 1;
-      obj.material = tronRunnerSuitMat.clone();
-      tronRunnerParts.materials.push(obj.material);
-    });
-    fitTronRunnerModel(model);
-    tronRunnerWalker.add(model);
-    const revealScan = tronRunnerReveal.makeScan();
-    tronRunnerWalker.add(revealScan);
-
-    let reflectionGroup = null;
-    let reflectionModel = null;
-    let reflectionLedModel = null;
-    let reflectionMixer = null;
-    let reflectionLedMixer = null;
-    let reflectionActionSet = { actions: {}, actionNames: null };
-    let reflectionLedActionSet = { actions: {}, actionNames: null };
-    if (reflectionGltf?.scene) {
-      reflectionGroup = new THREE.Group();
-      reflectionGroup.name = 'tron-runner-dynamic-reflection';
-      reflectionGroup.position.y = TRON_RUNNER_DYNAMIC_REFLECTION_Y;
-      reflectionGroup.scale.set(1, -TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE, 1);
-      reflectionGroup.visible = false;
-      reflectionModel = reflectionGltf.scene;
-      reflectionModel.name = 'soldier-rigged-runner-city-reflection';
-      reflectionModel.rotation.y = Math.PI;
-      fitTronRunnerModel(reflectionModel);
-      reflectionLedModel = cloneRunnerSkeleton
-        ? cloneRunnerSkeleton(reflectionModel)
-        : reflectionModel.clone(true);
-      reflectionLedModel.name = 'soldier-rigged-runner-city-reflection-led';
-      reflectionModel.traverse((obj) => {
-        if (!obj.isMesh) return;
-        obj.frustumCulled = false;
-        obj.castShadow = false;
-        obj.receiveShadow = false;
-        obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_BODY_RENDER_ORDER;
-        obj.material = makeTronRunnerReflectionBodyMaterial();
-        tronRunnerParts.reflectionMaterials.push(obj.material);
-        tronRunnerParts.reflectionBodyMaterials.push(obj.material);
-        tronRunnerParts.dynamicReflectionMeshCount += 1;
-      });
-      reflectionLedModel.traverse((obj) => {
-        if (!obj.isMesh) return;
-        obj.frustumCulled = false;
-        obj.castShadow = false;
-        obj.receiveShadow = false;
-        obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_LED_RENDER_ORDER;
-        obj.material = makeTronRunnerReflectionLedMaterial();
-        tronRunnerParts.reflectionMaterials.push(obj.material);
-        tronRunnerParts.reflectionLedMaterials.push(obj.material);
-        tronRunnerParts.dynamicReflectionLedMeshCount += 1;
-      });
-      reflectionGroup.add(reflectionModel);
-      reflectionGroup.add(reflectionLedModel);
-      tronRunnerWalker.add(reflectionGroup);
-      reflectionMixer = new THREE.AnimationMixer(reflectionModel);
-      reflectionLedMixer = new THREE.AnimationMixer(reflectionLedModel);
-      reflectionActionSet = makeTronRunnerActionSet(reflectionGltf, reflectionMixer);
-      reflectionLedActionSet = makeTronRunnerActionSet(reflectionGltf, reflectionLedMixer);
-    }
-
-    const groundShadow = new THREE.Mesh(new THREE.CircleGeometry(1.15, 48), tronRunnerShadowMat);
-    groundShadow.rotation.x = -Math.PI / 2;
-    groundShadow.position.set(0, 0.025, 0.2);
-    groundShadow.scale.set(1, TRON_RUNNER_CONTACT_SHADOW_ROUNDNESS, 1);
-    tronRunnerWalker.add(groundShadow);
-
-    const realShadowReceiver = new THREE.Mesh(
-      new THREE.CircleGeometry(TRON_RUNNER_REAL_SHADOW_RECEIVER_RADIUS, 72),
-      tronRunnerRealShadowMat.clone()
-    );
-    realShadowReceiver.name = 'tron-runner-real-shadow-receiver';
-    realShadowReceiver.rotation.x = -Math.PI / 2;
-    realShadowReceiver.position.set(0, 0.012, 0.2);
-    realShadowReceiver.receiveShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
-    realShadowReceiver.castShadow = false;
-    realShadowReceiver.depthWrite = false;
-    realShadowReceiver.renderOrder = 3;
-    realShadowReceiver.layers.enable(TRON_RUNNER_REAL_SHADOW_LAYER);
-    tronRunnerWalker.add(realShadowReceiver);
-
-    const mixer = new THREE.AnimationMixer(model);
-    const actionSet = makeTronRunnerActionSet(gltf, mixer);
-    tronRunnerParts.actionNames = actionSet.actionNames;
-    tronRunnerParts.model = model;
-    tronRunnerParts.mixer = mixer;
-    tronRunnerParts.actions = actionSet.actions;
-    tronRunnerParts.skeletonGlow = null;
-    tronRunnerParts.groundShadow = groundShadow;
-    tronRunnerParts.realShadowReceiver = realShadowReceiver;
-    tronRunnerParts.reflectionGroup = reflectionGroup;
-    tronRunnerParts.reflectionModel = reflectionModel;
-    tronRunnerParts.reflectionLedModel = reflectionLedModel;
-    tronRunnerParts.reflectionMixer = reflectionMixer;
-    tronRunnerParts.reflectionLedMixer = reflectionLedMixer;
-    tronRunnerParts.reflectionActions = reflectionActionSet.actions;
-    tronRunnerParts.reflectionLedActions = reflectionLedActionSet.actions;
-    tronRunnerParts.reflectionActionNames = reflectionActionSet.actionNames;
-    tronRunnerParts.reflectionLedActionNames = reflectionLedActionSet.actionNames;
-    tronRunnerParts.reflectionActiveAction = null;
-    tronRunnerParts.reflectionLedActiveAction = null;
-    tronRunnerParts.realShadowLight = tronRunnerRealShadowLight;
-    tronRunnerParts.realShadowTarget = tronRunnerRealShadowTarget;
-    tronRunnerParts.revealScan = revealScan;
-    tronRunnerParts.keyLight = null;
-    tronRunnerParts.leftRim = null;
-    tronRunnerParts.rightRim = null;
-    tronRunnerParts.lowFill = null;
-	    playTronRunnerAction({
-	      runnerParts: tronRunnerParts,
-	      runnerState: tronRunnerState,
-	      effectiveTimeScale: tronRunnerEffectiveAnimationSpeed(),
-	      kind: 'walk',
-	    });
-	    applyTronRunnerVisualControls();
-	    buildTronRunnerCrowd(model, gltf.animations);
-	    buildTronRunnerIdleCharacter(model);
-
-		    tronRunnerElapsed = 0;
-	    tronRunnerVisualDistanceWalked = 0;
-	    tronRunnerYaw = 0;
-    tronRunnerState.ready = true;
-    tronRunnerState.loaded = 1;
-    tronRunnerState.error = '';
-    tronRunnerReveal.reset();
-    updateTronRunner(0);
-    return true;
-  } catch (error) {
-    tronRunnerWalker.visible = false;
-    tronRunnerState.ready = false;
-    tronRunnerState.error = error?.message || String(error);
-    console.warn('[tron-runner]', tronRunnerState.error);
-    return false;
-  }
-}
-
-function updateTronRunner(dt) {
-  if (!tronRunnerState.ready && !tronRunnerParts.model) return;
-  tronRunnerElapsed += Math.min(dt, 0.05);
-  const route = tronRunnerState.route || tronRunnerRouteSpec();
-  let x = route.x;
-  let z = route.zA;
-  let directionX = 0;
-  let directionZ = 1;
-  let movedDistance = 0;
-  let collision = false;
-  if (route.mode === 'free-roam') {
-    const next = updateTronRunnerFreeRoam(dt, route);
-    if (next) {
-      x = next.x;
-      z = next.z;
-      directionX = next.directionX;
-      directionZ = next.directionZ;
-      movedDistance = next.movedDistance;
-      collision = next.collision;
-    }
-  } else {
-    const span = Math.max(1, Math.abs(route.zA - route.zB));
-    const loopDistance = span * 2;
-    const phase = ((TRON_RUNNER_ROUTE_OFFSET + tronRunnerElapsed * tronRunnerWalkSpeed / loopDistance) % 1 + 1) % 1;
-    const forwardLeg = phase < 0.5;
-    const t = forwardLeg ? phase * 2 : (1 - phase) * 2;
-    z = THREE.MathUtils.lerp(route.zA, route.zB, t);
-    directionZ = route.zB >= route.zA
-      ? (forwardLeg ? 1 : -1)
-      : (forwardLeg ? -1 : 1);
-    movedDistance = Math.hypot(x - tronRunnerWalker.position.x, z - tronRunnerWalker.position.z);
-  }
-  tronRunnerTargetYaw = Math.atan2(directionX, directionZ);
-  tronRunnerYaw = lerpAngle(tronRunnerYaw, tronRunnerTargetYaw, Math.min(1, dt * 9));
-  tronRunnerWalker.position.set(x, tronRunnerSurfaceYAt(x, z), z);
-  tronRunnerWalker.rotation.set(0, tronRunnerYaw, 0);
-  if (TRON_RUNNER_DISTANCE_DRIVEN_WALK_ENABLED && tronRunnerParts.activeAction) {
-    tronRunnerVisualDistanceWalked += movedDistance;
-    syncTronRunnerActionSetToDistance({
-      runnerParts: tronRunnerParts,
-      distance: tronRunnerVisualDistanceWalked,
-    });
-  } else {
-    tronRunnerParts.mixer?.update(dt);
-    tronRunnerParts.reflectionMixer?.update(dt);
-    tronRunnerParts.reflectionLedMixer?.update(dt);
-  }
-  if (tronRunnerState.distanceDrivenWalk) {
-    tronRunnerState.distanceDrivenWalk.visualDistance = Number(tronRunnerVisualDistanceWalked.toFixed(3));
-  }
-  tronRunnerFootstepRuntime.movedDistance = movedDistance;
-  tronRunnerFootstepRuntime.dt = dt;
-  tronRunnerFootstepRuntime.yaw = tronRunnerYaw;
-  tronRunnerFootstepRuntime.walkSpeed = tronRunnerWalkSpeed;
-  updateTronRunnerAutonomyFootstepsCore(tronRunnerFootstepRuntime);
-  updateTronRunnerAutonomyState(route, movedDistance, collision);
-  updateTronRunnerRealShadowRig();
-  updateTronRunnerDynamicReflection();
-
-  if (tronRunnerParts.groundShadow) {
-    if (!TRON_RUNNER_GROUND_SHADOW_ENABLED) {
-      tronRunnerParts.groundShadow.visible = false;
-      tronRunnerParts.groundShadow.material.userData.tronRunnerBaseOpacity = 0;
-      tronRunnerParts.groundShadow.material.opacity = 0;
-      return;
-    }
-    const phasePulse = tronRunnerElapsed * 4.65;
-    const c = Math.cos(phasePulse);
-    const shadowPulse = 1 + (1 - Math.abs(c)) * THREE.MathUtils.clamp(tronRunnerShadowPulse, 0, 1.5);
-    const groundShadowOpacity = THREE.MathUtils.clamp(
-      tronRunnerFloorReflection * 0.78 * shadowPulse,
-      0,
-      TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY
-    );
-    tronRunnerParts.groundShadow.material.userData.tronRunnerBaseOpacity = groundShadowOpacity;
-    tronRunnerParts.groundShadow.material.opacity = groundShadowOpacity;
-  }
-}
-
-function tronRunnerInspect() {
-  if (tronRunnerParts.model) {
-    tronRunnerBox.setFromObject(tronRunnerWalker);
-    tronRunnerBox.getSize(tronRunnerSize);
-  } else {
-    tronRunnerSize.set(0, 0, 0);
-  }
-  const runnerMaterial = tronRunnerParts.materials[0] || null;
-  const realShadowMaterial = tronRunnerParts.realShadowReceiver?.material || null;
-  const realShadowReceiverType = realShadowMaterial?.isShadowMaterial || realShadowMaterial?.type === 'ShadowMaterial'
-    ? 'shadow-material'
-    : null;
-  const groundShadowScaleX = tronRunnerParts.groundShadow?.scale?.x ?? 0;
-  const groundShadowScaleZ = tronRunnerParts.groundShadow?.scale?.y ?? 0;
-  return {
-    ...tronRunnerState,
-    x: Number(tronRunnerWalker.position.x.toFixed(2)),
-    y: Number(tronRunnerWalker.position.y.toFixed(2)),
-    z: Number(tronRunnerWalker.position.z.toFixed(2)),
-    yaw: Number(tronRunnerYaw.toFixed(3)),
-    visible: tronRunnerWalker.visible,
-    sourceCharacterVisible: TRON_RUNNER_SOURCE_CHARACTER_VISIBLE,
-    groundShadowVisible: Boolean(tronRunnerParts.groundShadow?.visible),
-    groundShadowOpacity: Number((tronRunnerParts.groundShadow?.material?.opacity ?? 0).toFixed(3)),
-    groundShadowScaleX: Number(groundShadowScaleX.toFixed(3)),
-    groundShadowScaleZ: Number(groundShadowScaleZ.toFixed(3)),
-    contactShadowRoundness: groundShadowScaleX > 0
-      ? Number((groundShadowScaleZ / groundShadowScaleX).toFixed(3))
-      : 0,
-    shadowMapEnabled: Boolean(renderer.shadowMap?.enabled),
-    shadowMapType: renderer.shadowMap?.type ?? null,
-    realShadowEnabled: TRON_RUNNER_REAL_SHADOW_ENABLED,
-    realShadowReceiverType,
-    realShadowReceiverGeometryType: tronRunnerParts.realShadowReceiver?.geometry?.type ?? null,
-    realShadowReceiverRadius: TRON_RUNNER_REAL_SHADOW_RECEIVER_RADIUS,
-    realShadowReceiverVisible: Boolean(tronRunnerParts.realShadowReceiver?.visible),
-    realShadowReceiverOpacity: Number((tronRunnerParts.realShadowReceiver?.material?.opacity ?? 0).toFixed(3)),
-    realShadowLightCastShadow: Boolean(tronRunnerParts.realShadowLight?.castShadow),
-    realShadowLightVisible: Boolean(tronRunnerParts.realShadowLight?.visible),
-    realShadowLightIntensity: Number((tronRunnerParts.realShadowLight?.intensity ?? 0).toFixed(3)),
-    realShadowMapSize: tronRunnerParts.realShadowLight?.shadow?.mapSize?.x ?? 0,
-    realShadowCasterCount: tronRunnerParts.realShadowCasterCount,
-    dynamicReflection: {
-      enabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
-      visible: Boolean(tronRunnerParts.reflectionGroup?.visible),
-      opacity: Number((tronRunnerState.dynamicReflectionOpacity ?? 0).toFixed(3)),
-      bodyOpacity: Number((tronRunnerState.dynamicReflectionBodyOpacity ?? 0).toFixed(3)),
-      ledOpacity: Number((tronRunnerState.dynamicReflectionLedOpacity ?? 0).toFixed(3)),
-      surface: tronRunnerState.dynamicReflectionSurface,
-      meshCount: tronRunnerParts.dynamicReflectionMeshCount,
-      ledMeshCount: tronRunnerParts.dynamicReflectionLedMeshCount,
-      animated: Boolean(tronRunnerParts.reflectionMixer && tronRunnerParts.reflectionLedMixer),
-      yScale: TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
-    },
-    suitColorHex: runnerMaterial?.color?.getHexString?.() ?? null,
-    suitEmissiveHex: runnerMaterial?.emissive?.getHexString?.() ?? null,
-    suitEmissiveIntensity: Number((runnerMaterial?.emissiveIntensity ?? 0).toFixed(3)),
-    suitTextureMode: TRON_RUNNER_SUIT_TEXTURE_MODE,
-    suitMapEnabled: Boolean(runnerMaterial?.map?.isTexture),
-    suitEmissiveMapEnabled: Boolean(runnerMaterial?.emissiveMap?.isTexture),
-    ledStripCount: 0,
-    ledStripIntensity: 0,
-    modelLineIntensity: Number((tronRunnerState.modelLineIntensity ?? 0).toFixed(3)),
-    skeletonHelperPresent: Boolean(tronRunnerParts.skeletonGlow),
-    skeletonHelperVisible: Boolean(tronRunnerParts.skeletonGlow?.visible),
-    keyLightLayerMask: null,
-    modelLightLayerEnabled: false,
-    pointLightCount: [
-      tronRunnerParts.keyLight,
-      tronRunnerParts.leftRim,
-      tronRunnerParts.rightRim,
-      tronRunnerParts.lowFill,
-    ].filter(Boolean).length,
-    heightFromRoad: Number((tronRunnerWalker.position.y - roadTileTopY()).toFixed(2)),
-    surface: tronRunnerState.surface,
-    sizeX: Number(tronRunnerSize.x.toFixed(2)),
-    sizeY: Number(tronRunnerSize.y.toFixed(2)),
-    sizeZ: Number(tronRunnerSize.z.toFixed(2)),
   };
 }
 
@@ -7847,7 +7123,7 @@ async function bootSceneWithFinalDefaults() {
   buildLabEqualizer({ visible: false });
   setTronNoclip(false, { silent: true });
   applyPlayerSpawn(playerSpawn, false);
-  await loadTronRunner();
+  await tronRunnerOrchestration.load();
   tronMainPlayerBody.build();
   await drainTronRunnerCrowdBuildQueue();
   prewarmSkinnedMeshBoneTextures(scene);
@@ -7884,9 +7160,9 @@ window.__tronInspect = () => ({
   })),
   sideBuildingLedLayouts: sideBuildingRecords.map((record) => sideBuildingLedLayoutInspect(record)),
   bridgeLinks: bridges.inspect(),
-  tronRunner: tronRunnerInspect(),
-  tronRunnerCrowd: tronRunnerCrowdInspect(),
-  tronRunnerIdleCharacter: tronRunnerIdleCharacterInspect(),
+  tronRunner: tronRunnerOrchestration.inspect(),
+  tronRunnerCrowd: tronRunnerCrowdRuntime.inspect(),
+  tronRunnerIdleCharacter: tronRunnerIdleCharacterRuntime.inspect(),
   mainPlayerBody: tronMainPlayerBody.inspect(),
   surfaceReflections: {
     roadReflect: Number(controlEls.roadReflect.value),
@@ -8106,7 +7382,7 @@ window.__tronInspect = () => ({
   render: { ...renderer.info.render },
   memory: { ...renderer.info.memory },
 });
-window.__tronRunnerInspect = tronRunnerInspect;
+window.__tronRunnerInspect = () => tronRunnerOrchestration.inspect();
 window.__tronRevealProfile = cityRevealProfiler.inspect;
 window.__tronSpikeInspect = performanceDiagnostics.spikeSummary;
 window.__tronCaptureLiveSpawn = captureLivePlayerSpawn;
@@ -8219,9 +7495,9 @@ function tick(now) {
       boundaryErrorAccumulatedDt = 0;
     }
     updateWalkSimulation(dt);
-    if (shouldUpdateTronRunnerSourceCharacter()) updateTronRunner(dt);
+    if (shouldUpdateTronRunnerSourceCharacter()) tronRunnerOrchestration.update(dt);
     if (postRevealPerfIsolationState.crowd) {
-      updateTronRunnerCrowd(dt);
+      tronRunnerCrowdRuntime.update(dt);
     } else {
       tronRunnerCrowdGroup.visible = false;
       tronRunnerCrowdRuntimeStats.cullingVisibleCount = 0;
