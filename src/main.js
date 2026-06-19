@@ -252,7 +252,6 @@ import {
 } from './character/character-footsteps.js';
 import {
   computeTronRunnerEffectiveAnimationSpeed,
-  syncTronRunnerWalkCycleToDistance as syncTronRunnerWalkCycleToDistanceCore,
   tronRunnerCrowdGridCoord as tronRunnerCrowdGridCoordCore,
   tronRunnerCrowdGridKey,
 } from './character/character-movement.js';
@@ -290,8 +289,13 @@ import {
 } from './character/runner-state.js';
 import {
   resetTronRunnerAutonomy,
-  switchTronRunnerAction as switchTronRunnerActionCore,
 } from './character/runner-controller.js';
+import {
+  playTronRunnerAction,
+  syncTronRunnerActionSetToDistance,
+  syncTronRunnerCrowdRunCycleToDistance,
+  syncTronRunnerCrowdWalkCycleToDistance,
+} from './character/runner-animation.js';
 import {
   TRON_SOUNDTRACK_CROSSFADE_SECONDS,
   TRON_SOUNDTRACK_ENABLED,
@@ -3209,65 +3213,6 @@ function tronRunnerEffectiveAnimationSpeed() {
   });
 }
 
-function syncTronRunnerWalkCycleToDistance(mixer, action, distance, phaseOffset = 0, cycleDistance = TRON_RUNNER_WALK_CYCLE_DISTANCE) {
-  return syncTronRunnerWalkCycleToDistanceCore({
-    mixer,
-    action,
-    distance,
-    phaseOffset,
-    cycleDistance,
-  });
-}
-
-function syncTronRunnerActionSetToDistance(distance, phaseOffset = 0) {
-  const synced = syncTronRunnerWalkCycleToDistance(
-    tronRunnerParts.mixer,
-    tronRunnerParts.activeAction,
-    distance,
-    phaseOffset
-  );
-  syncTronRunnerWalkCycleToDistance(
-    tronRunnerParts.reflectionMixer,
-    tronRunnerParts.reflectionActiveAction,
-    distance,
-    phaseOffset
-  );
-  syncTronRunnerWalkCycleToDistance(
-    tronRunnerParts.reflectionLedMixer,
-    tronRunnerParts.reflectionLedActiveAction,
-    distance,
-    phaseOffset
-  );
-  return synced;
-}
-
-function syncTronRunnerCrowdWalkCycleToDistance(member) {
-  if (!member) return false;
-  const offset = member.walkCycleOffset || 0;
-  const distance = member.distanceWalked || 0;
-  const synced = syncTronRunnerWalkCycleToDistance(member.mixer, member.action, distance, offset);
-  if (member.dynamicReflectionBudgetActive) {
-    syncTronRunnerWalkCycleToDistance(member.reflectionMixer, member.reflectionAction, distance, offset);
-    syncTronRunnerWalkCycleToDistance(member.reflectionLedMixer, member.reflectionLedAction, distance, offset);
-  }
-  return synced;
-}
-
-// Same as the walk version but for the greeter's run clip: drive the run cycle by ground
-// distance (no foot-slide / moonwalk) using the run-specific cycle distance.
-function syncTronRunnerCrowdRunCycleToDistance(member) {
-  if (!member) return false;
-  const offset = member.walkCycleOffset || 0;
-  const distance = member.distanceWalked || 0;
-  const cycle = GREETER_RUN_CYCLE_DISTANCE;
-  const synced = syncTronRunnerWalkCycleToDistance(member.mixer, member.action, distance, offset, cycle);
-  if (member.dynamicReflectionBudgetActive) {
-    syncTronRunnerWalkCycleToDistance(member.reflectionMixer, member.reflectionAction, distance, offset, cycle);
-    syncTronRunnerWalkCycleToDistance(member.reflectionLedMixer, member.reflectionLedAction, distance, offset, cycle);
-  }
-  return synced;
-}
-
 const applyTronRunnerVisualControls = () => applyTronRunnerVisualControlsCore({
   renderer,
   runnerWalker: tronRunnerWalker,
@@ -4800,7 +4745,7 @@ function updateTronRunnerCrowd(dt) {
     member.lastMovedDistance = movedThisUpdate;
     if (cullingHidden) syncTronRunnerCrowdMemberMatrixUpdates(member, true);
     if (!cullingHidden && distanceDrivenWalk && !member.greetPosed) {
-      if (greeterRunning) syncTronRunnerCrowdRunCycleToDistance(member);
+      if (greeterRunning) syncTronRunnerCrowdRunCycleToDistance(member, GREETER_RUN_CYCLE_DISTANCE);
       else syncTronRunnerCrowdWalkCycleToDistance(member);
     }
     if (!cullingHidden) {
@@ -5382,29 +5327,6 @@ function loadTronRunnerGltf() {
   });
 }
 
-function switchTronRunnerAction(next, previous) {
-  return switchTronRunnerActionCore({
-    next,
-    previous,
-    effectiveTimeScale: tronRunnerEffectiveAnimationSpeed(),
-    fadeSeconds: 0.16,
-  });
-}
-
-function playTronRunnerAction(kind = 'run') {
-  const actionName = tronRunnerParts.actionNames?.[kind] || tronRunnerParts.actionNames?.idle;
-  const next = actionName ? tronRunnerParts.actions?.[actionName] : null;
-  tronRunnerParts.activeAction = switchTronRunnerAction(next, tronRunnerParts.activeAction);
-  const reflectionActionName = tronRunnerParts.reflectionActionNames?.[kind] || tronRunnerParts.reflectionActionNames?.idle;
-  const reflectionNext = reflectionActionName ? tronRunnerParts.reflectionActions?.[reflectionActionName] : null;
-  tronRunnerParts.reflectionActiveAction = switchTronRunnerAction(reflectionNext, tronRunnerParts.reflectionActiveAction);
-  const reflectionLedActionName = tronRunnerParts.reflectionLedActionNames?.[kind] || tronRunnerParts.reflectionLedActionNames?.idle;
-  const reflectionLedNext = reflectionLedActionName ? tronRunnerParts.reflectionLedActions?.[reflectionLedActionName] : null;
-  tronRunnerParts.reflectionLedActiveAction = switchTronRunnerAction(reflectionLedNext, tronRunnerParts.reflectionLedActiveAction);
-  tronRunnerState.clip = actionName || reflectionActionName || '';
-  tronRunnerState.action = kind === 'run' ? 'Run' : kind === 'walk' ? 'Walk' : 'Idle';
-}
-
 async function loadTronRunner() {
   if (!TRON_RUNNER_ENABLED || !RunnerGLTFLoader) {
     tronRunnerState.error = RunnerGLTFLoader ? '' : 'GLTF loader unavailable';
@@ -5551,7 +5473,12 @@ async function loadTronRunner() {
     tronRunnerParts.leftRim = null;
     tronRunnerParts.rightRim = null;
     tronRunnerParts.lowFill = null;
-	    playTronRunnerAction('walk');
+	    playTronRunnerAction({
+	      runnerParts: tronRunnerParts,
+	      runnerState: tronRunnerState,
+	      effectiveTimeScale: tronRunnerEffectiveAnimationSpeed(),
+	      kind: 'walk',
+	    });
 	    applyTronRunnerVisualControls();
 	    buildTronRunnerCrowd(model, gltf.animations);
 	    buildTronRunnerIdleCharacter(model);
@@ -5612,7 +5539,10 @@ function updateTronRunner(dt) {
   tronRunnerWalker.rotation.set(0, tronRunnerYaw, 0);
   if (TRON_RUNNER_DISTANCE_DRIVEN_WALK_ENABLED && tronRunnerParts.activeAction) {
     tronRunnerVisualDistanceWalked += movedDistance;
-    syncTronRunnerActionSetToDistance(tronRunnerVisualDistanceWalked);
+    syncTronRunnerActionSetToDistance({
+      runnerParts: tronRunnerParts,
+      distance: tronRunnerVisualDistanceWalked,
+    });
   } else {
     tronRunnerParts.mixer?.update(dt);
     tronRunnerParts.reflectionMixer?.update(dt);
