@@ -1,3 +1,7 @@
+import {
+  updateTronRunnerCrowdCullingState,
+} from './character-crowd.js';
+
 export function clearTronRunnerCrowdState({
   crowd,
   group,
@@ -98,6 +102,36 @@ export function syncTronRunnerCrowdVisibilityState({
   }
 }
 
+export function updateTronRunnerCrowdCullingRuntime({
+  crowd,
+  group,
+  cullingEnabled,
+  camera,
+  stats,
+  cullMatrix,
+  cullFrustum,
+  cullSphere,
+  targetHeight,
+  cullRadius,
+  cullDistance,
+  updateReflection,
+}) {
+  updateTronRunnerCrowdCullingState({
+    crowd,
+    groupVisible: group.visible,
+    cullingEnabled,
+    camera,
+    stats,
+    cullMatrix,
+    cullFrustum,
+    cullSphere,
+    targetHeight,
+    cullRadius,
+    cullDistance,
+    updateReflection,
+  });
+}
+
 export function createTronRunnerCrowdRuntime({
   crowd,
   group,
@@ -109,6 +143,7 @@ export function createTronRunnerCrowdRuntime({
   inspectImpl,
   syncScaleAndGroundImpl,
   syncVisibilityImpl,
+  updateCullingImpl,
 }) {
   function resolveCameraCollision() {
     if (isCameraCollisionDisabled()) return;
@@ -142,6 +177,7 @@ export function createTronRunnerCrowdRuntime({
     inspect: inspectImpl,
     syncScaleAndGround: syncScaleAndGroundImpl,
     syncVisibility: syncVisibilityImpl,
+    updateCulling: updateCullingImpl,
     resolveCameraCollision,
   };
 }

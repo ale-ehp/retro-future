@@ -182,7 +182,6 @@ import {
   tronRunnerCrowdLodStride as tronRunnerCrowdLodStrideCore,
   tronRunnerCrowdTryDeadlockNudge as tronRunnerCrowdTryDeadlockNudgeCore,
   tronRunnerCrowdWalkCycleOffset,
-  updateTronRunnerCrowdCullingState,
 } from './character/character-crowd.js';
 import {
   createTronMainPlayerBodyRuntime,
@@ -254,6 +253,7 @@ import {
   createTronRunnerCrowdRuntime,
   syncTronRunnerCrowdScaleAndGround,
   syncTronRunnerCrowdVisibilityState,
+  updateTronRunnerCrowdCullingRuntime,
 } from './character/runner-crowd-runtime.js';
 import {
   createTronRunnerCrowdRoutesRuntime,
@@ -3130,6 +3130,20 @@ const tronRunnerCrowdVisibilityState = {
   updateReflection: crowdRuntimeUpdateReflection,
   syncMemberMatrixUpdates: syncTronRunnerCrowdMemberMatrixUpdates,
 };
+const tronRunnerCrowdCullingState = {
+  crowd: tronRunnerCrowd,
+  group: tronRunnerCrowdGroup,
+  cullingEnabled: TRON_RUNNER_CROWD_CULLING_ENABLED,
+  camera,
+  stats: tronRunnerCrowdRuntimeStats,
+  cullMatrix: tronRunnerCrowdCullMatrix,
+  cullFrustum: tronRunnerCrowdCullFrustum,
+  cullSphere: tronRunnerCrowdCullSphere,
+  targetHeight: TRON_RUNNER_TARGET_HEIGHT,
+  cullRadius: TRON_RUNNER_CROWD_CULL_RADIUS,
+  cullDistance: TRON_RUNNER_CROWD_CULL_DISTANCE,
+  updateReflection: crowdRuntimeUpdateReflection,
+};
 const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   crowd: tronRunnerCrowd,
   group: tronRunnerCrowdGroup,
@@ -3141,6 +3155,7 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   inspectImpl: crowdRuntimeInspect,
   syncScaleAndGroundImpl: () => syncTronRunnerCrowdScaleAndGround(tronRunnerCrowdScaleGroundState),
   syncVisibilityImpl: () => syncTronRunnerCrowdVisibilityState(tronRunnerCrowdVisibilityState),
+  updateCullingImpl: () => updateTronRunnerCrowdCullingRuntime(tronRunnerCrowdCullingState),
 });
 const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerState: tronRunnerState,
@@ -3451,23 +3466,6 @@ function syncTronRunnerCrowdMemberMatrixUpdates(member, refreshHidden = false) {
     if (!characterVisible) refreshTronRunnerFrozenSubtreeMatrices(member.group);
     if (!reflectionVisible) refreshTronRunnerFrozenSubtreeMatrices(member.reflectionGroup);
   }
-}
-
-function crowdRuntimeUpdateCulling() {
-  updateTronRunnerCrowdCullingState({
-    crowd: tronRunnerCrowd,
-    groupVisible: tronRunnerCrowdGroup.visible,
-    cullingEnabled: TRON_RUNNER_CROWD_CULLING_ENABLED,
-    camera,
-    stats: tronRunnerCrowdRuntimeStats,
-    cullMatrix: tronRunnerCrowdCullMatrix,
-    cullFrustum: tronRunnerCrowdCullFrustum,
-    cullSphere: tronRunnerCrowdCullSphere,
-    targetHeight: TRON_RUNNER_TARGET_HEIGHT,
-    cullRadius: TRON_RUNNER_CROWD_CULL_RADIUS,
-    cullDistance: TRON_RUNNER_CROWD_CULL_DISTANCE,
-    updateReflection: crowdRuntimeUpdateReflection,
-  });
 }
 
 function crowdRuntimeUpdateReflection(member) {
@@ -4023,7 +4021,7 @@ function crowdRuntimeUpdate(dt) {
   tronRunnerCrowdRuntimeStats.lastStepDt = step;
   tronRunnerCrowdRuntimeStats.avoidancePairs = 0;
   tronRunnerCrowdRuntimeStats.maxAvoidanceOverlap = 0;
-  crowdRuntimeUpdateCulling();
+  tronRunnerCrowdRuntime.updateCulling();
   crowdRuntimeUpdateReflectionBudget();
   for (const member of tronRunnerCrowd) syncTronRunnerCrowdMemberMatrixUpdates(member);
   prepareTronRunnerCrowdSpatialGrid();
