@@ -171,13 +171,7 @@ import {
   TRON_RUNNER_REAL_SHADOW_LAYER,
   TRON_RUNNER_REAL_SHADOW_MAP_SIZE,
   TRON_RUNNER_REAL_SHADOW_RECEIVER_RADIUS,
-  TRON_RUNNER_REVEAL_DURATION_MS,
-  TRON_RUNNER_REVEAL_EMISSIVE_BOOST,
   TRON_RUNNER_REVEAL_ENABLED,
-  TRON_RUNNER_REVEAL_SCAN_CORE_OPACITY,
-  TRON_RUNNER_REVEAL_SCAN_OUTER_OPACITY,
-  TRON_RUNNER_REVEAL_SCAN_RADIUS,
-  TRON_RUNNER_REVEAL_SCAN_TUBE,
   TRON_RUNNER_ROUTE_OFFSET,
   TRON_RUNNER_SHADOW_COLOR,
   TRON_RUNNER_SHADOW_CYAN_COLOR,
@@ -230,6 +224,9 @@ import {
 import {
   createTronRunnerBeatPulseRuntime,
 } from './character/runner-beat-pulse.js';
+import {
+  createTronRunnerRevealRuntime,
+} from './character/runner-reveal.js';
 import {
   applyTronRunnerCrowdReflectionState,
   emptyTronRunnerCrowdReflection,
@@ -286,7 +283,6 @@ import {
   createTronRunnerCrowdRuntimeStats,
   createTronRunnerIdleCharacter,
   createTronRunnerParts,
-  createTronRunnerRevealVisualCache,
   createTronRunnerState,
 } from './character/runner-state.js';
 import {
@@ -2874,6 +2870,24 @@ buildBuildingShells({
   invalidateTronRunnerCrowdColliderRecords,
 });
 
+let tronRunnerReveal = null;
+
+function tronRunnerRevealIsComplete() {
+  return tronRunnerReveal?.isComplete() ?? !TRON_RUNNER_REVEAL_ENABLED;
+}
+
+function tronRunnerRevealStartedAtTime() {
+  return tronRunnerReveal?.startedAt() ?? 0;
+}
+
+function tronRunnerRevealIsActive() {
+  return tronRunnerReveal?.isActive() ?? false;
+}
+
+function tronRunnerRevealProgressValue() {
+  return tronRunnerReveal?.progress() ?? (TRON_RUNNER_REVEAL_ENABLED ? 0 : 1);
+}
+
 // ---------- City department departures boards (extracted -> city-boards.js) ----------
 initCityDepartmentBoards({
   scene,
@@ -2889,10 +2903,10 @@ initCityDepartmentBoards({
   getPlayerSpawn: () => playerSpawn,
   getCityRevealComplete: () => cityRevealComplete,
   getRunnerReady: () => tronRunnerState.ready,
-  getRevealComplete: () => tronRunnerRevealComplete,
-  getRevealStartedAt: () => tronRunnerRevealStartedAt,
-  getRevealActive: () => tronRunnerRevealActive,
-  getRevealProgress: () => tronRunnerRevealProgress,
+  getRevealComplete: tronRunnerRevealIsComplete,
+  getRevealStartedAt: tronRunnerRevealStartedAtTime,
+  getRevealActive: tronRunnerRevealIsActive,
+  getRevealProgress: tronRunnerRevealProgressValue,
 });
 
 // ---------- City role boards: fixed sector boards beside civic doors (extracted -> city-boards.js) ----------
@@ -2967,7 +2981,7 @@ const tronRunnerSuitMat = new THREE.MeshStandardMaterial({
 const tronMainPlayerBody = createTronMainPlayerBodyRuntime({
   baseMaterial: tronRunnerSuitMat,
   camera,
-  getCharacterRevealDone: () => !TRON_RUNNER_REVEAL_ENABLED || tronRunnerState.reveal.complete,
+  getCharacterRevealDone: tronRunnerRevealIsComplete,
   getCityRevealComplete: () => cityRevealComplete,
   getMovementHorizontalSpeed: () => movementHorizontalSpeed,
   getSpeedBase: () => speedBase,
@@ -3026,14 +3040,6 @@ const tronRunnerRealShadowMat = new THREE.ShadowMaterial({
   color: TRON_RUNNER_REAL_SHADOW_COLOR,
   opacity: TRON_RUNNER_REAL_SHADOW_BASE_OPACITY,
   depthWrite: false,
-  transparent: true,
-});
-const tronRunnerRevealScanMat = new THREE.MeshBasicMaterial({
-  color: 0x62f7ff,
-  blending: THREE.AdditiveBlending,
-  depthWrite: false,
-  opacity: 0,
-  toneMapped: false,
   transparent: true,
 });
 const tronRunnerRealShadowLight = new THREE.DirectionalLight(0xc7fbff, 0.16);
@@ -3095,12 +3101,6 @@ let tronRunnerScale = 1;
 let tronRunnerWalkSpeed = TRON_RUNNER_DEFAULT_SPEED;
 let tronRunnerAnimationSpeed = 1;
 let tronRunnerStrideSync = 1;
-let tronRunnerRevealStartedAt = 0;
-let tronRunnerRevealProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
-let tronRunnerRevealRawProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
-let tronRunnerRevealActive = false;
-let tronRunnerRevealComplete = !TRON_RUNNER_REVEAL_ENABLED;
-const tronRunnerRevealVisualCache = createTronRunnerRevealVisualCache();
 let tronRunnerCrowdAccumulatedDt = 0;
 const tronRunnerCrowd = [];
 const tronRunnerIdleCharacter = createTronRunnerIdleCharacter({
@@ -3133,11 +3133,22 @@ const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerParts: tronRunnerParts,
   getCrowd: () => tronRunnerCrowd,
   getSoundtrack: () => tronSoundtrack,
-  getRevealComplete: () => tronRunnerRevealComplete,
+  getRevealComplete: tronRunnerRevealIsComplete,
   labEqualizerAnalyserPresent,
   labEqualizerLastSampleTime,
   labEqualizerAnalyserSampleReady,
   getLabEqualizerState: () => labEqualizerState,
+});
+
+tronRunnerReveal = createTronRunnerRevealRuntime({
+  runnerState: tronRunnerState,
+  runnerParts: tronRunnerParts,
+  runnerWalker: tronRunnerWalker,
+  crowd: tronRunnerCrowd,
+  idleCharacter: tronRunnerIdleCharacter,
+  idleCharacterGroup: tronRunnerIdleCharacterGroup,
+  syncCrowdVisibility: syncTronRunnerCrowdVisibility,
+  getCityRevealComplete: () => cityRevealComplete,
 });
 
 function tronRunnerCharacterLedDefaultScale() {
@@ -3270,273 +3281,6 @@ function tronRunnerModelLineIntensity(lineAmount, keyAmount, rimAmount, keyShape
     0,
     0.62
   );
-}
-
-function tronRunnerRevealEase(t) {
-  const clamped = THREE.MathUtils.clamp(t, 0, 1);
-  return clamped * clamped * (3 - 2 * clamped);
-}
-
-function makeTronRunnerRevealScan() {
-  const scan = new THREE.Group();
-  scan.name = 'tron-runner-reveal-scan';
-  scan.visible = false;
-  const outer = new THREE.Mesh(
-    new THREE.TorusGeometry(TRON_RUNNER_REVEAL_SCAN_RADIUS, TRON_RUNNER_REVEAL_SCAN_TUBE, 8, 96),
-    tronRunnerRevealScanMat
-  );
-  outer.name = 'tron-runner-reveal-scan-ring';
-  outer.rotation.x = Math.PI / 2;
-  outer.scale.set(1, 0.58, 1);
-  scan.add(outer);
-  const inner = new THREE.Mesh(
-    new THREE.TorusGeometry(TRON_RUNNER_REVEAL_SCAN_RADIUS * 0.72, TRON_RUNNER_REVEAL_SCAN_TUBE * 0.55, 8, 72),
-    tronRunnerRevealScanMat.clone()
-  );
-  inner.name = 'tron-runner-reveal-scan-core';
-  inner.rotation.x = Math.PI / 2;
-  inner.scale.set(1, 0.52, 1);
-  scan.add(inner);
-  return scan;
-}
-
-function setTronRunnerRevealState(progress, rawProgress, phase, active, complete) {
-  tronRunnerRevealProgress = THREE.MathUtils.clamp(progress, 0, 1);
-  tronRunnerRevealRawProgress = THREE.MathUtils.clamp(rawProgress, 0, 1);
-  tronRunnerRevealActive = Boolean(active);
-  tronRunnerRevealComplete = Boolean(complete);
-  tronRunnerState.reveal = {
-    enabled: TRON_RUNNER_REVEAL_ENABLED,
-    mode: 'post-city-scan-pulse',
-    durationMs: TRON_RUNNER_REVEAL_DURATION_MS,
-    phase,
-    progress: Number(tronRunnerRevealProgress.toFixed(3)),
-    rawProgress: Number(tronRunnerRevealRawProgress.toFixed(3)),
-    active: tronRunnerRevealActive,
-    complete: tronRunnerRevealComplete,
-    visibleFactor: Number(tronRunnerRevealProgress.toFixed(3)),
-    scanVisible: Boolean(tronRunnerParts.revealScan?.visible),
-    scanY: Number((tronRunnerParts.revealScan?.position.y ?? 0).toFixed(3)),
-    emissiveBoost: TRON_RUNNER_REVEAL_EMISSIVE_BOOST,
-    scanOuterOpacity: TRON_RUNNER_REVEAL_SCAN_OUTER_OPACITY,
-    scanCoreOpacity: TRON_RUNNER_REVEAL_SCAN_CORE_OPACITY,
-  };
-}
-
-function resetTronRunnerRevealState() {
-  tronRunnerRevealStartedAt = 0;
-  const complete = !TRON_RUNNER_REVEAL_ENABLED;
-  setTronRunnerRevealState(complete ? 1 : 0, complete ? 1 : 0, complete ? 'complete' : 'waiting-city', false, complete);
-  applyTronRunnerRevealVisuals();
-}
-
-function startTronRunnerReveal(now) {
-  if (!TRON_RUNNER_REVEAL_ENABLED) {
-    setTronRunnerRevealState(1, 1, 'complete', false, true);
-    applyTronRunnerRevealVisuals();
-    return;
-  }
-  tronRunnerRevealStartedAt = now;
-  setTronRunnerRevealState(0, 0, 'active', true, false);
-  applyTronRunnerRevealVisuals();
-}
-
-function baseMaterialOpacity(material, fallback = 1) {
-  return Number.isFinite(material?.userData?.tronRunnerBaseOpacity)
-    ? material.userData.tronRunnerBaseOpacity
-    : fallback;
-}
-
-function applyTronRunnerCrowdRevealVisuals(visibleFactor, complete, activePulse) {
-  const revealOpacity = complete ? 1 : visibleFactor;
-  for (const member of tronRunnerCrowd) {
-    for (const material of member.materials || []) {
-      const baseOpacity = baseMaterialOpacity(material, material.opacity);
-      const baseEmissive = Number.isFinite(material.userData?.tronRunnerBaseEmissiveIntensity)
-        ? material.userData.tronRunnerBaseEmissiveIntensity
-        : material.emissiveIntensity;
-      material.transparent = !complete;
-      material.opacity = baseOpacity * revealOpacity;
-      material.depthWrite = complete;
-      if (Number.isFinite(material.emissiveIntensity)) {
-        material.emissiveIntensity = complete
-          ? baseEmissive
-          : baseEmissive * (0.2 + visibleFactor * 0.8) + activePulse * TRON_RUNNER_REVEAL_EMISSIVE_BOOST;
-      }
-      material.needsUpdate = true;
-    }
-  }
-  tronRunnerState.crowdRevealMaterialOpacity = revealOpacity;
-}
-
-function syncTronRunnerIdleCharacterVisibility(visibleFactor = THREE.MathUtils.clamp(TRON_RUNNER_REVEAL_ENABLED ? tronRunnerRevealProgress : 1, 0, 1)) {
-  const revealVisible = (visibleFactor > 0.002 || tronRunnerRevealActive || tronRunnerRevealComplete);
-  const visible = Boolean(
-    TRON_RUNNER_IDLE_CHARACTER_ENABLED &&
-    tronRunnerIdleCharacter.built &&
-    tronRunnerState.ready &&
-    revealVisible
-  );
-  tronRunnerIdleCharacterGroup.visible = visible;
-  tronRunnerIdleCharacter.visible = visible;
-}
-
-function applyTronRunnerIdleCharacterRevealVisuals(visibleFactor, complete, activePulse) {
-  syncTronRunnerIdleCharacterVisibility(visibleFactor);
-  if (!tronRunnerIdleCharacter.built) return;
-  const revealOpacity = complete ? 1 : visibleFactor;
-  for (const material of tronRunnerIdleCharacter.materials || []) {
-    const baseOpacity = baseMaterialOpacity(material, material.opacity);
-    const baseEmissive = Number.isFinite(material.userData?.tronRunnerBaseEmissiveIntensity)
-      ? material.userData.tronRunnerBaseEmissiveIntensity
-      : material.emissiveIntensity;
-    material.transparent = !complete;
-    material.opacity = baseOpacity * revealOpacity;
-    material.depthWrite = complete;
-    if (Number.isFinite(material.emissiveIntensity)) {
-      material.emissiveIntensity = complete
-        ? baseEmissive
-        : baseEmissive * (0.2 + visibleFactor * 0.8) + activePulse * TRON_RUNNER_REVEAL_EMISSIVE_BOOST;
-    }
-    material.needsUpdate = true;
-  }
-}
-
-function applyTronRunnerRevealVisuals() {
-  const factor = TRON_RUNNER_REVEAL_ENABLED ? tronRunnerRevealProgress : 1;
-  const visibleFactor = THREE.MathUtils.clamp(factor, 0, 1);
-  const complete = visibleFactor >= 0.995 || !TRON_RUNNER_REVEAL_ENABLED;
-  const activePulse = tronRunnerRevealActive ? Math.sin(Math.PI * tronRunnerRevealRawProgress) : 0;
-  const cacheProgress = Number(visibleFactor.toFixed(4));
-  const cacheRawProgress = Number(tronRunnerRevealRawProgress.toFixed(4));
-  if (
-    tronRunnerRevealVisualCache.ready === tronRunnerState.ready &&
-    tronRunnerRevealVisualCache.progress === cacheProgress &&
-    tronRunnerRevealVisualCache.rawProgress === cacheRawProgress &&
-    tronRunnerRevealVisualCache.active === tronRunnerRevealActive &&
-    tronRunnerRevealVisualCache.complete === complete &&
-    tronRunnerRevealVisualCache.crowdCount === tronRunnerCrowd.length &&
-    tronRunnerRevealVisualCache.idleBuilt === tronRunnerIdleCharacter.built &&
-    tronRunnerRevealVisualCache.sourceVisible === TRON_RUNNER_SOURCE_CHARACTER_VISIBLE
-  ) {
-    return;
-  }
-  tronRunnerRevealVisualCache.ready = tronRunnerState.ready;
-  tronRunnerRevealVisualCache.progress = cacheProgress;
-  tronRunnerRevealVisualCache.rawProgress = cacheRawProgress;
-  tronRunnerRevealVisualCache.active = tronRunnerRevealActive;
-  tronRunnerRevealVisualCache.complete = complete;
-  tronRunnerRevealVisualCache.crowdCount = tronRunnerCrowd.length;
-  tronRunnerRevealVisualCache.idleBuilt = tronRunnerIdleCharacter.built;
-  tronRunnerRevealVisualCache.sourceVisible = TRON_RUNNER_SOURCE_CHARACTER_VISIBLE;
-  const shouldRenderRunner = Boolean(
-    TRON_RUNNER_SOURCE_CHARACTER_VISIBLE &&
-    tronRunnerState.ready &&
-    (visibleFactor > 0.002 || tronRunnerRevealActive || complete)
-  );
-  tronRunnerWalker.visible = shouldRenderRunner;
-  syncTronRunnerCrowdVisibility();
-
-  for (const material of tronRunnerParts.materials) {
-    const baseEmissive = Number.isFinite(material.userData.tronRunnerBaseEmissiveIntensity)
-      ? material.userData.tronRunnerBaseEmissiveIntensity
-      : material.emissiveIntensity;
-    material.transparent = !complete;
-    material.opacity = complete ? 1 : visibleFactor;
-    material.depthWrite = complete;
-    material.emissiveIntensity = complete
-      ? baseEmissive
-      : baseEmissive * (0.2 + visibleFactor * 0.8) + activePulse * TRON_RUNNER_REVEAL_EMISSIVE_BOOST;
-    material.needsUpdate = true;
-  }
-  applyTronRunnerCrowdRevealVisuals(visibleFactor, complete, activePulse);
-  applyTronRunnerIdleCharacterRevealVisuals(visibleFactor, complete, activePulse);
-
-  const groundShadow = tronRunnerParts.groundShadow;
-  if (groundShadow?.material) {
-    const baseOpacity = baseMaterialOpacity(groundShadow.material, groundShadow.material.opacity);
-    groundShadow.visible = shouldRenderRunner && TRON_RUNNER_GROUND_SHADOW_ENABLED && baseOpacity * visibleFactor > 0.002;
-    groundShadow.material.opacity = baseOpacity * visibleFactor;
-    groundShadow.material.needsUpdate = true;
-  }
-
-  const realShadowReceiver = tronRunnerParts.realShadowReceiver;
-  if (realShadowReceiver?.material) {
-    const baseOpacity = baseMaterialOpacity(realShadowReceiver.material, realShadowReceiver.material.opacity);
-    realShadowReceiver.visible = shouldRenderRunner && baseOpacity * visibleFactor > 0.002;
-    realShadowReceiver.material.opacity = baseOpacity * visibleFactor;
-    realShadowReceiver.material.needsUpdate = true;
-    tronRunnerState.realShadowOpacity = baseOpacity * visibleFactor;
-  }
-
-  if (tronRunnerParts.realShadowLight) {
-    tronRunnerParts.realShadowLight.visible = shouldRenderRunner && TRON_RUNNER_REAL_SHADOW_ENABLED && visibleFactor > 0.01;
-    tronRunnerParts.realShadowLight.intensity = shouldRenderRunner && TRON_RUNNER_REAL_SHADOW_ENABLED ? 0.16 * visibleFactor : 0;
-  }
-
-  const reflectionGroup = tronRunnerParts.reflectionGroup;
-  const reflectionFactor = complete ? 1 : visibleFactor;
-  if (reflectionGroup) reflectionGroup.visible = shouldRenderRunner && reflectionGroup.visible && reflectionFactor > 0.01;
-  for (const material of tronRunnerParts.reflectionMaterials || []) {
-    const baseOpacity = baseMaterialOpacity(material, material.opacity);
-    material.opacity = baseOpacity * reflectionFactor;
-    material.needsUpdate = true;
-  }
-  tronRunnerState.dynamicReflectionOpacity *= reflectionFactor;
-  tronRunnerState.dynamicReflectionBodyOpacity *= reflectionFactor;
-  tronRunnerState.dynamicReflectionLedOpacity *= reflectionFactor;
-
-  const scan = tronRunnerParts.revealScan;
-  if (scan) {
-    const scanPulse = tronRunnerRevealActive ? Math.sin(Math.PI * tronRunnerRevealRawProgress) : 0;
-    const scanY = TRON_RUNNER_TARGET_HEIGHT * THREE.MathUtils.lerp(0.06, 0.98, tronRunnerRevealProgress);
-    scan.position.y = scanY;
-    scan.visible = tronRunnerRevealActive && scanPulse > 0.02;
-    scan.scale.setScalar(1 + scanPulse * 0.08);
-    scan.traverse((object) => {
-      if (!object.material) return;
-      object.material.opacity = scanPulse * (object.name.includes('core')
-        ? TRON_RUNNER_REVEAL_SCAN_CORE_OPACITY
-        : TRON_RUNNER_REVEAL_SCAN_OUTER_OPACITY);
-      object.material.needsUpdate = true;
-    });
-  }
-
-  const phase = tronRunnerRevealComplete ? 'complete' : tronRunnerRevealActive ? 'active' : 'waiting-city';
-  setTronRunnerRevealState(visibleFactor, tronRunnerRevealRawProgress, phase, tronRunnerRevealActive, tronRunnerRevealComplete);
-}
-
-function updateTronRunnerReveal(now) {
-  if (!tronRunnerState.ready) {
-    resetTronRunnerRevealState();
-    return;
-  }
-  if (!TRON_RUNNER_REVEAL_ENABLED) {
-    setTronRunnerRevealState(1, 1, 'complete', false, true);
-    applyTronRunnerRevealVisuals();
-    return;
-  }
-  if (!cityRevealComplete) {
-    if (tronRunnerRevealStartedAt || tronRunnerRevealProgress > 0 || tronRunnerRevealComplete) resetTronRunnerRevealState();
-    else applyTronRunnerRevealVisuals();
-    return;
-  }
-  if (!tronRunnerRevealStartedAt && !tronRunnerRevealComplete) {
-    startTronRunnerReveal(now);
-    return;
-  }
-  if (tronRunnerRevealComplete) {
-    applyTronRunnerRevealVisuals();
-    return;
-  }
-  const raw = THREE.MathUtils.clamp((now - tronRunnerRevealStartedAt) / TRON_RUNNER_REVEAL_DURATION_MS, 0, 1);
-  const progress = tronRunnerRevealEase(raw);
-  if (raw >= 1) {
-    setTronRunnerRevealState(1, 1, 'complete', false, true);
-  } else {
-    setTronRunnerRevealState(progress, raw, 'active', true, false);
-  }
-  applyTronRunnerRevealVisuals();
 }
 
 function applyTronRunnerVisualControls() {
@@ -3679,7 +3423,7 @@ function applyTronRunnerVisualControls() {
   tronRunnerParts.rightRim = null;
   tronRunnerParts.lowFill = null;
   syncTronRunnerCrowdScaleAndGround();
-  applyTronRunnerRevealVisuals();
+  tronRunnerReveal?.applyVisuals();
 }
 
 function tronRunnerDynamicReflectionOpacity() {
@@ -4287,7 +4031,7 @@ function buildTronRunnerIdleCharacter(sourceModel) {
   tronRunnerIdleCharacter.built = true;
   poseTronRunnerIdleCharacterArmsCrossed(model);
   syncTronRunnerIdleCharacterPose();
-  syncTronRunnerIdleCharacterVisibility();
+  tronRunnerReveal?.syncIdleVisibility();
 }
 
 const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
@@ -4323,8 +4067,8 @@ function syncTronRunnerCrowdMemberMatrixUpdates(member, refreshHidden = false) {
 }
 
 function syncTronRunnerCrowdVisibility() {
-  const visibleFactor = THREE.MathUtils.clamp(TRON_RUNNER_REVEAL_ENABLED ? tronRunnerRevealProgress : 1, 0, 1);
-  const revealVisible = (visibleFactor > 0.002 || tronRunnerRevealActive || tronRunnerRevealComplete);
+  const visibleFactor = tronRunnerReveal?.visibleFactor() ?? (TRON_RUNNER_REVEAL_ENABLED ? 0 : 1);
+  const revealVisible = tronRunnerReveal?.revealVisible(visibleFactor) ?? !TRON_RUNNER_REVEAL_ENABLED;
   const wouldShow = Boolean(TRON_RUNNER_CROWD_ENABLED && revealVisible && tronRunnerState.ready);
   // Hold the crowd back an extra second after it would normally appear.
   if (!wouldShow) tronRunnerCrowdAppearArmedAt = 0;
@@ -5607,7 +5351,7 @@ function updateTronRunnerAutonomyState(route, movedDistance = 0, collision = fal
 function updateTronRunnerAutonomyFootsteps(movedDistance, dt) {
   if (!TRON_RUNNER_FREE_ROAM_FOOTSTEPS_ENABLED) return;
   if (!TRON_RUNNER_SOURCE_CHARACTER_VISIBLE) return;
-  if (TRON_RUNNER_REVEAL_ENABLED && !tronRunnerRevealComplete) return;
+  if (!tronRunnerRevealIsComplete()) return;
   const contact = tronRunnerWalkCycleFootstep(movedDistance);
   tronRunnerAutonomy.lastFootstepSyncSource = contact.syncSource || 'walk-cycle';
   if (!contact.triggered) return;
@@ -5819,7 +5563,7 @@ async function loadTronRunner() {
     });
     fitTronRunnerModel(model);
     tronRunnerWalker.add(model);
-    const revealScan = makeTronRunnerRevealScan();
+    const revealScan = tronRunnerReveal.makeScan();
     tronRunnerWalker.add(revealScan);
 
     let reflectionGroup = null;
@@ -5932,7 +5676,7 @@ async function loadTronRunner() {
     tronRunnerState.ready = true;
     tronRunnerState.loaded = 1;
     tronRunnerState.error = '';
-    resetTronRunnerRevealState();
+    tronRunnerReveal.reset();
     updateTronRunner(0);
     return true;
   } catch (error) {
@@ -6118,7 +5862,7 @@ initStaticCityCulling({
   roleBoardEnabled: CITY_ROLE_BOARD_ENABLED,
   getSideDoorEnabled,
   getBasePadCurbEnabled,
-  getRevealActive: () => tronRunnerRevealActive,
+  getRevealActive: tronRunnerRevealIsActive,
   updateDoorBatchMeshes: updateSideBuildingDoorBatchMeshes,
   departmentBoardRevealFactor: cityDepartmentBoardRevealFactor,
 });
@@ -8811,7 +8555,7 @@ function tick(now) {
     } else if (labEqualizerGroup.visible) {
       labEqualizerGroup.visible = false;
     }
-    updateTronRunnerReveal(now);
+    tronRunnerReveal.update(now);
     tronRunnerBeatPulse.update();
     tronMainPlayerBody.update(dt);
     updateMainFacadeVerticalReveal();
