@@ -250,6 +250,7 @@ import {
   createTronRunnerOrchestrationRuntime,
 } from './character/runner-orchestration.js';
 import {
+  clearTronRunnerCrowdState,
   createTronRunnerCrowdRuntime,
 } from './character/runner-crowd-runtime.js';
 import {
@@ -3081,6 +3082,14 @@ let tronRunnerCrowdBuildJob = null;
 const tronRunnerCrowdBuildStats = createTronRunnerCrowdBuildStats();
 const tronRunnerCrowdRuntimeStats = createTronRunnerCrowdRuntimeStats();
 const tronRunnerCrowdReflectionCandidates = [];
+const tronRunnerCrowdClearState = {
+  crowd: tronRunnerCrowd,
+  group: tronRunnerCrowdGroup,
+  spatialGrid: tronRunnerCrowdSpatialGrid,
+  buildStats: tronRunnerCrowdBuildStats,
+  runtimeStats: tronRunnerCrowdRuntimeStats,
+  requestedCount: TRON_RUNNER_CROWD_COUNT,
+};
 const tronRunnerCrowdRoutes = createTronRunnerCrowdRoutesRuntime({
   getSideBuildingRecords: () => sideBuildingRecords,
   getDynamicRoadCenter: () => dynamicRoadCenter,
@@ -3389,23 +3398,6 @@ function normalizeTronRunnerCrowdState(member, now) {
   }
 }
 
-function clearTronRunnerCrowd() {
-  tronRunnerCrowdBuildJob = null;
-  tronRunnerCrowdSpatialGrid.clear();
-  tronRunnerCrowd.length = 0;
-  while (tronRunnerCrowdGroup.children.length) {
-    tronRunnerCrowdGroup.remove(tronRunnerCrowdGroup.children[0]);
-  }
-  tronRunnerCrowdGroup.visible = false;
-  tronRunnerCrowdBuildStats.status = 'idle';
-  tronRunnerCrowdBuildStats.built = 0;
-  tronRunnerCrowdBuildStats.requested = TRON_RUNNER_CROWD_COUNT;
-  tronRunnerCrowdBuildStats.startedAt = 0;
-  tronRunnerCrowdBuildStats.durationMs = 0;
-  tronRunnerCrowdBuildStats.lastChunkMs = 0;
-  tronRunnerCrowdRuntimeStats.performanceFreezeFrameCount = 0;
-}
-
 function crowdRuntimeSyncScaleAndGround() {
   for (const member of tronRunnerCrowd) {
     member.group.scale.copy(tronRunnerWalker.scale);
@@ -3633,7 +3625,8 @@ function crowdRuntimeBuildMember(job, index) {
 }
 
 function crowdRuntimeBuild(sourceModel, animations) {
-  clearTronRunnerCrowd();
+  tronRunnerCrowdBuildJob = null;
+  clearTronRunnerCrowdState(tronRunnerCrowdClearState);
   if (!TRON_RUNNER_CROWD_ENABLED || !sourceModel || !cloneRunnerSkeleton) return;
   const sourceMeshes = [];
   sourceModel.traverse((obj) => {
