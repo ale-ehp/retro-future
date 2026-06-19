@@ -228,6 +228,10 @@ import {
   createTronRunnerRevealRuntime,
 } from './character/runner-reveal.js';
 import {
+  applyTronRunnerVisualControls as applyTronRunnerVisualControlsCore,
+  createTronRunnerShadowTextureState,
+} from './character/runner-visual-controls.js';
+import {
   applyTronRunnerCrowdReflectionState,
   emptyTronRunnerCrowdReflection,
   tronRunnerCrowdPostRevealReflectionRampLimit as tronRunnerCrowdPostRevealReflectionRampLimitCore,
@@ -272,7 +276,6 @@ import {
   tronRunnerCrowdStartPlayerRoute as tronRunnerCrowdStartPlayerRouteCore,
 } from './character/character-routes.js';
 import {
-  makeTronRunnerShadowTexture,
   makeTronRunnerSuitEmissiveTexture,
   makeTronRunnerSuitLedMaskTexture,
   makeTronRunnerSuitTexture,
@@ -2959,8 +2962,7 @@ tronRunnerIdleCharacterGroup.name = 'tron-runner-idle-character';
 tronRunnerIdleCharacterGroup.visible = false;
 scene.add(tronRunnerIdleCharacterGroup);
 
-let tronRunnerShadowTexture = makeTronRunnerShadowTexture(renderer);
-let tronRunnerShadowTextureSoftness = 0.9;
+const tronRunnerShadowTextureState = createTronRunnerShadowTextureState(renderer);
 const tronRunnerSuitTexture = makeTronRunnerSuitTexture(renderer);
 const tronRunnerSuitEmissiveTexture = makeTronRunnerSuitEmissiveTexture(renderer);
 const tronRunnerSuitLedMaskTexture = makeTronRunnerSuitLedMaskTexture(renderer);
@@ -3029,7 +3031,7 @@ function makeTronRunnerReflectionLedMaterial(colorPreset = null) {
 
 const tronRunnerShadowMat = new THREE.MeshBasicMaterial({
   color: TRON_RUNNER_SHADOW_COLOR,
-  alphaMap: tronRunnerShadowTexture,
+  alphaMap: tronRunnerShadowTextureState.texture,
   blending: THREE.NormalBlending,
   depthWrite: false,
   opacity: 0.16,
@@ -3266,165 +3268,49 @@ function syncTronRunnerCrowdRunCycleToDistance(member) {
   return synced;
 }
 
-function tronRunnerSuitLightIntensity(bodyAmount, fillAmount, materialDepth = 0.5) {
-  return THREE.MathUtils.clamp(
-    0.035 + bodyAmount * 0.025 + fillAmount * 0.006 + materialDepth * 0.018,
-    0.025,
-    0.16
-  );
-}
-
-function tronRunnerModelLineIntensity(lineAmount, keyAmount, rimAmount, keyShape = 1, rimShape = 1) {
-  if (lineAmount <= 0.001) return 0;
-  return THREE.MathUtils.clamp(
-    0.08 + lineAmount * 0.09 + keyAmount * 0.025 * keyShape + rimAmount * 0.018 * rimShape,
-    0,
-    0.62
-  );
-}
-
-function applyTronRunnerVisualControls() {
-  const bodyAmount = THREE.MathUtils.clamp(tronRunnerBodyLight, 0, 3);
-  const keyAmount = THREE.MathUtils.clamp(tronRunnerKeyLight, 0, 3);
-  const rimAmount = THREE.MathUtils.clamp(tronRunnerRimLight, 0, 3);
-  const fillAmount = THREE.MathUtils.clamp(tronRunnerFillLight, 0, 3);
-  const keyShape = THREE.MathUtils.clamp(tronRunnerKeyLightY / 3.1, 0, 1.8);
-  const rimShape = THREE.MathUtils.clamp(tronRunnerRimLightX / 1.9, 0.1, 1.8);
-  const fillShape = THREE.MathUtils.clamp(tronRunnerFillLightY / 0.9, 0, 1.8);
-  const materialDepth = THREE.MathUtils.clamp((tronRunnerKeyLightZ + 4) / 10, 0, 1);
-  const selfLightIntensity = tronRunnerSuitLightIntensity(bodyAmount, fillAmount, materialDepth);
-  const modelLineIntensity = tronRunnerModelLineIntensity(tronRunnerLineLight, keyAmount, rimAmount, keyShape, rimShape);
-  const floorAmount = TRON_RUNNER_GROUND_SHADOW_ENABLED
-    ? THREE.MathUtils.clamp(tronRunnerFloorReflection, 0, 1.2)
-    : 0;
-  const materialReflect = THREE.MathUtils.clamp(tronRunnerMaterialReflect, 0, 2);
-  const materialMetalness = THREE.MathUtils.clamp(tronRunnerMaterialMetalness, 0, 1);
-  const materialRoughness = THREE.MathUtils.clamp(tronRunnerMaterialRoughness, 0.02, 1);
-  const shadowSoftness = THREE.MathUtils.clamp(tronRunnerShadowSoftness, 0.2, 1.6);
-  const shadowCyan = THREE.MathUtils.clamp(tronRunnerShadowCyan, 0, 1);
-  const ledScale = tronRunnerCharacterLedScale();
-  const ledDefaultScale = tronRunnerCharacterLedDefaultScale();
-  const ledMax = THREE.MathUtils.clamp(
-    TRON_RUNNER_CHARACTER_LED_EMISSIVE_MAX * Math.max(1, ledDefaultScale > 0 ? ledScale / ledDefaultScale : 1),
-    0.5,
-    12
-  );
-  tronRunnerWalker.scale.setScalar(Math.max(0.01, tronRunnerScale));
-  tronRunnerState.scale = tronRunnerScale;
-  tronRunnerState.targetHeight = TRON_RUNNER_TARGET_HEIGHT * tronRunnerScale;
-  tronRunnerState.walkSpeed = tronRunnerWalkSpeed;
-  tronRunnerState.animationSpeed = tronRunnerAnimationSpeed;
-  tronRunnerState.effectiveAnimationSpeed = tronRunnerEffectiveAnimationSpeed();
-  tronRunnerState.strideSync = tronRunnerStrideSync;
-  tronRunnerState.distanceDrivenWalk = {
-    enabled: TRON_RUNNER_DISTANCE_DRIVEN_WALK_ENABLED,
-    crowdEnabled: TRON_RUNNER_CROWD_DISTANCE_DRIVEN_WALK_ENABLED,
-    cycleDistance: TRON_RUNNER_WALK_CYCLE_DISTANCE,
-    visualDistance: Number(tronRunnerVisualDistanceWalked.toFixed(3)),
-  };
-  tronRunnerState.materialReflect = materialReflect;
-  tronRunnerState.materialMetalness = materialMetalness;
-  tronRunnerState.materialRoughness = materialRoughness;
-  tronRunnerState.shadowSoftness = shadowSoftness;
-  tronRunnerState.shadowPulse = tronRunnerShadowPulse;
-  tronRunnerState.shadowCyan = shadowCyan;
-  tronRunnerState.shadowOffsetX = tronRunnerShadowOffsetX;
-  tronRunnerState.shadowOffsetZ = tronRunnerShadowOffsetZ;
-  tronRunnerState.groundShadowEnabled = TRON_RUNNER_GROUND_SHADOW_ENABLED;
-  tronRunnerState.contactShadowMaxOpacity = TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY;
-  tronRunnerState.runnerLightingMode = TRON_RUNNER_LIGHTING_MODE;
-  tronRunnerState.suitTextureMode = TRON_RUNNER_SUIT_TEXTURE_MODE;
-  tronRunnerState.ledBrightness = tronRunnerLedBrightness;
-  tronRunnerState.ledBloom = tronRunnerLedBloom;
-  tronRunnerState.ledScale = ledScale;
-  tronRunnerState.ledEmissiveMax = ledMax;
-  tronRunnerState.realShadowEnabled = TRON_RUNNER_REAL_SHADOW_ENABLED;
-  tronRunnerState.realShadowCasterCount = tronRunnerParts.realShadowCasterCount;
-  tronRunnerState.realShadowReceiverType = 'shadow-material';
-  tronRunnerState.selfLightIntensity = selfLightIntensity;
-  tronRunnerState.modelLineIntensity = modelLineIntensity;
-  tronRunnerState.pointLightCount = 0;
-  tronRunnerState.keyLightY = tronRunnerKeyLightY;
-  tronRunnerState.keyLightZ = tronRunnerKeyLightZ;
-  tronRunnerState.rimLightX = tronRunnerRimLightX;
-  tronRunnerState.fillLightY = tronRunnerFillLightY;
-
-  for (const material of tronRunnerParts.materials) {
-    material.map = tronRunnerSuitTexture;
-    material.emissiveMap = tronRunnerSuitEmissiveTexture;
-    material.color.copy(TRON_RUNNER_SUIT_COLOR).multiplyScalar(0.82 + bodyAmount * 0.035 + materialDepth * 0.035);
-    material.emissive.copy(TRON_RUNNER_SUIT_EMISSIVE);
-    material.emissiveIntensity = THREE.MathUtils.clamp(
-      (0.34 + selfLightIntensity * 1.05 + modelLineIntensity * 0.78) * ledScale,
-      0.18,
-      ledMax
-    );
-    material.envMapIntensity = materialReflect * 0.12;
-    material.metalness = materialMetalness;
-    material.roughness = materialRoughness;
-    material.userData.tronRunnerBaseOpacity = 1;
-    material.userData.tronRunnerBaseEmissiveIntensity = material.emissiveIntensity;
-    material.needsUpdate = true;
-  }
-  applyTronRunnerCrowdLedControls();
-  if (tronRunnerParts.activeAction) {
-    tronRunnerParts.activeAction.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
-  }
-  if (tronRunnerParts.reflectionActiveAction) {
-    tronRunnerParts.reflectionActiveAction.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
-  }
-  if (tronRunnerParts.reflectionLedActiveAction) {
-    tronRunnerParts.reflectionLedActiveAction.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed);
-  }
-  if (tronRunnerParts.groundShadow) {
-    tronRunnerParts.groundShadow.visible = TRON_RUNNER_GROUND_SHADOW_ENABLED && floorAmount > 0.001;
-    if (Math.abs(shadowSoftness - tronRunnerShadowTextureSoftness) > 0.001) {
-      const oldTexture = tronRunnerShadowTexture;
-      tronRunnerShadowTexture = makeTronRunnerShadowTexture(renderer, shadowSoftness);
-      tronRunnerShadowTextureSoftness = shadowSoftness;
-      tronRunnerParts.groundShadow.material.alphaMap = tronRunnerShadowTexture;
-      oldTexture?.dispose?.();
-    }
-    tronRunnerParts.groundShadow.material.color
-      .copy(TRON_RUNNER_SHADOW_COLOR)
-      .lerp(TRON_RUNNER_SHADOW_CYAN_COLOR, shadowCyan);
-    tronRunnerParts.groundShadow.position.set(tronRunnerShadowOffsetX, 0.025, tronRunnerShadowOffsetZ);
-    tronRunnerParts.groundShadow.scale.set(
-      tronRunnerFloorReflectionScale,
-      TRON_RUNNER_CONTACT_SHADOW_ROUNDNESS * tronRunnerFloorReflectionScale,
-      tronRunnerFloorReflectionScale
-    );
-    const groundShadowOpacity = THREE.MathUtils.clamp(
-      floorAmount * 0.78,
-      0,
-      TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY
-    );
-    tronRunnerParts.groundShadow.material.userData.tronRunnerBaseOpacity = groundShadowOpacity;
-    tronRunnerParts.groundShadow.material.opacity = groundShadowOpacity;
-    tronRunnerParts.groundShadow.material.needsUpdate = true;
-  }
-  if (tronRunnerParts.realShadowReceiver) {
-    const realShadowOpacity = TRON_RUNNER_REAL_SHADOW_ENABLED
-      ? THREE.MathUtils.clamp(TRON_RUNNER_REAL_SHADOW_BASE_OPACITY + floorAmount * 0.34, 0, 0.36)
-      : 0;
-    tronRunnerParts.realShadowReceiver.visible = realShadowOpacity > 0.001;
-    tronRunnerParts.realShadowReceiver.material.userData.tronRunnerBaseOpacity = realShadowOpacity;
-    tronRunnerParts.realShadowReceiver.material.opacity = realShadowOpacity;
-    tronRunnerParts.realShadowReceiver.material.needsUpdate = true;
-    tronRunnerState.realShadowOpacity = realShadowOpacity;
-  }
-  if (tronRunnerParts.realShadowLight) {
-    tronRunnerParts.realShadowLight.visible = TRON_RUNNER_REAL_SHADOW_ENABLED;
-    tronRunnerParts.realShadowLight.castShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
-    tronRunnerParts.realShadowLight.intensity = TRON_RUNNER_REAL_SHADOW_ENABLED ? 0.16 : 0;
-  }
-  tronRunnerParts.keyLight = null;
-  tronRunnerParts.leftRim = null;
-  tronRunnerParts.rightRim = null;
-  tronRunnerParts.lowFill = null;
-  syncTronRunnerCrowdScaleAndGround();
-  tronRunnerReveal?.applyVisuals();
-}
+const applyTronRunnerVisualControls = () => applyTronRunnerVisualControlsCore({
+  renderer,
+  runnerWalker: tronRunnerWalker,
+  runnerState: tronRunnerState,
+  runnerParts: tronRunnerParts,
+  suitTexture: tronRunnerSuitTexture,
+  suitEmissiveTexture: tronRunnerSuitEmissiveTexture,
+  shadowTextureState: tronRunnerShadowTextureState,
+  controls: {
+    bodyLight: tronRunnerBodyLight,
+    lineLight: tronRunnerLineLight,
+    keyLight: tronRunnerKeyLight,
+    rimLight: tronRunnerRimLight,
+    fillLight: tronRunnerFillLight,
+    ledBrightness: tronRunnerLedBrightness,
+    ledBloom: tronRunnerLedBloom,
+    materialReflect: tronRunnerMaterialReflect,
+    materialMetalness: tronRunnerMaterialMetalness,
+    materialRoughness: tronRunnerMaterialRoughness,
+    floorReflection: tronRunnerFloorReflection,
+    floorReflectionScale: tronRunnerFloorReflectionScale,
+    shadowSoftness: tronRunnerShadowSoftness,
+    shadowPulse: tronRunnerShadowPulse,
+    shadowCyan: tronRunnerShadowCyan,
+    shadowOffsetX: tronRunnerShadowOffsetX,
+    shadowOffsetZ: tronRunnerShadowOffsetZ,
+    keyLightY: tronRunnerKeyLightY,
+    keyLightZ: tronRunnerKeyLightZ,
+    rimLightX: tronRunnerRimLightX,
+    fillLightY: tronRunnerFillLightY,
+    scale: tronRunnerScale,
+    walkSpeed: tronRunnerWalkSpeed,
+    animationSpeed: tronRunnerAnimationSpeed,
+    strideSync: tronRunnerStrideSync,
+  },
+  visualDistanceWalked: tronRunnerVisualDistanceWalked,
+  effectiveAnimationSpeed: tronRunnerEffectiveAnimationSpeed(),
+  ledScale: tronRunnerCharacterLedScale(),
+  ledDefaultScale: tronRunnerCharacterLedDefaultScale(),
+  applyCrowdLedControls: applyTronRunnerCrowdLedControls,
+  syncCrowdScaleAndGround: syncTronRunnerCrowdScaleAndGround,
+  applyRevealVisuals: () => tronRunnerReveal?.applyVisuals(),
+});
 
 function tronRunnerDynamicReflectionOpacity() {
   return tronRunnerDynamicReflectionBodyOpacityForSurface(tronRunnerState.surface);
