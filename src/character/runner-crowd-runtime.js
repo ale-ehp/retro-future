@@ -1,3 +1,26 @@
+export function clearTronRunnerCrowdState({
+  crowd,
+  group,
+  spatialGrid,
+  buildStats,
+  runtimeStats,
+  requestedCount,
+}) {
+  spatialGrid.clear();
+  crowd.length = 0;
+  while (group.children.length) {
+    group.remove(group.children[0]);
+  }
+  group.visible = false;
+  buildStats.status = 'idle';
+  buildStats.built = 0;
+  buildStats.requested = requestedCount;
+  buildStats.startedAt = 0;
+  buildStats.durationMs = 0;
+  buildStats.lastChunkMs = 0;
+  runtimeStats.performanceFreezeFrameCount = 0;
+}
+
 export function createTronRunnerCrowdRuntime({
   crowd,
   group,
