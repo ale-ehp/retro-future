@@ -175,7 +175,6 @@ import {
 } from './character/character-collision.js';
 import {
   nearbyTronRunnerCrowdMembers as nearbyTronRunnerCrowdMembersCore,
-  prepareTronRunnerCrowdSpatialGrid as prepareTronRunnerCrowdSpatialGridCore,
   setTronRunnerCrowdFrameDistance as setTronRunnerCrowdFrameDistanceCore,
   tronRunnerCrowdAvoidance as tronRunnerCrowdAvoidanceCore,
   tronRunnerCrowdDistanceToCamera as tronRunnerCrowdDistanceToCameraCore,
@@ -251,6 +250,7 @@ import {
 import {
   clearTronRunnerCrowdState,
   createTronRunnerCrowdRuntime,
+  prepareTronRunnerCrowdSpatialGridRuntime,
   syncTronRunnerCrowdScaleAndGround,
   syncTronRunnerCrowdVisibilityState,
   updateTronRunnerCrowdCullingRuntime,
@@ -3144,6 +3144,15 @@ const tronRunnerCrowdCullingState = {
   cullDistance: TRON_RUNNER_CROWD_CULL_DISTANCE,
   updateReflection: crowdRuntimeUpdateReflection,
 };
+const tronRunnerCrowdSpatialGridState = {
+  spatialGrid: tronRunnerCrowdSpatialGrid,
+  crowd: tronRunnerCrowd,
+  stats: tronRunnerCrowdRuntimeStats,
+  cullingEnabled: TRON_RUNNER_CROWD_CULLING_ENABLED,
+  lodNearDistance: TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE,
+  gridCoord: tronRunnerCrowdGridCoord,
+  gridKey: tronRunnerCrowdGridKey,
+};
 const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   crowd: tronRunnerCrowd,
   group: tronRunnerCrowdGroup,
@@ -3156,6 +3165,7 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   syncScaleAndGroundImpl: () => syncTronRunnerCrowdScaleAndGround(tronRunnerCrowdScaleGroundState),
   syncVisibilityImpl: () => syncTronRunnerCrowdVisibilityState(tronRunnerCrowdVisibilityState),
   updateCullingImpl: () => updateTronRunnerCrowdCullingRuntime(tronRunnerCrowdCullingState),
+  prepareSpatialGridImpl: () => prepareTronRunnerCrowdSpatialGridRuntime(tronRunnerCrowdSpatialGridState),
 });
 const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerState: tronRunnerState,
@@ -3347,18 +3357,6 @@ function tronRunnerCrowdDistanceToCamera(member) {
     frame: tronRunnerCrowdRuntimeStats.frame,
     distanceCacheEnabled: TRON_RUNNER_CROWD_DISTANCE_CACHE_ENABLED,
   });
-}
-
-function prepareTronRunnerCrowdSpatialGrid() {
-  prepareTronRunnerCrowdSpatialGridCore(
-    tronRunnerCrowdSpatialGrid,
-    tronRunnerCrowd,
-    tronRunnerCrowdRuntimeStats,
-    TRON_RUNNER_CROWD_CULLING_ENABLED,
-    TRON_RUNNER_CROWD_LOD_NEAR_DISTANCE,
-    tronRunnerCrowdGridCoord,
-    tronRunnerCrowdGridKey,
-  );
 }
 
 function nearbyTronRunnerCrowdMembers(x, z) {
@@ -4024,7 +4022,7 @@ function crowdRuntimeUpdate(dt) {
   tronRunnerCrowdRuntime.updateCulling();
   crowdRuntimeUpdateReflectionBudget();
   for (const member of tronRunnerCrowd) syncTronRunnerCrowdMemberMatrixUpdates(member);
-  prepareTronRunnerCrowdSpatialGrid();
+  tronRunnerCrowdRuntime.prepareSpatialGrid();
   for (const member of tronRunnerCrowd) {
     // The greeter always updates (even when off-screen) so it reliably walks over to greet the player.
     const isGreeterMember = member.index === TRON_RUNNER_GREETER_INDEX;
