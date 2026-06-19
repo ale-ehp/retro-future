@@ -274,6 +274,7 @@ import {
   resetTronRunnerAutonomy,
 } from './character/runner-controller.js';
 import {
+  makeTronRunnerCrowdActionSet,
   playTronRunnerAction,
   syncTronRunnerActionSetToDistance,
   syncTronRunnerCrowdRunCycleToDistance,
@@ -3510,19 +3511,6 @@ function crowdRuntimeUpdateCulling() {
   });
 }
 
-function makeTronRunnerCrowdActionSet(model, animations, offset) {
-  const mixer = new THREE.AnimationMixer(model);
-  const walkClip = animations.find((clip) => /walk/i.test(clip.name)) || animations[0];
-  if (!walkClip) return { mixer, action: null };
-  const action = mixer.clipAction(walkClip);
-  action.enabled = true;
-  action.setEffectiveTimeScale(tronRunnerState.effectiveAnimationSpeed * (0.92 + (offset % 5) * 0.035));
-  action.setEffectiveWeight(1);
-  action.play();
-  action.time = (walkClip.duration || 1) * tronRunnerCrowdWalkCycleOffset(offset);
-  return { mixer, action };
-}
-
 function crowdRuntimeBuildReflection(sourceModel, animations, index, colorPreset = null) {
   if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED || !sourceModel || !cloneRunnerSkeleton) {
     return emptyTronRunnerCrowdReflection();
@@ -3566,8 +3554,18 @@ function crowdRuntimeBuildReflection(sourceModel, animations, index, colorPreset
   });
   group.add(model);
   group.add(ledModel);
-  const { mixer, action } = makeTronRunnerCrowdActionSet(model, animations, index);
-  const { mixer: ledMixer, action: ledAction } = makeTronRunnerCrowdActionSet(ledModel, animations, index);
+  const { mixer, action } = makeTronRunnerCrowdActionSet({
+    model,
+    animations,
+    offset: index,
+    effectiveAnimationSpeed: tronRunnerState.effectiveAnimationSpeed,
+  });
+  const { mixer: ledMixer, action: ledAction } = makeTronRunnerCrowdActionSet({
+    model: ledModel,
+    animations,
+    offset: index,
+    effectiveAnimationSpeed: tronRunnerState.effectiveAnimationSpeed,
+  });
   return {
     group,
     model,
@@ -3690,7 +3688,12 @@ function crowdRuntimeBuildMember(job, index) {
 
   const animationScaleOffset = 0.92 + (index % 5) * 0.035;
   const speedScaleOffset = 0.86 + (index % 5) * 0.035;
-  const { mixer, action } = makeTronRunnerCrowdActionSet(cloneModel, job.animations, index);
+  const { mixer, action } = makeTronRunnerCrowdActionSet({
+    model: cloneModel,
+    animations: job.animations,
+    offset: index,
+    effectiveAnimationSpeed: tronRunnerState.effectiveAnimationSpeed,
+  });
   const reflection = crowdRuntimeBuildReflection(job.sourceModel, job.animations, index, colorPreset);
   if (reflection.group) group.add(reflection.group);
   const route = tronRunnerCrowdRoutes.buildRoute(index);

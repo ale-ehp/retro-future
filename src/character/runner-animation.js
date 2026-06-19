@@ -1,6 +1,11 @@
+import * as THREE from 'three';
+
 import {
   TRON_RUNNER_WALK_CYCLE_DISTANCE,
 } from './characters.js';
+import {
+  tronRunnerCrowdWalkCycleOffset,
+} from './character-crowd.js';
 import {
   syncTronRunnerWalkCycleToDistance,
 } from './character-movement.js';
@@ -70,6 +75,24 @@ export function syncTronRunnerCrowdWalkCycleToDistance(member, cycleDistance = T
 
 export function syncTronRunnerCrowdRunCycleToDistance(member, cycleDistance) {
   return syncTronRunnerCrowdWalkCycleToDistance(member, cycleDistance);
+}
+
+export function makeTronRunnerCrowdActionSet({
+  model,
+  animations,
+  offset,
+  effectiveAnimationSpeed,
+}) {
+  const mixer = new THREE.AnimationMixer(model);
+  const walkClip = animations.find((clip) => /walk/i.test(clip.name)) || animations[0];
+  if (!walkClip) return { mixer, action: null };
+  const action = mixer.clipAction(walkClip);
+  action.enabled = true;
+  action.setEffectiveTimeScale(effectiveAnimationSpeed * (0.92 + (offset % 5) * 0.035));
+  action.setEffectiveWeight(1);
+  action.play();
+  action.time = (walkClip.duration || 1) * tronRunnerCrowdWalkCycleOffset(offset);
+  return { mixer, action };
 }
 
 export function playTronRunnerAction({
