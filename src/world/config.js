@@ -12,7 +12,11 @@ export const CITY_REVEAL_PROFILE_MAX_SAMPLES = 80;
 
 export const HEX_ROAD_UPDATE_FRAME_STRIDE = 2;
 export const MAX_HEX_ROAD_ACCUMULATED_DT = 0.1;
-export const MAX_RENDER_PIXEL_RATIO = 1.3;
+export const MAX_RENDER_PIXEL_RATIO = 2;
+export const HD_READY_RENDER_WIDTH = 1280;
+export const HD_READY_RENDER_HEIGHT = 720;
+export const FULL_HD_RENDER_WIDTH = 1920;
+export const FULL_HD_RENDER_HEIGHT = 1080;
 export const MIN_DYNAMIC_PIXEL_RATIO = 0.25;
 export const MIN_DYNAMIC_BLOOM_SCALE = 0.10;
 export const MIN_DYNAMIC_QUALITY_SCALE = 0.25;
