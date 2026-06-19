@@ -116,9 +116,7 @@ import {
   TRON_RUNNER_CROWD_YIELD_DURATION_MS,
   TRON_RUNNER_DEFAULT_SPEED,
   TRON_RUNNER_DISTANCE_DRIVEN_WALK_ENABLED,
-  TRON_RUNNER_DYNAMIC_REFLECTION_BODY_RENDER_ORDER,
   TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
-  TRON_RUNNER_DYNAMIC_REFLECTION_LED_RENDER_ORDER,
   TRON_RUNNER_DYNAMIC_REFLECTION_Y,
   TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
   TRON_RUNNER_ENABLED,
@@ -211,7 +209,7 @@ import {
 } from './character/runner-footsteps.js';
 import {
   applyTronRunnerCrowdReflectionState,
-  emptyTronRunnerCrowdReflection,
+  buildTronRunnerCrowdReflection,
   tronRunnerCrowdReflectionOccludedByBuilding,
   tronRunnerCrowdPostRevealReflectionRampLimit as tronRunnerCrowdPostRevealReflectionRampLimitCore,
   updateTronRunnerCrowdReflectionBudget as updateTronRunnerCrowdReflectionBudgetCore,
@@ -3512,77 +3510,6 @@ function crowdRuntimeUpdateCulling() {
   });
 }
 
-function crowdRuntimeBuildReflection(sourceModel, animations, index, colorPreset = null) {
-  if (!TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED || !sourceModel || !cloneRunnerSkeleton) {
-    return emptyTronRunnerCrowdReflection();
-  }
-  const group = new THREE.Group();
-  group.name = `tron-runner-crowd-reflection-${index + 1}`;
-  group.position.y = TRON_RUNNER_DYNAMIC_REFLECTION_Y;
-  group.scale.set(1, -TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE, 1);
-  group.userData.tronRunnerReflectionMode = 'mesh-clone';
-  group.visible = false;
-
-  const model = cloneRunnerSkeleton(sourceModel);
-  model.name = `soldier-rigged-runner-crowd-reflection-${index + 1}`;
-  const ledModel = cloneRunnerSkeleton(sourceModel);
-  ledModel.name = `soldier-rigged-runner-crowd-reflection-led-${index + 1}`;
-  const bodyMaterials = [];
-  const ledMaterials = [];
-  let meshCount = 0;
-  let ledMeshCount = 0;
-  model.traverse((obj) => {
-    if (!obj.isMesh) return;
-    obj.frustumCulled = false;
-    obj.castShadow = false;
-    obj.receiveShadow = false;
-    obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_BODY_RENDER_ORDER;
-    obj.layers.set(0);
-    obj.material = tronRunnerReflectionRig.makeBodyMaterial();
-    bodyMaterials.push(obj.material);
-    meshCount += 1;
-  });
-  ledModel.traverse((obj) => {
-    if (!obj.isMesh) return;
-    obj.frustumCulled = false;
-    obj.castShadow = false;
-    obj.receiveShadow = false;
-    obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_LED_RENDER_ORDER;
-    obj.layers.set(0);
-    obj.material = tronRunnerReflectionRig.makeLedMaterial(colorPreset);
-    ledMaterials.push(obj.material);
-    ledMeshCount += 1;
-  });
-  group.add(model);
-  group.add(ledModel);
-  const { mixer, action } = makeTronRunnerCrowdActionSet({
-    model,
-    animations,
-    offset: index,
-    effectiveAnimationSpeed: tronRunnerState.effectiveAnimationSpeed,
-  });
-  const { mixer: ledMixer, action: ledAction } = makeTronRunnerCrowdActionSet({
-    model: ledModel,
-    animations,
-    offset: index,
-    effectiveAnimationSpeed: tronRunnerState.effectiveAnimationSpeed,
-  });
-  return {
-    group,
-    model,
-    ledModel,
-    mixer,
-    ledMixer,
-    action,
-    ledAction,
-    materials: [...bodyMaterials, ...ledMaterials],
-    bodyMaterials,
-    ledMaterials,
-    meshCount,
-    ledMeshCount,
-  };
-}
-
 function crowdRuntimeUpdateReflection(member) {
   const budgetActive = postRevealPerfIsolationState.crowdReflections && member.dynamicReflectionBudgetActive === true;
   // Most crowd members are outside the reflection budget (max 3 active). Once cleared, the
@@ -3654,7 +3581,16 @@ function crowdRuntimeBuildMember(job, index) {
     offset: index,
     effectiveAnimationSpeed: tronRunnerState.effectiveAnimationSpeed,
   });
-  const reflection = crowdRuntimeBuildReflection(job.sourceModel, job.animations, index, colorPreset);
+  const reflection = buildTronRunnerCrowdReflection({
+    sourceModel: job.sourceModel,
+    animations: job.animations,
+    index,
+    colorPreset,
+    dynamicReflectionEnabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
+    cloneRunnerSkeleton,
+    reflectionRig: tronRunnerReflectionRig,
+    effectiveAnimationSpeed: tronRunnerState.effectiveAnimationSpeed,
+  });
   if (reflection.group) group.add(reflection.group);
   const route = tronRunnerCrowdRoutes.buildRoute(index);
   const fallback = tronRunnerCrowdRoutes.fallbackPlacement(index);

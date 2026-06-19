@@ -1,5 +1,15 @@
 import * as THREE from 'three';
 
+import {
+  TRON_RUNNER_DYNAMIC_REFLECTION_BODY_RENDER_ORDER,
+  TRON_RUNNER_DYNAMIC_REFLECTION_LED_RENDER_ORDER,
+  TRON_RUNNER_DYNAMIC_REFLECTION_Y,
+  TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
+} from './characters.js';
+import {
+  makeTronRunnerCrowdActionSet,
+} from './runner-animation.js';
+
 export function emptyTronRunnerCrowdReflection() {
   return {
     group: null,
@@ -14,6 +24,86 @@ export function emptyTronRunnerCrowdReflection() {
     ledMaterials: [],
     meshCount: 0,
     ledMeshCount: 0,
+  };
+}
+
+export function buildTronRunnerCrowdReflection({
+  sourceModel,
+  animations,
+  index,
+  colorPreset = null,
+  dynamicReflectionEnabled,
+  cloneRunnerSkeleton,
+  reflectionRig,
+  effectiveAnimationSpeed,
+}) {
+  if (!dynamicReflectionEnabled || !sourceModel || !cloneRunnerSkeleton) {
+    return emptyTronRunnerCrowdReflection();
+  }
+  const group = new THREE.Group();
+  group.name = `tron-runner-crowd-reflection-${index + 1}`;
+  group.position.y = TRON_RUNNER_DYNAMIC_REFLECTION_Y;
+  group.scale.set(1, -TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE, 1);
+  group.userData.tronRunnerReflectionMode = 'mesh-clone';
+  group.visible = false;
+
+  const model = cloneRunnerSkeleton(sourceModel);
+  model.name = `soldier-rigged-runner-crowd-reflection-${index + 1}`;
+  const ledModel = cloneRunnerSkeleton(sourceModel);
+  ledModel.name = `soldier-rigged-runner-crowd-reflection-led-${index + 1}`;
+  const bodyMaterials = [];
+  const ledMaterials = [];
+  let meshCount = 0;
+  let ledMeshCount = 0;
+  model.traverse((obj) => {
+    if (!obj.isMesh) return;
+    obj.frustumCulled = false;
+    obj.castShadow = false;
+    obj.receiveShadow = false;
+    obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_BODY_RENDER_ORDER;
+    obj.layers.set(0);
+    obj.material = reflectionRig.makeBodyMaterial();
+    bodyMaterials.push(obj.material);
+    meshCount += 1;
+  });
+  ledModel.traverse((obj) => {
+    if (!obj.isMesh) return;
+    obj.frustumCulled = false;
+    obj.castShadow = false;
+    obj.receiveShadow = false;
+    obj.renderOrder = TRON_RUNNER_DYNAMIC_REFLECTION_LED_RENDER_ORDER;
+    obj.layers.set(0);
+    obj.material = reflectionRig.makeLedMaterial(colorPreset);
+    ledMaterials.push(obj.material);
+    ledMeshCount += 1;
+  });
+  group.add(model);
+  group.add(ledModel);
+  const { mixer, action } = makeTronRunnerCrowdActionSet({
+    model,
+    animations,
+    offset: index,
+    effectiveAnimationSpeed,
+  });
+  const { mixer: ledMixer, action: ledAction } = makeTronRunnerCrowdActionSet({
+    model: ledModel,
+    animations,
+    offset: index,
+    effectiveAnimationSpeed,
+  });
+  return {
+    group,
+    model,
+    ledModel,
+    mixer,
+    ledMixer,
+    action,
+    ledAction,
+    materials: [...bodyMaterials, ...ledMaterials],
+    bodyMaterials,
+    ledMaterials,
+    meshCount,
+    ledMeshCount,
   };
 }
 
