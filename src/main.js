@@ -3518,13 +3518,13 @@ const tronRunnerCrowdDeadlockDeps = {
 const TRON_RUNNER_CROWD_PAUSE_CHANCE = 0.28;
 const TRON_RUNNER_CROWD_PAUSE_MIN_MS = 900;
 const TRON_RUNNER_CROWD_PAUSE_MAX_MS = 2800;
-// The green companion (member index 1) greets the player: it walks over at normal pace
+// The green companion (member index 1) greets the player: it walks over deliberately
 // when the city is revealed, stops at a welcoming distance and turns to face the player,
 // then stays put. The cyan member behaves like a normal crowd member.
 const TRON_RUNNER_GREETER_INDEX = 1;
-const TRON_RUNNER_GREET_DISTANCE = 4.0;
-const GREETER_SPEED_MULTIPLIER = 1.65; // the greeter always moves 65% faster than the crowd
-const GREETER_RUN_SPEED_BOOST = 1.65;  // extra 65% while running to the board (legs stay synced)
+const TRON_RUNNER_GREET_DISTANCE = 12.0;
+const GREETER_SPEED_MULTIPLIER = 1.155; // 30% slower than the previous 1.65 approach pace
+const GREETER_RUN_SPEED_BOOST = 3.064;  // keeps board run 30% faster overall after slower approach
 const GREETER_HEAD_MAX_YAW = 1.3963; // +/-80deg => 160deg total head turn, no neck over-rotation
 const GREETER_HEAD_YAW_SIGN = 1;
 const tronRunnerGreeterHeadLookState = {
@@ -3539,7 +3539,7 @@ const GREETER_BOARD_SIDE_GAP = 2.4;  // clearance beyond the board's right edge 
 const GREETER_BOARD_FRONT_GAP = 1.4; // step toward the player off the board plane (no clipping)
 const GREETER_BOARD_REACH = 0.8;     // arrival radius at the board anchor
 const GREETER_FOLLOW_DELAY_MS = 1000; // show "Seguimi" first, then start moving 1s later
-const GREETER_BOARD_BUBBLE_RANGE = 16.0; // "Questi sono i nostri reparti" shows within 16m of the greeter
+const GREETER_BOARD_BUBBLE_RANGE = 32.0; // "Qui vedi i nostri reparti" shows within 32m of the greeter
 const GREETER_BOARD_STANCE_DEG = 45; // at the board the body sits 45deg between player and board
 const tronRunnerGreeterBoardAnchorState = {
   getCityDepartmentBoards: () => (typeof getCityDepartmentBoards === 'function' ? getCityDepartmentBoards() : null),
