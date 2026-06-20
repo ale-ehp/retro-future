@@ -540,7 +540,7 @@ export function advanceTronRunnerCrowdMemberRuntime({
       bodyYaw = yawToPlayer + Math.sign(rel || 1) * Math.min(stance, Math.abs(rel));
       // Proximity-gated bubble: the renderer eases opacity in/out over 0.5s as bubbleInRange flips.
       const distToPlayer = Math.hypot(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
-      member.bubbleText = 'Questi sono i<br>nostri reparti';
+      member.bubbleText = 'Qui vedi i<br>nostri reparti';
       member.bubbleSizeScale = 2;
       member.bubbleProximity = true;
       member.bubbleInRange = distToPlayer <= greeterBoardBubbleRange;
