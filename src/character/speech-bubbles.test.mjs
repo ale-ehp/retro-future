@@ -19,6 +19,7 @@ import {
   GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_STYLE,
   GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_WIDTH_RATIO,
   GREETER_BUBBLE_LOGO_WORDMARK_FILL_STYLE,
+  CHARACTER_BUBBLE_RENDER_ORDER,
   characterBubbleBackgroundOpacityInspect,
   characterBubblePanelFillStyle,
   greeterBubbleLogoAnimationState,
@@ -72,6 +73,10 @@ test('character bubble backgrounds are visibly dark and opaque', () => {
 
 test('speech bubble text is 25 percent brighter', () => {
   assert.equal(CROWD_BUBBLE_TEXT_FILL_STYLE, 'rgba(255,255,255,1)');
+});
+
+test('character speech bubbles render above terminal role boards', () => {
+  assert.ok(CHARACTER_BUBBLE_RENDER_ORDER > 35);
 });
 
 test('character bubble background opacity command spans transparent to opaque', () => {
