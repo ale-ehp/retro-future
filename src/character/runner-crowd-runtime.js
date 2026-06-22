@@ -119,6 +119,32 @@ export function cityRevealPostRevealElapsedMsRuntime({
   return Math.max(0, now - getCityRevealCompletedAt());
 }
 
+export const TRON_RUNNER_GREETER_START_SIDE_OFFSET = 2.8;
+export const TRON_RUNNER_GREETER_START_BACK_OFFSET = 16;
+export const TRON_RUNNER_GREETER_GREET_DISTANCE = 7.4;
+export const TRON_RUNNER_WELCOME_BUBBLE_HTML = 'Benvenuto in<br>avstudio.ai';
+export const TRON_RUNNER_WELCOME_BUBBLE_DURATION_MS = 3600;
+export const TRON_RUNNER_WELCOME_BUBBLE_SIZE_SCALE = 1.55;
+export const TRON_RUNNER_FOLLOW_PROMPT_DELAY_MS = 1500;
+
+export function tronRunnerGreeterStartPosition({
+  droneLandingPose,
+  routeStart,
+  sideOffset = TRON_RUNNER_GREETER_START_SIDE_OFFSET,
+  backOffset = TRON_RUNNER_GREETER_START_BACK_OFFSET,
+} = {}) {
+  const landingX = Number.isFinite(droneLandingPose?.x) ? droneLandingPose.x : 0;
+  const baseZ = Number.isFinite(droneLandingPose?.z)
+    ? droneLandingPose.z
+    : (Number.isFinite(routeStart?.z) ? routeStart.z : 0);
+  const y = Number.isFinite(routeStart?.y) ? routeStart.y : 0;
+  return {
+    x: landingX + sideOffset,
+    y,
+    z: baseZ - backOffset,
+  };
+}
+
 export function invalidateTronRunnerCrowdColliderRecordsRuntime(cache) {
   cache.records = null;
   cache.sourceLength = -1;
@@ -139,46 +165,82 @@ export function tronRunnerCrowdColliderRecordsRuntime({
   return cache.records;
 }
 
-export function startTronRunnerCrowdBuildQueueRuntime(state, sourceModel, animations) {
-  state.job = null;
-  state.clearState();
-  if (!state.crowdEnabled || !sourceModel || !state.getCloneRunnerSkeleton()) return;
+function collectTronRunnerCrowdSourceMeshes(sourceModel) {
   const sourceMeshes = [];
   sourceModel.traverse((obj) => {
     if (obj.isMesh) sourceMeshes.push(obj);
   });
-  state.job = {
+  return sourceMeshes;
+}
+
+export function enqueueTronRunnerCrowdBuildJobRuntime(state, sourceModel, animations, options = {}) {
+  if (!state.crowdEnabled || !sourceModel || !state.getCloneRunnerSkeleton()) return false;
+  const count = Math.max(0, Math.floor(options.count ?? state.requestedCount));
+  if (!count) return false;
+  if (!Array.isArray(state.queue)) state.queue = [];
+  const startedAt = state.now();
+  const job = {
     sourceModel,
-    sourceMeshes,
+    sourceMeshes: collectTronRunnerCrowdSourceMeshes(sourceModel),
     animations,
+    count,
     nextIndex: 0,
-    startedAt: state.now(),
+    indexOffset: options.indexOffset ?? (state.crowd?.length ?? 0),
+    kind: options.kind || 'runner',
+    source: options.source || 'soldier',
+    groupNamePrefix: options.groupNamePrefix || 'tron-runner-crowd',
+    modelNamePrefix: options.modelNamePrefix || 'soldier-rigged-runner-crowd',
+    colorPresetForIndex: options.colorPresetForIndex || null,
+    walkCycleDistanceMode: options.walkCycleDistanceMode || '',
+    startedAt,
   };
-  state.buildStats.status = 'queued';
-  state.buildStats.startedAt = state.job.startedAt;
+  state.queue.push(job);
+  state.buildStats.status = state.job ? 'building' : 'queued';
+  state.buildStats.built = state.crowd?.length ?? state.buildStats.built ?? 0;
+  state.buildStats.requested = (state.buildStats.requested || 0) + count;
+  if (!state.buildStats.startedAt) state.buildStats.startedAt = startedAt;
+  return true;
+}
+
+export function startTronRunnerCrowdBuildQueueRuntime(state, sourceModel, animations) {
+  state.job = null;
+  state.queue = [];
+  state.clearState();
   state.buildStats.built = 0;
-  state.buildStats.requested = state.requestedCount;
+  state.buildStats.requested = 0;
+  state.buildStats.startedAt = 0;
+  state.buildStats.durationMs = 0;
+  enqueueTronRunnerCrowdBuildJobRuntime(state, sourceModel, animations, {
+    count: state.requestedCount,
+    indexOffset: 0,
+    kind: 'runner',
+    source: 'soldier',
+    groupNamePrefix: 'tron-runner-crowd',
+    modelNamePrefix: 'soldier-rigged-runner-crowd',
+  });
 }
 
 export function processTronRunnerCrowdBuildQueueRuntime(state) {
+  if (!state.job) state.job = state.queue?.shift() || null;
   if (!state.job) return;
   const job = state.job;
   const started = state.now();
   state.buildStats.status = 'building';
   state.buildMember(job, job.nextIndex);
   job.nextIndex += 1;
-  state.buildStats.built = job.nextIndex;
+  state.buildStats.built = state.crowd?.length ?? state.buildStats.built + 1;
   state.buildStats.lastChunkMs = state.now() - started;
-  if (job.nextIndex < state.requestedCount) return;
+  if (job.nextIndex < job.count) return;
+  state.job = null;
+  if (state.queue?.length) return;
   state.syncScaleAndGround();
   state.syncVisibility();
   state.buildStats.status = 'done';
-  state.buildStats.durationMs = state.now() - job.startedAt;
-  state.job = null;
+  state.buildStats.durationMs = state.now() - (state.buildStats.startedAt || job.startedAt);
 }
 
 export async function drainTronRunnerCrowdBuildQueueRuntime(state) {
-  while (state.job) {
+  while (state.job || state.queue?.length) {
     state.processBuildQueue();
     await state.waitForNextFrame();
   }
@@ -366,14 +428,15 @@ export function buildTronRunnerCrowdMemberRuntime({
   crowdLines,
   talkLinesPerMember,
 }, job, index) {
+  const globalIndex = (job.indexOffset ?? 0) + index;
   const group = new THREE.Group();
-  group.name = `tron-runner-crowd-${index + 1}`;
+  group.name = `${job.groupNamePrefix || 'tron-runner-crowd'}-${globalIndex + 1}`;
   group.visible = false;
   group.scale.copy(walker.scale);
-  const colorPreset = materials.colorPresetForIndex(index);
+  const colorPreset = job.colorPresetForIndex?.(index, globalIndex) || materials.colorPresetForIndex(globalIndex);
 
   const cloneModel = cloneRunnerSkeleton(job.sourceModel);
-  cloneModel.name = `soldier-rigged-runner-crowd-${index + 1}`;
+  cloneModel.name = `${job.modelNamePrefix || 'soldier-rigged-runner-crowd'}-${globalIndex + 1}`;
   const cloneMeshes = [];
   cloneModel.traverse((obj) => {
     if (!obj.isMesh) return;
@@ -389,18 +452,18 @@ export function buildTronRunnerCrowdMemberRuntime({
   });
   group.add(cloneModel);
 
-  const animationScaleOffset = 0.92 + (index % 5) * 0.035;
-  const speedScaleOffset = 0.86 + (index % 5) * 0.035;
+  const animationScaleOffset = 0.92 + (globalIndex % 5) * 0.035;
+  const speedScaleOffset = 0.86 + (globalIndex % 5) * 0.035;
   const { mixer, action } = makeTronRunnerCrowdActionSet({
     model: cloneModel,
     animations: job.animations,
-    offset: index,
+    offset: globalIndex,
     effectiveAnimationSpeed: runnerState.effectiveAnimationSpeed,
   });
   const reflection = buildTronRunnerCrowdReflection({
     sourceModel: job.sourceModel,
     animations: job.animations,
-    index,
+    index: globalIndex,
     colorPreset,
     dynamicReflectionEnabled,
     cloneRunnerSkeleton,
@@ -408,20 +471,27 @@ export function buildTronRunnerCrowdMemberRuntime({
     effectiveAnimationSpeed: runnerState.effectiveAnimationSpeed,
   });
   if (reflection.group) group.add(reflection.group);
-  const route = routes.buildRoute(index);
-  const fallback = routes.fallbackPlacement(index);
-  const startInfo = routes.roadFacingStart(route, index, fallback);
+  const route = routes.buildRoute(globalIndex);
+  const fallback = routes.fallbackPlacement(globalIndex);
+  const startInfo = routes.roadFacingStart(route, globalIndex, fallback);
   const start = startInfo.placement;
   group.position.set(start.x, start.y, start.z);
   group.rotation.y = start.yaw ?? 0;
-  if (index === greeterIndex) {
-    // The green companion starts a few metres in front of the landing so it reaches the
-    // player quickly to greet them.
+  if (globalIndex === greeterIndex) {
+    // The green companion starts far enough out to show a visible approach before greeting.
     const droneLandingPose = getDroneLandingPose();
-    group.position.set((droneLandingPose?.x ?? 0) + 3.5, start.y, (droneLandingPose?.z ?? start.z) - 13);
+    const greeterStart = tronRunnerGreeterStartPosition({ droneLandingPose, routeStart: start });
+    group.position.set(greeterStart.x, greeterStart.y, greeterStart.z);
   }
+  const speed = getWalkSpeed() * crowdSpeedScale * speedScaleOffset;
+  const actionClipDuration = action?.getClip?.()?.duration ?? 0;
+  const walkCycleDistance = job.walkCycleDistanceMode === 'clip-duration'
+    && Number.isFinite(actionClipDuration)
+    && actionClipDuration > 0
+      ? Math.max(0.001, speed * actionClipDuration)
+      : null;
   const member = createTronRunnerCrowdMemberRecord({
-    index,
+    index: globalIndex,
     group,
     model: cloneModel,
     material: crowdMaterial,
@@ -431,15 +501,21 @@ export function buildTronRunnerCrowdMemberRuntime({
     reflection,
     route,
     startInfo,
-    speed: getWalkSpeed() * crowdSpeedScale * speedScaleOffset,
+    speed,
     speedScaleOffset,
     animationScaleOffset,
-    walkCycleOffset: tronRunnerCrowdWalkCycleOffset(index),
+    walkCycleOffset: tronRunnerCrowdWalkCycleOffset(globalIndex),
     groundOffset,
   });
+  member.localIndex = index;
+  member.kind = job.kind || 'runner';
+  member.source = job.source || 'soldier';
   member.idleClip = job.animations?.find((clip) => /idle/i.test(clip.name)) || null;
   member.runClip = job.animations?.find((clip) => /run/i.test(clip.name)) || null;
-  member.talkLines = pickTronRunnerCrowdLines(index, crowdLines, talkLinesPerMember);
+  member.walkCycleDistance = walkCycleDistance;
+  member.walkCycleDistanceMode = job.walkCycleDistanceMode || '';
+  member.walkClipDuration = actionClipDuration;
+  member.talkLines = pickTronRunnerCrowdLines(globalIndex, crowdLines, talkLinesPerMember);
   member.talkCycle = 0;
   member.talkArmed = true;
   member.talkUntil = 0;
@@ -581,7 +657,13 @@ export function advanceTronRunnerCrowdMemberRuntime({
       member.greetDone = true;       // keeps the welcome bubble showing
       member.greetStage = 'welcome';
       member.greetAt = now;
-      crowdRuntime.setGreeterBubble(member, 'Benvenuto in<br>avstudio.ai', greeterBubbleDurationMs, now);
+      crowdRuntime.setGreeterBubble(
+        member,
+        TRON_RUNNER_WELCOME_BUBBLE_HTML,
+        greeterBubbleDurationMs,
+        now,
+        TRON_RUNNER_WELCOME_BUBBLE_SIZE_SCALE
+      );
       member.lastMovedDistance = 0;
       return;
     }
@@ -734,7 +816,7 @@ export function updateTronRunnerCrowdRuntime(state, dt) {
     if (cullingHidden) state.syncMemberMatrixUpdates(member, true);
     if (!cullingHidden && distanceDrivenWalk && !member.greetPosed) {
       if (greeterRunning) syncTronRunnerCrowdRunCycleToDistance(member, state.greeterRunCycleDistance);
-      else syncTronRunnerCrowdWalkCycleToDistance(member);
+      else syncTronRunnerCrowdWalkCycleToDistance(member, member.walkCycleDistance ?? undefined);
     }
     if (!cullingHidden) {
       crowdRuntime.updateReflection(member);
@@ -765,6 +847,9 @@ export function inspectTronRunnerCrowdRuntime(state) {
     const materialInspect = inspectTronRunnerMaterials(member.model);
     return {
       index: member.index + 1,
+      localIndex: (member.localIndex ?? member.index) + 1,
+      kind: member.kind ?? 'runner',
+      source: member.source ?? 'soldier',
       visible: Boolean(state.crowdGroup.visible && member.group.visible),
       x: Number(member.group.position.x.toFixed(2)),
       y: Number(member.group.position.y.toFixed(2)),
@@ -790,6 +875,8 @@ export function inspectTronRunnerCrowdRuntime(state) {
       walkClipDuration: Number((member.action?.getClip?.()?.duration ?? 0).toFixed(3)),
       walkCycleOffset: Number((member.walkCycleOffset ?? 0).toFixed(3)),
       state: member.state ?? 'walk',
+      greetStage: member.greetStage ?? '',
+      bubbleText: member.bubbleText ?? '',
       lodStride: member.lodStride ?? 1,
       lodDistance: Number((member.lodDistance ?? 0).toFixed(1)),
       cullingVisible: Boolean(member.cullingVisible),
@@ -832,6 +919,8 @@ export function inspectTronRunnerCrowdRuntime(state) {
   const routeDistribution = countBy(members, (member) => member.routeMode || 'fallback-road');
   const lodStrideCounts = countBy(members, (member) => String(member.lodStride || 1));
   const colorCounts = countBy(members, (member) => member.colorPreset || 'current');
+  const femaleMembers = members.filter((member) => member.kind === 'female');
+  const femaleWhiteCount = femaleMembers.filter((member) => member.colorPreset === 'white').length;
   const sideStreetSummary = state.routes.secondaryStreetSummary(state.routes.candidateRecords());
   const sideStreetCoverage = buildSideStreetCoverage(sideStreetSummary.streets, members);
   const sideStreetGroupedSegments = buildSideStreetGroupedSegments(sideStreetCoverage);
@@ -843,7 +932,21 @@ export function inspectTronRunnerCrowdRuntime(state) {
     mode: state.pathMode,
     count: state.crowd.length,
     visibleCount: members.filter((member) => member.visible).length,
+    greeterFollowDelayMs: state.greeterFollowDelayMs,
     colorCounts,
+    female: {
+      enabled: Boolean(state.female?.enabled),
+      modelUrl: state.female?.modelUrl ?? '',
+      requestedCount: state.female?.requestedCount ?? 0,
+      whiteRequestedCount: state.female?.whiteRequestedCount ?? 0,
+      colorPlan: state.female?.colorPlan ?? [],
+      loaded: Boolean(state.female?.loaded),
+      queued: Boolean(state.female?.queued),
+      count: femaleMembers.length,
+      whiteCount: femaleWhiteCount,
+      visibleCount: femaleMembers.filter((member) => member.visible).length,
+      error: state.female?.error ?? '',
+    },
     routeDistribution,
     sideStreetDetectedStreetCount: sideStreetSummary.streetCount,
     sideStreetDetectedLaneCount: sideStreetSummary.laneCount,
@@ -926,7 +1029,8 @@ export function inspectTronRunnerCrowdRuntime(state) {
       progress: Number((state.buildStats.built / Math.max(1, state.buildStats.requested)).toFixed(3)),
       durationMs: Number(state.buildStats.durationMs.toFixed(2)),
       lastChunkMs: Number(state.buildStats.lastChunkMs.toFixed(2)),
-      queued: Boolean(state.buildQueueState.job),
+      queued: Boolean(state.buildQueueState.job || state.buildQueueState.queue?.length),
+      queueLength: state.buildQueueState.queue?.length ?? 0,
     },
     intelligence: {
       enabled: state.intelligenceEnabled,

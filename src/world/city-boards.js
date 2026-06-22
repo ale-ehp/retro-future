@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { retroFutureSignOpacity, retroFutureSignScale } from '../sign-opacity.js';
 
 export function cityDepartmentPageItems(page, config) {
   const start = page * config.rows;
@@ -48,13 +49,16 @@ const CITY_DEPARTMENT_BOARD_TEXTURE_FPS = 13;
 const CITY_DEPARTMENT_BOARD_TEXTURE_SCALE = 0.5;
 const CITY_DEPARTMENT_BOARD_TEXTURE_WIDTH = 2048;
 const CITY_DEPARTMENT_BOARD_TEXTURE_HEIGHT = 1024;
-const CITY_DEPARTMENT_BOARD_WIDTH = 21;
-const CITY_DEPARTMENT_BOARD_HEIGHT = 10.5;
+export const CITY_DEPARTMENT_BOARD_WIDTH = retroFutureSignScale(21);
+export const CITY_DEPARTMENT_BOARD_HEIGHT = retroFutureSignScale(10.5);
+export const CITY_DEPARTMENT_BOARD_DEPTH_TEST = false;
 const CITY_DEPARTMENT_BOARD_INNER_SLIDE = 0.68;
 const CITY_DEPARTMENT_BOARD_REVEAL_EPS = 0.0015;
 const CITY_DEPARTMENT_BOARD_REVEAL_WITH_RUNNERS = true;
-const CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY = 0.46;
-const CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY = 0.96;
+const CITY_DEPARTMENT_BOARD_RAW_PANEL_BASE_OPACITY = 0.46;
+const CITY_DEPARTMENT_BOARD_RAW_TEXT_BASE_OPACITY = 0.96;
+export const CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY = retroFutureSignOpacity(CITY_DEPARTMENT_BOARD_RAW_PANEL_BASE_OPACITY);
+export const CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY = retroFutureSignOpacity(CITY_DEPARTMENT_BOARD_RAW_TEXT_BASE_OPACITY);
 window.__cityDepartmentBoardTextureUploadEnabled = new URLSearchParams(location.search).get('boardUpload') !== '0';
 const CITY_DEPARTMENT_BOARD_SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 /&';
 const CITY_DEPARTMENTS = Object.freeze([
@@ -104,7 +108,7 @@ function createCityDepartmentBoardTextureResources() {
     opacity: CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY,
     alphaTest: 0.012,
     depthWrite: false,
-    depthTest: true,
+    depthTest: CITY_DEPARTMENT_BOARD_DEPTH_TEST,
     toneMapped: false,
     side: THREE.DoubleSide,
     blending: THREE.NormalBlending,
@@ -363,6 +367,8 @@ function createCityDepartmentBoard(record, boardIndex = cityDepartmentBoards.len
     materials.forEach((material) => {
       if (!material || !Number.isFinite(material.opacity)) return;
       material.transparent = true;
+      material.depthTest = CITY_DEPARTMENT_BOARD_DEPTH_TEST;
+      material.depthWrite = false;
       material.userData.cityDepartmentBoardBaseOpacity = material.opacity;
       board.revealMaterials.push(material);
     });
@@ -503,6 +509,10 @@ export function cityDepartmentBoardInspect() {
     textureHeight: firstBoard?.canvas?.height ?? CITY_DEPARTMENT_BOARD_TEXTURE_HEIGHT * CITY_DEPARTMENT_BOARD_TEXTURE_SCALE,
     textureScale: CITY_DEPARTMENT_BOARD_TEXTURE_SCALE,
     textureMipmaps: firstBoard?.texture?.generateMipmaps ?? false,
+    panelBaseOpacity: CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY,
+    textBaseOpacity: CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY,
+    panelOpacity: firstBoard?.panelMesh?.material?.opacity ?? null,
+    textOpacity: firstBoard?.textMaterial?.opacity ?? null,
     updateOptimized: cityDepartmentBoardState.updateOptimized,
     runtime: {
       poseSyncs: cityDepartmentBoardState.poseSyncs,
@@ -537,6 +547,8 @@ export function cityDepartmentBoardInspect() {
       totalCanvasDrawMs: board.state.totalCanvasDrawMs,
       textureWidth: board.canvas.width,
       textureHeight: board.canvas.height,
+      panelOpacity: board.panelMesh?.material?.opacity ?? null,
+      textOpacity: board.textMaterial?.opacity ?? null,
       boardPosition: {
         x: board.boardPosition.x,
         y: board.boardPosition.y,
@@ -575,6 +587,7 @@ export function initCityDepartmentBoards(d) {
   transparent: true,
   opacity: CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY,
   depthWrite: false,
+  depthTest: CITY_DEPARTMENT_BOARD_DEPTH_TEST,
   side: THREE.DoubleSide,
 });
   buildCityDepartmentBoards();
@@ -594,11 +607,14 @@ const CITY_ROLE_BOARD_TARGET_CIVICS = Object.freeze([1, 2, 3, 4, 5, 6, 7, 8, 9, 
 const CITY_ROLE_BOARD_TEXTURE_SCALE = 0.5;
 const CITY_ROLE_BOARD_TEXTURE_WIDTH = 2048;
 const CITY_ROLE_BOARD_TEXTURE_HEIGHT = 1024;
-const CITY_ROLE_BOARD_WIDTH = 12;
-const CITY_ROLE_BOARD_HEIGHT = 6;
-const CITY_ROLE_BOARD_WALL_CENTER_WIDTH = 24;
-const CITY_ROLE_BOARD_PANEL_BASE_OPACITY = 0.40;
-const CITY_ROLE_BOARD_TEXT_BASE_OPACITY = 0.96;
+export const CITY_ROLE_BOARD_WIDTH = retroFutureSignScale(12);
+export const CITY_ROLE_BOARD_HEIGHT = retroFutureSignScale(6);
+export const CITY_ROLE_BOARD_DEPTH_TEST = false;
+const CITY_ROLE_BOARD_WALL_CENTER_WIDTH = retroFutureSignScale(24);
+const CITY_ROLE_BOARD_RAW_PANEL_BASE_OPACITY = 0.40;
+const CITY_ROLE_BOARD_RAW_TEXT_BASE_OPACITY = 0.96;
+export const CITY_ROLE_BOARD_PANEL_BASE_OPACITY = retroFutureSignOpacity(CITY_ROLE_BOARD_RAW_PANEL_BASE_OPACITY);
+export const CITY_ROLE_BOARD_TEXT_BASE_OPACITY = retroFutureSignOpacity(CITY_ROLE_BOARD_RAW_TEXT_BASE_OPACITY);
 const CITY_ROLE_BOARD_SLOT_COUNT = 6;
 const CITY_ROLE_BOARD_REVEAL_EPS = 0.0015;
 const CITY_ROLE_BOARD_SECTORS = Object.freeze([
@@ -721,7 +737,7 @@ const cityRoleBoardPanelMat = new THREE.MeshBasicMaterial({
   transparent: true,
   opacity: CITY_ROLE_BOARD_PANEL_BASE_OPACITY,
   depthWrite: false,
-  depthTest: true,
+  depthTest: CITY_ROLE_BOARD_DEPTH_TEST,
   side: THREE.DoubleSide,
 });
 const cityRoleBoards = [];
@@ -754,7 +770,7 @@ function createCityRoleBoardTextureResources() {
     opacity: CITY_ROLE_BOARD_TEXT_BASE_OPACITY,
     alphaTest: 0.012,
     depthWrite: false,
-    depthTest: true,
+    depthTest: CITY_ROLE_BOARD_DEPTH_TEST,
     toneMapped: false,
     side: THREE.DoubleSide,
     blending: THREE.NormalBlending,
@@ -992,6 +1008,8 @@ function createCityRoleBoard(record, sector) {
     materials.forEach((material) => {
       if (!material || !Number.isFinite(material.opacity)) return;
       material.transparent = true;
+      material.depthTest = CITY_ROLE_BOARD_DEPTH_TEST;
+      material.depthWrite = false;
       material.userData.cityRoleBoardBaseOpacity = material.opacity;
       board.revealMaterials.push(material);
     });
@@ -1051,6 +1069,10 @@ export function cityRoleBoardInspect() {
     textureMipmaps: firstBoard?.texture?.generateMipmaps ?? false,
     panelMaterialType: cityRoleBoardPanelMat.type,
     textMaterialType: firstBoard?.textMaterial?.type ?? null,
+    panelBaseOpacity: CITY_ROLE_BOARD_PANEL_BASE_OPACITY,
+    textBaseOpacity: CITY_ROLE_BOARD_TEXT_BASE_OPACITY,
+    panelOpacity: firstBoard?.panelMesh?.material?.opacity ?? null,
+    textOpacity: firstBoard?.textMaterial?.opacity ?? null,
     updateOptimized: cityRoleBoardRuntimeStats.updateOptimized,
     runtime: {
       poseSyncs: cityRoleBoardRuntimeStats.poseSyncs,
@@ -1084,6 +1106,8 @@ export function cityRoleBoardInspect() {
         textureHeight: board.canvas.height,
         textureMipmaps: board.texture.generateMipmaps,
         textMaterialType: board.textMaterial.type,
+        panelOpacity: board.panelMesh?.material?.opacity ?? null,
+        textOpacity: board.textMaterial?.opacity ?? null,
         boardChildren: board.group.children.length,
         yaw: board.yaw,
         boardPosition: {
