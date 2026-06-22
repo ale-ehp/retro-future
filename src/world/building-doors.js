@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { retroFutureSignScale } from '../sign-opacity.js';
 
 let overlayGroup = null;
 let renderer = null;
@@ -14,6 +15,7 @@ export const sideBuildingDoorGroups = [];
 export const sideBuildingDoorLedMeshes = [];
 export const sideBuildingCivicNumberGroups = [];
 export const sideBuildingCivicNumberMaterials = [];
+export const SIDE_BUILDING_CIVIC_NUMBER_DEPTH_TEST = false;
 const sideBuildingCivicNumberTextureCache = new Map();
 const sideBuildingCivicNumberPlaneGeometry = new THREE.PlaneGeometry(1, 1);
 export const sideDoorCount = () => sideBuildingDoorGroups.length;
@@ -52,9 +54,9 @@ const sideDoorLocalQuaternion = new THREE.Quaternion();
 const sideDoorLocalScale = new THREE.Vector3();
 
 export const SIDE_BUILDING_CIVIC_NUMBER_FIXED = Object.freeze({
-  singleWidth: 59,
-  doubleWidth: 91,
-  height: 47,
+  singleWidth: retroFutureSignScale(59),
+  doubleWidth: retroFutureSignScale(91),
+  height: retroFutureSignScale(47),
   faceOffset: 2.1,
   verticalLift: 1.05,
   renderOrder: 18,
@@ -127,7 +129,7 @@ function ensureSideDoorMaterials() {
     opacity: 1,
     alphaTest: 0.018,
     depthWrite: false,
-    depthTest: true,
+    depthTest: SIDE_BUILDING_CIVIC_NUMBER_DEPTH_TEST,
     toneMapped: false,
   });
 }

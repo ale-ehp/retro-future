@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { retroFutureSignOpacity, retroFutureSignScale } from '../sign-opacity.js';
 import {
   getHexTileHeightScale,
   getHexTileScale,
@@ -48,6 +49,9 @@ const ROAD_BOUNDARY_ROW_MAX = 10; // mirrors main's offsets-array length; used t
 const ROAD_BOUNDARY_PULSE_EDGES = ['minX', 'maxX', 'minZ', 'maxZ'];
 const BOUNDARY_ERROR_WALL_RELOCATE_THRESHOLD = 3.5;
 const BOUNDARY_ERROR_OLD_FADE_SECONDS = 1;
+export const BOUNDARY_ERROR_SIGN_MAX_OPACITY = retroFutureSignOpacity(1);
+export const BOUNDARY_ERROR_SIGN_WIDTH = retroFutureSignScale(11.5);
+export const BOUNDARY_ERROR_SIGN_HEIGHT = retroFutureSignScale(5.4);
 const boundaryErrorHalfFovRad = THREE.MathUtils.degToRad(100); // 200 degree total visibility cone.
 const boundaryErrorRenderHalfFovRad = THREE.MathUtils.degToRad(58); // keep the panel out of side/back view.
 
@@ -556,7 +560,7 @@ function updateOldBoundaryErrorWallMesh(dt) {
   if (!boundaryErrorOldWallMesh.visible) return;
   const elapsed = Math.max(0, (performance.now() - boundaryErrorOldWallFadeStartedAt) / 1000);
   boundaryErrorOldWallFade = Math.max(0, 1 - elapsed / BOUNDARY_ERROR_OLD_FADE_SECONDS);
-  boundaryErrorOldWallMesh.material.opacity = Math.pow(boundaryErrorOldWallFade, 1.35);
+  boundaryErrorOldWallMesh.material.opacity = retroFutureSignOpacity(Math.pow(boundaryErrorOldWallFade, 1.35));
   if (boundaryErrorOldWallFade <= 0.001) {
     boundaryErrorOldWallMesh.visible = false;
     boundaryErrorOldWallMesh.material.opacity = 0;
@@ -655,8 +659,8 @@ export function updateBoundaryError(dt) {
     boundaryErrorWallMesh.position.copy(boundaryErrorWorldPosition);
     boundaryErrorWallMesh.position.addScaledVector(boundaryErrorNormalForEdge(boundaryErrorEdge, boundaryErrorWallNormal), 0.12);
     orientBoundaryErrorWallMesh(boundaryErrorEdge);
-    boundaryErrorWallMesh.scale.set(boundaryErrorSize * 11.5, boundaryErrorSize * 5.4, 1);
-    boundaryErrorWallMesh.material.opacity = alpha;
+    boundaryErrorWallMesh.scale.set(boundaryErrorSize * BOUNDARY_ERROR_SIGN_WIDTH, boundaryErrorSize * BOUNDARY_ERROR_SIGN_HEIGHT, 1);
+    boundaryErrorWallMesh.material.opacity = retroFutureSignOpacity(alpha);
     boundaryErrorOverlay.style.opacity = '0';
     return;
   }
@@ -667,8 +671,8 @@ export function updateBoundaryError(dt) {
     boundaryErrorSprite.position.copy(boundaryErrorWorldPosition);
     boundaryErrorSprite.position.x += glitchSnap * boundaryErrorGlitch * 0.035;
     boundaryErrorSprite.position.y += flicker * 0.08;
-    boundaryErrorSprite.scale.set(boundaryErrorSize * 11.5 * scalePulse, boundaryErrorSize * 5.4 * scalePulse, 1);
-    boundaryErrorSprite.material.opacity = alpha;
+    boundaryErrorSprite.scale.set(boundaryErrorSize * BOUNDARY_ERROR_SIGN_WIDTH * scalePulse, boundaryErrorSize * BOUNDARY_ERROR_SIGN_HEIGHT * scalePulse, 1);
+    boundaryErrorSprite.material.opacity = retroFutureSignOpacity(alpha);
     boundaryErrorSprite.material.rotation = flicker * 0.009;
     boundaryErrorOverlay.style.opacity = '0';
     return;
@@ -676,8 +680,8 @@ export function updateBoundaryError(dt) {
 
   boundaryErrorWallMesh.visible = false;
   boundaryErrorSprite.visible = false;
-  boundaryErrorOverlay.style.opacity = String(alpha);
-  boundaryErrorOverlay.style.fontSize = `${Math.round(18 + boundaryErrorSize * 28)}px`;
+  boundaryErrorOverlay.style.opacity = String(retroFutureSignOpacity(alpha));
+  boundaryErrorOverlay.style.fontSize = `${Math.round(retroFutureSignScale(18 + boundaryErrorSize * 28))}px`;
   boundaryErrorOverlay.style.filter = `brightness(${1 + boundaryErrorAnimation * boundaryErrorPulse * 0.35})`;
   if (boundaryErrorAnchor === 'wall') {
     boundaryErrorScreenPosition.copy(boundaryErrorWorldPosition).project(camera);
@@ -722,6 +726,10 @@ export function getRoadBoundaryHexStats() {
 export function boundaryErrorInspect() {
   return {
     boundaryErrorPulse,
+    boundaryErrorSignMaxOpacity: BOUNDARY_ERROR_SIGN_MAX_OPACITY,
+    boundaryErrorWallOpacity: boundaryErrorWallMesh?.material?.opacity ?? null,
+    boundaryErrorSpriteOpacity: boundaryErrorSprite?.material?.opacity ?? null,
+    boundaryErrorOverlayOpacity: boundaryErrorOverlay?.style?.opacity ?? null,
     boundaryErrorTextureAge: boundaryErrorTextureLastAge,
   };
 }

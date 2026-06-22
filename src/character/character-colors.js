@@ -30,6 +30,13 @@ export const TRON_RUNNER_CROWD_COLOR_PRESETS = {
     emissiveColor: TRON_RUNNER_SUIT_EMISSIVE.clone(),
     reflectionLedColor: new THREE.Color(0xbaffff),
   },
+  white: {
+    label: 'white',
+    name: 'white',
+    bodyColor: new THREE.Color(0xffffff),
+    emissiveColor: new THREE.Color(0xffffff),
+    reflectionLedColor: new THREE.Color(0xffffff),
+  },
   orange: {
     label: 'orange',
     name: 'orange',

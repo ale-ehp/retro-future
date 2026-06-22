@@ -120,6 +120,12 @@ import {
   TRON_RUNNER_DYNAMIC_REFLECTION_Y,
   TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
   TRON_RUNNER_ENABLED,
+  TRON_RUNNER_FEMALE_CROWD_COLOR_PLAN,
+  TRON_RUNNER_FEMALE_CROWD_COUNT,
+  TRON_RUNNER_FEMALE_CROWD_ENABLED,
+  TRON_RUNNER_FEMALE_CROWD_INDEX_OFFSET,
+  TRON_RUNNER_FEMALE_CROWD_WHITE_COUNT,
+  TRON_RUNNER_FEMALE_MODEL_URL,
   TRON_RUNNER_FREE_ROAM_COLLISIONS_ENABLED,
   TRON_RUNNER_FREE_ROAM_COLLISION_RADIUS,
   TRON_RUNNER_FREE_ROAM_ENABLED,
@@ -223,6 +229,10 @@ import {
   applyGreeterHeadLookRuntime,
   cityRevealPostRevealElapsedMsRuntime,
   drainTronRunnerCrowdBuildQueueRuntime,
+  enqueueTronRunnerCrowdBuildJobRuntime,
+  TRON_RUNNER_FOLLOW_PROMPT_DELAY_MS,
+  TRON_RUNNER_GREETER_GREET_DISTANCE,
+  TRON_RUNNER_WELCOME_BUBBLE_DURATION_MS,
   invalidateTronRunnerCrowdColliderRecordsRuntime,
   nearbyTronRunnerCrowdMembersRuntime,
   normalizeTronRunnerCrowdStateRuntime,
@@ -257,6 +267,9 @@ import {
 import {
   createTronRunnerCrowdMaterialsRuntime,
 } from './character/runner-crowd-materials.js';
+import {
+  TRON_RUNNER_CROWD_COLOR_PRESETS,
+} from './character/character-colors.js';
 import {
   TRON_RUNNER_CROWD_LINES,
   TRON_RUNNER_CROWD_TALK_DURATION_MS,
@@ -3030,6 +3043,28 @@ const tronRunnerCrowdMaterials = createTronRunnerCrowdMaterialsRuntime({
   getLedBrightness: () => tronRunnerLedBrightness,
   getLedBloom: () => tronRunnerLedBloom,
 });
+const tronRunnerFemaleCrowdColorPlan = Array.from({ length: TRON_RUNNER_FEMALE_CROWD_COUNT }, (_, index) => {
+  if (index < TRON_RUNNER_FEMALE_CROWD_WHITE_COUNT) return 'white';
+  const planIndex = index - TRON_RUNNER_FEMALE_CROWD_WHITE_COUNT;
+  const planLength = Math.max(1, TRON_RUNNER_FEMALE_CROWD_COLOR_PLAN.length);
+  return TRON_RUNNER_FEMALE_CROWD_COLOR_PLAN[planIndex % planLength] || 'current';
+});
+const tronRunnerFemaleCrowdState = {
+  enabled: TRON_RUNNER_FEMALE_CROWD_ENABLED,
+  modelUrl: TRON_RUNNER_FEMALE_MODEL_URL,
+  requestedCount: TRON_RUNNER_FEMALE_CROWD_COUNT,
+  whiteRequestedCount: TRON_RUNNER_FEMALE_CROWD_WHITE_COUNT,
+  colorPlan: tronRunnerFemaleCrowdColorPlan,
+  loaded: false,
+  queued: false,
+  error: '',
+};
+
+function tronRunnerFemaleCrowdColorPresetForIndex(index, globalIndex) {
+  const key = tronRunnerFemaleCrowdColorPlan[index] || 'current';
+  return TRON_RUNNER_CROWD_COLOR_PRESETS[key] || tronRunnerCrowdMaterials.colorPresetForIndex(globalIndex);
+}
+
 let tronRunnerMaterialReflect = 0.06;
 let tronRunnerMaterialMetalness = 0.12;
 let tronRunnerMaterialRoughness = 0.92;
@@ -3088,6 +3123,8 @@ const tronRunnerCrowdClearState = {
 };
 const tronRunnerCrowdBuildQueueState = {
   job: null,
+  queue: [],
+  crowd: tronRunnerCrowd,
   buildStats: tronRunnerCrowdBuildStats,
   requestedCount: TRON_RUNNER_CROWD_COUNT,
   crowdEnabled: TRON_RUNNER_CROWD_ENABLED,
@@ -3283,6 +3320,59 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   ),
   updateReflectionBudgetImpl: () => updateTronRunnerCrowdReflectionBudgetRuntime(tronRunnerCrowdReflectionBudgetState),
 });
+
+let tronRunnerFemaleCrowdLoadPromise = null;
+
+function loadTronRunnerFemaleCrowdGltf() {
+  const Loader = RunnerGLTFLoader;
+  if (!Loader) return Promise.reject(new Error('GLTF loader unavailable'));
+  return new Promise((resolve, reject) => {
+    new Loader().load(TRON_RUNNER_FEMALE_MODEL_URL, resolve, undefined, reject);
+  });
+}
+
+async function loadTronRunnerFemaleCrowd() {
+  if (!TRON_RUNNER_FEMALE_CROWD_ENABLED || TRON_RUNNER_FEMALE_CROWD_COUNT <= 0) return false;
+  if (tronRunnerFemaleCrowdLoadPromise) return tronRunnerFemaleCrowdLoadPromise;
+  tronRunnerFemaleCrowdState.loaded = false;
+  tronRunnerFemaleCrowdState.queued = false;
+  tronRunnerFemaleCrowdState.error = '';
+  tronRunnerFemaleCrowdLoadPromise = (async () => {
+    try {
+      const gltf = await loadTronRunnerFemaleCrowdGltf();
+      const model = gltf.scene;
+      model.name = 'girl12-fullbody-tron-crowd-source';
+      fitTronRunnerModelCore(model, TRON_RUNNER_TARGET_HEIGHT);
+      const queued = enqueueTronRunnerCrowdBuildJobRuntime(
+        tronRunnerCrowdBuildQueueState,
+        model,
+        gltf.animations,
+        {
+          count: TRON_RUNNER_FEMALE_CROWD_COUNT,
+          indexOffset: TRON_RUNNER_FEMALE_CROWD_INDEX_OFFSET,
+          kind: 'female',
+          source: 'girl12-fullbody-tron',
+          groupNamePrefix: 'tron-runner-crowd-female',
+          modelNamePrefix: 'girl12-fullbody-tron-crowd',
+          colorPresetForIndex: tronRunnerFemaleCrowdColorPresetForIndex,
+          walkCycleDistanceMode: 'clip-duration',
+        }
+      );
+      tronRunnerFemaleCrowdState.loaded = true;
+      tronRunnerFemaleCrowdState.queued = queued;
+      if (!queued) tronRunnerFemaleCrowdState.error = 'female crowd queue skipped';
+      return queued;
+    } catch (error) {
+      tronRunnerFemaleCrowdState.loaded = false;
+      tronRunnerFemaleCrowdState.queued = false;
+      tronRunnerFemaleCrowdState.error = error?.message || String(error);
+      console.warn('[tron-runner-female]', tronRunnerFemaleCrowdState.error);
+      return false;
+    }
+  })();
+  return tronRunnerFemaleCrowdLoadPromise;
+}
+
 const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerState: tronRunnerState,
   runnerParts: tronRunnerParts,
@@ -3408,7 +3498,10 @@ const tronRunnerOrchestration = createTronRunnerOrchestrationRuntime({
   cloneRunnerSkeleton: () => cloneRunnerSkeleton,
   effectiveAnimationSpeed: tronRunnerEffectiveAnimationSpeed,
   applyVisualControls: applyTronRunnerVisualControls,
-  buildCrowd: (model, animations) => tronRunnerCrowdRuntime.build(model, animations),
+  buildCrowd: (model, animations) => {
+    tronRunnerCrowdRuntime.build(model, animations);
+    void loadTronRunnerFemaleCrowd();
+  },
   buildIdleCharacter: (model) => tronRunnerIdleCharacterRuntime.build(model),
   updateRealShadowRig: () => tronRunnerReflectionRig.updateRealShadowRig(),
   updateDynamicReflection: () => tronRunnerReflectionRig.updateDynamicReflection(),
@@ -3522,7 +3615,7 @@ const TRON_RUNNER_CROWD_PAUSE_MAX_MS = 2800;
 // when the city is revealed, stops at a welcoming distance and turns to face the player,
 // then stays put. The cyan member behaves like a normal crowd member.
 const TRON_RUNNER_GREETER_INDEX = 1;
-const TRON_RUNNER_GREET_DISTANCE = 12.0;
+const TRON_RUNNER_GREET_DISTANCE = TRON_RUNNER_GREETER_GREET_DISTANCE;
 const GREETER_SPEED_MULTIPLIER = 1.155; // 30% slower than the previous 1.65 approach pace
 const GREETER_RUN_SPEED_BOOST = 3.064;  // keeps board run 30% faster overall after slower approach
 const GREETER_HEAD_MAX_YAW = 1.3963; // +/-80deg => 160deg total head turn, no neck over-rotation
@@ -3538,7 +3631,7 @@ const tronRunnerGreeterHeadLookState = {
 const GREETER_BOARD_SIDE_GAP = 2.4;  // clearance beyond the board's right edge (world units)
 const GREETER_BOARD_FRONT_GAP = 1.4; // step toward the player off the board plane (no clipping)
 const GREETER_BOARD_REACH = 0.8;     // arrival radius at the board anchor
-const GREETER_FOLLOW_DELAY_MS = 1000; // show "Seguimi" first, then start moving 1s later
+const GREETER_FOLLOW_DELAY_MS = TRON_RUNNER_FOLLOW_PROMPT_DELAY_MS; // show "Seguimi" first, then start moving 1.5s later
 const GREETER_BOARD_BUBBLE_RANGE = 32.0; // "Qui vedi i nostri reparti" shows within 32m of the greeter
 const GREETER_BOARD_STANCE_DEG = 45; // at the board the body sits 45deg between player and board
 const tronRunnerGreeterBoardAnchorState = {
@@ -3551,7 +3644,7 @@ const tronRunnerGreeterBoardAnchorState = {
 // (like the crowd walk) so the feet plant instead of sliding/moonwalking. Tune this up if the
 // legs lag behind the motion (slide), down if they spin too fast. Run stride > walk stride.
 const GREETER_RUN_CYCLE_DISTANCE = TRON_RUNNER_WALK_CYCLE_DISTANCE * 1.55;
-const GREETER_BUBBLE_DURATION_MS = 3000;   // welcome message dissolves after this
+const GREETER_BUBBLE_DURATION_MS = TRON_RUNNER_WELCOME_BUBBLE_DURATION_MS; // welcome + stop duration
 
 const tronRunnerCrowdBuildMemberState = {
   crowd: tronRunnerCrowd,
@@ -3630,6 +3723,7 @@ const tronRunnerCrowdInspectState = {
   now: () => performance.now(),
   crowd: tronRunnerCrowd,
   crowdGroup: tronRunnerCrowdGroup,
+  greeterFollowDelayMs: GREETER_FOLLOW_DELAY_MS,
   crowdBox: tronRunnerCrowdBox,
   crowdSize: tronRunnerCrowdSize,
   groundOffset: TRON_RUNNER_CROWD_GROUND_OFFSET,
@@ -3642,7 +3736,8 @@ const tronRunnerCrowdInspectState = {
   roadHalf,
   deadlockMs: TRON_RUNNER_CROWD_DEADLOCK_MS,
   collisionEnabled: TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
-  requestedCount: TRON_RUNNER_CROWD_COUNT,
+  requestedCount: TRON_RUNNER_CROWD_COUNT + (TRON_RUNNER_FEMALE_CROWD_ENABLED ? TRON_RUNNER_FEMALE_CROWD_COUNT : 0),
+  female: tronRunnerFemaleCrowdState,
   getCloneRunnerSkeleton: () => cloneRunnerSkeleton,
   dynamicReflectionEnabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
   reflectionMaxActive: TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE,

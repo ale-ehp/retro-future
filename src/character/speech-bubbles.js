@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { retroFutureSignOpacity, retroFutureSignScale } from '../sign-opacity.js';
 
 // ---------- Speech-bubble rendering subsystem ----------
 // World-space billboarded sprites that float above characters. Two updaters share one texture
@@ -16,32 +17,258 @@ export function initSpeechBubbles(injected) { deps = injected; }
 // ---------- Greeter welcome speech bubble (3D world sprite, like the //error sign) ----------
 const greeterBubbleWorldScratch = new THREE.Vector3();
 const GREETER_BUBBLE_HEAD_GAP = 1.1;       // world units above the head
-const GREETER_BUBBLE_WORLD_HEIGHT = 1.5;   // sprite height in world units at sizeScale 1
+export const GREETER_BUBBLE_WORLD_HEIGHT = retroFutureSignScale(1.5); // sprite height in world units at sizeScale 1
 const GREETER_BUBBLE_FADE_SEC = 0.5;       // dissolve in/out time
+export const GREETER_BUBBLE_MAX_OPACITY = retroFutureSignOpacity(1);
+export const CROWD_BUBBLE_MAX_OPACITY = retroFutureSignOpacity(1);
+export const CROWD_BUBBLE_PANEL_FILL_STYLE = 'rgba(0,16,20,0.78)';
+export const GREETER_BUBBLE_PANEL_FILL_STYLE = 'rgba(0,8,10,0.90)';
 let greeterBubbleSprite = null;
 let greeterBubbleLastMs = 0;
 const greeterBubbleTextureCache = new Map();
+export const GREETER_BUBBLE_LOGO_EFFECT_ID = 'tron-orange';
+export const GREETER_BUBBLE_LOGO_AI_ANIMATION_ENABLED = true;
+export const GREETER_BUBBLE_LOGO_AV_FILL_ALPHA = 0.82;
+export const GREETER_BUBBLE_LOGO_STUDIO_FILL_ALPHA = 1;
+export const GREETER_BUBBLE_LOGO_AI_MAIN_MIN_OPACITY = 1;
+export const GREETER_BUBBLE_LOGO_WORDMARK_FILL_STYLE = 'rgba(255,255,255,1)';
+export const GREETER_BUBBLE_LOGO_WORDMARK_FONT_WEIGHT = 400;
+export const GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_STYLE = 'rgba(0,16,20,0.82)';
+export const GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_WIDTH_RATIO = 0.052;
+export const GREETER_BUBBLE_LOGO_AI_IDLE_OFFSET_PX = 1.3;
+export const GREETER_BUBBLE_LOGO_AI_GLITCH_SLICE_OPACITY = 1;
 
-function makeGreeterBubbleTexture(html) {
-  const lines = String(html).split(/<br\s*\/?>/i).map((s) => s.trim());
-  const canvas = document.createElement('canvas');
-  canvas.width = 768;
-  canvas.height = 320;
-  const ctx = canvas.getContext('2d');
+export function isGreeterBubbleLogoLine(line) {
+  return String(line ?? '').trim().toLowerCase().replace('/', '') === 'avstudio.ai';
+}
+
+export function greeterBubbleLogoAnimationState(nowMs = 0) {
+  const t = Math.max(0, nowMs) / 1000;
+  const dashPhase = (t / 2.4) % 1;
+  const sweepPhase = (t / 2.4) % 1;
+  const burst = (Math.max(0, nowMs) % 2200) < 360 ? 1 : 0;
+  const jitter = burst ? Math.sin(t * 91) : 0;
+  const decay = burst ? 1 - ((Math.max(0, nowMs) % 2200) / 360) : 0;
+  return {
+    dashOffset: -98 * dashPhase,
+    sweepPhase,
+    aiCyanDx: -GREETER_BUBBLE_LOGO_AI_IDLE_OFFSET_PX + burst * (-5.2 + jitter * 1.6) * decay,
+    aiRedDx: GREETER_BUBBLE_LOGO_AI_IDLE_OFFSET_PX + burst * (5.2 - jitter * 1.6) * decay,
+    aiDy: burst ? Math.sin(t * 53) * 1.8 * decay : 0,
+    aiOpacity: burst ? 0.92 : 0.78,
+    aiMainOpacity: GREETER_BUBBLE_LOGO_AI_MAIN_MIN_OPACITY,
+    aiSliceOpacity: burst ? GREETER_BUBBLE_LOGO_AI_GLITCH_SLICE_OPACITY : 0,
+    aiSliceDx: burst ? Math.sin(t * 47) * 8 * decay : 0,
+  };
+}
+
+function greeterBubbleTextFont(fontPx) {
+  return `700 ${fontPx}px Menlo, Consolas, monospace`;
+}
+
+function greeterBubbleLogoFont(fontPx) {
+  return `350 ${fontPx}px "Space Grotesk", "DM Sans", "Avenir Next", "Segoe UI", sans-serif`;
+}
+
+function greeterBubbleLogoWordmarkFont(fontPx) {
+  return `${GREETER_BUBBLE_LOGO_WORDMARK_FONT_WEIGHT} ${fontPx}px "Space Grotesk", "DM Sans", "Avenir Next", "Segoe UI", sans-serif`;
+}
+
+function setGreeterBubbleLineFont(ctx, line, fontPx) {
+  ctx.font = isGreeterBubbleLogoLine(line)
+    ? greeterBubbleLogoFont(fontPx * 1.08)
+    : greeterBubbleTextFont(fontPx);
+}
+
+function measureGreeterBubbleLogoLine(ctx, fontPx) {
+  const logoFontPx = fontPx * 1.08;
+  ctx.font = greeterBubbleLogoFont(logoFontPx);
+  const avW = ctx.measureText('av').width;
+  ctx.font = greeterBubbleLogoWordmarkFont(logoFontPx);
+  return avW + ctx.measureText('/studio').width + ctx.measureText('.ai').width;
+}
+
+function measureGreeterBubbleLine(ctx, line, fontPx) {
+  setGreeterBubbleLineFont(ctx, line, fontPx);
+  if (isGreeterBubbleLogoLine(line)) {
+    return measureGreeterBubbleLogoLine(ctx, fontPx);
+  }
+  return ctx.measureText(line).width;
+}
+
+function drawGreeterBubbleLogoLine(ctx, line, centerX, y, fontPx, nowMs = 0) {
+  const logoFontPx = fontPx * 1.08;
+  ctx.font = greeterBubbleLogoFont(logoFontPx);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const av = 'av';
+  const studio = '/studio';
+  const ai = '.ai';
+  ctx.font = greeterBubbleLogoFont(logoFontPx);
+  const avW = ctx.measureText(av).width;
+  ctx.font = greeterBubbleLogoWordmarkFont(logoFontPx);
+  const studioW = ctx.measureText(studio).width;
+  const aiW = ctx.measureText(ai).width;
+  const startX = centerX - (avW + studioW + aiW) / 2;
+  const studioX = startX + avW;
+  const aiX = studioX + studioW;
+  const state = greeterBubbleLogoAnimationState(nowMs);
+
+  ctx.font = greeterBubbleLogoFont(logoFontPx);
+
+  ctx.save();
+  ctx.globalAlpha = 0.14;
+  ctx.fillStyle = '#25F4EE';
+  ctx.fillText(av, startX, y);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = 0.14;
+  ctx.fillStyle = '#ff7a18';
+  ctx.fillText(av, startX, y);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = GREETER_BUBBLE_LOGO_AV_FILL_ALPHA;
+  ctx.fillStyle = '#ff7a18';
+  ctx.shadowColor = 'rgba(255,122,24,0.78)';
+  ctx.shadowBlur = 12;
+  ctx.fillText(av, startX, y);
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,214,178,0.96)';
+  ctx.lineWidth = Math.max(1.8, logoFontPx * 0.042);
+  ctx.shadowColor = 'rgba(255,122,24,0.78)';
+  ctx.shadowBlur = 14;
+  ctx.strokeText(av, startX, y);
+  ctx.restore();
+
+  ctx.save();
+  ctx.setLineDash([logoFontPx * 0.22, logoFontPx * 3.3]);
+  ctx.lineDashOffset = state.dashOffset * (logoFontPx / 28);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#ff7a18';
+  ctx.lineWidth = Math.max(2.6, logoFontPx * 0.082);
+  ctx.shadowColor = 'rgba(255,122,24,0.9)';
+  ctx.shadowBlur = 18;
+  ctx.strokeText(av, startX, y);
+  ctx.restore();
+
+  ctx.save();
+  const sweepW = Math.max(5, logoFontPx * 0.16);
+  const sweepX = startX - sweepW + state.sweepPhase * (avW + sweepW * 2);
+  ctx.beginPath();
+  ctx.rect(sweepX, y - logoFontPx * 0.82, sweepW, logoFontPx * 1.08);
+  ctx.clip();
+  ctx.strokeStyle = '#ffd2a3';
+  ctx.lineWidth = Math.max(2.4, logoFontPx * 0.084);
+  ctx.shadowColor = 'rgba(255,194,122,0.95)';
+  ctx.shadowBlur = 20;
+  ctx.strokeText(av, startX, y);
+  ctx.restore();
+
+  ctx.font = greeterBubbleLogoWordmarkFont(logoFontPx);
+
+  ctx.save();
+  ctx.strokeStyle = GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_STYLE;
+  ctx.lineWidth = Math.max(2.2, logoFontPx * GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_WIDTH_RATIO);
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(0,16,20,0.64)';
+  ctx.shadowBlur = 10;
+  ctx.strokeText(studio, studioX, y);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = GREETER_BUBBLE_LOGO_STUDIO_FILL_ALPHA;
+  ctx.fillStyle = GREETER_BUBBLE_LOGO_WORDMARK_FILL_STYLE;
+  ctx.shadowColor = 'rgba(255,255,255,0.34)';
+  ctx.shadowBlur = 8;
+  ctx.fillText(studio, studioX, y);
+  ctx.restore();
+
+  // Same .ai logic as the site logo: cyan/red anaglyph under a readable white base,
+  // with clipped slices that jump during the glitch burst.
+  ctx.save();
+  ctx.globalAlpha = state.aiOpacity;
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#25F4EE';
+  ctx.fillText(ai, aiX + state.aiCyanDx, y + state.aiDy);
+  ctx.fillStyle = '#FE2C55';
+  ctx.fillText(ai, aiX + state.aiRedDx, y - state.aiDy);
+  ctx.restore();
+
+  if (state.aiSliceOpacity > 0) {
+    ctx.save();
+    ctx.globalAlpha = state.aiSliceOpacity;
+    ctx.beginPath();
+    ctx.rect(aiX - 7, y - logoFontPx * 0.78, aiW + 16, logoFontPx * 0.32);
+    ctx.clip();
+    ctx.fillStyle = '#25F4EE';
+    ctx.fillText(ai, aiX + state.aiSliceDx, y);
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = state.aiSliceOpacity;
+    ctx.beginPath();
+    ctx.rect(aiX - 7, y - logoFontPx * 0.22, aiW + 16, logoFontPx * 0.42);
+    ctx.clip();
+    ctx.fillStyle = '#FE2C55';
+    ctx.fillText(ai, aiX - state.aiSliceDx * 0.82, y);
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.strokeStyle = GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_STYLE;
+  ctx.lineWidth = Math.max(2.2, logoFontPx * GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_WIDTH_RATIO);
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(0,16,20,0.68)';
+  ctx.shadowBlur = 10;
+  ctx.strokeText(ai, aiX, y);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = state.aiMainOpacity;
+  ctx.fillStyle = GREETER_BUBBLE_LOGO_WORDMARK_FILL_STYLE;
+  ctx.shadowColor = 'rgba(255,255,255,0.5)';
+  ctx.shadowBlur = 10;
+  ctx.fillText(ai, aiX, y);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.3 + Math.abs(Math.sin(Math.max(0, nowMs) / 180)) * 0.14;
+  ctx.strokeStyle = 'rgba(255,122,24,0.5)';
+  ctx.lineWidth = Math.max(0.8, logoFontPx * 0.014);
+  ctx.font = greeterBubbleLogoFont(logoFontPx);
+  ctx.strokeText(av, startX, y);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = 0.16 + Math.abs(Math.sin(Math.max(0, nowMs) / 180)) * 0.05;
+  ctx.strokeStyle = 'rgba(255,255,255,0.62)';
+  ctx.lineWidth = Math.max(0.55, logoFontPx * 0.008);
+  ctx.font = greeterBubbleLogoWordmarkFont(logoFontPx);
+  ctx.strokeText(ai, aiX, y);
+  ctx.restore();
+
+  ctx.textAlign = 'center';
+}
+
+function drawGreeterBubbleCanvas(canvas, ctx, lines, nowMs = 0, panelFillStyle = CROWD_BUBBLE_PANEL_FILL_STYLE) {
   const pad = 30;
   const maxTextW = canvas.width - pad * 2 - 120;
-  let fontPx = 74;
+  let fontPx = 84;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const widest = () => {
-    ctx.font = `700 ${fontPx}px Menlo, Consolas, monospace`;
-    return Math.max(...lines.map((l) => ctx.measureText(l).width));
+    return Math.max(...lines.map((line) => measureGreeterBubbleLine(ctx, line, fontPx)));
   };
   while (fontPx > 28 && widest() > maxTextW) fontPx -= 2;
   const lineH = fontPx * 1.24;
   const blockH = lineH * lines.length;
-  const panelH = blockH + 56;
-  const panelW = Math.min(canvas.width - pad, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 150);
+  const panelH = blockH + 70;
+  const panelW = Math.min(canvas.width - pad, Math.max(...lines.map((line) => measureGreeterBubbleLine(ctx, line, fontPx))) + 170);
   const px = (canvas.width - panelW) / 2;
   const py = (canvas.height - panelH) / 2;
 
@@ -50,7 +277,7 @@ function makeGreeterBubbleTexture(html) {
   ctx.save();
   ctx.shadowColor = 'rgba(98,247,255,0.55)';
   ctx.shadowBlur = 26;
-  ctx.fillStyle = 'rgba(0,16,20,0.78)';
+  ctx.fillStyle = panelFillStyle;
   ctx.beginPath();
   ctx.roundRect(px, py, panelW, panelH, 18);
   ctx.fill();
@@ -64,23 +291,49 @@ function makeGreeterBubbleTexture(html) {
   ctx.stroke();
   ctx.shadowBlur = 0;
   // text
-  ctx.font = `700 ${fontPx}px Menlo, Consolas, monospace`;
   ctx.fillStyle = 'rgba(205,252,255,0.98)';
   ctx.shadowColor = 'rgba(98,247,255,0.7)';
   ctx.shadowBlur = 10;
   const cy = canvas.height / 2 - blockH / 2 + lineH / 2;
-  lines.forEach((line, i) => ctx.fillText(line, canvas.width / 2, cy + i * lineH));
+  lines.forEach((line, i) => {
+    const y = cy + i * lineH;
+    if (isGreeterBubbleLogoLine(line)) {
+      drawGreeterBubbleLogoLine(ctx, line, canvas.width / 2, y, fontPx, nowMs);
+      return;
+    }
+    ctx.font = greeterBubbleTextFont(fontPx);
+    ctx.fillText(line, canvas.width / 2, y);
+  });
+}
+
+function makeGreeterBubbleTexture(html, options = {}) {
+  const lines = String(html).split(/<br\s*\/?>/i).map((s) => s.trim());
+  const canvas = document.createElement('canvas');
+  canvas.width = 896;
+  canvas.height = 360;
+  const ctx = canvas.getContext('2d');
+  const animated = lines.some(isGreeterBubbleLogoLine);
+  const panelFillStyle = options.greeter ? GREETER_BUBBLE_PANEL_FILL_STYLE : CROWD_BUBBLE_PANEL_FILL_STYLE;
+  drawGreeterBubbleCanvas(canvas, ctx, lines, performance.now(), panelFillStyle);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = Math.min(8, deps.getRenderer().capabilities.getMaxAnisotropy?.() || 1);
   texture.__aspect = canvas.width / canvas.height;
+  texture.__animated = animated;
+  texture.__draw = animated
+    ? (nowMs) => drawGreeterBubbleCanvas(canvas, ctx, lines, nowMs, panelFillStyle)
+    : null;
   return texture;
 }
 
-function getGreeterBubbleTexture(html) {
-  let tex = greeterBubbleTextureCache.get(html);
-  if (!tex) { tex = makeGreeterBubbleTexture(html); greeterBubbleTextureCache.set(html, tex); }
+function getGreeterBubbleTexture(html, options = {}) {
+  const cacheKey = `${options.greeter ? 'greeter' : 'crowd'}:${html}`;
+  let tex = greeterBubbleTextureCache.get(cacheKey);
+  if (!tex) {
+    tex = makeGreeterBubbleTexture(html, options);
+    greeterBubbleTextureCache.set(cacheKey, tex);
+  }
   return tex;
 }
 
@@ -119,14 +372,20 @@ export function updateGreeterSpeechBubble() {
   if (greeter && deps.getCrowdGroup().visible && deps.isReady() && greeter.bubbleText) {
     show = greeter.bubbleProximity ? Boolean(greeter.bubbleInRange) : (greeter.bubbleUntil && nowMs < greeter.bubbleUntil);
   }
-  const target = show ? 1 : 0;
-  const stepOp = fadeDt > 0 ? fadeDt / GREETER_BUBBLE_FADE_SEC : (target ? 1 : 0);
+  const target = show ? GREETER_BUBBLE_MAX_OPACITY : 0;
+  const stepOp = fadeDt > 0
+    ? (fadeDt / GREETER_BUBBLE_FADE_SEC) * GREETER_BUBBLE_MAX_OPACITY
+    : target;
   let op = sprite.material.opacity ?? 0;
   if (op < target) op = Math.min(target, op + stepOp);
   else if (op > target) op = Math.max(target, op - stepOp);
   sprite.material.opacity = op;
   if (op <= 0.001 || !greeter || !greeter.bubbleText) { sprite.visible = false; return; }
-  const tex = getGreeterBubbleTexture(greeter.bubbleText);
+  const tex = getGreeterBubbleTexture(greeter.bubbleText, { greeter: true });
+  if (tex.__animated && tex.__draw) {
+    tex.__draw(nowMs);
+    tex.needsUpdate = true;
+  }
   if (sprite.material.map !== tex) { sprite.material.map = tex; sprite.material.needsUpdate = true; }
   // Anchor purely to the body (group world position) at a constant height above the head.
   // No head bone: the head yaws to track the player and bobs with the animation, which made the
@@ -202,7 +461,7 @@ export function updateTronRunnerCrowdSpeechBubbles() {
     // Time-based fade: in over 0.3s, out over 0.4s before talkUntil.
     const fadeIn = (nowMs - member.talkStart) / 300;
     const fadeOut = (member.talkUntil - nowMs) / 400;
-    const opacity = THREE.MathUtils.clamp(Math.min(fadeIn, fadeOut, 1), 0, 1);
+    const opacity = THREE.MathUtils.clamp(Math.min(fadeIn, fadeOut, 1), 0, 1) * CROWD_BUBBLE_MAX_OPACITY;
     if (opacity <= 0.001) { sprite.visible = false; sprite.material.opacity = 0; continue; }
     const tex = getGreeterBubbleTexture(member.talkText);
     if (sprite.material.map !== tex) { sprite.material.map = tex; sprite.material.needsUpdate = true; }
