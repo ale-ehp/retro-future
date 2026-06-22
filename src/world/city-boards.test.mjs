@@ -30,11 +30,11 @@ test('city board signs are 50 percent larger in world space', async () => {
   assert.equal(cityBoards.CITY_ROLE_BOARD_HEIGHT, 9);
 });
 
-test('city board signs render above background geometry', async () => {
+test('city board signs respect foreground character depth', async () => {
   globalThis.window = {};
   globalThis.location = { search: '' };
   const cityBoards = await import(`./city-boards.js?depth-test=${Date.now()}`);
 
-  assert.equal(cityBoards.CITY_DEPARTMENT_BOARD_DEPTH_TEST, false);
-  assert.equal(cityBoards.CITY_ROLE_BOARD_DEPTH_TEST, false);
+  assert.equal(cityBoards.CITY_DEPARTMENT_BOARD_DEPTH_TEST, true);
+  assert.equal(cityBoards.CITY_ROLE_BOARD_DEPTH_TEST, true);
 });
