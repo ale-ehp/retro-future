@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { retroFutureSignScale } from '../sign-opacity.js';
+import { DEFAULT_BASE_PAD_Y } from './boulevard-constants.js';
 
 let overlayGroup = null;
 let renderer = null;
@@ -16,6 +17,8 @@ export const sideBuildingDoorLedMeshes = [];
 export const sideBuildingCivicNumberGroups = [];
 export const sideBuildingCivicNumberMaterials = [];
 export const SIDE_BUILDING_CIVIC_NUMBER_DEPTH_TEST = false;
+export const SIDE_BUILDING_DOOR_BASE_CLEARANCE = 0.04;
+export const SIDE_BUILDING_DOOR_LED_DEPTH_TEST = true;
 export const SIDE_BUILDING_CIVIC_NUMBER_BRIGHT_STROKE_STYLE = 'rgba(179,255,255,1)';
 export const SIDE_BUILDING_CIVIC_NUMBER_HIGHLIGHT_STROKE_STYLE = 'rgba(255,255,255,1)';
 const SIDE_BUILDING_CIVIC_NUMBER_SHADOW_STYLE = 'rgba(123,255,255,0.90)';
@@ -31,7 +34,7 @@ export const SIDE_DOOR_FIXED = Object.freeze({
   width: 16,
   height: 26,
   depth: 7.66,
-  y: -2.35,
+  y: DEFAULT_BASE_PAD_Y + SIDE_BUILDING_DOOR_BASE_CLEARANCE,
   faceOffset: 12.7,
 });
 
@@ -133,7 +136,7 @@ function ensureSideDoorMaterials() {
     opacity: 1,
     alphaTest: 0.018,
     depthWrite: false,
-    depthTest: SIDE_BUILDING_CIVIC_NUMBER_DEPTH_TEST,
+    depthTest: SIDE_BUILDING_DOOR_LED_DEPTH_TEST,
     toneMapped: false,
   });
 }
