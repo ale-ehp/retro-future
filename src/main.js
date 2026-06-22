@@ -1047,6 +1047,7 @@ const welcomeWindowPanel = welcomeWindowOverlay?.querySelector('.welcome-window'
 const welcomeWindowAction = welcomeWindowOverlay?.querySelector('.welcome-action');
 const welcomeWindowActionPrefix = welcomeWindowOverlay?.querySelector('.welcome-action-prefix');
 const welcomeWindowKeyLabel = welcomeWindowOverlay?.querySelector('.welcome-key');
+const welcomeStartButton = document.getElementById('welcome-start-button');
 const tronDiscCursor = document.getElementById('tron-disc-cursor');
 const welcomeWindowTouchQuery = window.matchMedia('(hover: none), (pointer: coarse)');
 const welcomeWindowMobileQuery = window.matchMedia('(max-width: 760px)');
@@ -1087,6 +1088,7 @@ const welcomeDeps = {
 
 function dismissWelcomeWindow() {
   dismissWelcomeWindowCore(welcomeWindowState, welcomeDeps);
+  document.body.classList.remove('welcome-cover-visible');
 }
 
 function welcomeWindowVisible() {
@@ -1120,6 +1122,10 @@ if (typeof welcomeWindowTouchQuery.addEventListener === 'function') {
 }
 welcomeWindowOverlay?.addEventListener('pointerdown', triggerWelcomeWindowTouch, { passive: false });
 welcomeWindowOverlay?.addEventListener('touchstart', triggerWelcomeWindowTouch, { passive: false });
+welcomeStartButton?.addEventListener('click', (event) => {
+  event.preventDefault();
+  triggerBackspaceDroneIntro('welcome-button');
+});
 
 function applyCameraLook() {
   camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, viewRoll, 'YXZ'));

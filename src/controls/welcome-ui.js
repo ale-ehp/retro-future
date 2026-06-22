@@ -71,6 +71,7 @@ export function applyWelcomeWindowInputMode(deps) {
 export function triggerWelcomeWindowTouch(event, state, deps) {
   if (!welcomeWindowVisible(state, deps)) return;
   if (!welcomeWindowUsesTouchPrompt(deps)) return;
+  if (event.target?.closest?.('button, a, input, select, textarea')) return;
   event.preventDefault?.();
   deps.ensureFootstepAudioReady();
   deps.triggerBackspaceDroneIntro('welcome-touch');
