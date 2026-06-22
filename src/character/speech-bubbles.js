@@ -12,7 +12,10 @@ import { retroFutureSignOpacity, retroFutureSignScale } from '../sign-opacity.js
 // DOM overlays.
 
 let deps = null;
-export function initSpeechBubbles(injected) { deps = injected; }
+export function initSpeechBubbles(injected) {
+  deps = injected;
+  installSpeechBubbleRuntimeCommands();
+}
 
 // ---------- Greeter welcome speech bubble (3D world sprite, like the //error sign) ----------
 const greeterBubbleWorldScratch = new THREE.Vector3();
@@ -21,14 +24,18 @@ export const GREETER_BUBBLE_WORLD_HEIGHT = retroFutureSignScale(1.5); // sprite 
 const GREETER_BUBBLE_FADE_SEC = 0.5;       // dissolve in/out time
 export const GREETER_BUBBLE_MAX_OPACITY = retroFutureSignOpacity(1);
 export const CROWD_BUBBLE_MAX_OPACITY = retroFutureSignOpacity(1);
-export const CROWD_BUBBLE_PANEL_FILL_STYLE = 'rgba(0,16,20,0.78)';
-export const GREETER_BUBBLE_PANEL_FILL_STYLE = 'rgba(0,8,10,0.90)';
+export const CROWD_BUBBLE_PANEL_FILL_STYLE = 'rgba(0,3,4,0.94)';
+export const CROWD_BUBBLE_TEXT_FILL_STYLE = 'rgba(255,255,255,1)';
+const CROWD_BUBBLE_TEXT_SHADOW_STYLE = 'rgba(123,255,255,0.88)';
+export const GREETER_BUBBLE_PANEL_FILL_STYLE = 'rgba(0,3,4,0.96)';
+const CHARACTER_BUBBLE_PANEL_RGB = Object.freeze([0, 3, 4]);
 let greeterBubbleSprite = null;
 let greeterBubbleLastMs = 0;
 const greeterBubbleTextureCache = new Map();
+let characterBubbleBackgroundOpacityOverride = null;
 export const GREETER_BUBBLE_LOGO_EFFECT_ID = 'tron-orange';
 export const GREETER_BUBBLE_LOGO_AI_ANIMATION_ENABLED = true;
-export const GREETER_BUBBLE_LOGO_AV_FILL_ALPHA = 0.82;
+export const GREETER_BUBBLE_LOGO_AV_FILL_ALPHA = 1;
 export const GREETER_BUBBLE_LOGO_STUDIO_FILL_ALPHA = 1;
 export const GREETER_BUBBLE_LOGO_AI_MAIN_MIN_OPACITY = 1;
 export const GREETER_BUBBLE_LOGO_WORDMARK_FILL_STYLE = 'rgba(255,255,255,1)';
@@ -40,6 +47,58 @@ export const GREETER_BUBBLE_LOGO_AI_GLITCH_SLICE_OPACITY = 1;
 
 export function isGreeterBubbleLogoLine(line) {
   return String(line ?? '').trim().toLowerCase().replace('/', '') === 'avstudio.ai';
+}
+
+function formatCharacterBubblePanelFill(alpha) {
+  const safeAlpha = THREE.MathUtils.clamp(Number.isFinite(alpha) ? alpha : 1, 0, 1);
+  return `rgba(${CHARACTER_BUBBLE_PANEL_RGB[0]},${CHARACTER_BUBBLE_PANEL_RGB[1]},${CHARACTER_BUBBLE_PANEL_RGB[2]},${Number(safeAlpha.toFixed(3))})`;
+}
+
+export function characterBubblePanelFillStyle(kind = 'crowd') {
+  if (characterBubbleBackgroundOpacityOverride !== null) {
+    return formatCharacterBubblePanelFill(characterBubbleBackgroundOpacityOverride);
+  }
+  return kind === 'greeter' ? GREETER_BUBBLE_PANEL_FILL_STYLE : CROWD_BUBBLE_PANEL_FILL_STYLE;
+}
+
+function clearGreeterBubbleTextureCache() {
+  for (const texture of greeterBubbleTextureCache.values()) texture?.dispose?.();
+  greeterBubbleTextureCache.clear();
+}
+
+export function characterBubbleBackgroundOpacityInspect() {
+  return {
+    command: 'setCartelliSfondoOpacity(0..1)',
+    aliases: ['setCharacterBubbleBackgroundOpacity(0..1)', 'tronBubbleBackgroundOpacity(0..1)'],
+    opacity: characterBubbleBackgroundOpacityOverride,
+    crowdStyle: characterBubblePanelFillStyle('crowd'),
+    greeterStyle: characterBubblePanelFillStyle('greeter'),
+  };
+}
+
+export function setCharacterBubbleBackgroundOpacity(opacity) {
+  const next = Number(opacity);
+  if (!Number.isFinite(next)) {
+    throw new TypeError('setCharacterBubbleBackgroundOpacity expects a number from 0 to 1');
+  }
+  characterBubbleBackgroundOpacityOverride = THREE.MathUtils.clamp(next, 0, 1);
+  clearGreeterBubbleTextureCache();
+  return characterBubbleBackgroundOpacityInspect();
+}
+
+export function resetCharacterBubbleBackgroundOpacity() {
+  characterBubbleBackgroundOpacityOverride = null;
+  clearGreeterBubbleTextureCache();
+  return characterBubbleBackgroundOpacityInspect();
+}
+
+function installSpeechBubbleRuntimeCommands() {
+  if (typeof window === 'undefined') return;
+  window.setCharacterBubbleBackgroundOpacity = setCharacterBubbleBackgroundOpacity;
+  window.setCartelliSfondoOpacity = setCharacterBubbleBackgroundOpacity;
+  window.tronBubbleBackgroundOpacity = setCharacterBubbleBackgroundOpacity;
+  window.resetCharacterBubbleBackgroundOpacity = resetCharacterBubbleBackgroundOpacity;
+  window.characterBubbleBackgroundOpacityInspect = characterBubbleBackgroundOpacityInspect;
 }
 
 export function greeterBubbleLogoAnimationState(nowMs = 0) {
@@ -291,8 +350,8 @@ function drawGreeterBubbleCanvas(canvas, ctx, lines, nowMs = 0, panelFillStyle =
   ctx.stroke();
   ctx.shadowBlur = 0;
   // text
-  ctx.fillStyle = 'rgba(205,252,255,0.98)';
-  ctx.shadowColor = 'rgba(98,247,255,0.7)';
+  ctx.fillStyle = CROWD_BUBBLE_TEXT_FILL_STYLE;
+  ctx.shadowColor = CROWD_BUBBLE_TEXT_SHADOW_STYLE;
   ctx.shadowBlur = 10;
   const cy = canvas.height / 2 - blockH / 2 + lineH / 2;
   lines.forEach((line, i) => {
@@ -313,7 +372,7 @@ function makeGreeterBubbleTexture(html, options = {}) {
   canvas.height = 360;
   const ctx = canvas.getContext('2d');
   const animated = lines.some(isGreeterBubbleLogoLine);
-  const panelFillStyle = options.greeter ? GREETER_BUBBLE_PANEL_FILL_STYLE : CROWD_BUBBLE_PANEL_FILL_STYLE;
+  const panelFillStyle = characterBubblePanelFillStyle(options.greeter ? 'greeter' : 'crowd');
   drawGreeterBubbleCanvas(canvas, ctx, lines, performance.now(), panelFillStyle);
 
   const texture = new THREE.CanvasTexture(canvas);

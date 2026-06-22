@@ -4,6 +4,8 @@ import test from 'node:test';
 import {
   BOUNDARY_ERROR_SIGN_HEIGHT,
   BOUNDARY_ERROR_SIGN_MAX_OPACITY,
+  BOUNDARY_ERROR_TEXT_FILL_STYLE,
+  BOUNDARY_ERROR_TEXT_STROKE_STYLE,
   BOUNDARY_ERROR_SIGN_WIDTH,
 } from './boundary-error.js';
 
@@ -21,4 +23,9 @@ test('boundary error sign uses the shared 30 percent opacity reduction', () => {
 test('boundary error sign is 50 percent larger in world space', () => {
   assert.equal(BOUNDARY_ERROR_SIGN_WIDTH, 17.25);
   assertNear(BOUNDARY_ERROR_SIGN_HEIGHT, 8.1);
+});
+
+test('boundary error text is 25 percent brighter', () => {
+  assert.equal(BOUNDARY_ERROR_TEXT_FILL_STYLE, 'rgba(255,255,255,1)');
+  assert.equal(BOUNDARY_ERROR_TEXT_STROKE_STYLE, 'rgba(123,255,255,1)');
 });

@@ -14,9 +14,9 @@ test('city board signs use the shared 30 percent opacity reduction', async () =>
   const cityBoards = await import(`./city-boards.js?opacity-test=${Date.now()}`);
 
   assertNear(cityBoards.CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY, 0.46 * 0.7);
-  assertNear(cityBoards.CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY, 0.96 * 0.7);
+  assertNear(cityBoards.CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY, 0.96 * 1.25 * 0.7);
   assertNear(cityBoards.CITY_ROLE_BOARD_PANEL_BASE_OPACITY, 0.4 * 0.7);
-  assertNear(cityBoards.CITY_ROLE_BOARD_TEXT_BASE_OPACITY, 0.96 * 0.7);
+  assertNear(cityBoards.CITY_ROLE_BOARD_TEXT_BASE_OPACITY, 0.96 * 1.25 * 0.7);
 });
 
 test('city board signs are 50 percent larger in world space', async () => {

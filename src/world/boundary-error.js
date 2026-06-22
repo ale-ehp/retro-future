@@ -52,6 +52,10 @@ const BOUNDARY_ERROR_OLD_FADE_SECONDS = 1;
 export const BOUNDARY_ERROR_SIGN_MAX_OPACITY = retroFutureSignOpacity(1);
 export const BOUNDARY_ERROR_SIGN_WIDTH = retroFutureSignScale(11.5);
 export const BOUNDARY_ERROR_SIGN_HEIGHT = retroFutureSignScale(5.4);
+export const BOUNDARY_ERROR_TEXT_FILL_STYLE = 'rgba(255,255,255,1)';
+export const BOUNDARY_ERROR_TEXT_STROKE_STYLE = 'rgba(123,255,255,1)';
+const BOUNDARY_ERROR_TEXT_SHADOW_STYLE = 'rgba(123,255,255,1)';
+const BOUNDARY_ERROR_TEXT_GHOST_STYLE = 'rgba(23,118,130,0.48)';
 const boundaryErrorHalfFovRad = THREE.MathUtils.degToRad(100); // 200 degree total visibility cone.
 const boundaryErrorRenderHalfFovRad = THREE.MathUtils.degToRad(58); // keep the panel out of side/back view.
 
@@ -164,22 +168,22 @@ function makeBoundaryErrorTexture() {
   ctx.font = '900 34px Menlo, Consolas, monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(232,254,255,0.96)';
-  ctx.shadowColor = 'rgba(98,247,255,0.88)';
+  ctx.fillStyle = BOUNDARY_ERROR_TEXT_FILL_STYLE;
+  ctx.shadowColor = BOUNDARY_ERROR_TEXT_SHADOW_STYLE;
   ctx.shadowBlur = 10;
   ctx.fillText('x', panelX + panelW - 31, panelY + headerH * 0.52);
 
   ctx.font = '900 84px Menlo, Consolas, monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(98,247,255,0.92)';
+  ctx.shadowColor = BOUNDARY_ERROR_TEXT_SHADOW_STYLE;
   ctx.shadowBlur = 24;
-  ctx.fillStyle = 'rgba(18,94,104,0.38)';
+  ctx.fillStyle = BOUNDARY_ERROR_TEXT_GHOST_STYLE;
   ctx.fillText('//error', 394, 187);
-  ctx.fillStyle = 'rgba(232,254,255,0.96)';
+  ctx.fillStyle = BOUNDARY_ERROR_TEXT_FILL_STYLE;
   ctx.fillText('//error', 384, 176);
   ctx.shadowBlur = 6;
-  ctx.strokeStyle = 'rgba(98,247,255,0.86)';
+  ctx.strokeStyle = BOUNDARY_ERROR_TEXT_STROKE_STYLE;
   ctx.lineWidth = 2.4;
   ctx.strokeText('//error', 384, 176);
   ctx.shadowBlur = 0;
