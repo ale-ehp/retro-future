@@ -1,17 +1,30 @@
 <!doctype html>
-<html lang="en">
+<html lang="it">
 <head>
 <meta charset="utf-8" />
-<title>Retro Future v1.0 | AVstudio</title>
-<meta name="description" content="Retro Future v1.0: demo Tron Boulevard in tempo reale con wireframe, reveal città, FXAA, bloom e volo introduttivo." />
+<title>Chi siamo | AVstudio Retro Future</title>
+<meta name="description" content="Chi siamo AVstudio: esplora reparti, metodo e sistemi AI operativi dentro la demo Retro Future in tempo reale." />
 <meta name="robots" content="index, follow, max-image-preview:large" />
 <meta name="demo-version" content="v1.0" />
 <link rel="canonical" href="https://avstudio.ai/chi-siamo/retro-future/" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <link rel="icon" href="data:," />
 <link rel="stylesheet" href="./retro-future.css" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "AVstudio",
+  "url": "https://avstudio.ai/",
+  "description": "Studio italiano che costruisce sistemi AI operativi, demo reali e automazioni su misura con controllo umano.",
+  "areaServed": "IT",
+  "sameAs": [
+    "https://avstudio.ai/"
+  ]
+}
+</script>
 </head>
-<body class="controls-hidden">
+<body class="controls-hidden welcome-cover-visible">
 <div id="app"></div>
 <div id="loader" aria-hidden="true"></div>
 <div id="boundary-error-overlay" aria-hidden="true">
@@ -543,16 +556,13 @@
 
 <div id="welcome-window-overlay" aria-live="polite">
   <article class="welcome-window" aria-labelledby="welcome-window-title">
-    <div class="welcome-titlebar">
-      <div class="welcome-titlebar-title">Windows 95</div>
-      <div class="welcome-titlebar-controls" aria-hidden="true"><span>_</span><span>□</span><span>X</span></div>
-    </div>
     <div class="welcome-body">
-      <h2 id="welcome-window-title">Benvenuto</h2>
-      <p class="welcome-copy">Sei dentro il cervello di avstudio.ai
-qui puoi esplorare liberamente i reparti.
-ti auguriamo un esperienza illuminante.</p>
-      <div class="welcome-action"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></div>
+      <h1 id="welcome-window-title">Ti aspettavi una pagina con reparti e foto.</h1>
+      <p class="welcome-copy">Puoi esplorare qui tutti i reparti:</p>
+      <button id="welcome-start-button" class="welcome-start-button" type="button">
+        Clicca qui
+      </button>
+      <p class="welcome-action" aria-hidden="true"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></p>
     </div>
   </article>
 </div>

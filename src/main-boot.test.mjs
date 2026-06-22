@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const mainSource = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
+const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const cssSource = readFileSync(new URL('../retro-future.css', import.meta.url), 'utf8');
 
 test('boot waits for female crowd before draining queue and prewarming textures', () => {
   const body = mainSource.match(/async function bootSceneWithFinalDefaults\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
@@ -34,4 +36,17 @@ test('boot renders hidden skinned meshes once before postprocessing prewarm', ()
   assert.notEqual(postPrewarmIndex, -1);
   assert.ok(texturePrewarmIndex < skinnedRenderIndex);
   assert.ok(skinnedRenderIndex < postPrewarmIndex);
+});
+
+test('welcome cover button starts the existing reveal flow', () => {
+  assert.match(mainSource, /document\.getElementById\('welcome-start-button'\)/);
+  assert.match(mainSource, /welcomeStartButton\?\.addEventListener\('click'/);
+  assert.match(mainSource, /triggerBackspaceDroneIntro\('welcome-button'\)/);
+});
+
+test('welcome cover hides HUD until dismissed', () => {
+  assert.match(htmlSource, /<body class="[^"]*\bwelcome-cover-visible\b[^"]*"/);
+  assert.match(cssSource, /body\.welcome-cover-visible\s+#hud-tl/);
+  assert.match(cssSource, /body\.welcome-cover-visible\s+#settings-toggle/);
+  assert.match(mainSource, /document\.body\.classList\.remove\('welcome-cover-visible'\)/);
 });

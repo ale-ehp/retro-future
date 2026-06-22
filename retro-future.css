@@ -146,35 +146,58 @@
     inset: 0;
     z-index: 36;
     display: grid;
-    place-items: center;
-    padding: 28px;
-    pointer-events: none;
+    align-items: start;
+    justify-items: center;
+    padding: clamp(34px, 8vh, 84px) 22px 28px;
+    pointer-events: auto;
     opacity: 1;
     visibility: visible;
-    transition: opacity 260ms cubic-bezier(0.16, 1, 0.3, 1), visibility 260ms ease;
+    background:
+      linear-gradient(180deg, rgba(4, 5, 8, 0.88), rgba(4, 5, 8, 0.54) 42%, rgba(4, 5, 8, 0.16)),
+      radial-gradient(circle at 50% 0%, rgba(255, 122, 43, 0.18), transparent 34%);
+    transition: opacity 360ms cubic-bezier(0.16, 1, 0.3, 1), visibility 360ms ease;
+  }
+  #welcome-window-overlay::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(120, 170, 255, 0.10) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(120, 170, 255, 0.08) 1px, transparent 1px);
+    background-size: 56px 56px;
+    opacity: 0.2;
+    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.58) 34%, transparent 76%);
   }
   #welcome-window-overlay.is-dismissed {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
   }
+  body.welcome-cover-visible #hud-tl,
+  body.welcome-cover-visible #hud-controls,
+  body.welcome-cover-visible #settings-toggle,
+  body.welcome-cover-visible #mobile-performance-diagnostics,
+  body.welcome-cover-visible #mobile-movement-pad {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
   .welcome-window {
-    --welcome-base-x: 400px;
     --welcome-move-x: 0px;
     --welcome-move-y: 0px;
     --welcome-bend-y: 0deg;
     --welcome-tilt-x: 0deg;
     --welcome-origin-x: 50%;
-    width: min(420px, calc(100vw - 56px));
-    border: 1px solid #75a7ff;
-    border-radius: 0;
-    background: #061014;
-    color: #d9fbff;
+    position: relative;
+    width: min(980px, calc(100vw - 44px));
+    border: 0;
+    background: transparent;
+    color: #f2f7ff;
+    text-align: center;
     box-shadow: none;
-    overflow: hidden;
     contain: layout paint;
     transform:
-      translateX(var(--welcome-base-x))
       translate3d(var(--welcome-move-x), var(--welcome-move-y), 0)
       perspective(900px)
       rotateY(var(--welcome-bend-y))
@@ -187,68 +210,66 @@
   #welcome-window-overlay.is-motion-active .welcome-window {
     transition-duration: 70ms, 180ms;
   }
-  .welcome-titlebar {
-    height: 24px;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 10px;
-    padding: 0 4px 0 6px;
-    background: #001f75;
-    border-bottom: 1px solid #75a7ff;
-  }
-  .welcome-titlebar-title {
-    min-width: 0;
-    overflow: hidden;
-    color: #e8feff;
-    font-size: 10px;
-    font-weight: 700;
-    line-height: 1;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .welcome-titlebar-controls {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-  }
-  .welcome-titlebar-controls span {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 15px;
-    height: 15px;
-    border: 1px solid #75a7ff;
-    background: #061014;
-    color: #e8feff;
-    font-size: 9px;
-    font-weight: 700;
-    line-height: 1;
-  }
   .welcome-body {
-    padding: 34px 36px 34px;
+    display: grid;
+    justify-items: center;
+    gap: 22px;
+    padding: 0;
   }
-  .welcome-body h2 {
-    margin: 0 0 22px;
-    color: #e8feff;
-    font-size: 20px;
-    line-height: 1.12;
+  .welcome-body h1 {
+    max-width: 820px;
+    margin: 0;
+    color: #f4f7fb;
+    font-family: Sora, Avenir Next, Segoe UI, sans-serif;
+    font-size: clamp(32px, 5vw, 68px);
+    font-weight: 800;
+    line-height: 0.98;
     letter-spacing: 0;
+    text-wrap: balance;
   }
   .welcome-copy {
-    margin: 0 0 36px;
-    color: #a9dce4;
-    font-size: 12.5px;
-    line-height: 1.55;
+    margin: 0;
+    color: #cbd6e3;
+    font-family: Sora, Avenir Next, Segoe UI, sans-serif;
+    font-size: clamp(17px, 2.1vw, 24px);
+    font-weight: 500;
+    line-height: 1.28;
     letter-spacing: 0;
-    white-space: pre-wrap;
+  }
+  .welcome-start-button {
+    min-width: min(430px, 88vw);
+    min-height: 82px;
+    margin-top: 8px;
+    padding: 0 30px;
+    border: 2px solid rgba(255, 122, 43, 0.95);
+    border-radius: 0;
+    background: rgba(255, 122, 43, 0.94);
+    color: #160b05;
+    box-shadow: 0 0 30px rgba(255, 122, 43, 0.24);
+    cursor: pointer;
+    font-family: Sora, Avenir Next, Segoe UI, sans-serif;
+    font-size: clamp(22px, 3vw, 32px);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0;
+    transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), background 180ms ease, box-shadow 180ms ease;
+  }
+  .welcome-start-button:hover {
+    background: rgba(255, 142, 67, 0.98);
+    box-shadow: 0 0 42px rgba(255, 122, 43, 0.34);
+    transform: translateY(-1px);
+  }
+  .welcome-start-button:focus-visible {
+    outline: 3px solid rgba(242, 247, 255, 0.94);
+    outline-offset: 5px;
   }
   .welcome-action {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 10px;
-    color: #e8feff;
+    margin: 0;
+    color: rgba(232, 254, 255, 0.72);
     font-size: 12px;
     line-height: 1.25;
     letter-spacing: 0.02em;
@@ -266,29 +287,29 @@
     min-width: 82px;
     height: 31px;
     padding: 0 11px;
-    border: 1px solid #75a7ff;
+    border: 1px solid rgba(117, 167, 255, 0.65);
     background: transparent;
     color: #d9fbff;
     font-weight: 700;
   }
   @media (max-width: 560px) {
     #welcome-window-overlay {
-      padding: 20px;
-      align-items: end;
+      padding: 34px 18px 22px;
     }
     .welcome-body {
-      padding: 30px 30px 32px;
+      gap: 18px;
     }
-  }
-  @media (hover: none), (pointer: coarse) {
-    #welcome-window-overlay {
-      pointer-events: auto;
+    .welcome-start-button {
+      min-height: 72px;
     }
   }
   @media (prefers-reduced-motion: reduce) {
     .welcome-window {
       transition: none;
       will-change: auto;
+    }
+    .welcome-start-button {
+      transition: none;
     }
   }
   #hud-tl { top:14px; left:14px; }
