@@ -5969,6 +5969,16 @@ const skinnedMeshPrewarmStats = {
   errors: 0,
   durationMs: 0,
 };
+const hiddenSkinnedRenderPrewarmStats = {
+  attempted: 0,
+  forcedVisible: 0,
+  forcedUnculled: 0,
+  rendered: false,
+  errors: 0,
+  durationMs: 0,
+  texturesBefore: 0,
+  texturesAfter: 0,
+};
 
 function prewarmTextureUpload(texture, seen) {
   if (!texture?.isTexture || seen.has(texture)) return;
@@ -6036,6 +6046,78 @@ function prewarmSkinnedMeshBoneTextures(root = scene) {
   return skinnedMeshPrewarmStats;
 }
 
+function prewarmHiddenSkinnedMeshRender(root = scene) {
+  const started = performance.now();
+  hiddenSkinnedRenderPrewarmStats.attempted = 0;
+  hiddenSkinnedRenderPrewarmStats.forcedVisible = 0;
+  hiddenSkinnedRenderPrewarmStats.forcedUnculled = 0;
+  hiddenSkinnedRenderPrewarmStats.rendered = false;
+  hiddenSkinnedRenderPrewarmStats.errors = 0;
+  hiddenSkinnedRenderPrewarmStats.texturesBefore = renderer.info.memory?.textures ?? 0;
+  hiddenSkinnedRenderPrewarmStats.texturesAfter = hiddenSkinnedRenderPrewarmStats.texturesBefore;
+  if (typeof renderer.render !== 'function') return hiddenSkinnedRenderPrewarmStats;
+
+  const visibilityState = [];
+  const frustumState = [];
+  const seenVisibility = new Set();
+  try {
+    root.traverse((object) => {
+      if (!object?.isSkinnedMesh) return;
+      hiddenSkinnedRenderPrewarmStats.attempted += 1;
+      if (object.frustumCulled) {
+        frustumState.push([object, object.frustumCulled]);
+        object.frustumCulled = false;
+        hiddenSkinnedRenderPrewarmStats.forcedUnculled += 1;
+      }
+      let current = object;
+      while (current && current !== root.parent) {
+        if (!seenVisibility.has(current) && current.visible === false) {
+          seenVisibility.add(current);
+          visibilityState.push([current, current.visible]);
+          current.visible = true;
+          hiddenSkinnedRenderPrewarmStats.forcedVisible += 1;
+        }
+        if (current === root) break;
+        current = current.parent;
+      }
+    });
+
+    if (hiddenSkinnedRenderPrewarmStats.attempted > 0) {
+      const previousRenderTarget = renderer.getRenderTarget();
+      const previousAutoClear = renderer.autoClear;
+      const target = new THREE.WebGLRenderTarget(4, 4, {
+        depthBuffer: true,
+        stencilBuffer: false,
+      });
+      try {
+        renderer.setRenderTarget(target);
+        renderer.autoClear = true;
+        renderer.clear();
+        renderer.compile?.(root, camera);
+        renderer.render(root, camera);
+        hiddenSkinnedRenderPrewarmStats.rendered = true;
+      } finally {
+        renderer.setRenderTarget(previousRenderTarget);
+        renderer.autoClear = previousAutoClear;
+        target.dispose();
+      }
+    }
+  } catch {
+    hiddenSkinnedRenderPrewarmStats.errors += 1;
+  } finally {
+    for (let i = visibilityState.length - 1; i >= 0; i -= 1) {
+      visibilityState[i][0].visible = visibilityState[i][1];
+    }
+    for (let i = frustumState.length - 1; i >= 0; i -= 1) {
+      frustumState[i][0].frustumCulled = frustumState[i][1];
+    }
+    hiddenSkinnedRenderPrewarmStats.durationMs = Number((performance.now() - started).toFixed(2));
+    hiddenSkinnedRenderPrewarmStats.texturesAfter = renderer.info.memory?.textures ?? 0;
+    performanceDiagnostics.setLastTextureCount(hiddenSkinnedRenderPrewarmStats.texturesAfter);
+  }
+  return hiddenSkinnedRenderPrewarmStats;
+}
+
 function prewarmPostProcessingPasses() {
   postProcessingPrewarmStats.attempted = true;
   postProcessingPrewarmStats.rendered = false;
@@ -6085,10 +6167,12 @@ async function bootSceneWithFinalDefaults() {
   setTronNoclip(false, { silent: true });
   applyPlayerSpawn(playerSpawn, false);
   await tronRunnerOrchestration.load();
+  await loadTronRunnerFemaleCrowd();
   tronMainPlayerBody.build();
   await tronRunnerCrowdRuntime.drainBuildQueue();
   prewarmSkinnedMeshBoneTextures(scene);
   prewarmSceneTextureUploads(scene);
+  prewarmHiddenSkinnedMeshRender(scene);
   prewarmPostProcessingPasses();
   await ensureFootstepAudioReady();
   cityRevealRender.prewarmRealPass();
@@ -6391,6 +6475,7 @@ window.__tronPerfInspect = () => ({
   liveDiagnostics: performanceDiagnostics.summary(),
   skinnedMeshPrewarm: { ...skinnedMeshPrewarmStats },
   texturePrewarm: { ...sceneTexturePrewarmStats },
+  hiddenSkinnedRenderPrewarm: { ...hiddenSkinnedRenderPrewarmStats },
   postProcessingPrewarm: { ...postProcessingPrewarmStats },
   postRevealIsolation: postRevealPerfIsolationInspect(),
   render: { ...renderer.info.render },
