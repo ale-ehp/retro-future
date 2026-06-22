@@ -567,6 +567,7 @@ import {
 } from './controls/welcome-ui.js';
 import {
   initSpeechBubbles,
+  setCharacterBubbleBackgroundOpacity,
   updateGreeterSpeechBubble,
   updateTronRunnerCrowdSpeechBubbles,
 } from './character/speech-bubbles.js';
@@ -891,6 +892,7 @@ const mobilePerformanceDiagnosticsEl = document.getElementById('mobile-performan
 const mobileMovementPadEl = document.getElementById('mobile-movement-pad');
 const mobileMovementKnobEl = document.getElementById('mobile-movement-knob');
 const controlEls = createControlEls();
+const CHARACTER_BUBBLE_BG_OPACITY_RANGE_MULTIPLIER = 3;
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 const postRevealPerfIsolationState = {
@@ -5048,6 +5050,10 @@ function applyCharacterControlsFromUI() {
   tronRunnerMaterialReflect = Number(controlEls.runnerMaterialReflect.value);
   tronRunnerMaterialMetalness = Number(controlEls.runnerMaterialMetalness.value);
   tronRunnerMaterialRoughness = Number(controlEls.runnerMaterialRoughness.value);
+  const characterBubbleBgOpacity = Number(controlEls.characterBubbleBgOpacity.value);
+  setCharacterBubbleBackgroundOpacity(
+    characterBubbleBgOpacity / CHARACTER_BUBBLE_BG_OPACITY_RANGE_MULTIPLIER
+  );
   tronRunnerFloorReflection = Number(controlEls.runnerFloorReflection.value);
   tronRunnerFloorReflectionScale = Number(controlEls.runnerFloorReflectionScale.value);
   tronRunnerShadowSoftness = Number(controlEls.runnerShadowSoftness.value);
@@ -5081,6 +5087,7 @@ function applyCharacterControlsFromUI() {
   controlEls.runnerMaterialReflectVal.textContent = tronRunnerMaterialReflect.toFixed(2);
   controlEls.runnerMaterialMetalnessVal.textContent = tronRunnerMaterialMetalness.toFixed(2);
   controlEls.runnerMaterialRoughnessVal.textContent = tronRunnerMaterialRoughness.toFixed(2);
+  controlEls.characterBubbleBgOpacityVal.textContent = characterBubbleBgOpacity.toFixed(2);
   controlEls.runnerFloorReflectionVal.textContent = tronRunnerFloorReflection.toFixed(2);
   controlEls.runnerFloorReflectionScaleVal.textContent = tronRunnerFloorReflectionScale.toFixed(2);
   controlEls.runnerShadowSoftnessVal.textContent = tronRunnerShadowSoftness.toFixed(2);

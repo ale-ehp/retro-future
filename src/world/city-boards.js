@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { retroFutureSignOpacity, retroFutureSignScale } from '../sign-opacity.js';
+import { retroFutureSignOpacity, retroFutureSignScale, retroFutureSignTextOpacity } from '../sign-opacity.js';
 
 export function cityDepartmentPageItems(page, config) {
   const start = page * config.rows;
@@ -58,7 +58,7 @@ const CITY_DEPARTMENT_BOARD_REVEAL_WITH_RUNNERS = true;
 const CITY_DEPARTMENT_BOARD_RAW_PANEL_BASE_OPACITY = 0.46;
 const CITY_DEPARTMENT_BOARD_RAW_TEXT_BASE_OPACITY = 0.96;
 export const CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY = retroFutureSignOpacity(CITY_DEPARTMENT_BOARD_RAW_PANEL_BASE_OPACITY);
-export const CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY = retroFutureSignOpacity(CITY_DEPARTMENT_BOARD_RAW_TEXT_BASE_OPACITY);
+export const CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY = retroFutureSignTextOpacity(CITY_DEPARTMENT_BOARD_RAW_TEXT_BASE_OPACITY);
 window.__cityDepartmentBoardTextureUploadEnabled = new URLSearchParams(location.search).get('boardUpload') !== '0';
 const CITY_DEPARTMENT_BOARD_SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 /&';
 const CITY_DEPARTMENTS = Object.freeze([
@@ -614,7 +614,7 @@ const CITY_ROLE_BOARD_WALL_CENTER_WIDTH = retroFutureSignScale(24);
 const CITY_ROLE_BOARD_RAW_PANEL_BASE_OPACITY = 0.40;
 const CITY_ROLE_BOARD_RAW_TEXT_BASE_OPACITY = 0.96;
 export const CITY_ROLE_BOARD_PANEL_BASE_OPACITY = retroFutureSignOpacity(CITY_ROLE_BOARD_RAW_PANEL_BASE_OPACITY);
-export const CITY_ROLE_BOARD_TEXT_BASE_OPACITY = retroFutureSignOpacity(CITY_ROLE_BOARD_RAW_TEXT_BASE_OPACITY);
+export const CITY_ROLE_BOARD_TEXT_BASE_OPACITY = retroFutureSignTextOpacity(CITY_ROLE_BOARD_RAW_TEXT_BASE_OPACITY);
 const CITY_ROLE_BOARD_SLOT_COUNT = 6;
 const CITY_ROLE_BOARD_REVEAL_EPS = 0.0015;
 const CITY_ROLE_BOARD_SECTORS = Object.freeze([
