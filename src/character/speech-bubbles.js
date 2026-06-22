@@ -44,6 +44,7 @@ export const GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_STYLE = 'rgba(0,16,20,0.82)';
 export const GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_WIDTH_RATIO = 0.052;
 export const GREETER_BUBBLE_LOGO_AI_IDLE_OFFSET_PX = 1.3;
 export const GREETER_BUBBLE_LOGO_AI_GLITCH_SLICE_OPACITY = 1;
+export const CHARACTER_BUBBLE_RENDER_ORDER = 40;
 
 export function isGreeterBubbleLogoLine(line) {
   return String(line ?? '').trim().toLowerCase().replace('/', '') === 'avstudio.ai';
@@ -413,7 +414,7 @@ function ensureGreeterBubbleSprite() {
     })
   );
   greeterBubbleSprite.visible = false;
-  greeterBubbleSprite.renderOrder = 26;
+  greeterBubbleSprite.renderOrder = CHARACTER_BUBBLE_RENDER_ORDER;
   greeterBubbleSprite.frustumCulled = false;
   deps.getScene().add(greeterBubbleSprite);
   return greeterBubbleSprite;
@@ -475,7 +476,7 @@ function ensureCrowdBubbleSprites() {
       new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, depthTest: false, toneMapped: false, side: THREE.DoubleSide })
     );
     sprite.visible = false;
-    sprite.renderOrder = 26;
+    sprite.renderOrder = CHARACTER_BUBBLE_RENDER_ORDER;
     sprite.frustumCulled = false;
     deps.getScene().add(sprite);
     crowdBubbleSprites.push(sprite);
