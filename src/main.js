@@ -623,6 +623,7 @@ import {
 import {
   handleTronDiscCursorMove,
   initDiscCursor,
+  setTronDiscCursorRevealWaiting,
   setTronDiscCursorVisible,
   tronDiscCursorState,
   updateTronDiscCursor,
@@ -1036,6 +1037,7 @@ let cameraCollisionUnlockedByBackspace = false;
 let mouseSensitivityScale = 1;
 let cameraMinHeight = 1.8;
 let viewRoll = 0;
+let tronDiscRevealWaitingActive = false;
 const welcomeWindowOverlay = document.getElementById('welcome-window-overlay');
 const welcomeWindowPanel = welcomeWindowOverlay?.querySelector('.welcome-window');
 const welcomeWindowAction = welcomeWindowOverlay?.querySelector('.welcome-action');
@@ -1118,6 +1120,8 @@ welcomeWindowOverlay?.addEventListener('touchstart', triggerWelcomeWindowTouch, 
 
 function triggerWelcomeButtonStart(event) {
   event.preventDefault();
+  tronDiscRevealWaitingActive = true;
+  setTronDiscCursorRevealWaiting(true, event);
   triggerBackspaceDroneIntro('welcome-button');
 }
 
@@ -1168,6 +1172,13 @@ function triggerBackspaceDroneIntro(source = 'backspace') {
   }
   startCityRevealWireTimer();
   startDroneIntroFlight(source);
+}
+
+function syncTronDiscRevealWaiting() {
+  const next = Boolean(tronDiscRevealWaitingActive && !cityRevealComplete);
+  if (next === tronDiscCursorState.revealWaiting) return;
+  tronDiscRevealWaitingActive = next;
+  setTronDiscCursorRevealWaiting(tronDiscRevealWaitingActive);
 }
 
 initMouseLook(ctx, {
@@ -6506,6 +6517,7 @@ function tick(now) {
     updateTronRunnerCrowdSpeechBubbles();
   }
   updateCityRevealWireframe(now);
+  syncTronDiscRevealWaiting();
   syncCityRevealPerformanceProfile();
   const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
   const bypassBloomForReveal = shouldBypassBloomForRevealPerformance();

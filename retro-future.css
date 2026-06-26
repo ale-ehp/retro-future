@@ -61,6 +61,47 @@
     border: 1px solid rgba(218, 255, 255, 0.94);
     box-shadow: 0 0 5px rgba(76, 245, 255, 0.9);
   }
+  #tron-disc-cursor .disc-wait-ring {
+    position: absolute;
+    inset: -9px;
+    opacity: 0;
+    pointer-events: none;
+    animation: tron-disc-wait-orbit 0.82s linear infinite;
+    animation-play-state: paused;
+    transition: none;
+    filter:
+      drop-shadow(0 0 5px rgba(70, 244, 255, 0.88))
+      drop-shadow(0 0 13px rgba(33, 205, 224, 0.44));
+  }
+  #tron-disc-cursor .disc-wait-notch {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 3px;
+    height: 11px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, rgba(226, 255, 255, 0.98), rgba(70, 244, 255, 0.26));
+    box-shadow:
+      0 0 5px rgba(70, 244, 255, 0.88),
+      0 0 11px rgba(33, 205, 224, 0.5);
+    transform: translateX(-50%) rotate(0deg);
+    transform-origin: 50% 26px;
+  }
+  #tron-disc-cursor .disc-wait-notch:nth-child(2) {
+    transform: translateX(-50%) rotate(120deg);
+  }
+  #tron-disc-cursor .disc-wait-notch:nth-child(3) {
+    transform: translateX(-50%) rotate(240deg);
+  }
+  #tron-disc-cursor.is-reveal-waiting .disc-wait-ring {
+    opacity: 1;
+    animation-play-state: running;
+  }
+  @keyframes tron-disc-wait-orbit {
+    to {
+      transform: rotate(360deg);
+    }
+  }
   body.tron-disc-cursor-visible #tron-disc-cursor {
     opacity: 1;
     visibility: visible;
