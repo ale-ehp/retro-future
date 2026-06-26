@@ -75,6 +75,12 @@ test('welcome cover hides HUD until dismissed', () => {
   assert.match(mainSource, /document\.body\.classList\.remove\('welcome-cover-visible'\)/);
 });
 
+test('welcome cover schedules the city boot after the first paint', () => {
+  assert.doesNotMatch(htmlSource, /<script type="module" src="\.\/src\/main\.js"><\/script>/);
+  assert.match(htmlSource, /function scheduleRetroFutureCityBoot\(\)/);
+  assert.match(htmlSource, /requestAnimationFrame\(\(\) => \{[\s\S]*import\('\.\/src\/main\.js'\)/);
+});
+
 test('welcome cover renders as an instant opaque black page', () => {
   assert.ok(
     htmlSource.indexOf('id="welcome-window-overlay"') < htmlSource.indexOf('id="hud-tl"'),
@@ -152,6 +158,7 @@ test('welcome cover shows four colored anime GLB department heads above the star
   assert.equal((htmlSource.match(/class="welcome-department-face/g) || []).length, 4);
   assert.equal((htmlSource.match(/data-head-model="assets\/models\/anime-head-practice\.glb"/g) || []).length, 4);
   assert.equal((htmlSource.match(/data-head-color="/g) || []).length, 4);
+  assert.equal((htmlSource.match(/style="--welcome-head-accent:/g) || []).length, 4);
   assert.doesNotMatch(htmlSource, /data-instant-face=['"]procedural-3d['"]/);
   assert.doesNotMatch(htmlSource, /drawWelcomeDepartmentFace/);
   assert.doesNotMatch(htmlSource, /procedural-3d-canvas/);
@@ -160,11 +167,19 @@ test('welcome cover shows four colored anime GLB department heads above the star
     'import map should be available before the GLB head module',
   );
   assert.ok(
-    htmlSource.indexOf('initWelcomeDepartmentHeads') < htmlSource.indexOf('./src/main.js'),
-    'department heads should start before the main city module',
+    htmlSource.indexOf('scheduleWelcomeDepartmentHeads') < htmlSource.indexOf('./src/main.js'),
+    'department head scheduler should mount before the main city module',
   );
-  assert.match(htmlSource, /import \* as THREE from 'three';/);
-  assert.match(htmlSource, /import \{ GLTFLoader \} from 'three\/addons\/loaders\/GLTFLoader\.js';/);
+  assert.doesNotMatch(htmlSource, /^import \* as THREE from 'three';/m);
+  assert.doesNotMatch(htmlSource, /^import \{ GLTFLoader \} from 'three\/addons\/loaders\/GLTFLoader\.js';/m);
+  assert.match(htmlSource, /Promise\.all\(\[\s*import\('three'\),\s*import\('three\/addons\/loaders\/GLTFLoader\.js'\)/);
+  assert.match(htmlSource, /function scheduleWelcomeDepartmentHeads\(\)/);
+  assert.match(htmlSource, /requestAnimationFrame\(\(\) => \{/);
+  assert.match(htmlSource, /requestIdleCallback/);
+  assert.match(htmlSource, /status:\s*state\.status/);
+  assert.match(htmlSource, /state\.status = 'scheduled'/);
+  assert.match(htmlSource, /state\.status = 'loading'/);
+  assert.match(htmlSource, /state\.status = 'ready'/);
   assert.match(htmlSource, /mode:\s*'anime-head-glb'/);
   assert.match(htmlSource, /function isHeadTintTarget\(node\)/);
   assert.match(htmlSource, /function applyHeadFeatureTint\(root, colorValue\)/);
@@ -184,7 +199,14 @@ test('welcome cover shows four colored anime GLB department heads above the star
   assert.match(cssSource, /\.welcome-departments\s*\{[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(cssSource, /\.welcome-departments\s*\{[^}]*pointer-events:\s*auto/);
   assert.match(cssSource, /\.welcome-department-card\s*\{[\s\S]*background:[\s\S]*oklch\(3% 0\.006 250\)/);
+  assert.match(cssSource, /\.welcome-department-card::before\s*\{[\s\S]*--welcome-head-glow:\s*color-mix\(in oklch, var\(--welcome-head-accent\) 76%, oklch\(92% 0\.04 210\)\)/);
+  assert.match(cssSource, /\.welcome-department-card::before\s*\{[\s\S]*opacity:\s*var\(--welcome-head-placeholder-opacity, 0\.92\)/);
+  assert.match(cssSource, /\.welcome-department-card\.is-head-ready::before\s*\{[\s\S]*opacity:\s*0/);
   assert.match(cssSource, /\.welcome-department-face\s*\{[\s\S]*background:\s*oklch\(0% 0 0\)/);
+  assert.match(cssSource, /\.welcome-department-face\s*\{[\s\S]*opacity:\s*0/);
+  assert.match(cssSource, /\.welcome-department-face\.is-head-ready\s*\{[\s\S]*opacity:\s*1/);
+  assert.match(htmlSource, /view\.hitTarget\.style\.setProperty\('--welcome-head-placeholder-opacity', '0'\)/);
+  assert.match(htmlSource, /view\.canvas\.style\.opacity = '1'/);
   assert.match(cssSource, /\.welcome-department-face\s*\{[\s\S]*filter:[\s\S]*drop-shadow\(0 0 13px oklch\(78% 0\.16 195/);
   assert.match(cssSource, /@media \(max-width: 760px\)[\s\S]*\.welcome-departments\s*\{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
 });
