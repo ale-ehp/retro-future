@@ -33,19 +33,19 @@
     <div class="welcome-body">
       <h1 id="welcome-window-title">Ti aspettavi una pagina con reparti e foto.</h1>
       <div class="welcome-departments" role="list" aria-label="Dipartimenti">
-        <div class="welcome-department-card" role="listitem">
+        <div class="welcome-department-card" role="listitem" style="--welcome-head-accent: #00d4ff">
           <canvas class="welcome-department-face face-angle-1" width="240" height="180" data-face-index="0" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#00d4ff" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 1</span>
         </div>
-        <div class="welcome-department-card" role="listitem">
+        <div class="welcome-department-card" role="listitem" style="--welcome-head-accent: #2fd37a">
           <canvas class="welcome-department-face face-angle-2" width="240" height="180" data-face-index="1" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#2fd37a" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 2</span>
         </div>
-        <div class="welcome-department-card" role="listitem">
+        <div class="welcome-department-card" role="listitem" style="--welcome-head-accent: #ff7a18">
           <canvas class="welcome-department-face face-angle-3" width="240" height="180" data-face-index="2" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#ff7a18" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 3</span>
         </div>
-        <div class="welcome-department-card" role="listitem">
+        <div class="welcome-department-card" role="listitem" style="--welcome-head-accent: #4d9bff">
           <canvas class="welcome-department-face face-angle-4" width="240" height="180" data-face-index="3" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#4d9bff" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 4</span>
         </div>
@@ -610,47 +610,71 @@
 </script>
 
 <script type="module">
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const canvases = Array.from(document.querySelectorAll('.welcome-department-face[data-head-model]'));
+const modelUrl = canvases[0]?.dataset.headModel || 'assets/models/anime-head-practice.glb';
+const state = {
+  colors: canvases.map((canvas) => canvas.dataset.headColor || '#00d4ff'),
+  error: '',
+  fullHeadTintCount: 0,
+  hoverActiveCount: 0,
+  loadedCount: 0,
+  mode: 'anime-head-glb',
+  originalMaterialCount: 0,
+  ready: false,
+  scheduled: false,
+  status: canvases.length ? 'idle' : 'empty',
+  tintedFeatureCount: 0,
+  url: modelUrl,
+  views: [],
+};
 
-function initWelcomeDepartmentHeads() {
-  const canvases = Array.from(document.querySelectorAll('.welcome-department-face[data-head-model]'));
+window.__welcomeDepartmentHeadsInspect = () => ({
+  colors: state.colors,
+  count: canvases.length,
+  error: state.error,
+  fullHeadTintCount: state.fullHeadTintCount,
+  hoverActiveCount: state.hoverActiveCount,
+  loadedCount: state.loadedCount,
+  mode: state.mode,
+  originalMaterialCount: state.originalMaterialCount,
+  ready: state.ready,
+  scheduled: state.scheduled,
+  status: state.status,
+  tintedFeatureCount: state.tintedFeatureCount,
+  url: state.url,
+  views: state.views.map((view) => ({
+    currentPitch: Number(view.currentPitch.toFixed(3)),
+    currentYaw: Number(view.currentYaw.toFixed(3)),
+    hoverActive: view.hoverActive,
+  })),
+});
+
+async function initWelcomeDepartmentHeads() {
   if (!canvases.length) return;
+  if (state.status === 'loading' || state.status === 'ready') return;
+  if (document.getElementById('welcome-window-overlay')?.classList.contains('is-dismissed')) {
+    state.status = 'skipped';
+    return;
+  }
+  state.status = 'loading';
 
-  const modelUrl = canvases[0].dataset.headModel || 'assets/models/anime-head-practice.glb';
+  let THREE;
+  let GLTFLoader;
+  try {
+    const [threeModule, loaderModule] = await Promise.all([
+      import('three'),
+      import('three/addons/loaders/GLTFLoader.js'),
+    ]);
+    THREE = threeModule;
+    GLTFLoader = loaderModule.GLTFLoader;
+  } catch (error) {
+    state.status = 'error';
+    state.error = error?.message || String(error);
+    console.warn('[welcome-heads]', state.error);
+    return;
+  }
+
   const yaws = [-0.34, -0.12, 0.12, 0.34];
-  const state = {
-    colors: canvases.map((canvas) => canvas.dataset.headColor || '#00d4ff'),
-    error: '',
-    fullHeadTintCount: 0,
-    hoverActiveCount: 0,
-    loadedCount: 0,
-    mode: 'anime-head-glb',
-    originalMaterialCount: 0,
-    ready: false,
-    tintedFeatureCount: 0,
-    url: modelUrl,
-    views: [],
-  };
-
-  window.__welcomeDepartmentHeadsInspect = () => ({
-    colors: state.colors,
-    count: canvases.length,
-    error: state.error,
-    fullHeadTintCount: state.fullHeadTintCount,
-    hoverActiveCount: state.hoverActiveCount,
-    loadedCount: state.loadedCount,
-    mode: state.mode,
-    originalMaterialCount: state.originalMaterialCount,
-    ready: state.ready,
-    tintedFeatureCount: state.tintedFeatureCount,
-    url: state.url,
-    views: state.views.map((view) => ({
-      currentPitch: Number(view.currentPitch.toFixed(3)),
-      currentYaw: Number(view.currentYaw.toFixed(3)),
-      hoverActive: view.hoverActive,
-    })),
-  });
 
   function resizeView(view) {
     const rect = view.canvas.getBoundingClientRect();
@@ -836,9 +860,14 @@ function initWelcomeDepartmentHeads() {
       view.currentPitch = 0;
       view.scene.add(head);
       renderView(view);
+      view.canvas.classList.add('is-head-ready');
+      view.canvas.style.opacity = '1';
+      view.hitTarget.classList.add('is-head-ready');
+      view.hitTarget.style.setProperty('--welcome-head-placeholder-opacity', '0');
       state.loadedCount += 1;
     });
     state.ready = state.loadedCount === views.length;
+    if (state.ready) state.status = 'ready';
     state.fullHeadTintCount = views.reduce((count, view) => {
       let tinted = count;
       view.head?.traverse((node) => {
@@ -847,6 +876,7 @@ function initWelcomeDepartmentHeads() {
       return tinted;
     }, 0);
   }, undefined, (error) => {
+    state.status = 'error';
     state.error = error?.message || String(error);
     console.warn('[welcome-heads]', state.error);
   });
@@ -858,9 +888,37 @@ function initWelcomeDepartmentHeads() {
   }, { passive: true });
 }
 
-initWelcomeDepartmentHeads();
+function scheduleWelcomeDepartmentHeads() {
+  if (!canvases.length || state.scheduled) return;
+  state.scheduled = true;
+  state.status = 'scheduled';
+  requestAnimationFrame(() => {
+    const start = () => {
+      void initWelcomeDepartmentHeads();
+    };
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(start, { timeout: 900 });
+    } else {
+      window.setTimeout(start, 160);
+    }
+  });
+}
+
+scheduleWelcomeDepartmentHeads();
 </script>
 
-<script type="module" src="./src/main.js"></script>
+<script type="module">
+function scheduleRetroFutureCityBoot() {
+  requestAnimationFrame(() => {
+    window.setTimeout(() => {
+      import('./src/main.js').catch((error) => {
+        console.error('[retro-future]', error);
+      });
+    }, 0);
+  });
+}
+
+scheduleRetroFutureCityBoot();
+</script>
 </body>
 </html>
