@@ -32,10 +32,6 @@
   <article class="welcome-window" aria-labelledby="welcome-window-title">
     <div class="welcome-body">
       <h1 id="welcome-window-title">Ti aspettavi una pagina con reparti e foto.</h1>
-      <p class="welcome-copy">Puoi esplorare qui tutti i reparti:</p>
-      <button id="welcome-start-button" class="welcome-start-button" type="button">
-        Clicca qui
-      </button>
       <div class="welcome-departments" role="list" aria-label="Dipartimenti">
         <div class="welcome-department-card" role="listitem">
           <canvas class="welcome-department-face face-angle-1" width="240" height="180" data-face-index="0" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#00d4ff" aria-hidden="true"></canvas>
@@ -54,6 +50,9 @@
           <span class="welcome-department-label">Dipartimento 4</span>
         </div>
       </div>
+      <button id="welcome-start-button" class="welcome-start-button" type="button">
+        Esplora i reparti
+      </button>
       <p class="welcome-action" aria-hidden="true"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></p>
     </div>
   </article>
@@ -601,7 +600,6 @@
     "three/addons/postprocessing/Pass.js": "./Pass.js",
     "three/addons/postprocessing/MaskPass.js": "./MaskPass.js",
     "three/addons/loaders/GLTFLoader.js": "./GLTFLoader.js",
-    "three/addons/libs/meshopt_decoder.module.js": "./meshopt_decoder.module.js",
     "three/addons/utils/SkeletonUtils.js": "./SkeletonUtils.js",
     "three/addons/shaders/CopyShader.js": "./CopyShader.js",
     "three/addons/shaders/LuminosityHighPassShader.js": "./LuminosityHighPassShader.js",
@@ -765,22 +763,47 @@ function initWelcomeDepartmentHeads() {
   const views = canvases.map(makeView);
   state.views = views;
 
+  let headMotionFrame = 0;
+  let lastHeadMotionTime = 0;
+
+  function scheduleWelcomeHeadMotion() {
+    if (headMotionFrame) return;
+    headMotionFrame = requestAnimationFrame(animateWelcomeHeadMotion);
+  }
+
+  function animateWelcomeHeadMotion(now) {
+    headMotionFrame = 0;
+    const dt = lastHeadMotionTime ? Math.min(0.05, Math.max(0.001, (now - lastHeadMotionTime) / 1000)) : 0.016;
+    lastHeadMotionTime = now;
+    const headEase = 1 - Math.exp(-dt * 10);
+    let needsNextFrame = false;
+    views.forEach((view) => {
+      if (!view.head) return;
+      const yawDelta = view.targetYaw - view.currentYaw;
+      view.currentYaw += yawDelta * headEase;
+      view.currentPitch = 0;
+      if (Math.abs(yawDelta) > 0.001) needsNextFrame = true;
+      view.head.rotation.y = view.baseYaw + view.currentYaw;
+      view.head.rotation.x = view.basePitch;
+      renderView(view);
+    });
+    if (needsNextFrame) {
+      scheduleWelcomeHeadMotion();
+    } else {
+      lastHeadMotionTime = 0;
+    }
+  }
+
   function updateHoverState() {
     state.hoverActiveCount = views.filter((view) => view.hoverActive).length;
   }
 
   function setHeadRotationFromPointer(view, event) {
-    if (!view.head) return;
     const rect = view.canvas.getBoundingClientRect();
     const nx = THREE.MathUtils.clamp(((event.clientX - rect.left) / Math.max(1, rect.width) - 0.5) * 2, -1, 1);
-    const ny = THREE.MathUtils.clamp(((event.clientY - rect.top) / Math.max(1, rect.height) - 0.5) * 2, -1, 1);
-    view.targetYaw = nx * 0.42;
-    view.targetPitch = -ny * 0.2;
-    view.currentYaw = view.targetYaw;
-    view.currentPitch = view.targetPitch;
-    view.head.rotation.y = view.baseYaw + view.currentYaw;
-    view.head.rotation.x = view.basePitch + view.currentPitch;
-    renderView(view);
+    view.targetYaw = nx * 0.34;
+    view.targetPitch = 0;
+    scheduleWelcomeHeadMotion();
   }
 
   views.forEach((view) => {
@@ -797,13 +820,7 @@ function initWelcomeDepartmentHeads() {
       view.hoverActive = false;
       view.targetYaw = 0;
       view.targetPitch = 0;
-      view.currentYaw = 0;
-      view.currentPitch = 0;
-      if (view.head) {
-        view.head.rotation.y = view.baseYaw;
-        view.head.rotation.x = view.basePitch;
-        renderView(view);
-      }
+      scheduleWelcomeHeadMotion();
       updateHoverState();
     }, { passive: true });
   });

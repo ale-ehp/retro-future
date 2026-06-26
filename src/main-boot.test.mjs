@@ -6,21 +6,19 @@ const mainSource = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
 const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const cssSource = readFileSync(new URL('../retro-future.css', import.meta.url), 'utf8');
 
-test('boot waits for female crowd before draining queue and prewarming textures', () => {
+test('boot drains the runner crowd queue before prewarming textures', () => {
   const body = mainSource.match(/async function bootSceneWithFinalDefaults\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
   const orchestrationIndex = body.indexOf('await tronRunnerOrchestration.load();');
-  const femaleIndex = body.indexOf('await loadTronRunnerFemaleCrowd();');
   const drainIndex = body.indexOf('await tronRunnerCrowdRuntime.drainBuildQueue();');
   const skinPrewarmIndex = body.indexOf('prewarmSkinnedMeshBoneTextures(scene);');
   const texturePrewarmIndex = body.indexOf('prewarmSceneTextureUploads(scene);');
 
   assert.notEqual(orchestrationIndex, -1);
-  assert.notEqual(femaleIndex, -1);
   assert.notEqual(drainIndex, -1);
   assert.notEqual(skinPrewarmIndex, -1);
   assert.notEqual(texturePrewarmIndex, -1);
-  assert.ok(orchestrationIndex < femaleIndex);
-  assert.ok(femaleIndex < drainIndex);
+  assert.doesNotMatch(body, /loadTronRunnerFemaleCrowd/);
+  assert.ok(orchestrationIndex < drainIndex);
   assert.ok(drainIndex < skinPrewarmIndex);
   assert.ok(skinPrewarmIndex < texturePrewarmIndex);
 });
@@ -38,17 +36,19 @@ test('boot renders hidden skinned meshes once before postprocessing prewarm', ()
   assert.ok(skinnedRenderIndex < postPrewarmIndex);
 });
 
-test('female runner GLB is meshopt compressed and configured in loader', () => {
+test('female12 runner GLB and meshopt decoder are fully removed', () => {
   const femaleModelUrl = new URL('../character-mockups/assets/models/girl12-fullbody-tron.glb', import.meta.url);
   const meshoptDecoderUrl = new URL('../meshopt_decoder.module.js', import.meta.url);
 
-  assert.ok(existsSync(femaleModelUrl), 'female runner GLB should exist');
-  assert.ok(statSync(femaleModelUrl).size < 2_000_000, 'female runner GLB should stay below 2 MB');
-  assert.ok(existsSync(meshoptDecoderUrl), 'meshopt decoder should be shipped with retro future assets');
-  assert.match(htmlSource, /"three\/addons\/libs\/meshopt_decoder\.module\.js": "\.\/meshopt_decoder\.module\.js"/);
-  assert.match(mainSource, /import\('three\/addons\/libs\/meshopt_decoder\.module\.js'\)/);
-  assert.match(mainSource, /RunnerMeshoptDecoder = MeshoptDecoder/);
-  assert.match(mainSource, /loader\.setMeshoptDecoder\(RunnerMeshoptDecoder\)/);
+  assert.ok(!existsSync(femaleModelUrl), 'female12 GLB should be removed');
+  assert.ok(!existsSync(meshoptDecoderUrl), 'meshopt decoder should be removed with female12');
+  assert.doesNotMatch(htmlSource, /meshopt_decoder|girl12-fullbody-tron|TRON_RUNNER_FEMALE/);
+  assert.doesNotMatch(mainSource, /meshopt_decoder|RunnerMeshoptDecoder|setMeshoptDecoder|girl12-fullbody-tron|TRON_RUNNER_FEMALE|loadTronRunnerFemaleCrowd/);
+});
+
+test('disc cursor does not intercept mouse input', () => {
+  assert.match(cssSource, /#tron-disc-cursor\s*\{[^}]*pointer-events:\s*none/);
+  assert.doesNotMatch(cssSource, /#tron-disc-cursor\s*\{[^}]*pointer-events:\s*auto/);
 });
 
 test('welcome cover button starts the existing reveal flow', () => {
@@ -88,10 +88,57 @@ test('welcome cover renders as an instant opaque black page', () => {
   assert.match(cssSource, /body\.welcome-cover-visible\s+\.welcome-action\s*\{[\s\S]*display:\s*none/);
 });
 
-test('welcome cover shows four colored anime GLB department heads below the start button', () => {
+test('welcome cover uses the start button as the only department prompt', () => {
+  assert.match(htmlSource, /<h1 id="welcome-window-title">Ti aspettavi una pagina con reparti e foto\.<\/h1>/);
+  assert.match(htmlSource, /<button id="welcome-start-button" class="welcome-start-button" type="button">\s*Esplora i reparti\s*<\/button>/);
+  assert.doesNotMatch(htmlSource, /class="welcome-copy"/);
+  assert.doesNotMatch(htmlSource, /Esplora tutti i reparti/);
+  assert.doesNotMatch(htmlSource, /Puoi esplorare qui tutti i reparti:/);
+  assert.match(cssSource, /\.welcome-body h1\s*\{[\s\S]*font-size:\s*clamp\(22px, 3\.5vw, 48px\)/);
+  assert.match(cssSource, /\.welcome-body h1\s*\{[\s\S]*line-height:\s*1\.24/);
+  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*min-width:\s*min\(520px, 88vw\)/);
+  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*min-height:\s*123px/);
+  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*margin-block:\s*clamp\(36px, 5\.4vh, 58px\) clamp\(42px, 6\.2vh, 64px\)/);
+  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*padding:\s*0 28px/);
+  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*transition:\s*none/);
+  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*animation:\s*welcome-start-button-pulse 1s/);
+  assert.match(cssSource, /\.welcome-start-button:hover\s*\{[\s\S]*background:\s*oklch\(96% 0\.012 95\)/);
+  assert.match(cssSource, /\.welcome-start-button:hover\s*\{[\s\S]*animation:\s*none/);
+  assert.match(cssSource, /\.welcome-start-button:hover\s*\{[\s\S]*filter:\s*none/);
+  assert.match(cssSource, /@keyframes welcome-start-button-pulse\s*\{/);
+  assert.match(cssSource, /@keyframes welcome-start-button-pulse\s*\{[\s\S]*background-color:\s*oklch\(73% 0\.19 45\)/);
+  assert.match(cssSource, /@keyframes welcome-start-button-pulse\s*\{[\s\S]*filter:\s*brightness\(1\.08\) saturate\(1\.04\) drop-shadow/);
+  assert.match(cssSource, /@keyframes welcome-start-button-pulse\s*\{[\s\S]*0 0 18px oklch\(73% 0\.19 45 \/ 0\.22\)/);
+  assert.match(cssSource, /@keyframes welcome-start-button-pulse\s*\{[\s\S]*0 0 42px oklch\(73% 0\.19 45 \/ 0\.1\)/);
+  assert.doesNotMatch(cssSource, /0 0 30px oklch\(78% 0\.2 45 \/ 0\.34\)/);
+  assert.doesNotMatch(cssSource, /0 0 0 8px/);
+  assert.doesNotMatch(cssSource, /transform:\s*scale\(1\.025\)/);
+});
+
+test('welcome department tiles fit all four columns without clipping the last card', () => {
+  assert.match(cssSource, /\.welcome-departments\s*\{[\s\S]*gap:\s*24px/);
+  assert.match(cssSource, /\.welcome-departments\s*\{[\s\S]*width:\s*min\(960px, calc\(100vw - 48px\)\)/);
+  assert.match(cssSource, /\.welcome-department-card\s*\{[\s\S]*min-height:\s*198px/);
+  assert.match(cssSource, /\.welcome-department-face\s*\{[\s\S]*width:\s*min\(210px, 100%\)/);
+  assert.match(cssSource, /\.welcome-department-face\s*\{[\s\S]*height:\s*145px/);
+});
+
+test('welcome department heads move only on the horizontal axis with smoothed easing', () => {
+  assert.match(htmlSource, /function animateWelcomeHeadMotion\(now\)/);
+  assert.match(htmlSource, /requestAnimationFrame\(animateWelcomeHeadMotion\)/);
+  assert.match(htmlSource, /const headEase = 1 - Math\.exp\(-dt \* 10\)/);
+  assert.match(htmlSource, /const nx =/);
+  assert.match(htmlSource, /view\.targetPitch = 0/);
+  assert.doesNotMatch(htmlSource, /view\.currentPitch = view\.targetPitch/);
+  assert.doesNotMatch(htmlSource, /view\.currentYaw = view\.targetYaw/);
+  assert.match(htmlSource, /view\.head\.rotation\.y = view\.baseYaw \+ view\.currentYaw/);
+  assert.match(htmlSource, /view\.head\.rotation\.x = view\.basePitch/);
+});
+
+test('welcome cover shows four colored anime GLB department heads above the start button', () => {
   assert.ok(
-    htmlSource.indexOf('id="welcome-start-button"') < htmlSource.indexOf('class="welcome-departments"'),
-    'department tiles should render below the start button',
+    htmlSource.indexOf('class="welcome-departments"') < htmlSource.indexOf('id="welcome-start-button"'),
+    'department tiles should render above the start button',
   );
   const labels = Array.from(htmlSource.matchAll(/class="welcome-department-label">([^<]+)/g), (match) => match[1]);
   assert.deepEqual(labels, [

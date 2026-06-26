@@ -120,12 +120,6 @@ import {
   TRON_RUNNER_DYNAMIC_REFLECTION_Y,
   TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
   TRON_RUNNER_ENABLED,
-  TRON_RUNNER_FEMALE_CROWD_COLOR_PLAN,
-  TRON_RUNNER_FEMALE_CROWD_COUNT,
-  TRON_RUNNER_FEMALE_CROWD_ENABLED,
-  TRON_RUNNER_FEMALE_CROWD_INDEX_OFFSET,
-  TRON_RUNNER_FEMALE_CROWD_WHITE_COUNT,
-  TRON_RUNNER_FEMALE_MODEL_URL,
   TRON_RUNNER_FREE_ROAM_COLLISIONS_ENABLED,
   TRON_RUNNER_FREE_ROAM_COLLISION_RADIUS,
   TRON_RUNNER_FREE_ROAM_ENABLED,
@@ -853,16 +847,13 @@ try {
 }
 
 let RunnerGLTFLoader = null;
-let RunnerMeshoptDecoder = null;
 let cloneRunnerSkeleton = null;
 try {
-  const [{ GLTFLoader }, { MeshoptDecoder }, { clone }] = await Promise.all([
+  const [{ GLTFLoader }, { clone }] = await Promise.all([
     import('three/addons/loaders/GLTFLoader.js'),
-    import('three/addons/libs/meshopt_decoder.module.js'),
     import('three/addons/utils/SkeletonUtils.js'),
   ]);
   RunnerGLTFLoader = GLTFLoader;
-  RunnerMeshoptDecoder = MeshoptDecoder;
   cloneRunnerSkeleton = clone;
 } catch (e) {
   console.warn('Runner GLB support unavailable:', e.message);
@@ -3071,27 +3062,6 @@ const tronRunnerCrowdMaterials = createTronRunnerCrowdMaterialsRuntime({
   getLedBrightness: () => tronRunnerLedBrightness,
   getLedBloom: () => tronRunnerLedBloom,
 });
-const tronRunnerFemaleCrowdColorPlan = Array.from({ length: TRON_RUNNER_FEMALE_CROWD_COUNT }, (_, index) => {
-  if (index < TRON_RUNNER_FEMALE_CROWD_WHITE_COUNT) return 'white';
-  const planIndex = index - TRON_RUNNER_FEMALE_CROWD_WHITE_COUNT;
-  const planLength = Math.max(1, TRON_RUNNER_FEMALE_CROWD_COLOR_PLAN.length);
-  return TRON_RUNNER_FEMALE_CROWD_COLOR_PLAN[planIndex % planLength] || 'current';
-});
-const tronRunnerFemaleCrowdState = {
-  enabled: TRON_RUNNER_FEMALE_CROWD_ENABLED,
-  modelUrl: TRON_RUNNER_FEMALE_MODEL_URL,
-  requestedCount: TRON_RUNNER_FEMALE_CROWD_COUNT,
-  whiteRequestedCount: TRON_RUNNER_FEMALE_CROWD_WHITE_COUNT,
-  colorPlan: tronRunnerFemaleCrowdColorPlan,
-  loaded: false,
-  queued: false,
-  error: '',
-};
-
-function tronRunnerFemaleCrowdColorPresetForIndex(index, globalIndex) {
-  const key = tronRunnerFemaleCrowdColorPlan[index] || 'current';
-  return TRON_RUNNER_CROWD_COLOR_PRESETS[key] || tronRunnerCrowdMaterials.colorPresetForIndex(globalIndex);
-}
 
 let tronRunnerMaterialReflect = 0.06;
 let tronRunnerMaterialMetalness = 0.12;
@@ -3349,61 +3319,6 @@ const tronRunnerCrowdRuntime = createTronRunnerCrowdRuntime({
   updateReflectionBudgetImpl: () => updateTronRunnerCrowdReflectionBudgetRuntime(tronRunnerCrowdReflectionBudgetState),
 });
 
-let tronRunnerFemaleCrowdLoadPromise = null;
-
-function loadTronRunnerFemaleCrowdGltf() {
-  const Loader = RunnerGLTFLoader;
-  if (!Loader) return Promise.reject(new Error('GLTF loader unavailable'));
-  if (!RunnerMeshoptDecoder) return Promise.reject(new Error('Meshopt decoder unavailable'));
-  return new Promise((resolve, reject) => {
-    const loader = new Loader();
-    loader.setMeshoptDecoder(RunnerMeshoptDecoder);
-    loader.load(TRON_RUNNER_FEMALE_MODEL_URL, resolve, undefined, reject);
-  });
-}
-
-async function loadTronRunnerFemaleCrowd() {
-  if (!TRON_RUNNER_FEMALE_CROWD_ENABLED || TRON_RUNNER_FEMALE_CROWD_COUNT <= 0) return false;
-  if (tronRunnerFemaleCrowdLoadPromise) return tronRunnerFemaleCrowdLoadPromise;
-  tronRunnerFemaleCrowdState.loaded = false;
-  tronRunnerFemaleCrowdState.queued = false;
-  tronRunnerFemaleCrowdState.error = '';
-  tronRunnerFemaleCrowdLoadPromise = (async () => {
-    try {
-      const gltf = await loadTronRunnerFemaleCrowdGltf();
-      const model = gltf.scene;
-      model.name = 'girl12-fullbody-tron-crowd-source';
-      fitTronRunnerModelCore(model, TRON_RUNNER_TARGET_HEIGHT);
-      const queued = enqueueTronRunnerCrowdBuildJobRuntime(
-        tronRunnerCrowdBuildQueueState,
-        model,
-        gltf.animations,
-        {
-          count: TRON_RUNNER_FEMALE_CROWD_COUNT,
-          indexOffset: TRON_RUNNER_FEMALE_CROWD_INDEX_OFFSET,
-          kind: 'female',
-          source: 'girl12-fullbody-tron',
-          groupNamePrefix: 'tron-runner-crowd-female',
-          modelNamePrefix: 'girl12-fullbody-tron-crowd',
-          colorPresetForIndex: tronRunnerFemaleCrowdColorPresetForIndex,
-          walkCycleDistanceMode: 'clip-duration',
-        }
-      );
-      tronRunnerFemaleCrowdState.loaded = true;
-      tronRunnerFemaleCrowdState.queued = queued;
-      if (!queued) tronRunnerFemaleCrowdState.error = 'female crowd queue skipped';
-      return queued;
-    } catch (error) {
-      tronRunnerFemaleCrowdState.loaded = false;
-      tronRunnerFemaleCrowdState.queued = false;
-      tronRunnerFemaleCrowdState.error = error?.message || String(error);
-      console.warn('[tron-runner-female]', tronRunnerFemaleCrowdState.error);
-      return false;
-    }
-  })();
-  return tronRunnerFemaleCrowdLoadPromise;
-}
-
 const tronRunnerBeatPulse = createTronRunnerBeatPulseRuntime({
   runnerState: tronRunnerState,
   runnerParts: tronRunnerParts,
@@ -3531,7 +3446,6 @@ const tronRunnerOrchestration = createTronRunnerOrchestrationRuntime({
   applyVisualControls: applyTronRunnerVisualControls,
   buildCrowd: (model, animations) => {
     tronRunnerCrowdRuntime.build(model, animations);
-    void loadTronRunnerFemaleCrowd();
   },
   buildIdleCharacter: (model) => tronRunnerIdleCharacterRuntime.build(model),
   updateRealShadowRig: () => tronRunnerReflectionRig.updateRealShadowRig(),
@@ -3767,8 +3681,7 @@ const tronRunnerCrowdInspectState = {
   roadHalf,
   deadlockMs: TRON_RUNNER_CROWD_DEADLOCK_MS,
   collisionEnabled: TRON_RUNNER_CROWD_COLLISIONS_ENABLED,
-  requestedCount: TRON_RUNNER_CROWD_COUNT + (TRON_RUNNER_FEMALE_CROWD_ENABLED ? TRON_RUNNER_FEMALE_CROWD_COUNT : 0),
-  female: tronRunnerFemaleCrowdState,
+  requestedCount: TRON_RUNNER_CROWD_COUNT,
   getCloneRunnerSkeleton: () => cloneRunnerSkeleton,
   dynamicReflectionEnabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
   reflectionMaxActive: TRON_RUNNER_CROWD_REFLECTION_MAX_ACTIVE,
@@ -6196,7 +6109,6 @@ async function bootSceneWithFinalDefaults() {
   setTronNoclip(false, { silent: true });
   applyPlayerSpawn(playerSpawn, false);
   await tronRunnerOrchestration.load();
-  await loadTronRunnerFemaleCrowd();
   tronMainPlayerBody.build();
   await tronRunnerCrowdRuntime.drainBuildQueue();
   prewarmSkinnedMeshBoneTextures(scene);
