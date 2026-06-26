@@ -50,3 +50,16 @@ test('welcome cover hides HUD until dismissed', () => {
   assert.match(cssSource, /body\.welcome-cover-visible\s+#settings-toggle/);
   assert.match(mainSource, /document\.body\.classList\.remove\('welcome-cover-visible'\)/);
 });
+
+test('welcome cover renders as an instant opaque white page', () => {
+  assert.ok(
+    htmlSource.indexOf('id="welcome-window-overlay"') < htmlSource.indexOf('id="hud-tl"'),
+    'welcome cover should appear before HUD markup so it can paint immediately',
+  );
+  assert.match(cssSource, /#welcome-window-overlay\s*\{[\s\S]*z-index:\s*120/);
+  assert.match(cssSource, /#welcome-window-overlay\s*\{[\s\S]*background:\s*oklch\(99\.2% 0\.004 250\)/);
+  assert.match(cssSource, /#welcome-window-overlay\s*\{[\s\S]*color:\s*oklch\(18% 0\.01 255\)/);
+  assert.match(cssSource, /body\.welcome-cover-visible\s*\{[\s\S]*background:\s*oklch\(99\.2% 0\.004 250\)/);
+  assert.match(cssSource, /body\.welcome-cover-visible\s+#loader\s*\{[\s\S]*z-index:\s*20/);
+  assert.match(cssSource, /body\.welcome-cover-visible\s+\.welcome-action\s*\{[\s\S]*display:\s*none/);
+});

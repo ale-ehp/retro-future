@@ -27,6 +27,20 @@
 <body class="controls-hidden welcome-cover-visible">
 <div id="app"></div>
 <div id="loader" aria-hidden="true"></div>
+
+<div id="welcome-window-overlay" aria-live="polite">
+  <article class="welcome-window" aria-labelledby="welcome-window-title">
+    <div class="welcome-body">
+      <h1 id="welcome-window-title">Ti aspettavi una pagina con reparti e foto.</h1>
+      <p class="welcome-copy">Puoi esplorare qui tutti i reparti:</p>
+      <button id="welcome-start-button" class="welcome-start-button" type="button">
+        Clicca qui
+      </button>
+      <p class="welcome-action" aria-hidden="true"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></p>
+    </div>
+  </article>
+</div>
+
 <div id="boundary-error-overlay" aria-hidden="true">
   <div class="boundary-error-window">
     <span class="boundary-error-x">x</span>
@@ -552,19 +566,6 @@
       <button class="control-action save-tab-settings" type="button" data-save-tab="export">Salva scheda Export</button>
     </section>
   </div>
-</div>
-
-<div id="welcome-window-overlay" aria-live="polite">
-  <article class="welcome-window" aria-labelledby="welcome-window-title">
-    <div class="welcome-body">
-      <h1 id="welcome-window-title">Ti aspettavi una pagina con reparti e foto.</h1>
-      <p class="welcome-copy">Puoi esplorare qui tutti i reparti:</p>
-      <button id="welcome-start-button" class="welcome-start-button" type="button">
-        Clicca qui
-      </button>
-      <p class="welcome-action" aria-hidden="true"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></p>
-    </div>
-  </article>
 </div>
 
 <div id="tron-disc-cursor" aria-hidden="true"><span class="disc-core"></span></div>
