@@ -104,7 +104,7 @@ test('welcome cover uses the start button as the only department prompt', () => 
   assert.match(cssSource, /\.welcome-body h1\s*\{[\s\S]*line-height:\s*1\.24/);
   assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*min-width:\s*min\(520px, 88vw\)/);
   assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*min-height:\s*123px/);
-  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*margin-block:\s*clamp\(36px, 5\.4vh, 58px\) clamp\(42px, 6\.2vh, 64px\)/);
+  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*margin-block:\s*clamp\(36px, 5\.4vh, 58px\) clamp\(18px, 2\.8vh, 28px\)/);
   assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*padding:\s*0 28px/);
   assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*transition:\s*none/);
   assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*animation:\s*welcome-start-button-pulse 1s/);
@@ -119,6 +119,23 @@ test('welcome cover uses the start button as the only department prompt', () => 
   assert.doesNotMatch(cssSource, /0 0 30px oklch\(78% 0\.2 45 \/ 0\.34\)/);
   assert.doesNotMatch(cssSource, /0 0 0 8px/);
   assert.doesNotMatch(cssSource, /transform:\s*scale\(1\.025\)/);
+});
+
+test('welcome cover offers a text link back to the home below the start button', () => {
+  assert.match(htmlSource, /<a class="welcome-home-link" href="\/">torna alla home<\/a>/);
+  assert.ok(
+    htmlSource.indexOf('id="welcome-start-button"') < htmlSource.indexOf('class="welcome-home-link"'),
+    'home link should render below the start button',
+  );
+  assert.ok(
+    htmlSource.indexOf('class="welcome-home-link"') < htmlSource.indexOf('class="welcome-action"'),
+    'home link should stay in the welcome action area',
+  );
+  assert.match(cssSource, /\.welcome-home-link\s*\{[\s\S]*position:\s*relative[\s\S]*z-index:\s*3/);
+  assert.match(cssSource, /\.welcome-home-link\s*\{[\s\S]*display:\s*inline-flex/);
+  assert.match(cssSource, /\.welcome-home-link\s*\{[\s\S]*color:\s*oklch\(96% 0\.018 220/);
+  assert.match(cssSource, /\.welcome-home-link:hover\s*\{[\s\S]*color:\s*oklch\(100% 0\.006 220/);
+  assert.match(cssSource, /\.welcome-home-link:focus-visible\s*\{[\s\S]*outline:\s*2px solid/);
 });
 
 test('welcome department tiles fit all four columns without clipping the last card', () => {
