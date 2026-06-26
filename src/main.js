@@ -853,13 +853,16 @@ try {
 }
 
 let RunnerGLTFLoader = null;
+let RunnerMeshoptDecoder = null;
 let cloneRunnerSkeleton = null;
 try {
-  const [{ GLTFLoader }, { clone }] = await Promise.all([
+  const [{ GLTFLoader }, { MeshoptDecoder }, { clone }] = await Promise.all([
     import('three/addons/loaders/GLTFLoader.js'),
+    import('three/addons/libs/meshopt_decoder.module.js'),
     import('three/addons/utils/SkeletonUtils.js'),
   ]);
   RunnerGLTFLoader = GLTFLoader;
+  RunnerMeshoptDecoder = MeshoptDecoder;
   cloneRunnerSkeleton = clone;
 } catch (e) {
   console.warn('Runner GLB support unavailable:', e.message);
@@ -1051,7 +1054,7 @@ const welcomeStartButton = document.getElementById('welcome-start-button');
 const tronDiscCursor = document.getElementById('tron-disc-cursor');
 const welcomeWindowTouchQuery = window.matchMedia('(hover: none), (pointer: coarse)');
 const welcomeWindowMobileQuery = window.matchMedia('(max-width: 760px)');
-const welcomeWindowMotionAllowed = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const welcomeWindowMotionAllowed = false;
 const welcomeWindowMotion = {
   frame: 0,
   next: null,
@@ -1111,7 +1114,6 @@ function triggerWelcomeWindowTouch(event) {
 function resetWelcomeWindowMotion() {
   resetWelcomeWindowMotionCore(welcomeWindowMotion, welcomeMotionDeps);
 }
-setupWelcomeWindowMotion(welcomeWindowMotion, welcomeMotionDeps);
 applyWelcomeWindowInputMode();
 if (typeof welcomeWindowTouchQuery.addEventListener === 'function') {
   welcomeWindowTouchQuery.addEventListener('change', applyWelcomeWindowInputMode);
@@ -1122,9 +1124,27 @@ if (typeof welcomeWindowTouchQuery.addEventListener === 'function') {
 }
 welcomeWindowOverlay?.addEventListener('pointerdown', triggerWelcomeWindowTouch, { passive: false });
 welcomeWindowOverlay?.addEventListener('touchstart', triggerWelcomeWindowTouch, { passive: false });
-welcomeStartButton?.addEventListener('click', (event) => {
+
+function triggerWelcomeButtonStart(event) {
   event.preventDefault();
   triggerBackspaceDroneIntro('welcome-button');
+}
+
+function isEventInsideWelcomeStartButton(event) {
+  const rect = welcomeStartButton?.getBoundingClientRect();
+  if (!rect || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
+  return event.clientX >= rect.left
+    && event.clientX <= rect.right
+    && event.clientY >= rect.top
+    && event.clientY <= rect.bottom;
+}
+
+welcomeStartButton?.addEventListener('click', triggerWelcomeButtonStart);
+welcomeWindowOverlay?.addEventListener('click', (event) => {
+  if (!welcomeWindowVisible()) return;
+  if (event.target === welcomeStartButton || welcomeStartButton?.contains?.(event.target)) return;
+  if (!isEventInsideWelcomeStartButton(event)) return;
+  triggerWelcomeButtonStart(event);
 });
 
 function applyCameraLook() {
@@ -3334,8 +3354,11 @@ let tronRunnerFemaleCrowdLoadPromise = null;
 function loadTronRunnerFemaleCrowdGltf() {
   const Loader = RunnerGLTFLoader;
   if (!Loader) return Promise.reject(new Error('GLTF loader unavailable'));
+  if (!RunnerMeshoptDecoder) return Promise.reject(new Error('Meshopt decoder unavailable'));
   return new Promise((resolve, reject) => {
-    new Loader().load(TRON_RUNNER_FEMALE_MODEL_URL, resolve, undefined, reject);
+    const loader = new Loader();
+    loader.setMeshoptDecoder(RunnerMeshoptDecoder);
+    loader.load(TRON_RUNNER_FEMALE_MODEL_URL, resolve, undefined, reject);
   });
 }
 

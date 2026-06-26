@@ -36,6 +36,24 @@
       <button id="welcome-start-button" class="welcome-start-button" type="button">
         Clicca qui
       </button>
+      <div class="welcome-departments" role="list" aria-label="Dipartimenti">
+        <div class="welcome-department-card" role="listitem">
+          <canvas class="welcome-department-face face-angle-1" width="240" height="180" data-face-index="0" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#00d4ff" aria-hidden="true"></canvas>
+          <span class="welcome-department-label">Dipartimento 1</span>
+        </div>
+        <div class="welcome-department-card" role="listitem">
+          <canvas class="welcome-department-face face-angle-2" width="240" height="180" data-face-index="1" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#2fd37a" aria-hidden="true"></canvas>
+          <span class="welcome-department-label">Dipartimento 2</span>
+        </div>
+        <div class="welcome-department-card" role="listitem">
+          <canvas class="welcome-department-face face-angle-3" width="240" height="180" data-face-index="2" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#ff7a18" aria-hidden="true"></canvas>
+          <span class="welcome-department-label">Dipartimento 3</span>
+        </div>
+        <div class="welcome-department-card" role="listitem">
+          <canvas class="welcome-department-face face-angle-4" width="240" height="180" data-face-index="3" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#4d9bff" aria-hidden="true"></canvas>
+          <span class="welcome-department-label">Dipartimento 4</span>
+        </div>
+      </div>
       <p class="welcome-action" aria-hidden="true"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></p>
     </div>
   </article>
@@ -583,6 +601,7 @@
     "three/addons/postprocessing/Pass.js": "./Pass.js",
     "three/addons/postprocessing/MaskPass.js": "./MaskPass.js",
     "three/addons/loaders/GLTFLoader.js": "./GLTFLoader.js",
+    "three/addons/libs/meshopt_decoder.module.js": "./meshopt_decoder.module.js",
     "three/addons/utils/SkeletonUtils.js": "./SkeletonUtils.js",
     "three/addons/shaders/CopyShader.js": "./CopyShader.js",
     "three/addons/shaders/LuminosityHighPassShader.js": "./LuminosityHighPassShader.js",
@@ -590,6 +609,239 @@
     "three/addons/shaders/OutputShader.js": "./OutputShader.js"
   }
 }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+function initWelcomeDepartmentHeads() {
+  const canvases = Array.from(document.querySelectorAll('.welcome-department-face[data-head-model]'));
+  if (!canvases.length) return;
+
+  const modelUrl = canvases[0].dataset.headModel || 'assets/models/anime-head-practice.glb';
+  const yaws = [-0.34, -0.12, 0.12, 0.34];
+  const state = {
+    colors: canvases.map((canvas) => canvas.dataset.headColor || '#00d4ff'),
+    error: '',
+    fullHeadTintCount: 0,
+    hoverActiveCount: 0,
+    loadedCount: 0,
+    mode: 'anime-head-glb',
+    originalMaterialCount: 0,
+    ready: false,
+    tintedFeatureCount: 0,
+    url: modelUrl,
+    views: [],
+  };
+
+  window.__welcomeDepartmentHeadsInspect = () => ({
+    colors: state.colors,
+    count: canvases.length,
+    error: state.error,
+    fullHeadTintCount: state.fullHeadTintCount,
+    hoverActiveCount: state.hoverActiveCount,
+    loadedCount: state.loadedCount,
+    mode: state.mode,
+    originalMaterialCount: state.originalMaterialCount,
+    ready: state.ready,
+    tintedFeatureCount: state.tintedFeatureCount,
+    url: state.url,
+    views: state.views.map((view) => ({
+      currentPitch: Number(view.currentPitch.toFixed(3)),
+      currentYaw: Number(view.currentYaw.toFixed(3)),
+      hoverActive: view.hoverActive,
+    })),
+  });
+
+  function resizeView(view) {
+    const rect = view.canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width || 176));
+    const height = Math.max(1, Math.round(rect.height || 118));
+    view.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    view.renderer.setSize(width, height, false);
+    view.camera.aspect = width / height;
+    view.camera.updateProjectionMatrix();
+  }
+
+  function renderView(view) {
+    resizeView(view);
+    view.renderer.render(view.scene, view.camera);
+  }
+
+  function makeView(canvas, index) {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    const camera = new THREE.PerspectiveCamera(27, 1, 0.1, 100);
+    camera.position.set(0, 0.08, 4.5);
+
+    const renderer = new THREE.WebGLRenderer({
+      alpha: false,
+      antialias: true,
+      canvas,
+      powerPreference: 'low-power',
+      preserveDrawingBuffer: true,
+    });
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.setClearColor(0x000000, 1);
+
+    const ambient = new THREE.HemisphereLight(0xcffaff, 0x031013, 1.25);
+    const key = new THREE.DirectionalLight(0xe9feff, 2.05);
+    key.position.set(-2.8, 3.2, 4.5);
+    const rimColor = new THREE.Color(state.colors[index]).multiplyScalar(1.45);
+    const rim = new THREE.DirectionalLight(rimColor, 1.65);
+    rim.position.set(3.5, 1.1, 2.2);
+    scene.add(ambient, key, rim);
+
+    return {
+      basePitch: -0.02,
+      baseYaw: yaws[index] || 0,
+      camera,
+      canvas,
+      currentPitch: 0,
+      currentYaw: 0,
+      head: null,
+      hoverActive: false,
+      hitTarget: canvas.closest('.welcome-department-card') || canvas,
+      index,
+      renderer,
+      scene,
+      targetPitch: 0,
+      targetYaw: 0,
+    };
+  }
+
+  function materialName(material) {
+    if (Array.isArray(material)) return material.map((item) => item?.name || '').join(' ');
+    return material?.name || '';
+  }
+
+  function isHeadTintTarget(node) {
+    const text = `${node.name || ''} ${materialName(node.material)}`.toLowerCase();
+    return /\beye\b|eyes|sombracelha|brow|eyebrow/.test(text);
+  }
+
+  function cloneTintMaterial(material, color) {
+    const next = material.clone();
+    if (next.color) next.color.copy(color);
+    if (next.emissive) next.emissive.copy(color).multiplyScalar(0.12);
+    next.needsUpdate = true;
+    return next;
+  }
+
+  function applyHeadFeatureTint(root, colorValue) {
+    const color = new THREE.Color(colorValue);
+    root.traverse((node) => {
+      if (!node.isMesh) return;
+      node.frustumCulled = false;
+      if (!isHeadTintTarget(node)) {
+        node.userData.welcomeHeadOriginalMaterial = true;
+        state.originalMaterialCount += 1;
+        if (/head|skin|ears/i.test(`${node.name || ''} ${materialName(node.material)}`)) {
+          node.userData.welcomeHeadFullTinted = false;
+        }
+        return;
+      }
+      node.material = Array.isArray(node.material)
+        ? node.material.map((material) => cloneTintMaterial(material, color))
+        : cloneTintMaterial(node.material, color);
+      node.userData.welcomeHeadFeatureTinted = true;
+      state.tintedFeatureCount += 1;
+    });
+  }
+
+  function fitHead(root, index) {
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+    const scale = 2.28 / maxDim;
+    root.scale.setScalar(scale);
+    root.position.set(-center.x * scale, -center.y * scale - 0.08, -center.z * scale);
+    root.rotation.set(-0.02, yaws[index] || 0, 0);
+  }
+
+  const views = canvases.map(makeView);
+  state.views = views;
+
+  function updateHoverState() {
+    state.hoverActiveCount = views.filter((view) => view.hoverActive).length;
+  }
+
+  function setHeadRotationFromPointer(view, event) {
+    if (!view.head) return;
+    const rect = view.canvas.getBoundingClientRect();
+    const nx = THREE.MathUtils.clamp(((event.clientX - rect.left) / Math.max(1, rect.width) - 0.5) * 2, -1, 1);
+    const ny = THREE.MathUtils.clamp(((event.clientY - rect.top) / Math.max(1, rect.height) - 0.5) * 2, -1, 1);
+    view.targetYaw = nx * 0.42;
+    view.targetPitch = -ny * 0.2;
+    view.currentYaw = view.targetYaw;
+    view.currentPitch = view.targetPitch;
+    view.head.rotation.y = view.baseYaw + view.currentYaw;
+    view.head.rotation.x = view.basePitch + view.currentPitch;
+    renderView(view);
+  }
+
+  views.forEach((view) => {
+    view.hitTarget.addEventListener('pointerenter', (event) => {
+      view.hoverActive = true;
+      updateHoverState();
+      setHeadRotationFromPointer(view, event);
+    }, { passive: true });
+    view.hitTarget.addEventListener('pointermove', (event) => {
+      if (!view.hoverActive) return;
+      setHeadRotationFromPointer(view, event);
+    }, { passive: true });
+    view.hitTarget.addEventListener('pointerleave', () => {
+      view.hoverActive = false;
+      view.targetYaw = 0;
+      view.targetPitch = 0;
+      view.currentYaw = 0;
+      view.currentPitch = 0;
+      if (view.head) {
+        view.head.rotation.y = view.baseYaw;
+        view.head.rotation.x = view.basePitch;
+        renderView(view);
+      }
+      updateHoverState();
+    }, { passive: true });
+  });
+
+  const loader = new GLTFLoader();
+  loader.load(modelUrl, (gltf) => {
+    views.forEach((view, index) => {
+      const head = gltf.scene.clone(true);
+      applyHeadFeatureTint(head, state.colors[index]);
+      fitHead(head, index);
+      view.head = head;
+      view.currentYaw = 0;
+      view.currentPitch = 0;
+      view.scene.add(head);
+      renderView(view);
+      state.loadedCount += 1;
+    });
+    state.ready = state.loadedCount === views.length;
+    state.fullHeadTintCount = views.reduce((count, view) => {
+      let tinted = count;
+      view.head?.traverse((node) => {
+        if (node.userData?.welcomeHeadFullTinted) tinted += 1;
+      });
+      return tinted;
+    }, 0);
+  }, undefined, (error) => {
+    state.error = error?.message || String(error);
+    console.warn('[welcome-heads]', state.error);
+  });
+
+  let resizeFrame = 0;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => views.forEach(renderView));
+  }, { passive: true });
+}
+
+initWelcomeDepartmentHeads();
 </script>
 
 <script type="module" src="./src/main.js"></script>
