@@ -19,6 +19,7 @@ export const tronDiscCursorState = {
   lastAt: 0,
   pointerInside: false,
   visible: false,
+  revealWaiting: false,
   speed: 0,
   rotationDeg: 0,
   spinDegPerSec: TRON_DISC_CURSOR_IDLE_SPIN,
@@ -30,6 +31,11 @@ let tronDiscCursor = null;
 let lockEl = null;
 let getPointerLocked = null;
 let getUnlockedMouseLookActive = null;
+
+function writeTronDiscCursorTransform() {
+  if (!tronDiscCursor) return;
+  tronDiscCursor.style.transform = `translate3d(${tronDiscCursorState.x}px, ${tronDiscCursorState.y}px, 0) translate(-50%, -50%) rotate(${tronDiscCursorState.rotationDeg.toFixed(2)}deg)`;
+}
 
 function isTronDiscCursorSurfaceEvent(event) {
   if (!tronDiscCursor || !event || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
@@ -50,6 +56,27 @@ export function setTronDiscCursorVisible(visible) {
   if (tronDiscCursor) {
     tronDiscCursor.style.opacity = shouldShow ? '1' : '0';
     tronDiscCursor.style.visibility = shouldShow ? 'visible' : 'hidden';
+  }
+}
+
+export function setTronDiscCursorRevealWaiting(waiting, anchorEvent = null) {
+  const next = Boolean(waiting);
+  tronDiscCursorState.revealWaiting = next;
+  tronDiscCursor?.classList.toggle('is-reveal-waiting', next);
+  if (next && Number.isFinite(anchorEvent?.clientX) && Number.isFinite(anchorEvent?.clientY)) {
+    const now = performance.now();
+    tronDiscCursorState.x = anchorEvent.clientX;
+    tronDiscCursorState.y = anchorEvent.clientY;
+    tronDiscCursorState.lastX = anchorEvent.clientX;
+    tronDiscCursorState.lastY = anchorEvent.clientY;
+    tronDiscCursorState.lastAt = now;
+    tronDiscCursorState.pointerInside = true;
+    tronDiscCursorState.targetSpinDegPerSec = Math.max(
+      tronDiscCursorState.targetSpinDegPerSec,
+      TRON_DISC_CURSOR_IDLE_SPIN * 2.4
+    );
+    writeTronDiscCursorTransform();
+    setTronDiscCursorVisible(true);
   }
 }
 
@@ -100,7 +127,7 @@ export function updateTronDiscCursor(dt) {
     spinEase
   );
   tronDiscCursorState.rotationDeg = (tronDiscCursorState.rotationDeg + tronDiscCursorState.spinDegPerSec * dt) % 360;
-  tronDiscCursor.style.transform = `translate3d(${tronDiscCursorState.x}px, ${tronDiscCursorState.y}px, 0) translate(-50%, -50%) rotate(${tronDiscCursorState.rotationDeg.toFixed(2)}deg)`;
+  writeTronDiscCursorTransform();
 }
 
 // ---------- init: wire DOM refs + mouse-look gating getters ----------

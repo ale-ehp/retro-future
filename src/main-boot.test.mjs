@@ -5,6 +5,7 @@ import test from 'node:test';
 const mainSource = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
 const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const cssSource = readFileSync(new URL('../retro-future.css', import.meta.url), 'utf8');
+const discCursorSource = readFileSync(new URL('./camera/disc-cursor.js', import.meta.url), 'utf8');
 
 test('boot drains the runner crowd queue before prewarming textures', () => {
   const body = mainSource.match(/async function bootSceneWithFinalDefaults\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
@@ -49,6 +50,22 @@ test('female12 runner GLB and meshopt decoder are fully removed', () => {
 test('disc cursor does not intercept mouse input', () => {
   assert.match(cssSource, /#tron-disc-cursor\s*\{[^}]*pointer-events:\s*none/);
   assert.doesNotMatch(cssSource, /#tron-disc-cursor\s*\{[^}]*pointer-events:\s*auto/);
+});
+
+test('disc cursor shows three rotating wait notches during the reveal', () => {
+  assert.match(htmlSource, /<span class="disc-wait-ring" aria-hidden="true">/);
+  assert.equal((htmlSource.match(/class="disc-wait-notch"/g) || []).length, 3);
+  assert.match(cssSource, /#tron-disc-cursor \.disc-wait-ring\s*\{[\s\S]*animation:\s*tron-disc-wait-orbit/);
+  assert.match(cssSource, /#tron-disc-cursor \.disc-wait-notch\s*\{[\s\S]*background:\s*linear-gradient/);
+  assert.match(cssSource, /#tron-disc-cursor \.disc-wait-notch:nth-child\(2\)\s*\{[\s\S]*rotate\(120deg\)/);
+  assert.match(cssSource, /#tron-disc-cursor \.disc-wait-notch:nth-child\(3\)\s*\{[\s\S]*rotate\(240deg\)/);
+  assert.match(cssSource, /#tron-disc-cursor\.is-reveal-waiting \.disc-wait-ring\s*\{[\s\S]*opacity:\s*1/);
+  assert.match(cssSource, /@keyframes tron-disc-wait-orbit\s*\{[\s\S]*rotate\(360deg\)/);
+  assert.match(discCursorSource, /revealWaiting:\s*false/);
+  assert.match(discCursorSource, /export function setTronDiscCursorRevealWaiting\(waiting, anchorEvent = null\)/);
+  assert.match(discCursorSource, /tronDiscCursor\?\.classList\.toggle\('is-reveal-waiting', next\)/);
+  assert.match(mainSource, /setTronDiscCursorRevealWaiting\(true, event\)/);
+  assert.match(mainSource, /setTronDiscCursorRevealWaiting\(tronDiscRevealWaitingActive\)/);
 });
 
 test('welcome cover button starts the existing reveal flow', () => {
