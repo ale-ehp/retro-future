@@ -33,19 +33,19 @@
     <div class="welcome-body">
       <h1 id="welcome-window-title">Ti aspettavi una pagina con reparti e foto.</h1>
       <div class="welcome-departments" role="list" aria-label="Dipartimenti">
-        <div class="welcome-department-card" role="listitem" style="--welcome-head-accent: #00d4ff">
+        <div class="welcome-department-card" role="listitem">
           <canvas class="welcome-department-face face-angle-1" width="240" height="180" data-face-index="0" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#00d4ff" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 1</span>
         </div>
-        <div class="welcome-department-card" role="listitem" style="--welcome-head-accent: #2fd37a">
+        <div class="welcome-department-card" role="listitem">
           <canvas class="welcome-department-face face-angle-2" width="240" height="180" data-face-index="1" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#2fd37a" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 2</span>
         </div>
-        <div class="welcome-department-card" role="listitem" style="--welcome-head-accent: #ff7a18">
+        <div class="welcome-department-card" role="listitem">
           <canvas class="welcome-department-face face-angle-3" width="240" height="180" data-face-index="2" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#ff7a18" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 3</span>
         </div>
-        <div class="welcome-department-card" role="listitem" style="--welcome-head-accent: #4d9bff">
+        <div class="welcome-department-card" role="listitem">
           <canvas class="welcome-department-face face-angle-4" width="240" height="180" data-face-index="3" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#4d9bff" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 4</span>
         </div>
@@ -863,7 +863,6 @@ async function initWelcomeDepartmentHeads() {
       view.canvas.classList.add('is-head-ready');
       view.canvas.style.opacity = '1';
       view.hitTarget.classList.add('is-head-ready');
-      view.hitTarget.style.setProperty('--welcome-head-placeholder-opacity', '0');
       state.loadedCount += 1;
     });
     state.ready = state.loadedCount === views.length;
