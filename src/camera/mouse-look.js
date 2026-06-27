@@ -54,6 +54,15 @@ export function isMouseLookEnabled() {
   return getCityRevealComplete();
 }
 
+export function getCameraTouchCandidates(touchList, movementTargetFn = isMobileMovementControlTarget) {
+  const isMovementTarget = typeof movementTargetFn === 'function' ? movementTargetFn : () => false;
+  return Array.from(touchList || []).filter((touch) => !isMovementTarget(touch.target));
+}
+
+export function acceptsSingleCameraTouch(touchList, movementTargetFn = isMobileMovementControlTarget) {
+  return getCameraTouchCandidates(touchList, movementTargetFn).length === 1;
+}
+
 // ---------- control fns ----------
 function suppressPointerLook(ms = POINTER_CLICK_SUPPRESS_MS, moveCount = 8) {
   suppressNextPointerLockMove = true;
@@ -242,18 +251,22 @@ export function initMouseLook(ctx, injected) {
   // touch fallback (mobile)
   lockEl.addEventListener('touchstart', (e) => {
     if (!isMouseLookEnabled()) {
+      e.preventDefault();
       stopMouseLookInput();
       return;
     }
+    e.preventDefault();
     if (lookTouchIdentifier !== null) return;
-    const touch = Array.from(e.changedTouches).find((item) => !isMobileMovementControlTarget(item.target)) || e.changedTouches[0];
+    const cameraTouches = getCameraTouchCandidates(e.touches);
+    if (cameraTouches.length !== 1) return;
+    const touch = getCameraTouchCandidates(e.changedTouches).find((item) => item.identifier === cameraTouches[0].identifier) || cameraTouches[0];
     if (!touch) return;
     requestLandscapeFullscreen('look-touch');
     lookTouchIdentifier = touch.identifier;
     dragging = true;
     lastX = touch.clientX;
     lastY = touch.clientY;
-  }, { passive: true });
+  }, { passive: false });
   window.addEventListener('touchend', (e) => {
     if (lookTouchIdentifier === null) {
       dragging = false;
@@ -281,8 +294,15 @@ export function initMouseLook(ctx, injected) {
       stopMouseLookInput();
       return;
     }
+    const cameraTouches = getCameraTouchCandidates(e.touches);
+    if (cameraTouches.length > 1) {
+      e.preventDefault();
+      return;
+    }
     if (!dragging || lookTouchIdentifier === null) return;
-    const t = Array.from(e.touches).find((touch) => touch.identifier === lookTouchIdentifier);
+    e.preventDefault();
+    if (cameraTouches.length !== 1) return;
+    const t = cameraTouches.find((touch) => touch.identifier === lookTouchIdentifier);
     if (!t) return;
     const dx = t.clientX - lastX, dy = t.clientY - lastY;
     lastX = t.clientX; lastY = t.clientY;
@@ -290,5 +310,5 @@ export function initMouseLook(ctx, injected) {
     setPitch(getPitch() - dy * 0.0035 * getMouseSensitivityScale());
     setPitch(Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, getPitch())));
     applyCameraLook();
-  }, { passive: true });
+  }, { passive: false });
 }
