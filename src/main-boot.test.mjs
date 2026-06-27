@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import test from 'node:test';
+import { MOBILE_PERFORMANCE_PIXEL_RATIO_CAP } from './world/config.js';
 
 const mainSource = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
 const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -66,6 +67,50 @@ test('disc cursor shows three rotating wait notches during the reveal', () => {
   assert.match(discCursorSource, /tronDiscCursor\?\.classList\.toggle\('is-reveal-waiting', next\)/);
   assert.match(mainSource, /setTronDiscCursorRevealWaiting\(true, event\)/);
   assert.match(mainSource, /setTronDiscCursorRevealWaiting\(tronDiscRevealWaitingActive\)/);
+});
+
+test('reveal wait label pulses in the bottom right during the reveal', () => {
+  const waitLabelRule = cssSource.match(/#tron-reveal-wait-label\s*\{[^}]*\}/)?.[0] ?? '';
+
+  assert.match(
+    htmlSource,
+    /<div id="tron-reveal-wait-label" aria-hidden="true"><span class="tron-wait-text">Attendi<\/span><span class="tron-wait-dots" aria-hidden="true"><span class="tron-wait-dot">.<\/span><span class="tron-wait-dot">.<\/span><span class="tron-wait-dot">.<\/span><\/span><\/div>/,
+  );
+  assert.doesNotMatch(htmlSource, /WHAIT/);
+  assert.match(waitLabelRule, /position:\s*fixed/);
+  assert.match(waitLabelRule, /right:\s*max\(72px, env\(safe-area-inset-right\)\)/);
+  assert.match(waitLabelRule, /bottom:\s*max\(42px, env\(safe-area-inset-bottom\)\)/);
+  assert.doesNotMatch(waitLabelRule, /left:\s*max\(18px, env\(safe-area-inset-left\)\)/);
+  assert.match(waitLabelRule, /font-size:\s*clamp\(24px, 2\.2vw, 30px\)/);
+  assert.match(waitLabelRule, /text-align:\s*right/);
+  assert.match(waitLabelRule, /text-transform:\s*none/);
+  assert.match(waitLabelRule, /pointer-events:\s*none/);
+  assert.match(waitLabelRule, /opacity:\s*0/);
+  assert.match(cssSource, /#tron-reveal-wait-label\.is-active\s*\{[\s\S]*animation:\s*tron-reveal-wait-label-pulse/);
+  assert.match(cssSource, /#tron-reveal-wait-label\.is-active \.tron-wait-dot\s*\{[\s\S]*animation:\s*tron-wait-dot-scan/);
+  assert.match(cssSource, /#tron-reveal-wait-label \.tron-wait-dot:nth-child\(1\)\s*\{[\s\S]*animation-delay:\s*0s/);
+  assert.match(cssSource, /#tron-reveal-wait-label \.tron-wait-dot:nth-child\(2\)\s*\{[\s\S]*animation-delay:\s*0\.16s/);
+  assert.match(cssSource, /#tron-reveal-wait-label \.tron-wait-dot:nth-child\(3\)\s*\{[\s\S]*animation-delay:\s*0\.32s/);
+  assert.match(cssSource, /@keyframes tron-reveal-wait-label-pulse\s*\{[\s\S]*text-shadow/);
+  assert.match(cssSource, /@keyframes tron-wait-dot-scan\s*\{[\s\S]*transform:\s*translateY\(-0\.14em\)/);
+  assert.match(mainSource, /const tronRevealWaitLabel = document\.getElementById\('tron-reveal-wait-label'\)/);
+  assert.match(mainSource, /tronRevealWaitLabel\?\.classList\.toggle\('is-active', tronDiscRevealWaitingActive\)/);
+});
+
+test('mobile performance HUD shows only the FPS row', () => {
+  assert.match(htmlSource, /<div class="perf-live-row perf-live-primary"><span>FPS<\/span><strong id="fps">--<\/strong><\/div>/);
+  assert.match(htmlSource, /<div class="perf-live-row"><span>Theo<\/span><span id="perf-theoretical-fps"/);
+  assert.match(cssSource, /@media \(max-width: 760px\), \(hover: none\), \(pointer: coarse\) \{[\s\S]*#hud-tl\s*\{[\s\S]*width:\s*max-content/);
+  assert.match(cssSource, /@media \(max-width: 760px\), \(hover: none\), \(pointer: coarse\) \{[\s\S]*#hud-tl \.perf-live-overlay\s*\{[\s\S]*width:\s*max-content/);
+  assert.match(cssSource, /@media \(max-width: 760px\), \(hover: none\), \(pointer: coarse\) \{[\s\S]*#hud-tl > :not\(\.perf-live-overlay\)\s*\{[\s\S]*display:\s*none !important/);
+  assert.match(cssSource, /@media \(max-width: 760px\), \(hover: none\), \(pointer: coarse\) \{[\s\S]*#hud-tl \.perf-live-row:not\(\.perf-live-primary\)\s*\{[\s\S]*display:\s*none/);
+  assert.match(cssSource, /@media \(max-width: 760px\), \(hover: none\), \(pointer: coarse\) \{[\s\S]*#hud-tl \.perf-live-primary\s*\{[\s\S]*display:\s*flex/);
+  assert.match(cssSource, /@media \(max-width: 760px\), \(hover: none\), \(pointer: coarse\) \{[\s\S]*#hud-tl \.perf-live-primary\s*\{[\s\S]*width:\s*max-content/);
+  assert.match(cssSource, /@media \(max-width: 760px\), \(hover: none\), \(pointer: coarse\) \{[\s\S]*#hud-tl \.perf-live-primary strong\s*\{[\s\S]*min-width:\s*2ch/);
+});
+
+test('mobile performance caps pixel ratio at native scale', () => {
+  assert.equal(MOBILE_PERFORMANCE_PIXEL_RATIO_CAP, 1);
 });
 
 test('welcome cover button starts the existing reveal flow', () => {
