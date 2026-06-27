@@ -30,7 +30,7 @@ export const MIN_BLOOM_TARGET_SIZE = 96;
 export const CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP = 1.5;
 export const MOBILE_PERFORMANCE_QUERY = '(max-width: 760px), (hover: none), (pointer: coarse)';
 export const MOBILE_PERFORMANCE_RENDER_SCALE_CAP = 1;
-export const MOBILE_PERFORMANCE_PIXEL_RATIO_CAP = 1.5;
+export const MOBILE_PERFORMANCE_PIXEL_RATIO_CAP = 1;
 export const MOBILE_PERFORMANCE_BLOOM_SCALE_CAP = 0.14;
 export const FSR_PRESETS = Object.freeze({
   custom: { label: 'Custom', enabled: false, scale: 1 },

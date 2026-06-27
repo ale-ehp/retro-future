@@ -1045,6 +1045,7 @@ const welcomeWindowActionPrefix = welcomeWindowOverlay?.querySelector('.welcome-
 const welcomeWindowKeyLabel = welcomeWindowOverlay?.querySelector('.welcome-key');
 const welcomeStartButton = document.getElementById('welcome-start-button');
 const tronDiscCursor = document.getElementById('tron-disc-cursor');
+const tronRevealWaitLabel = document.getElementById('tron-reveal-wait-label');
 const welcomeWindowTouchQuery = window.matchMedia('(hover: none), (pointer: coarse)');
 const welcomeWindowMobileQuery = window.matchMedia('(max-width: 760px)');
 const welcomeWindowMotionAllowed = false;
@@ -1122,6 +1123,7 @@ function triggerWelcomeButtonStart(event) {
   event.preventDefault();
   tronDiscRevealWaitingActive = true;
   setTronDiscCursorRevealWaiting(true, event);
+  tronRevealWaitLabel?.classList.toggle('is-active', tronDiscRevealWaitingActive);
   triggerBackspaceDroneIntro('welcome-button');
 }
 
@@ -1179,6 +1181,7 @@ function syncTronDiscRevealWaiting() {
   if (next === tronDiscCursorState.revealWaiting) return;
   tronDiscRevealWaitingActive = next;
   setTronDiscCursorRevealWaiting(tronDiscRevealWaitingActive);
+  tronRevealWaitLabel?.classList.toggle('is-active', tronDiscRevealWaitingActive);
 }
 
 initMouseLook(ctx, {

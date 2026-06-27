@@ -97,9 +97,96 @@
     opacity: 1;
     animation-play-state: running;
   }
+  #tron-reveal-wait-label {
+    position: fixed;
+    right: max(72px, env(safe-area-inset-right));
+    bottom: max(42px, env(safe-area-inset-bottom));
+    z-index: 81;
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 0.04em;
+    pointer-events: none;
+    opacity: 0;
+    color: oklch(92% 0.11 205);
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    font-size: clamp(24px, 2.2vw, 30px);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-align: right;
+    text-transform: none;
+    text-shadow:
+      0 0 5px rgba(70, 244, 255, 0.78),
+      0 0 16px rgba(33, 205, 224, 0.38);
+    transform: translateZ(0);
+    transition: none;
+  }
+  .tron-wait-dots {
+    display: inline-flex;
+    justify-content: space-between;
+    width: 0.88em;
+    margin-left: 0.02em;
+    letter-spacing: 0;
+  }
+  .tron-wait-dot {
+    display: inline-block;
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  #tron-reveal-wait-label.is-active .tron-wait-dot {
+    animation: tron-wait-dot-scan 0.84s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+  #tron-reveal-wait-label .tron-wait-dot:nth-child(1) {
+    animation-delay: 0s;
+  }
+  #tron-reveal-wait-label .tron-wait-dot:nth-child(2) {
+    animation-delay: 0.16s;
+  }
+  #tron-reveal-wait-label .tron-wait-dot:nth-child(3) {
+    animation-delay: 0.32s;
+  }
+  #tron-reveal-wait-label.is-active {
+    opacity: 1;
+    animation: tron-reveal-wait-label-pulse 0.92s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+  @keyframes tron-reveal-wait-label-pulse {
+    0%, 100% {
+      opacity: 0.54;
+      text-shadow:
+        0 0 4px rgba(70, 244, 255, 0.55),
+        0 0 12px rgba(33, 205, 224, 0.22);
+    }
+    50% {
+      opacity: 1;
+      text-shadow:
+        0 0 7px rgba(226, 255, 255, 0.82),
+        0 0 18px rgba(70, 244, 255, 0.72),
+        0 0 34px rgba(33, 205, 224, 0.42);
+    }
+  }
   @keyframes tron-disc-wait-orbit {
     to {
       transform: rotate(360deg);
+    }
+  }
+  @keyframes tron-wait-dot-scan {
+    0%, 100% {
+      opacity: 0.28;
+      text-shadow: 0 0 4px rgba(70, 244, 255, 0.3);
+      transform: translateY(0);
+    }
+    38% {
+      opacity: 1;
+      text-shadow:
+        0 0 6px rgba(226, 255, 255, 0.88),
+        0 0 16px rgba(70, 244, 255, 0.72);
+      transform: translateY(-0.14em);
+    }
+    62% {
+      opacity: 0.44;
+      text-shadow: 0 0 7px rgba(70, 244, 255, 0.42);
+      transform: translateY(0);
     }
   }
   body.tron-disc-cursor-visible #tron-disc-cursor {
@@ -175,8 +262,35 @@
       line-height: 1.45;
       max-width: calc(100vw - 24px);
     }
+    #hud-tl {
+      padding: 6px 9px;
+      width: max-content;
+      max-width: max-content;
+    }
     .perf-live-overlay {
       width: min(220px, calc(100vw - 44px));
+    }
+    #hud-tl .perf-live-overlay {
+      display: inline-grid;
+      width: max-content;
+      min-width: 0;
+      gap: 0;
+    }
+    #hud-tl > :not(.perf-live-overlay) {
+      display: none !important;
+    }
+    #hud-tl .perf-live-row:not(.perf-live-primary) {
+      display: none;
+    }
+    #hud-tl .perf-live-primary {
+      display: flex;
+      align-items: baseline;
+      justify-content: flex-start;
+      width: max-content;
+      gap: 8px;
+    }
+    #hud-tl .perf-live-primary strong {
+      min-width: 2ch;
     }
     .perf-live-extra-mobile {
       display: none;
