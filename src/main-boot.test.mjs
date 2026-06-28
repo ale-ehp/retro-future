@@ -125,6 +125,7 @@ test('retro benchmark is query-startable and exports diagnostic json', () => {
   assert.match(mainSource, /window\.__retroBenchmarkDownload\s*=/);
   assert.match(mainSource, /retroBenchmarkRuntime\.recordFrame\(\{/);
   assert.match(mainSource, /performanceDiagnostics\.canvasSummary\(\)/);
+  assert.match(mainSource, /hexRoad:\s*hexRoadInspect\(\)/);
   assert.match(mainSource, /WEBGL_debug_renderer_info/);
   assert.match(cssSource, /\.retro-benchmark-panel\s*\{/);
   assert.match(cssSource, /\.retro-benchmark-panel\s*\{[\s\S]*z-index:\s*130/);
