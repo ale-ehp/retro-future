@@ -145,6 +145,14 @@ test('hex road LOD updates before reveal-critical work is skipped', () => {
   assert.ok(revealCriticalIndex < skippedStepIndex);
 });
 
+test('mobile reveal keeps bloom bypassed for the whole critical reveal window', () => {
+  const body = mainSource.match(/function shouldBypassBloomForRevealPerformance\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+
+  assert.match(body, /isCityRevealPerformanceCritical\(\)/);
+  assert.match(body, /mobilePerformanceProfileActive\(\)/);
+  assert.match(body, /!hasDroneIntroLanded\(\)/);
+});
+
 test('welcome cover button starts the existing reveal flow', () => {
   assert.match(mainSource, /document\.getElementById\('welcome-start-button'\)/);
   assert.match(mainSource, /welcomeStartButton\?\.addEventListener\('click'/);

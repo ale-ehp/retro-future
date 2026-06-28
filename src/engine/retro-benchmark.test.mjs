@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  RETRO_BENCHMARK_DEFAULT_UPDATE_INTERVAL_MS,
   RETRO_BENCHMARK_DEFAULT_DURATION_MS,
   createRetroBenchmarkRuntime,
 } from './retro-benchmark.js';
@@ -103,4 +104,31 @@ test('retro benchmark can export copy-safe json with a stable file name', () => 
   assert.equal(parsed.schemaVersion, 1);
   assert.equal(parsed.frames, 1);
   assert.equal(parsed.render.maxTriangles, 3400);
+});
+
+test('retro benchmark throttles live update callbacks during frame recording', () => {
+  let clock = 0;
+  const updateTimes = [];
+  const runtime = createRetroBenchmarkRuntime({
+    now: () => clock,
+    dateNow: () => new Date('2026-06-28T10:00:00.000Z'),
+    updateIntervalMs: 250,
+    onUpdate: () => updateTimes.push(clock),
+  });
+
+  assert.equal(RETRO_BENCHMARK_DEFAULT_UPDATE_INTERVAL_MS, 250);
+
+  runtime.start({ durationMs: 1000 });
+  for (let i = 0; i < 20; i++) {
+    clock += 16;
+    runtime.recordFrame({
+      now: clock,
+      rafDtMs: 16,
+      frameMs: 4,
+      updateMs: 1,
+      renderMs: 3,
+    });
+  }
+
+  assert.deepEqual(updateTimes, [0, 256]);
 });
