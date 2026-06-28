@@ -1057,6 +1057,7 @@ function retroBenchmarkEnvironment() {
       mobileProfile: mobilePerformanceProfileInspect(),
     },
     diagnostics: performanceDiagnostics.summary(latestMeasuredFps),
+    hexRoad: hexRoadInspect(),
   };
 }
 

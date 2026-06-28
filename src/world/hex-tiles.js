@@ -181,6 +181,12 @@ export function initHexTileMaterials() {
 // that ownership boundary.
 export const HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED = true;
 export const HEX_ROAD_UPLOAD_BATCH_LIMIT = 10;
+export const HEX_ROAD_LOD_ENABLED = true;
+export const HEX_ROAD_LOD_NEAR_DISTANCE = 520;
+export const HEX_ROAD_LOD_HYSTERESIS = 120;
+export const HEX_ROAD_TRIANGLES_PER_INSTANCE = Math.round(
+  (hexTileGeo.index?.count ?? hexTileGeo.attributes.position.count) / 3
+);
 const streetEdgeHexInstanceColor = new THREE.Color(0x2a6371);
 const hexTileInstanceMatrix = new THREE.Matrix4();
 const hexTileInstancePosition = new THREE.Vector3();
@@ -196,6 +202,14 @@ export const hexRoadRuntimeStats = {
   lastDirtyUploadCount: 0,
   pendingDirtyBatches: 0,
   uploadDeferredFrames: 0,
+  lodEnabled: HEX_ROAD_LOD_ENABLED,
+  lodNearDistance: HEX_ROAD_LOD_NEAR_DISTANCE,
+  lodHysteresis: HEX_ROAD_LOD_HYSTERESIS,
+  lodVisibleBatches: 0,
+  lodHiddenBatches: 0,
+  lodVisibleInstances: 0,
+  lodHiddenInstances: 0,
+  lodSavedTriangles: 0,
 };
 
 const hexTileSyncDeps = {
@@ -214,6 +228,124 @@ function markHexTileBatchDirty(batch, colorChanged = false) {
 
 export function getDirtyHexTileBatchCount() {
   return dirtyHexTileBatches.size;
+}
+
+function syncHexTileBatchVisibility(batchRecord) {
+  if (!batchRecord?.mesh) return;
+  const renderVisible = batchRecord.renderVisible !== false;
+  const lodVisible = batchRecord.lodVisible !== false;
+  batchRecord.mesh.visible = renderVisible && lodVisible;
+}
+
+export function refreshHexRoadBatchBounds(batchRecord) {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const tile of batchRecord.tiles) {
+    if (tile.visible === false || tile.userData.visible === false) continue;
+    minX = Math.min(minX, tile.userData.x - hexTileRadius);
+    maxX = Math.max(maxX, tile.userData.x + hexTileRadius);
+    minZ = Math.min(minZ, tile.userData.z - hexTileRadius);
+    maxZ = Math.max(maxZ, tile.userData.z + hexTileRadius);
+  }
+  if (minX === Infinity) {
+    batchRecord.bounds = null;
+    return null;
+  }
+  batchRecord.bounds = {
+    minX,
+    maxX,
+    minZ,
+    maxZ,
+    centerX: (minX + maxX) * 0.5,
+    centerZ: (minZ + maxZ) * 0.5,
+  };
+  return batchRecord.bounds;
+}
+
+export function hexRoadBatchDistanceSqToPoint(batchRecord, x, z) {
+  const bounds = batchRecord?.bounds;
+  if (!bounds) return Number.POSITIVE_INFINITY;
+  const dx = x < bounds.minX ? bounds.minX - x : x > bounds.maxX ? x - bounds.maxX : 0;
+  const dz = z < bounds.minZ ? bounds.minZ - z : z > bounds.maxZ ? z - bounds.maxZ : 0;
+  return dx * dx + dz * dz;
+}
+
+export function resolveHexRoadBatchLodVisible(
+  distanceSq,
+  currentlyVisible,
+  nearDistance = HEX_ROAD_LOD_NEAR_DISTANCE,
+  hysteresis = HEX_ROAD_LOD_HYSTERESIS
+) {
+  const distance = Number.isFinite(distanceSq) ? distanceSq : Number.POSITIVE_INFINITY;
+  const threshold = (currentlyVisible ? nearDistance + hysteresis : nearDistance);
+  return distance <= threshold * threshold;
+}
+
+export function applyHexRoadBatchLodVisibility(batchRecords, {
+  x,
+  z,
+  enabled = HEX_ROAD_LOD_ENABLED,
+  nearDistance = HEX_ROAD_LOD_NEAR_DISTANCE,
+  hysteresis = HEX_ROAD_LOD_HYSTERESIS,
+  trianglesPerInstance = HEX_ROAD_TRIANGLES_PER_INSTANCE,
+} = {}) {
+  const stats = {
+    enabled,
+    nearDistance,
+    hysteresis,
+    visibleBatches: 0,
+    hiddenBatches: 0,
+    visibleInstances: 0,
+    hiddenInstances: 0,
+    savedTriangles: 0,
+  };
+  for (const record of batchRecords) {
+    const count = record.mesh?.count ?? 0;
+    if (!enabled) {
+      record.lodVisible = true;
+    } else {
+      const distanceSq = hexRoadBatchDistanceSqToPoint(record, x, z);
+      record.lodVisible = resolveHexRoadBatchLodVisible(distanceSq, record.lodVisible !== false, nearDistance, hysteresis);
+    }
+    syncHexTileBatchVisibility(record);
+
+    if (record.renderVisible === false || count <= 0) continue;
+    if (record.lodVisible === false) {
+      stats.hiddenBatches += 1;
+      stats.hiddenInstances += count;
+      stats.savedTriangles += count * trianglesPerInstance;
+    } else {
+      stats.visibleBatches += 1;
+      stats.visibleInstances += count;
+    }
+  }
+  return stats;
+}
+
+export function updateHexRoadBatchLod(camera = hexTileCamera) {
+  if (!camera?.position || !hexRoadTileBatches.length) {
+    hexRoadRuntimeStats.lodVisibleBatches = 0;
+    hexRoadRuntimeStats.lodHiddenBatches = 0;
+    hexRoadRuntimeStats.lodVisibleInstances = 0;
+    hexRoadRuntimeStats.lodHiddenInstances = 0;
+    hexRoadRuntimeStats.lodSavedTriangles = 0;
+    return null;
+  }
+  const stats = applyHexRoadBatchLodVisibility(hexRoadTileBatches, {
+    x: camera.position.x,
+    z: camera.position.z,
+  });
+  hexRoadRuntimeStats.lodEnabled = stats.enabled;
+  hexRoadRuntimeStats.lodNearDistance = stats.nearDistance;
+  hexRoadRuntimeStats.lodHysteresis = stats.hysteresis;
+  hexRoadRuntimeStats.lodVisibleBatches = stats.visibleBatches;
+  hexRoadRuntimeStats.lodHiddenBatches = stats.hiddenBatches;
+  hexRoadRuntimeStats.lodVisibleInstances = stats.visibleInstances;
+  hexRoadRuntimeStats.lodHiddenInstances = stats.hiddenInstances;
+  hexRoadRuntimeStats.lodSavedTriangles = stats.savedTriangles;
+  return stats;
 }
 
 export function flushHexTileBatchUploads() {
@@ -240,6 +372,10 @@ export function hexRoadBatchStats(batchRecords) {
     activeInstances: 0,
     capacityInstances: 0,
     dirtyBatches: 0,
+    lodVisibleBatches: 0,
+    lodHiddenBatches: 0,
+    lodHiddenInstances: 0,
+    lodSavedTriangles: 0,
   };
   for (const record of batchRecords) {
     const count = record.mesh?.count ?? 0;
@@ -249,6 +385,15 @@ export function hexRoadBatchStats(batchRecords) {
     else stats.emptyBatches += 1;
     if (record.mesh?.visible === false) stats.hiddenBatches += 1;
     if (dirtyHexTileBatches.has(record.mesh)) stats.dirtyBatches += 1;
+    if (count > 0 && record.renderVisible !== false) {
+      if (record.lodVisible === false) {
+        stats.lodHiddenBatches += 1;
+        stats.lodHiddenInstances += count;
+        stats.lodSavedTriangles += count * HEX_ROAD_TRIANGLES_PER_INSTANCE;
+      } else {
+        stats.lodVisibleBatches += 1;
+      }
+    }
   }
   return stats;
 }
@@ -304,9 +449,9 @@ export function compactHexTileBatch(batchRecord) {
     }
   }
   batchRecord.mesh.count = writeIndex;
-  if (HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED) {
-    batchRecord.mesh.visible = writeIndex > 0;
-  }
+  batchRecord.renderVisible = HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED ? writeIndex > 0 : true;
+  refreshHexRoadBatchBounds(batchRecord);
+  syncHexTileBatchVisibility(batchRecord);
   hexTileSyncDeps.refreshCullingBounds(batchRecord.mesh);
   if (writeIndex > 0) {
     markHexTileBatchDirty(batchRecord.mesh, true);
@@ -433,7 +578,15 @@ function addHexRoadTileBatch(batchSeeds, material, interactive, createdTiles) {
   batch.frustumCulled = true;
   hexTileScene.add(batch);
 
-  const batchRecord = { mesh: batch, material: batchMaterial, tiles: [], interactive };
+  const batchRecord = {
+    mesh: batch,
+    material: batchMaterial,
+    tiles: [],
+    interactive,
+    renderVisible: true,
+    lodVisible: true,
+    bounds: null,
+  };
   if (interactive) hexRoadTileBatches.push(batchRecord);
   else streetEdgeHexTileBatches.push(batchRecord);
 
@@ -612,6 +765,7 @@ function updateHexRoadTiles(dt) {
 }
 
 export function stepHexRoadTiles(dt) {
+  updateHexRoadBatchLod();
   if (!hexUpdateEnabled) {
     hexRoadUpdateFrame = 0;
     hexRoadAccumulatedDt = 0;
