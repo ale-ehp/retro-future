@@ -4280,7 +4280,7 @@ function hasDroneIntroLanded() {
 }
 
 function shouldBypassBloomForRevealPerformance() {
-  return Boolean(isCityRevealPerformanceCritical() && !hasDroneIntroLanded());
+  return Boolean(isCityRevealPerformanceCritical() && (mobilePerformanceProfileActive() || !hasDroneIntroLanded()));
 }
 
 function isBloomRevealBypassed() {

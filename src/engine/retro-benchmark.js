@@ -1,4 +1,5 @@
 export const RETRO_BENCHMARK_DEFAULT_DURATION_MS = 60000;
+export const RETRO_BENCHMARK_DEFAULT_UPDATE_INTERVAL_MS = 250;
 
 const RETRO_BENCHMARK_SCHEMA_VERSION = 1;
 
@@ -138,6 +139,11 @@ export function createRetroBenchmarkRuntime(deps = {}) {
   const getEnvironment = typeof deps.getEnvironment === 'function' ? deps.getEnvironment : () => ({});
   const onUpdate = typeof deps.onUpdate === 'function' ? deps.onUpdate : () => {};
   const onComplete = typeof deps.onComplete === 'function' ? deps.onComplete : () => {};
+  const updateIntervalMs = Math.max(0, finiteNumber(
+    deps.updateIntervalMs,
+    RETRO_BENCHMARK_DEFAULT_UPDATE_INTERVAL_MS
+  ));
+  let lastUpdateNotifiedAtMs = -Infinity;
 
   const state = {
     status: 'idle',
@@ -153,7 +159,10 @@ export function createRetroBenchmarkRuntime(deps = {}) {
     summary: null,
   };
 
-  function notifyUpdate() {
+  function notifyUpdate({ force = false, at = now() } = {}) {
+    const current = finiteNumber(at, finiteNumber(now(), 0));
+    if (!force && updateIntervalMs > 0 && current - lastUpdateNotifiedAtMs < updateIntervalMs) return;
+    lastUpdateNotifiedAtMs = current;
     onUpdate(inspect());
   }
 
@@ -170,7 +179,8 @@ export function createRetroBenchmarkRuntime(deps = {}) {
     state.environment = safeEnvironment(getEnvironment);
     state.samples = [];
     state.summary = null;
-    notifyUpdate();
+    lastUpdateNotifiedAtMs = -Infinity;
+    notifyUpdate({ force: true, at: state.startedAtMs });
     return inspect();
   }
 
@@ -183,7 +193,7 @@ export function createRetroBenchmarkRuntime(deps = {}) {
     state.completedAt = safeDateIso(dateNow());
     state.summary = summarizeSamples(state);
     onComplete(state.summary);
-    notifyUpdate();
+    notifyUpdate({ force: true, at: state.completedAtMs });
     return state.summary;
   }
 
@@ -193,7 +203,7 @@ export function createRetroBenchmarkRuntime(deps = {}) {
     state.completedAtMs = finiteNumber(now(), state.startedAtMs + state.lastElapsedMs);
     state.completedAt = safeDateIso(dateNow());
     state.summary = summarizeSamples(state);
-    notifyUpdate();
+    notifyUpdate({ force: true, at: state.completedAtMs });
     return inspect();
   }
 
@@ -219,7 +229,7 @@ export function createRetroBenchmarkRuntime(deps = {}) {
     });
 
     if (elapsedMs >= state.durationMs) return complete(sampleNow);
-    notifyUpdate();
+    notifyUpdate({ at: sampleNow });
     return inspect();
   }
 
