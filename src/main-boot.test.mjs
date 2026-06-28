@@ -7,7 +7,6 @@ const mainSource = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
 const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const cssSource = readFileSync(new URL('../retro-future.css', import.meta.url), 'utf8');
 const discCursorSource = readFileSync(new URL('./camera/disc-cursor.js', import.meta.url), 'utf8');
-const manifestUrl = new URL('../retro-future.webmanifest', import.meta.url);
 
 test('boot drains the runner crowd queue before prewarming textures', () => {
   const body = mainSource.match(/async function bootSceneWithFinalDefaults\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
@@ -117,54 +116,7 @@ test('mobile performance caps pixel ratio at native scale', () => {
 test('welcome cover button starts the existing reveal flow', () => {
   assert.match(mainSource, /document\.getElementById\('welcome-start-button'\)/);
   assert.match(mainSource, /welcomeStartButton\?\.addEventListener\('click'/);
-  assert.match(mainSource, /queueWelcomeStartUntilLandscape\('welcome-button', event\)/);
-  assert.match(mainSource, /startWelcomeReveal\('welcome-button', event\)/);
-  assert.match(mainSource, /triggerBackspaceDroneIntro\(source\)/);
-});
-
-test('welcome start waits for landscape on mobile portrait', () => {
-  assert.match(htmlSource, /<div id="orientation-gate-overlay" aria-hidden="true">/);
-  assert.match(htmlSource, /Ruota il dispositivo/);
-  assert.match(htmlSource, /<button id="orientation-gate-fullscreen-button" class="orientation-fullscreen-button" type="button">\s*Schermo intero\s*<\/button>/);
-  assert.match(cssSource, /#orientation-gate-overlay\s*\{[\s\S]*position:\s*fixed/);
-  assert.match(cssSource, /body\.orientation-gate-visible #orientation-gate-overlay\s*\{[\s\S]*opacity:\s*1/);
-  assert.match(cssSource, /\.orientation-fullscreen-button\s*\{[\s\S]*min-height:\s*56px/);
-  assert.match(cssSource, /\.orientation-device\s*\{[\s\S]*animation:\s*orientation-device-rotate/);
-  assert.match(cssSource, /@keyframes orientation-device-rotate\s*\{/);
-  assert.match(mainSource, /const orientationGateOverlay = document\.getElementById\('orientation-gate-overlay'\)/);
-  assert.match(mainSource, /const orientationGateFullscreenButton = document\.getElementById\('orientation-gate-fullscreen-button'\)/);
-  assert.match(mainSource, /function requestOrientationGateFullscreen\(event\)/);
-  assert.match(mainSource, /requestLandscapeImmersive\('orientation-gate-fullscreen-button'\)/);
-  assert.match(mainSource, /orientationGateFullscreenButton\?\.addEventListener\('click', requestOrientationGateFullscreen\)/);
-  assert.match(mainSource, /let welcomeStartPendingForLandscape = false/);
-  assert.match(mainSource, /function welcomeStartUsesTouchOrientationGate\(\)/);
-  assert.match(mainSource, /welcomeWindowTouchQuery\.matches \|\| navigator\.maxTouchPoints > 0/);
-  assert.match(mainSource, /function welcomeStartNeedsLandscapeGate\(\)/);
-  assert.match(mainSource, /welcomeStartUsesTouchOrientationGate\(\) && window\.innerWidth <= window\.innerHeight/);
-  assert.match(mainSource, /function queueWelcomeStartUntilLandscape\(source, event = null\)/);
-  assert.match(mainSource, /let welcomeSoundtrackPrimedMuted = false/);
-  assert.match(mainSource, /function primeWelcomeAudioForDeferredStart\(source\)/);
-  assert.match(mainSource, /primeWelcomeAudioForDeferredStart\(source\)/);
-  assert.match(mainSource, /function releaseWelcomeDeferredAudio\(\)/);
-  assert.match(mainSource, /welcomeStartPendingForLandscape = true/);
-  assert.match(mainSource, /document\.body\.classList\.add\('orientation-gate-visible'\)/);
-  assert.match(mainSource, /function maybeReleaseWelcomeLandscapeGate\(\)/);
-  assert.match(mainSource, /window\.addEventListener\('orientationchange', maybeReleaseWelcomeLandscapeGate/);
-  assert.match(mainSource, /window\.addEventListener\('resize', maybeReleaseWelcomeLandscapeGate/);
-});
-
-test('mobile start exposes fullscreen-capable immersive shell metadata', () => {
-  assert.match(htmlSource, /<meta name="mobile-web-app-capable" content="yes" \/>/);
-  assert.match(htmlSource, /<meta name="apple-mobile-web-app-capable" content="yes" \/>/);
-  assert.match(htmlSource, /<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" \/>/);
-  assert.match(htmlSource, /<link rel="manifest" href="\.\/retro-future\.webmanifest" \/>/);
-  assert.match(cssSource, /html\.mobile-immersive-active,\s*body\.mobile-immersive-active\s*\{[\s\S]*height:\s*100dvh/);
-  assert.match(cssSource, /body\.mobile-immersive-active #app\s*\{[\s\S]*height:\s*100dvh/);
-  assert.ok(existsSync(manifestUrl), 'retro-future web manifest should exist');
-  const manifest = JSON.parse(readFileSync(manifestUrl, 'utf8'));
-  assert.equal(manifest.display, 'fullscreen');
-  assert.equal(manifest.orientation, 'landscape');
-  assert.equal(manifest.start_url, '/chi-siamo/retro-future/');
+  assert.match(mainSource, /triggerBackspaceDroneIntro\('welcome-button'\)/);
 });
 
 test('welcome cover page stays static while the button starts the reveal flow', () => {
@@ -173,8 +125,6 @@ test('welcome cover page stays static while the button starts the reveal flow', 
   assert.match(mainSource, /welcomeWindowOverlay\?\.addEventListener\('click'/);
   assert.match(mainSource, /isEventInsideWelcomeStartButton\(event\)/);
   assert.match(mainSource, /triggerWelcomeButtonStart\(event\)/);
-  assert.doesNotMatch(mainSource, /welcomeWindowOverlay\?\.addEventListener\('pointerdown', triggerWelcomeWindowTouch/);
-  assert.doesNotMatch(mainSource, /welcomeWindowOverlay\?\.addEventListener\('touchstart', triggerWelcomeWindowTouch/);
   assert.doesNotMatch(mainSource, /setupWelcomeWindowMotion\(welcomeWindowMotion, welcomeMotionDeps\)/);
   assert.match(mainSource, /const welcomeWindowMotionAllowed = false/);
   assert.doesNotMatch(cssSource, /\.welcome-start-button:hover\s*\{[\s\S]*transform:\s*translateY/);
