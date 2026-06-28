@@ -8,6 +8,12 @@
 <meta name="demo-version" content="v1.0" />
 <link rel="canonical" href="https://avstudio.ai/chi-siamo/retro-future/" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="AVstudio Retro Future" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#020a0c" />
+<link rel="manifest" href="./retro-future.webmanifest" />
 <link rel="icon" href="data:," />
 <link rel="stylesheet" href="./retro-future.css" />
 <script type="application/ld+json">
@@ -57,6 +63,18 @@
       <p class="welcome-action" aria-hidden="true"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></p>
     </div>
   </article>
+</div>
+
+<div id="orientation-gate-overlay" aria-hidden="true">
+  <div class="orientation-gate-inner">
+    <div class="orientation-device" aria-hidden="true">
+      <span class="orientation-device-screen"></span>
+    </div>
+    <p class="orientation-gate-title">Ruota il dispositivo</p>
+    <button id="orientation-gate-fullscreen-button" class="orientation-fullscreen-button" type="button">
+      Schermo intero
+    </button>
+  </div>
 </div>
 
 <div id="boundary-error-overlay" aria-hidden="true">

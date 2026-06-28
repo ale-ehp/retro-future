@@ -10,6 +10,11 @@ export const TRON_SYNTH_MUSIC_PATTERN_STEPS = 64;
 
 export const TRON_SOUNDTRACK_ENABLED = true;
 export const TRON_SOUNDTRACK_URL = 'audio/music/retro-future.opus';
+export const TRON_SOUNDTRACK_FALLBACK_URL = 'audio/music/retro-future.m4a';
+export const TRON_SOUNDTRACK_SOURCES = Object.freeze([
+  { url: TRON_SOUNDTRACK_URL, type: 'audio/ogg; codecs="opus"' },
+  { url: TRON_SOUNDTRACK_FALLBACK_URL, type: 'audio/mp4; codecs="mp4a.40.2"' },
+]);
 export const TRON_SOUNDTRACK_VOLUME = 0.09;
 export const TRON_SOUNDTRACK_FADE_IN_SECONDS = 3;
 export const TRON_SOUNDTRACK_STOP_FADE_SECONDS = 0.75;
@@ -208,11 +213,24 @@ export function stopTronSoundtrackIntroLofiForReveal(soundtrack, ctx) {
   return setTronSoundtrackIntroLofi(soundtrack, ctx, false, TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS, true);
 }
 
+export function resolveTronSoundtrackUrl(audio = null) {
+  const probe = audio || (typeof Audio === 'function' ? new Audio() : null);
+  if (typeof probe?.canPlayType !== 'function') return TRON_SOUNDTRACK_URL;
+  for (const source of TRON_SOUNDTRACK_SOURCES) {
+    const support = probe.canPlayType(source.type);
+    if (support === 'probably' || support === 'maybe') return source.url;
+  }
+  return TRON_SOUNDTRACK_URL;
+}
+
 export function createTronSoundtrackElement(soundtrack) {
-  const audio = new Audio(TRON_SOUNDTRACK_URL);
+  const audio = new Audio();
+  const sourceUrl = resolveTronSoundtrackUrl(audio);
+  audio.src = sourceUrl;
   audio.preload = 'auto';
   audio.loop = false;
   audio.playsInline = true;
+  soundtrack.url = sourceUrl;
   audio.addEventListener('loadedmetadata', () => {
     if (Number.isFinite(audio.duration)) soundtrack.duration = audio.duration;
   });
