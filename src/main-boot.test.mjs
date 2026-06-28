@@ -113,6 +113,24 @@ test('mobile performance caps pixel ratio at native scale', () => {
   assert.equal(MOBILE_PERFORMANCE_PIXEL_RATIO_CAP, 1);
 });
 
+test('retro benchmark is query-startable and exports diagnostic json', () => {
+  assert.match(mainSource, /createRetroBenchmarkRuntime/);
+  assert.match(mainSource, /RETRO_BENCHMARK_DEFAULT_DURATION_MS/);
+  assert.match(mainSource, /new URLSearchParams\(window\.location\.search\)/);
+  assert.match(mainSource, /benchmarkSeconds/);
+  assert.match(mainSource, /retroBenchmarkAutoStartPending/);
+  assert.match(mainSource, /cityRevealComplete[\s\S]*window\.__retroBenchmarkStart/);
+  assert.match(mainSource, /window\.__retroBenchmarkStart\s*=/);
+  assert.match(mainSource, /window\.__retroBenchmarkInspect\s*=/);
+  assert.match(mainSource, /window\.__retroBenchmarkDownload\s*=/);
+  assert.match(mainSource, /retroBenchmarkRuntime\.recordFrame\(\{/);
+  assert.match(mainSource, /performanceDiagnostics\.canvasSummary\(\)/);
+  assert.match(mainSource, /WEBGL_debug_renderer_info/);
+  assert.match(cssSource, /\.retro-benchmark-panel\s*\{/);
+  assert.match(cssSource, /\.retro-benchmark-panel\s*\{[\s\S]*z-index:\s*130/);
+  assert.match(cssSource, /\.retro-benchmark-actions\s+button/);
+});
+
 test('welcome cover button starts the existing reveal flow', () => {
   assert.match(mainSource, /document\.getElementById\('welcome-start-button'\)/);
   assert.match(mainSource, /welcomeStartButton\?\.addEventListener\('click'/);

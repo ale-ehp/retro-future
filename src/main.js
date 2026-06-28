@@ -348,6 +348,10 @@ import {
 import { createCityRevealProfiler } from './engine/city-reveal-profiler.js';
 import { createPerformanceDiagnostics } from './engine/performance-diagnostics.js';
 import {
+  RETRO_BENCHMARK_DEFAULT_DURATION_MS,
+  createRetroBenchmarkRuntime,
+} from './engine/retro-benchmark.js';
+import {
   CITY_DEPARTMENT_BOARD_ENABLED,
   addCityDepartmentFrame,
   cityDepartmentBoardBottomY,
@@ -985,6 +989,221 @@ const performanceDiagnostics = createPerformanceDiagnostics({
   isCityRevealPerformanceCritical,
 });
 
+const retroBenchmarkSearchParams = new URLSearchParams(window.location.search);
+const retroBenchmarkQuerySeconds = Number(retroBenchmarkSearchParams.get('benchmarkSeconds'));
+const retroBenchmarkDurationMs = Number.isFinite(retroBenchmarkQuerySeconds) && retroBenchmarkQuerySeconds > 0
+  ? retroBenchmarkQuerySeconds * 1000
+  : RETRO_BENCHMARK_DEFAULT_DURATION_MS;
+let retroBenchmarkAutoStartPending = retroBenchmarkSearchParams.get('benchmark') === '1';
+let retroBenchmarkPanelEl = null;
+let retroBenchmarkCopyButton = null;
+let retroBenchmarkDownloadButton = null;
+
+function getRetroBenchmarkGpuInfo() {
+  try {
+    const gl = renderer.getContext();
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    return {
+      vendor: debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
+      renderer: debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+      webglVersion: gl.getParameter(gl.VERSION),
+      shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function retroBenchmarkEnvironment() {
+  return {
+    browser: {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      language: navigator.language,
+      hardwareConcurrency: navigator.hardwareConcurrency ?? null,
+      deviceMemory: navigator.deviceMemory ?? null,
+    },
+    screen: {
+      width: window.screen?.width ?? null,
+      height: window.screen?.height ?? null,
+      availWidth: window.screen?.availWidth ?? null,
+      availHeight: window.screen?.availHeight ?? null,
+      orientation: window.screen?.orientation?.type ?? null,
+    },
+    viewport: {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio || 1,
+    },
+    canvas: performanceDiagnostics.canvasSummary(),
+    gpu: getRetroBenchmarkGpuInfo(),
+    quality: {
+      performanceMode,
+      activePixelRatio,
+      requestedPixelRatio,
+      manualRenderScale,
+      dynamicQualityScale,
+      antialiasMode,
+      bloomEnabled,
+      bloomActive: isBloomPassActive(),
+      bloomPassEnabled: Boolean(bloomPass?.enabled),
+      bloomResolutionScale,
+      composerActive: shouldUseComposer(),
+      fsrUpscaleEnabled,
+      fsrInternalScale,
+      fsrSharpness,
+      mobileProfile: mobilePerformanceProfileInspect(),
+    },
+    diagnostics: performanceDiagnostics.summary(latestMeasuredFps),
+  };
+}
+
+function ensureRetroBenchmarkPanel() {
+  if (retroBenchmarkPanelEl) return retroBenchmarkPanelEl;
+  retroBenchmarkPanelEl = document.createElement('section');
+  retroBenchmarkPanelEl.id = 'retro-benchmark-panel';
+  retroBenchmarkPanelEl.className = 'retro-benchmark-panel';
+  retroBenchmarkPanelEl.hidden = true;
+  retroBenchmarkPanelEl.setAttribute('aria-live', 'polite');
+  retroBenchmarkPanelEl.innerHTML = `
+    <div class="retro-benchmark-head">
+      <strong>Benchmark</strong>
+      <span data-retro-benchmark-status>idle</span>
+    </div>
+    <div class="retro-benchmark-progress" aria-hidden="true"><span data-retro-benchmark-progress></span></div>
+    <dl class="retro-benchmark-grid">
+      <div><dt>FPS avg</dt><dd data-retro-benchmark-fps-avg>--</dd></div>
+      <div><dt>FPS p5</dt><dd data-retro-benchmark-fps-p5>--</dd></div>
+      <div><dt>Worst</dt><dd data-retro-benchmark-worst>--</dd></div>
+      <div><dt>Draws</dt><dd data-retro-benchmark-draws>--</dd></div>
+      <div><dt>Tris</dt><dd data-retro-benchmark-tris>--</dd></div>
+      <div><dt>Frames</dt><dd data-retro-benchmark-frames>--</dd></div>
+    </dl>
+    <div class="retro-benchmark-actions">
+      <button type="button" data-retro-benchmark-copy>Copia JSON</button>
+      <button type="button" data-retro-benchmark-download>Scarica JSON</button>
+      <button type="button" data-retro-benchmark-close>Chiudi</button>
+    </div>
+  `;
+  retroBenchmarkCopyButton = retroBenchmarkPanelEl.querySelector('[data-retro-benchmark-copy]');
+  retroBenchmarkDownloadButton = retroBenchmarkPanelEl.querySelector('[data-retro-benchmark-download]');
+  retroBenchmarkCopyButton?.addEventListener('click', copyRetroBenchmarkJson);
+  retroBenchmarkDownloadButton?.addEventListener('click', downloadRetroBenchmarkJson);
+  retroBenchmarkPanelEl.querySelector('[data-retro-benchmark-close]')?.addEventListener('click', () => {
+    retroBenchmarkPanelEl.hidden = true;
+  });
+  document.body.appendChild(retroBenchmarkPanelEl);
+  return retroBenchmarkPanelEl;
+}
+
+function setRetroBenchmarkPanelText(selector, value) {
+  const target = retroBenchmarkPanelEl?.querySelector(selector);
+  if (target) target.textContent = value;
+}
+
+function formatRetroBenchmarkNumber(value, digits = 1) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(digits) : '--';
+}
+
+function renderRetroBenchmarkPanel(view) {
+  const panel = ensureRetroBenchmarkPanel();
+  const summary = view?.summary;
+  const fps = summary?.fps || {};
+  const frameMs = summary?.frameMs || {};
+  const render = summary?.render || {};
+  const elapsedSeconds = Math.round((view?.elapsedMs || 0) / 1000);
+  const durationSeconds = Math.round((view?.durationMs || retroBenchmarkDurationMs) / 1000);
+  const progress = durationSeconds > 0 ? Math.min(100, (elapsedSeconds / durationSeconds) * 100) : 0;
+
+  panel.hidden = false;
+  setRetroBenchmarkPanelText('[data-retro-benchmark-status]', `${view?.status || 'idle'} ${elapsedSeconds}s/${durationSeconds}s`);
+  setRetroBenchmarkPanelText('[data-retro-benchmark-fps-avg]', formatRetroBenchmarkNumber(fps.avg));
+  setRetroBenchmarkPanelText('[data-retro-benchmark-fps-p5]', formatRetroBenchmarkNumber(fps.p5));
+  setRetroBenchmarkPanelText('[data-retro-benchmark-worst]', `${formatRetroBenchmarkNumber(frameMs.worst)}ms`);
+  setRetroBenchmarkPanelText('[data-retro-benchmark-draws]', String(render.maxCalls ?? '--'));
+  setRetroBenchmarkPanelText('[data-retro-benchmark-tris]', String(render.maxTriangles ?? '--'));
+  setRetroBenchmarkPanelText('[data-retro-benchmark-frames]', String(summary?.frames ?? view?.frames ?? '--'));
+  const progressEl = panel.querySelector('[data-retro-benchmark-progress]');
+  if (progressEl) progressEl.style.width = `${progress}%`;
+  const hasFrames = Boolean(summary?.frames);
+  if (retroBenchmarkCopyButton) retroBenchmarkCopyButton.disabled = !hasFrames;
+  if (retroBenchmarkDownloadButton) retroBenchmarkDownloadButton.disabled = !hasFrames;
+}
+
+async function writeRetroBenchmarkText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+  return copied;
+}
+
+async function copyRetroBenchmarkJson() {
+  const exported = retroBenchmarkRuntime.exportJson();
+  if (!exported?.text) return;
+  await writeRetroBenchmarkText(exported.text);
+  if (!retroBenchmarkCopyButton) return;
+  retroBenchmarkCopyButton.textContent = 'Copiato';
+  setTimeout(() => {
+    if (retroBenchmarkCopyButton) retroBenchmarkCopyButton.textContent = 'Copia JSON';
+  }, 1200);
+}
+
+function downloadRetroBenchmarkJson() {
+  const exported = retroBenchmarkRuntime.exportJson();
+  if (!exported?.text) return null;
+  const blob = new Blob([exported.text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = exported.filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  return exported;
+}
+
+const retroBenchmarkRuntime = createRetroBenchmarkRuntime({
+  getEnvironment: retroBenchmarkEnvironment,
+  onUpdate: renderRetroBenchmarkPanel,
+  onComplete: (summary) => {
+    renderRetroBenchmarkPanel(retroBenchmarkRuntime.inspect());
+    console.info('[retro-benchmark]', summary);
+  },
+});
+
+window.__retroBenchmarkStart = (options = {}) => {
+  const requestedDurationMs = Number(options.durationMs);
+  retroBenchmarkAutoStartPending = false;
+  return retroBenchmarkRuntime.start({
+    ...options,
+    source: options.source || 'console',
+    durationMs: Number.isFinite(requestedDurationMs) && requestedDurationMs > 0
+      ? requestedDurationMs
+      : retroBenchmarkDurationMs,
+  });
+};
+window.__retroBenchmarkInspect = () => retroBenchmarkRuntime.inspect();
+window.__retroBenchmarkDownload = () => downloadRetroBenchmarkJson();
+
+function maybeStartRetroBenchmarkAuto() {
+  if (!retroBenchmarkAutoStartPending || !cityRevealComplete) return;
+  retroBenchmarkAutoStartPending = false;
+  window.__retroBenchmarkStart({ source: 'query-param', durationMs: retroBenchmarkDurationMs });
+}
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(FIXED_CAMERA_FOV, window.innerWidth / window.innerHeight, 0.1, 10000);
@@ -6522,6 +6741,7 @@ function tick(now) {
   updateCityRevealWireframe(now);
   syncTronDiscRevealWaiting();
   syncCityRevealPerformanceProfile();
+  maybeStartRetroBenchmarkAuto();
   const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
   const bypassBloomForReveal = shouldBypassBloomForRevealPerformance();
   if (bloomPass) bloomPass.enabled = bloomEnabled && postRevealPerfIsolationState.bloom && !bypassBloomForReveal;
@@ -6573,6 +6793,15 @@ function tick(now) {
     renderMs: performanceDiagnostics.timing.renderMs,
     frameMs: performanceDiagnostics.timing.frameMs,
     renderInfo: frameRenderInfo,
+  });
+  retroBenchmarkRuntime.recordFrame({
+    now,
+    rafDtMs: rawRafDtMs,
+    updateMs: performanceDiagnostics.timing.updateMs,
+    renderMs: performanceDiagnostics.timing.renderMs,
+    frameMs: performanceDiagnostics.timing.frameMs,
+    renderInfo: { ...renderer.info.render },
+    memoryInfo: { ...renderer.info.memory },
   });
 }
 bootSceneWithFinalDefaults().then(() => {
