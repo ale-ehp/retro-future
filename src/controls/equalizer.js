@@ -230,6 +230,7 @@ function ensureLabEqualizerAudioGraph() {
     return false;
   }
   setupTronSoundtrackGraph(ctx);
+  LAB_EQUALIZER_AUDIO_URL = tronSoundtrack.url || TRON_SOUNDTRACK_URL;
   if (!labEqualizerAnalyser || labEqualizerAudioContext !== ctx) {
     labEqualizerAudioContext = ctx;
     labEqualizerAnalyser = ctx.createAnalyser();
