@@ -555,6 +555,7 @@ import {
   dismissWelcomeWindow as dismissWelcomeWindowCore,
   resetWelcomeWindowMotion as resetWelcomeWindowMotionCore,
   setupWelcomeWindowMotion,
+  triggerWelcomeWindowTouch as triggerWelcomeWindowTouchCore,
   welcomeWindowUsesTouchPrompt as welcomeWindowUsesTouchPromptCore,
   welcomeWindowVisible as welcomeWindowVisibleCore,
 } from './controls/welcome-ui.js';
@@ -632,7 +633,6 @@ import {
   isMobileMovementControlTarget,
   mobileTouchControlsInspect,
   mobileTouchControlsState,
-  requestLandscapeImmersive,
   requestLandscapeFullscreen,
 } from './controls/mobile-movement.js';
 import {
@@ -1044,8 +1044,6 @@ const welcomeWindowAction = welcomeWindowOverlay?.querySelector('.welcome-action
 const welcomeWindowActionPrefix = welcomeWindowOverlay?.querySelector('.welcome-action-prefix');
 const welcomeWindowKeyLabel = welcomeWindowOverlay?.querySelector('.welcome-key');
 const welcomeStartButton = document.getElementById('welcome-start-button');
-const orientationGateOverlay = document.getElementById('orientation-gate-overlay');
-const orientationGateFullscreenButton = document.getElementById('orientation-gate-fullscreen-button');
 const tronDiscCursor = document.getElementById('tron-disc-cursor');
 const tronRevealWaitLabel = document.getElementById('tron-reveal-wait-label');
 const welcomeWindowTouchQuery = window.matchMedia('(hover: none), (pointer: coarse)');
@@ -1081,10 +1079,9 @@ const welcomeDeps = {
   mobileQuery: welcomeWindowMobileQuery,
   resetMotion: resetWelcomeWindowMotion,
   updatePointerLockHint: updatePointerLockHint,
+  ensureFootstepAudioReady: ensureFootstepAudioReady,
+  triggerBackspaceDroneIntro: triggerBackspaceDroneIntro,
 };
-let welcomeStartPendingForLandscape = false;
-let welcomeStartPendingSource = 'welcome-button';
-let welcomeSoundtrackPrimedMuted = false;
 
 function dismissWelcomeWindow() {
   dismissWelcomeWindowCore(welcomeWindowState, welcomeDeps);
@@ -1104,6 +1101,10 @@ function applyWelcomeWindowInputMode() {
   applyWelcomeWindowInputModeCore(welcomeDeps);
 }
 
+function triggerWelcomeWindowTouch(event) {
+  triggerWelcomeWindowTouchCore(event, welcomeWindowState, welcomeDeps);
+}
+
 function resetWelcomeWindowMotion() {
   resetWelcomeWindowMotionCore(welcomeWindowMotion, welcomeMotionDeps);
 }
@@ -1115,100 +1116,15 @@ if (typeof welcomeWindowTouchQuery.addEventListener === 'function') {
   welcomeWindowTouchQuery.addListener?.(applyWelcomeWindowInputMode);
   welcomeWindowMobileQuery.addListener?.(applyWelcomeWindowInputMode);
 }
-
-function welcomeStartUsesTouchOrientationGate() {
-  return Boolean(welcomeWindowTouchQuery.matches || navigator.maxTouchPoints > 0);
-}
-
-function welcomeStartNeedsLandscapeGate() {
-  return Boolean(welcomeStartUsesTouchOrientationGate() && window.innerWidth <= window.innerHeight);
-}
-
-function showWelcomeOrientationGate() {
-  orientationGateOverlay?.setAttribute('aria-hidden', 'false');
-  document.body.classList.add('orientation-gate-visible');
-}
-
-function hideWelcomeOrientationGate() {
-  orientationGateOverlay?.setAttribute('aria-hidden', 'true');
-  document.body.classList.remove('orientation-gate-visible');
-}
-
-function requestOrientationGateFullscreen(event) {
-  event?.preventDefault?.();
-  event?.stopPropagation?.();
-  requestLandscapeImmersive('orientation-gate-fullscreen-button');
-}
-
-function startWelcomeReveal(source = 'welcome-button', event = null) {
-  requestLandscapeImmersive(source);
-  tronDiscRevealWaitingActive = true;
-  setTronDiscCursorRevealWaiting(true, event);
-  tronRevealWaitLabel?.classList.toggle('is-active', tronDiscRevealWaitingActive);
-  triggerBackspaceDroneIntro(source);
-  releaseWelcomeDeferredAudio();
-}
-
-function primeWelcomeAudioForDeferredStart(source) {
-  ensureFootstepAudioReady();
-  if (tronSoundtrack.playing) {
-    welcomeSoundtrackPrimedMuted = true;
-    return;
-  }
-  const restoreVolume = tronSoundtrack.targetVolume || TRON_SOUNDTRACK_VOLUME;
-  tronSoundtrack.targetVolume = 0.0001;
-  const started = startTronProceduralMusic(source);
-  tronSoundtrack.targetVolume = restoreVolume;
-  welcomeSoundtrackPrimedMuted = Boolean(started || tronSoundtrack.playing);
-}
-
-function releaseWelcomeDeferredAudio() {
-  if (!welcomeSoundtrackPrimedMuted) return;
-  welcomeSoundtrackPrimedMuted = false;
-  tronSoundtrack.elements.forEach((audio) => setAudioCurrentTime(audio, TRON_SOUNDTRACK_INITIAL_START_SECONDS));
-  setTronFileSoundtrackVolume(TRON_SOUNDTRACK_VOLUME);
-}
-
-function queueWelcomeStartUntilLandscape(source, event = null) {
-  if (!welcomeStartNeedsLandscapeGate()) return false;
-  welcomeStartPendingForLandscape = true;
-  welcomeStartPendingSource = source;
-  showWelcomeOrientationGate();
-  primeWelcomeAudioForDeferredStart(source);
-  requestLandscapeImmersive(source);
-  setTronDiscCursorRevealWaiting(false, event);
-  tronRevealWaitLabel?.classList.remove('is-active');
-  return true;
-}
-
-function requestWelcomeStart(source = 'welcome-button', event = null) {
-  if (queueWelcomeStartUntilLandscape(source, event)) return;
-  hideWelcomeOrientationGate();
-  startWelcomeReveal(source, event);
-}
-
-function maybeReleaseWelcomeLandscapeGate() {
-  if (!welcomeStartPendingForLandscape) return;
-  if (welcomeStartNeedsLandscapeGate()) {
-    showWelcomeOrientationGate();
-    return;
-  }
-  const source = welcomeStartPendingSource || 'welcome-button';
-  welcomeStartPendingForLandscape = false;
-  welcomeStartPendingSource = 'welcome-button';
-  hideWelcomeOrientationGate();
-  startWelcomeReveal(source, null);
-}
-
-window.addEventListener('orientationchange', maybeReleaseWelcomeLandscapeGate, { passive: true });
-window.addEventListener('resize', maybeReleaseWelcomeLandscapeGate, { passive: true });
-orientationGateFullscreenButton?.addEventListener('click', requestOrientationGateFullscreen);
+welcomeWindowOverlay?.addEventListener('pointerdown', triggerWelcomeWindowTouch, { passive: false });
+welcomeWindowOverlay?.addEventListener('touchstart', triggerWelcomeWindowTouch, { passive: false });
 
 function triggerWelcomeButtonStart(event) {
   event.preventDefault();
-  if (queueWelcomeStartUntilLandscape('welcome-button', event)) return;
-  hideWelcomeOrientationGate();
-  startWelcomeReveal('welcome-button', event);
+  tronDiscRevealWaitingActive = true;
+  setTronDiscCursorRevealWaiting(true, event);
+  tronRevealWaitLabel?.classList.toggle('is-active', tronDiscRevealWaitingActive);
+  triggerBackspaceDroneIntro('welcome-button');
 }
 
 function isEventInsideWelcomeStartButton(event) {
@@ -1444,7 +1360,6 @@ const tronSoundtrack = {
   crossfading: false,
   startedAt: 0,
   startSource: '',
-  url: TRON_SOUNDTRACK_URL,
   duration: 0,
   targetVolume: TRON_SOUNDTRACK_VOLUME,
   timer: 0,
@@ -1758,7 +1673,7 @@ window.__tronMusicForceCrossfade = crossfadeTronSoundtrack;
 window.__tronMusicInspect = () => ({
   enabled: TRON_SOUNDTRACK_ENABLED,
   mode: 'file-crossfade',
-  url: tronSoundtrack.url || TRON_SOUNDTRACK_URL,
+  url: TRON_SOUNDTRACK_URL,
   contextState: footstepAudioContext?.state || 'not-created',
   ready: tronSoundtrack.ready,
   playing: tronSoundtrack.playing,
@@ -2246,7 +2161,7 @@ initKeyboard({
   DEMO_START_KEY,
   welcomeWindowVisible,
   ensureFootstepAudioReady,
-  triggerBackspaceDroneIntro: requestWelcomeStart,
+  triggerBackspaceDroneIntro,
   resetCameraHeightToDefault,
   captureLivePlayerSpawn,
   getBackspaceIntroTriggered: () => backspaceIntroTriggered,

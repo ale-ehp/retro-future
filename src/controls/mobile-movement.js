@@ -2,14 +2,13 @@
 // The on-screen virtual joystick (active only in mobile landscape) plus the landscape-fullscreen
 // request flow. Dormant on desktop. mobileTouchControlsState is the shared interface: the pad writes
 // movement.{x,z,magnitude,enabled} here and main's applyMovement reads it; __tronInspect reads the
-// snapshot. requestLandscapeFullscreen / requestLandscapeImmersive + isMobileMovementControlTarget are
-// also used by the mouse-look touch handlers and welcome start flow. main calls initMobileMovement(deps)
-// once to wire the perf/diagnostics/viewport deps + the pad DOM refs and register all listeners.
+// snapshot. requestLandscapeFullscreen + isMobileMovementControlTarget are also used by the mouse-look
+// touch handlers (injected there). main calls initMobileMovement(deps) once to wire the perf/diagnostics/
+// viewport deps + the pad DOM refs and register all the touch/orientation/fullscreen listeners.
 
 const MOBILE_MOVEMENT_PAD_RADIUS = 58;
 const MOBILE_MOVEMENT_PAD_DEADZONE = 0.12;
 const mobileLandscapeQuery = window.matchMedia('(orientation: landscape)');
-const mobileTouchQuery = window.matchMedia('(hover: none), (pointer: coarse)');
 
 export const mobileTouchControlsState = {
   landscape: false,
@@ -22,12 +21,6 @@ export const mobileTouchControlsState = {
     attemptId: 0,
     lastResult: 'idle',
     lastError: '',
-    orientationSupported: false,
-    orientationLastResult: 'idle',
-    orientationLastError: '',
-    nativeActive: false,
-    mobileImmersiveActive: false,
-    mobileImmersiveSource: '',
   },
   movement: {
     enabled: false,
@@ -59,51 +52,19 @@ function requestFullscreenSupported() {
   return Boolean(target.requestFullscreen || target.webkitRequestFullscreen);
 }
 
-function screenOrientation() {
-  return globalThis.screen?.orientation || null;
-}
-
-function orientationLockSupported() {
-  return typeof screenOrientation()?.lock === 'function';
-}
-
 function updateMobileTouchControlsState() {
   const landscape = isMobileLandscapeMode();
-  const nativeFullscreenActive = Boolean(currentFullscreenElement());
   mobileTouchControlsState.landscape = landscape;
   mobileTouchControlsState.fullscreen.supported = requestFullscreenSupported();
-  mobileTouchControlsState.fullscreen.nativeActive = nativeFullscreenActive;
-  mobileTouchControlsState.fullscreen.active = Boolean(nativeFullscreenActive || mobileTouchControlsState.fullscreen.mobileImmersiveActive);
+  mobileTouchControlsState.fullscreen.active = Boolean(currentFullscreenElement());
   mobileTouchControlsState.fullscreen.landscape = landscape;
-  mobileTouchControlsState.fullscreen.orientationSupported = orientationLockSupported();
   mobileTouchControlsState.movement.enabled = Boolean(landscape && mobileMovementPadEl);
   document.body.classList.toggle('mobile-landscape', mobileTouchControlsState.movement.enabled);
   if (!mobileTouchControlsState.movement.enabled) resetMobileMovementPad();
   return mobileTouchControlsState;
 }
 
-function mobileProfileActive() {
-  return Boolean(typeof mobilePerformanceProfileActive === 'function' && mobilePerformanceProfileActive());
-}
-
-function mobileImmersiveShellAllowed() {
-  return Boolean(
-    mobileProfileActive()
-      || mobileTouchQuery.matches
-      || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0),
-  );
-}
-
-function setMobileImmersiveShell(active, source = 'auto') {
-  const next = Boolean(active && mobileImmersiveShellAllowed());
-  document.documentElement?.classList?.toggle('mobile-immersive-active', next);
-  document.body?.classList?.toggle('mobile-immersive-active', next);
-  mobileTouchControlsState.fullscreen.mobileImmersiveActive = next;
-  mobileTouchControlsState.fullscreen.mobileImmersiveSource = next ? source : '';
-  return next;
-}
-
-function requestMobileFullscreen(source = 'auto', { requireLandscape = true, allowNonMobile = false } = {}) {
+export function requestLandscapeFullscreen(source = 'auto') {
   updateMobileTouchControlsState();
   const fs = mobileTouchControlsState.fullscreen;
   const attemptId = fs.attemptId + 1;
@@ -111,11 +72,7 @@ function requestMobileFullscreen(source = 'auto', { requireLandscape = true, all
   fs.lastAttemptSource = source;
   fs.lastAttemptAt = performance.now();
   fs.lastError = '';
-  if (!allowNonMobile && !mobileProfileActive()) {
-    fs.lastResult = 'skipped-not-mobile';
-    return Promise.resolve(false);
-  }
-  if (requireLandscape && !fs.landscape) {
+  if (!fs.landscape) {
     fs.lastResult = 'skipped-not-landscape';
     return Promise.resolve(false);
   }
@@ -156,46 +113,6 @@ function requestMobileFullscreen(source = 'auto', { requireLandscape = true, all
     updateMobileTouchControlsState();
     return Promise.resolve(false);
   }
-}
-
-export function requestLandscapeFullscreen(source = 'auto') {
-  return requestMobileFullscreen(source, { requireLandscape: true });
-}
-
-async function requestLandscapeOrientationLock() {
-  const fs = mobileTouchControlsState.fullscreen;
-  fs.orientationLastError = '';
-  fs.orientationSupported = orientationLockSupported();
-  if (!mobileProfileActive()) {
-    fs.orientationLastResult = 'skipped-not-mobile';
-    return false;
-  }
-  const orientation = screenOrientation();
-  if (typeof orientation?.lock !== 'function') {
-    fs.orientationLastResult = 'unsupported';
-    return false;
-  }
-  try {
-    await orientation.lock('landscape');
-    fs.orientationLastResult = 'locked';
-    fs.orientationLastError = '';
-    updateMobileTouchControlsState();
-    return true;
-  } catch (error) {
-    fs.orientationLastResult = 'blocked';
-    fs.orientationLastError = error?.message || String(error);
-    updateMobileTouchControlsState();
-    return false;
-  }
-}
-
-export async function requestLandscapeImmersive(source = 'auto') {
-  updateMobileTouchControlsState();
-  const fullscreenResult = await requestMobileFullscreen(source, { requireLandscape: false, allowNonMobile: true });
-  const mobileImmersiveResult = setMobileImmersiveShell(true, source);
-  const orientationResult = await requestLandscapeOrientationLock();
-  updateMobileTouchControlsState();
-  return Boolean(fullscreenResult || orientationResult || mobileImmersiveResult);
 }
 
 function resetMobileMovementPad() {
