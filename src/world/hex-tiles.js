@@ -182,8 +182,12 @@ export function initHexTileMaterials() {
 export const HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED = true;
 export const HEX_ROAD_UPLOAD_BATCH_LIMIT = 10;
 export const HEX_ROAD_LOD_ENABLED = true;
-export const HEX_ROAD_LOD_NEAR_DISTANCE = 520;
-export const HEX_ROAD_LOD_HYSTERESIS = 120;
+export const HEX_ROAD_LOD_DESKTOP_NEAR_DISTANCE = 520;
+export const HEX_ROAD_LOD_DESKTOP_HYSTERESIS = 120;
+export const HEX_ROAD_LOD_MOBILE_NEAR_DISTANCE = 320;
+export const HEX_ROAD_LOD_MOBILE_HYSTERESIS = 80;
+export const HEX_ROAD_LOD_NEAR_DISTANCE = HEX_ROAD_LOD_DESKTOP_NEAR_DISTANCE;
+export const HEX_ROAD_LOD_HYSTERESIS = HEX_ROAD_LOD_DESKTOP_HYSTERESIS;
 export const HEX_ROAD_TRIANGLES_PER_INSTANCE = Math.round(
   (hexTileGeo.index?.count ?? hexTileGeo.attributes.position.count) / 3
 );
@@ -205,6 +209,7 @@ export const hexRoadRuntimeStats = {
   lodEnabled: HEX_ROAD_LOD_ENABLED,
   lodNearDistance: HEX_ROAD_LOD_NEAR_DISTANCE,
   lodHysteresis: HEX_ROAD_LOD_HYSTERESIS,
+  lodMobileProfile: false,
   lodVisibleBatches: 0,
   lodHiddenBatches: 0,
   lodVisibleInstances: 0,
@@ -216,6 +221,31 @@ const hexTileSyncDeps = {
   getBasePadHexOverlay: () => null,
   refreshCullingBounds: () => {},
 };
+
+const hexRoadLodSettings = {
+  enabled: HEX_ROAD_LOD_ENABLED,
+  nearDistance: HEX_ROAD_LOD_NEAR_DISTANCE,
+  hysteresis: HEX_ROAD_LOD_HYSTERESIS,
+  mobile: false,
+};
+
+export function hexRoadLodSettingsForProfile({ mobile = false } = {}) {
+  return {
+    enabled: HEX_ROAD_LOD_ENABLED,
+    nearDistance: mobile ? HEX_ROAD_LOD_MOBILE_NEAR_DISTANCE : HEX_ROAD_LOD_DESKTOP_NEAR_DISTANCE,
+    hysteresis: mobile ? HEX_ROAD_LOD_MOBILE_HYSTERESIS : HEX_ROAD_LOD_DESKTOP_HYSTERESIS,
+    mobile,
+  };
+}
+
+export function setHexRoadLodProfile(profile = {}) {
+  const next = hexRoadLodSettingsForProfile(profile);
+  hexRoadLodSettings.enabled = next.enabled;
+  hexRoadLodSettings.nearDistance = next.nearDistance;
+  hexRoadLodSettings.hysteresis = next.hysteresis;
+  hexRoadLodSettings.mobile = next.mobile;
+  return { ...hexRoadLodSettings };
+}
 
 export function initHexTileSync(deps) {
   hexTileSyncDeps.getBasePadHexOverlay = deps.getBasePadHexOverlay;
@@ -286,9 +316,9 @@ export function resolveHexRoadBatchLodVisible(
 export function applyHexRoadBatchLodVisibility(batchRecords, {
   x,
   z,
-  enabled = HEX_ROAD_LOD_ENABLED,
-  nearDistance = HEX_ROAD_LOD_NEAR_DISTANCE,
-  hysteresis = HEX_ROAD_LOD_HYSTERESIS,
+  enabled = hexRoadLodSettings.enabled,
+  nearDistance = hexRoadLodSettings.nearDistance,
+  hysteresis = hexRoadLodSettings.hysteresis,
   trianglesPerInstance = HEX_ROAD_TRIANGLES_PER_INSTANCE,
 } = {}) {
   const stats = {
@@ -340,6 +370,7 @@ export function updateHexRoadBatchLod(camera = hexTileCamera) {
   hexRoadRuntimeStats.lodEnabled = stats.enabled;
   hexRoadRuntimeStats.lodNearDistance = stats.nearDistance;
   hexRoadRuntimeStats.lodHysteresis = stats.hysteresis;
+  hexRoadRuntimeStats.lodMobileProfile = hexRoadLodSettings.mobile;
   hexRoadRuntimeStats.lodVisibleBatches = stats.visibleBatches;
   hexRoadRuntimeStats.lodHiddenBatches = stats.hiddenBatches;
   hexRoadRuntimeStats.lodVisibleInstances = stats.visibleInstances;

@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   applyHexRoadBatchLodVisibility,
+  hexRoadLodSettingsForProfile,
   hexRoadBatchDistanceSqToPoint,
   resolveHexRoadBatchLodVisible,
 } from './hex-tiles.js';
@@ -29,6 +30,16 @@ test('hex road LOD visibility uses hysteresis around the near distance', () => {
 
   assert.equal(resolveHexRoadBatchLodVisible(105 * 105, false, 100, 10), false);
   assert.equal(resolveHexRoadBatchLodVisible(95 * 95, false, 100, 10), true);
+});
+
+test('hex road LOD uses tighter thresholds on mobile', () => {
+  const desktop = hexRoadLodSettingsForProfile({ mobile: false });
+  const mobile = hexRoadLodSettingsForProfile({ mobile: true });
+
+  assert.ok(mobile.nearDistance < desktop.nearDistance);
+  assert.ok(mobile.hysteresis < desktop.hysteresis);
+  assert.equal(resolveHexRoadBatchLodVisible(450 * 450, true, desktop.nearDistance, desktop.hysteresis), true);
+  assert.equal(resolveHexRoadBatchLodVisible(450 * 450, true, mobile.nearDistance, mobile.hysteresis), false);
 });
 
 test('hex road LOD hides far batches and reports saved triangles', () => {

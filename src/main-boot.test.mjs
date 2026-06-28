@@ -132,6 +132,19 @@ test('retro benchmark is query-startable and exports diagnostic json', () => {
   assert.match(cssSource, /\.retro-benchmark-actions\s+button/);
 });
 
+test('hex road LOD updates before reveal-critical work is skipped', () => {
+  const tickBody = mainSource.match(/function tick\(now\) \{([\s\S]*?)\n\}/)?.[1] || '';
+  const lodSyncIndex = tickBody.indexOf('syncHexRoadLodForFrame();');
+  const revealCriticalIndex = tickBody.indexOf('const revealPerformanceCritical = isCityRevealPerformanceCritical();');
+  const skippedStepIndex = tickBody.indexOf('if (!revealPerformanceCritical) {');
+
+  assert.notEqual(lodSyncIndex, -1);
+  assert.notEqual(revealCriticalIndex, -1);
+  assert.notEqual(skippedStepIndex, -1);
+  assert.ok(lodSyncIndex < revealCriticalIndex);
+  assert.ok(revealCriticalIndex < skippedStepIndex);
+});
+
 test('welcome cover button starts the existing reveal flow', () => {
   assert.match(mainSource, /document\.getElementById\('welcome-start-button'\)/);
   assert.match(mainSource, /welcomeStartButton\?\.addEventListener\('click'/);
