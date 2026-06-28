@@ -692,6 +692,7 @@ import {
   setHexTileGap,
   setHexTileHeightScale,
   setHexRoadMaterialGlow,
+  setHexRoadLodProfile,
   setHexTileScale,
   sidewalkMinSurfaceY,
   hexPlayerTileLight,
@@ -703,6 +704,7 @@ import {
   syncHexTileDisplayColor,
   streetEdgeHexMat,
   updateHexTileLayout,
+  updateHexRoadBatchLod,
   updateStreetEdgeHexTileScale,
   updateZTileBand,
 } from './world/hex-tiles.js';
@@ -4393,6 +4395,11 @@ function mobilePerformanceProfileInspect() {
   };
 }
 
+function syncHexRoadLodForFrame() {
+  setHexRoadLodProfile({ mobile: mobilePerformanceProfileActive() });
+  updateHexRoadBatchLod();
+}
+
 function shouldUseComposer() {
   if (!composer || !postEnabled) return false;
   return Boolean(
@@ -6699,6 +6706,7 @@ function tick(now) {
   removeViewMotionOffset();
   const droneIntroWasActive = updateDroneIntroFlight(now);
   if (!droneIntroWasActive) applyMovement(dt);
+  syncHexRoadLodForFrame();
   const revealPerformanceCritical = isCityRevealPerformanceCritical();
   if (!revealPerformanceCritical) {
     stepHexRoadTiles(dt);
