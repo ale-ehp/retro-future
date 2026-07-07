@@ -10,6 +10,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <link rel="icon" href="data:," />
 <link rel="stylesheet" href="./retro-future.css" />
+<!-- warm the soundtrack cache during boot (low priority, doesn't compete with three.js/GLB) so the
+     music is ready the instant the reveal starts and stays in sync even on a cold/incognito load -->
+<link rel="prefetch" href="./audio/music/retro-future.opus" as="audio" />
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
