@@ -606,14 +606,8 @@
     "three/addons/postprocessing/UnrealBloomPass.js": "./UnrealBloomPass.js",
     "three/addons/postprocessing/FXAAPass.js": "./FXAAPass.js",
     "three/addons/postprocessing/ShaderPass.js": "./ShaderPass.js",
-    "three/addons/postprocessing/Pass.js": "./Pass.js",
-    "three/addons/postprocessing/MaskPass.js": "./MaskPass.js",
     "three/addons/loaders/GLTFLoader.js": "./GLTFLoader.js",
-    "three/addons/utils/SkeletonUtils.js": "./SkeletonUtils.js",
-    "three/addons/shaders/CopyShader.js": "./CopyShader.js",
-    "three/addons/shaders/LuminosityHighPassShader.js": "./LuminosityHighPassShader.js",
-    "three/addons/shaders/FXAAShader.js": "./FXAAShader.js",
-    "three/addons/shaders/OutputShader.js": "./OutputShader.js"
+    "three/addons/utils/SkeletonUtils.js": "./SkeletonUtils.js"
   }
 }
 </script>
@@ -815,10 +809,13 @@ async function initWelcomeDepartmentHeads() {
       const yawDelta = view.targetYaw - view.currentYaw;
       view.currentYaw += yawDelta * headEase;
       view.currentPitch = 0;
-      if (Math.abs(yawDelta) > 0.001) needsNextFrame = true;
+      const moving = Math.abs(yawDelta) > 0.001;
+      if (moving) needsNextFrame = true;
       view.head.rotation.y = view.baseYaw + view.currentYaw;
       view.head.rotation.x = view.basePitch;
-      renderView(view);
+      // only re-render the view that is actually moving; idle heads keep their last frame
+      // (canvases use preserveDrawingBuffer) instead of 4 full WebGL renders every hover frame
+      if (moving) renderView(view);
     });
     if (needsNextFrame) {
       scheduleWelcomeHeadMotion();

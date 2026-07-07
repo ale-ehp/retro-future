@@ -709,6 +709,8 @@ function ensureBasePadLedBatchForRecord(record, count) {
 
   if (batch?.mesh) {
     overlayGroup.remove(batch.mesh);
+    // free the retired mesh's instanceMatrix buffer; basePadLedUnitGeometry is shared and must stay
+    batch.mesh.dispose();
     const index = basePadLedBatch.batches.indexOf(batch);
     if (index >= 0) basePadLedBatch.batches.splice(index, 1);
   }

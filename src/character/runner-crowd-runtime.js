@@ -982,7 +982,6 @@ export function inspectTronRunnerCrowdRuntime(state) {
     cloneSource: 'runner-post-fit-model',
     skeletonClone: Boolean(state.getCloneRunnerSkeleton()),
     sharedMaterial: true,
-    realShadows: false,
     dynamicReflections: {
       enabled: state.dynamicReflectionEnabled,
       mode: 'mesh-clone',

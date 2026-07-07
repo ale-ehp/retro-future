@@ -35,18 +35,6 @@ export const TRON_SOUNDTRACK_INTRO_FX_DEFAULTS = Object.freeze({
   noise: 0,
 });
 
-export function createTronSynthNoiseBuffer(ctx) {
-  const length = Math.max(1, Math.floor(ctx.sampleRate * 0.45));
-  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-  const channel = buffer.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < length; i += 1) {
-    last = last * 0.72 + (Math.random() * 2 - 1) * 0.28;
-    channel[i] = last;
-  }
-  return buffer;
-}
-
 export function createTronIntroNoiseBuffer(ctx) {
   const length = Math.max(1, Math.floor(ctx.sampleRate * 1.5));
   const buffer = ctx.createBuffer(1, length, ctx.sampleRate);

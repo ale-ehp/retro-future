@@ -796,7 +796,8 @@ function updateHexRoadTiles(dt) {
 }
 
 export function stepHexRoadTiles(dt) {
-  updateHexRoadBatchLod();
+  // LOD already refreshed this frame by syncHexRoadLodForFrame() in the tick (runs immediately before
+  // stepHexRoadTiles with the same camera); a second updateHexRoadBatchLod() here was redundant.
   if (!hexUpdateEnabled) {
     hexRoadUpdateFrame = 0;
     hexRoadAccumulatedDt = 0;

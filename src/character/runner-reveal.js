@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import {
   TRON_RUNNER_GROUND_SHADOW_ENABLED,
   TRON_RUNNER_IDLE_CHARACTER_ENABLED,
-  TRON_RUNNER_REAL_SHADOW_ENABLED,
   TRON_RUNNER_REVEAL_DURATION_MS,
   TRON_RUNNER_REVEAL_EMISSIVE_BOOST,
   TRON_RUNNER_REVEAL_ENABLED,
@@ -130,7 +129,12 @@ export function createTronRunnerRevealRuntime({
             ? baseEmissive
             : baseEmissive * (0.2 + factor * 0.8) + activePulse * TRON_RUNNER_REVEAL_EMISSIVE_BOOST;
         }
-        material.needsUpdate = true;
+        // opacity/emissiveIntensity/depthWrite are uniforms/state; only a transparent flip needs a
+        // program refresh. Gate needsUpdate to those frames instead of every reveal frame.
+        if (material.userData.tronRunnerRevealTransparent !== material.transparent) {
+          material.userData.tronRunnerRevealTransparent = material.transparent;
+          material.needsUpdate = true;
+        }
       }
     }
     runnerState.crowdRevealMaterialOpacity = revealOpacity;
@@ -153,7 +157,11 @@ export function createTronRunnerRevealRuntime({
           ? baseEmissive
           : baseEmissive * (0.2 + factor * 0.8) + activePulse * TRON_RUNNER_REVEAL_EMISSIVE_BOOST;
       }
-      material.needsUpdate = true;
+      // only a transparent flip needs a program refresh (see applyCrowdRevealVisuals)
+      if (material.userData.tronRunnerRevealTransparent !== material.transparent) {
+        material.userData.tronRunnerRevealTransparent = material.transparent;
+        material.needsUpdate = true;
+      }
     }
   }
 
@@ -212,20 +220,6 @@ export function createTronRunnerRevealRuntime({
       groundShadow.visible = shouldRenderRunner && TRON_RUNNER_GROUND_SHADOW_ENABLED && baseOpacity * factor > 0.002;
       groundShadow.material.opacity = baseOpacity * factor;
       groundShadow.material.needsUpdate = true;
-    }
-
-    const realShadowReceiver = runnerParts.realShadowReceiver;
-    if (realShadowReceiver?.material) {
-      const baseOpacity = baseMaterialOpacity(realShadowReceiver.material, realShadowReceiver.material.opacity);
-      realShadowReceiver.visible = shouldRenderRunner && baseOpacity * factor > 0.002;
-      realShadowReceiver.material.opacity = baseOpacity * factor;
-      realShadowReceiver.material.needsUpdate = true;
-      runnerState.realShadowOpacity = baseOpacity * factor;
-    }
-
-    if (runnerParts.realShadowLight) {
-      runnerParts.realShadowLight.visible = shouldRenderRunner && TRON_RUNNER_REAL_SHADOW_ENABLED && factor > 0.01;
-      runnerParts.realShadowLight.intensity = shouldRenderRunner && TRON_RUNNER_REAL_SHADOW_ENABLED ? 0.16 * factor : 0;
     }
 
     const reflectionGroup = runnerParts.reflectionGroup;

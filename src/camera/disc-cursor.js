@@ -82,6 +82,12 @@ export function setTronDiscCursorRevealWaiting(waiting, anchorEvent = null) {
 
 export function handleTronDiscCursorMove(event) {
   if (!tronDiscCursor) return;
+  // while pointer-locked (steady gameplay) the disc cursor can never show, so skip the
+  // getBoundingClientRect + closest() + DOM writes this handler would otherwise do every mousemove
+  if (getPointerLocked()) {
+    if (tronDiscCursorState.visible) setTronDiscCursorVisible(false);
+    return;
+  }
   const inside = isTronDiscCursorSurfaceEvent(event);
   tronDiscCursorState.pointerInside = inside;
   if (!inside) {

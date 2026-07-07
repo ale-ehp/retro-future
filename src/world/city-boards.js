@@ -475,7 +475,7 @@ function syncCityDepartmentBoardRevealVisibility(revealFactor = cityDepartmentBo
       const nextOpacity = baseOpacity * factor;
       if (Math.abs((material.opacity ?? 0) - nextOpacity) < CITY_DEPARTMENT_BOARD_REVEAL_EPS) continue;
       material.opacity = nextOpacity;
-      material.needsUpdate = true;
+      // opacity is a uniform; no needsUpdate/program refresh required for the fade
       cityDepartmentBoardState.revealWrites += 1;
     }
   }
@@ -956,7 +956,7 @@ function syncCityRoleBoardRevealVisibility(revealFactor = cityDepartmentBoardRev
       const nextOpacity = baseOpacity * factor;
       if (Math.abs((material.opacity ?? 0) - nextOpacity) < CITY_ROLE_BOARD_REVEAL_EPS) continue;
       material.opacity = nextOpacity;
-      material.needsUpdate = true;
+      // opacity is a uniform; no needsUpdate/program refresh required for the fade
       cityRoleBoardRuntimeStats.revealWrites += 1;
     }
   }

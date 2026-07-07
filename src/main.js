@@ -5,9 +5,9 @@ import {
   SIDE_BUILDING_BASE, SIDE_BUILDING_GAP, SIDE_BUILDING_SPACING,
   SIDE_BUILDING_MIN_CLEARANCE, BRIDGE_BUILDING_CLEARANCE, BRIDGE_INNER_BUILDING_FACE_X, BRIDGE_HALF_SPAN,
   MAIN_ROAD_BASE_LENGTH, START_SIDE_EXTENSION, MAIN_ROAD_LENGTH, MAIN_ROAD_Z, MAIN_BUILDING_BASE,
-  MAIN_BUILDING_Z, laneZ, crossStreetZ, STREET_EDGE_WIDTH_DEFAULT, STREET_EDGE_WIDTH_MAX,
+  MAIN_BUILDING_Z, laneZ, STREET_EDGE_WIDTH_DEFAULT, STREET_EDGE_WIDTH_MAX,
   MAX_BUILDING_AXIS_SCALE, MAX_BOULEVARD_WIDTH_SCALE, MAX_DYNAMIC_ROAD_MARGIN,
-  MAIN_BUILDING_SIDE_HEX_EXTENSION_ROWS, CROSS_STREET_EDGE_WIDTH_MAX, DEFAULT_BASE_PAD_Y,
+  MAIN_BUILDING_SIDE_HEX_EXTENSION_ROWS, DEFAULT_BASE_PAD_Y,
   DEFAULT_BASE_PAD_THICKNESS,
 } from './world/boulevard-constants.js';
 import {
@@ -141,13 +141,6 @@ import {
   TRON_RUNNER_IDLE_CHARACTER_Y_LIFT,
   TRON_RUNNER_LIGHTING_MODE,
   TRON_RUNNER_MODEL_URL,
-  TRON_RUNNER_REAL_SHADOW_BASE_OPACITY,
-  TRON_RUNNER_REAL_SHADOW_CAMERA_SIZE,
-  TRON_RUNNER_REAL_SHADOW_COLOR,
-  TRON_RUNNER_REAL_SHADOW_ENABLED,
-  TRON_RUNNER_REAL_SHADOW_LAYER,
-  TRON_RUNNER_REAL_SHADOW_MAP_SIZE,
-  TRON_RUNNER_REAL_SHADOW_RECEIVER_RADIUS,
   TRON_RUNNER_REVEAL_ENABLED,
   TRON_RUNNER_ROUTE_OFFSET,
   TRON_RUNNER_SHADOW_COLOR,
@@ -168,9 +161,6 @@ import {
 import {
   resolveTronRunnerRoundedCollider,
 } from './character/character-collision.js';
-import {
-  createTronMainPlayerBodyRuntime,
-} from './character/main-player-body.js';
 import {
   createTronRunnerBeatPulseRuntime,
 } from './character/runner-beat-pulse.js';
@@ -1366,8 +1356,12 @@ welcomeWindowOverlay?.addEventListener('click', (event) => {
   triggerWelcomeButtonStart(event);
 });
 
+// reused scratch (order 'YXZ') to avoid allocating a THREE.Euler on every applyCameraLook call
+// (runs once per frame plus once per mousemove/touchmove)
+const applyCameraLookEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 function applyCameraLook() {
-  camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, viewRoll, 'YXZ'));
+  applyCameraLookEuler.set(pitch, yaw, viewRoll);
+  camera.quaternion.setFromEuler(applyCameraLookEuler);
 }
 
 const lockEl = renderer.domElement;
@@ -2086,14 +2080,6 @@ function sideBuildingX(sign) {
   return sign * (roadHalf() + streetEdgeWidth + sideBuildingVisualWidth() / 2);
 }
 
-function sideRoadVisualLength() {
-  return SIDE_ROAD_LENGTH;
-}
-
-function sideRoadX(sign) {
-  return sign * (roadHalf() + sideRoadVisualLength() / 2);
-}
-
 function crossStreetVisualLength(width = streetEdgeWidth, sideWidth = sideBuildingVisualWidth(), roadWidthScale = boulevardWidthScale) {
   return 2 * (roadHalf(roadWidthScale) + width + sideWidth);
 }
@@ -2536,23 +2522,6 @@ function intersectionTracePoints(z) {
   ];
 }
 
-const intersectionTraceMat = new THREE.MeshBasicMaterial({
-  color: PAL.cyan,
-  transparent: true,
-  opacity: 0.34,
-  toneMapped: false,
-  depthWrite: false,
-});
-groundLedMaterials.push({ material: intersectionTraceMat, baseColor: new THREE.Color(PAL.cyan), role: 'roadEdge' });
-const streetEdgeBlockLedMat = new THREE.LineBasicMaterial({
-  color: PAL.cyan,
-  transparent: true,
-  opacity: 0.72,
-  toneMapped: false,
-  depthWrite: false,
-});
-groundLedMaterials.push({ material: streetEdgeBlockLedMat, baseColor: new THREE.Color(PAL.cyan), role: 'roadEdge' });
-const intersectionRecords = [];
 const buildingStreetEdgeRecords = [];
 let mainBuildingStreetEdgeRecord = null;
 const STREET_EDGE_BLOCK_MAX_DEPTH = SIDE_BUILDING_BASE * MAX_BUILDING_AXIS_SCALE;
@@ -2578,24 +2547,6 @@ function streetEdgeBlockPoints(sign, z, width, depth) {
   ];
 }
 
-function addBuildingStreetEdgeBlock(sign, z) {
-  const depth = streetEdgeBlockVisualDepth();
-  const mesh = new THREE.Mesh(groundShapeGeometry(streetEdgeBlockPoints(sign, z, streetEdgeWidth, depth)), streetEdgeMat);
-  mesh.position.y = 0.14;
-  mesh.renderOrder = 2;
-  scene.add(mesh);
-
-  const perimeter = addGroundLineLoop(streetEdgeBlockPoints(sign, z, streetEdgeWidth, depth), streetEdgeBlockLedMat, 0.54);
-  perimeter.renderOrder = 7;
-
-  buildingStreetEdgeRecords.push({
-    sign,
-    zFactor: z / SIDE_BUILDING_SPACING,
-    mesh,
-    perimeter,
-  });
-}
-
 function mainBuildingStreetEdgePoints(z = mainBuildingZ, width = streetEdgeWidth, nextMainWidthScale = mainBuildingWidthScale, nextMainDepthScale = mainBuildingDepthScale) {
   const buildingWidth = MAIN_BUILDING_BASE * nextMainWidthScale;
   const buildingDepth = MAIN_BUILDING_BASE * nextMainDepthScale;
@@ -2610,141 +2561,9 @@ function mainBuildingStreetEdgePoints(z = mainBuildingZ, width = streetEdgeWidth
   ];
 }
 
-function addMainBuildingStreetEdgeBlock() {
-  const points = mainBuildingStreetEdgePoints();
-  const mesh = new THREE.Mesh(groundShapeGeometry(points), streetEdgeMat);
-  mesh.position.y = 0.14;
-  mesh.renderOrder = 2;
-  scene.add(mesh);
-
-  const perimeter = addGroundLineLoop(points, streetEdgeBlockLedMat, 0.54);
-  perimeter.renderOrder = 7;
-  mainBuildingStreetEdgeRecord = { mesh, perimeter };
-}
-
-function addIntersectionNode(z, blockLength = streetEdgeWidth) {
-  const record = {
-    zFactor: z / SIDE_BUILDING_SPACING,
-    cornerPads: [],
-    cornerCuts: [],
-    roadMasks: [],
-    diagonalLines: [],
-    perimeterLines: [],
-    traceLines: [],
-  };
-
-  [-1, 1].forEach((sideSign) => {
-    const mask = new THREE.Mesh(groundShapeGeometry(mainStreetEdgeRoadMaskPoints(sideSign, z, streetEdgeWidth)), roadMat);
-    mask.position.y = 0.34;
-    mask.renderOrder = 5;
-    scene.add(mask);
-    record.roadMasks.push({ mesh: mask, sideSign });
-  });
-
-  [-1, 1].forEach((sideSign) => {
-    [-1, 1].forEach((zSign) => {
-      const pad = new THREE.Mesh(groundShapeGeometry(cornerPadPoints(sideSign, zSign, z, blockLength)), streetEdgeMat);
-      pad.position.y = 0.18;
-      pad.renderOrder = 3;
-      scene.add(pad);
-      record.cornerPads.push({ mesh: pad, sideSign, zSign });
-
-      const cut = new THREE.Mesh(groundShapeGeometry(cornerCutPoints(sideSign, zSign, z, blockLength)), roadMat);
-      cut.position.y = 0.26;
-      cut.renderOrder = 4;
-      cut.visible = false;
-      scene.add(cut);
-      record.cornerCuts.push({ mesh: cut, sideSign, zSign });
-
-      const diagPts = cornerDiagonalPoints(sideSign, zSign, z, blockLength);
-      const line = addGroundSegment(diagPts[0], diagPts[1], intersectionTraceMat, 0.52, 0.20, 0.055);
-      record.diagonalLines.push({ mesh: line, sideSign, zSign });
-
-      const perimeterSegments = cornerRoadPerimeterSegments(sideSign, zSign, z, blockLength);
-      perimeterSegments.forEach(([a, b]) => {
-        const perimeterLine = addGroundSegment(a, b, intersectionTraceMat, 0.51, 0.14, 0.045);
-        record.perimeterLines.push({ mesh: perimeterLine, sideSign, zSign });
-      });
-    });
-  });
-
-  const tracePts = intersectionTracePoints(z);
-  for (let i = 0; i < tracePts.length; i++) {
-    const line = addGroundSegment(tracePts[i], tracePts[(i + 1) % tracePts.length], intersectionTraceMat, 0.42, 0.12, 0.035);
-    record.traceLines.push(line);
-  }
-
-  intersectionRecords.push(record);
-  return record;
-}
-
 // Cross streets — true intersections in the gaps between the building rows.
 const sideRoadRecords = [];
 const CROSS_STREET_MAX_LENGTH = 2 * (MAIN_ROAD_WIDTH * MAX_BOULEVARD_WIDTH_SCALE / 2 + STREET_EDGE_WIDTH_MAX + SIDE_BUILDING_BASE * MAX_BUILDING_AXIS_SCALE);
-function addSideRoad(_x, z) {
-  const roadLength = crossStreetVisualLength();
-  const sideSegmentLength = crossStreetSideSegmentLength();
-  const crossRoad = new THREE.Mesh(new THREE.PlaneGeometry(CROSS_STREET_MAX_LENGTH, 1), roadMat);
-  crossRoad.rotation.x = -Math.PI / 2;
-  crossRoad.position.set(0, roadBaseY + 0.02, z);
-  crossRoad.scale.set(roadLength / CROSS_STREET_MAX_LENGTH, crossRoadWidth, 1);
-  scene.add(crossRoad);
-  const roadTiles = addHexRoadTiles(80, CROSS_STREET_MAX_LENGTH, 0, z, "x", hexTileMat, true, 0.03);
-
-  const crossStreetEdges = [];
-  const streetEdgeTiles = [];
-  [-1, 1].forEach((zSign) => {
-    [-1, 1].forEach((xSign) => {
-      const x = xSign * (roadHalf() + sideSegmentLength / 2);
-      const zSide = z + zSign * (crossRoadWidth / 2 + crossStreetEdgeWidth / 2);
-      const streetEdge = new THREE.Mesh(new THREE.PlaneGeometry(CROSS_STREET_MAX_LENGTH, 1), streetEdgeMat);
-      streetEdge.rotation.x = -Math.PI / 2;
-      streetEdge.position.set(x, 0.11, zSide);
-      streetEdge.scale.set(sideSegmentLength / CROSS_STREET_MAX_LENGTH, Math.max(0.001, crossStreetEdgeWidth), 1);
-      streetEdge.visible = false;
-      scene.add(streetEdge);
-      crossStreetEdges.push({ mesh: streetEdge, zSign, xSign });
-      streetEdgeTiles.push({
-        zSign,
-        xSign,
-        tiles: [],
-      });
-    });
-  });
-
-  const roadEdgeMat = new THREE.MeshBasicMaterial({ color: PAL.cyan, toneMapped: false });
-  groundLedMaterials.push({ material: roadEdgeMat, baseColor: new THREE.Color(PAL.cyan), role: 'roadEdge' });
-  const roadEdgeLines = [];
-  [-1, 1].forEach((zSign) => {
-    [crossRoadWidth / 2, crossRoadWidth / 2 + crossStreetEdgeWidth].forEach((offset, idx) => {
-      [-1, 1].forEach((xSign) => {
-        const roadEdge = new THREE.Mesh(new THREE.BoxGeometry(CROSS_STREET_MAX_LENGTH, idx === 0 ? 0.11 : 0.09, 0.22), roadEdgeMat);
-        roadEdge.position.set(xSign * (roadHalf() + sideSegmentLength / 2), idx === 0 ? 0.37 : 0.35, z + zSign * offset);
-        roadEdge.scale.x = sideSegmentLength / CROSS_STREET_MAX_LENGTH;
-        roadEdge.visible = idx === 0 || crossStreetEdgeWidth > 0.1;
-        scene.add(roadEdge);
-        roadEdgeLines.push({ mesh: roadEdge, zSign, xSign, edge: idx === 0 ? 'road' : 'outer' });
-      });
-    });
-  });
-
-  const intersection = addIntersectionNode(z, streetEdgeWidth);
-
-  sideRoadRecords.push({
-    zFactor: z / SIDE_BUILDING_SPACING,
-    road: crossRoad,
-    roadTiles,
-    crossStreetEdges,
-    streetEdgeTiles,
-    roadEdgeLines,
-    intersection,
-  });
-}
-
-crossStreetZ.forEach((z) => {
-  addSideRoad(0, z);
-});
-
 // ---------- Tron energy pulses (extracted -> energy-pulse.js) ----------
 
 // ---------- RoadEdge EL strips (cyan tube borders between road and streetEdge) ----------
@@ -3210,22 +3029,6 @@ const tronRunnerSuitMat = new THREE.MeshStandardMaterial({
   toneMapped: false,
 });
 
-const tronMainPlayerBody = createTronMainPlayerBodyRuntime({
-  baseMaterial: tronRunnerSuitMat,
-  camera,
-  getCharacterRevealDone: tronRunnerRevealIsComplete,
-  getCityRevealComplete: () => cityRevealComplete,
-  getMovementHorizontalSpeed: () => movementHorizontalSpeed,
-  getSpeedBase: () => speedBase,
-  getWalkStepRate: () => walkStepRate,
-  getRunStepRate: () => runStepRate,
-  getMovementRunMix: () => movementRunMix,
-  getMovementStrafeDirection: () => movementStrafeDirection,
-  getMovementStrafeMix: () => movementStrafeMix,
-  getBeatMultiplier: () => tronRunnerState.beatPulse?.multiplier || 1,
-});
-scene.add(tronMainPlayerBody.group);
-
 const tronRunnerShadowMat = new THREE.MeshBasicMaterial({
   color: TRON_RUNNER_SHADOW_COLOR,
   alphaMap: tronRunnerShadowTextureState.texture,
@@ -3235,37 +3038,7 @@ const tronRunnerShadowMat = new THREE.MeshBasicMaterial({
   toneMapped: false,
   transparent: true,
 });
-const tronRunnerRealShadowMat = new THREE.ShadowMaterial({
-  color: TRON_RUNNER_REAL_SHADOW_COLOR,
-  opacity: TRON_RUNNER_REAL_SHADOW_BASE_OPACITY,
-  depthWrite: false,
-  transparent: true,
-});
-const tronRunnerRealShadowLight = new THREE.DirectionalLight(0xc7fbff, 0.16);
-tronRunnerRealShadowLight.name = 'tron-runner-real-shadow-light';
-tronRunnerRealShadowLight.castShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
-tronRunnerRealShadowLight.visible = TRON_RUNNER_REAL_SHADOW_ENABLED;
-tronRunnerRealShadowLight.layers.set(TRON_RUNNER_REAL_SHADOW_LAYER);
-tronRunnerRealShadowLight.shadow.mapSize.set(TRON_RUNNER_REAL_SHADOW_MAP_SIZE, TRON_RUNNER_REAL_SHADOW_MAP_SIZE);
-tronRunnerRealShadowLight.shadow.bias = -0.00018;
-tronRunnerRealShadowLight.shadow.normalBias = 0.035;
-tronRunnerRealShadowLight.shadow.radius = 3;
-tronRunnerRealShadowLight.shadow.camera.near = 1;
-tronRunnerRealShadowLight.shadow.camera.far = 46;
-tronRunnerRealShadowLight.shadow.camera.left = -TRON_RUNNER_REAL_SHADOW_CAMERA_SIZE;
-tronRunnerRealShadowLight.shadow.camera.right = TRON_RUNNER_REAL_SHADOW_CAMERA_SIZE;
-tronRunnerRealShadowLight.shadow.camera.top = TRON_RUNNER_REAL_SHADOW_CAMERA_SIZE;
-tronRunnerRealShadowLight.shadow.camera.bottom = -TRON_RUNNER_REAL_SHADOW_CAMERA_SIZE;
-tronRunnerRealShadowLight.shadow.camera.updateProjectionMatrix();
-const tronRunnerRealShadowTarget = new THREE.Object3D();
-tronRunnerRealShadowTarget.name = 'tron-runner-real-shadow-target';
-tronRunnerRealShadowLight.target = tronRunnerRealShadowTarget;
-scene.add(tronRunnerRealShadowLight);
-scene.add(tronRunnerRealShadowTarget);
-const tronRunnerParts = createTronRunnerParts({
-  realShadowLight: tronRunnerRealShadowLight,
-  realShadowTarget: tronRunnerRealShadowTarget,
-});
+const tronRunnerParts = createTronRunnerParts({});
 const tronRunnerState = createTronRunnerState({
   footstepBus: FOOTSTEP_NPC_SPATIAL_BUS,
 });
@@ -3603,10 +3376,6 @@ const tronRunnerFootstepRuntime = {
   walkSpeed: TRON_RUNNER_DEFAULT_SPEED,
 };
 
-function tronRunnerDoorHalfHeight() {
-  return sideDoorHeight * sideDoorScale * 0.5;
-}
-
 function tronRunnerEffectiveAnimationSpeed() {
   return computeTronRunnerEffectiveAnimationSpeed({
     walkSpeed: tronRunnerWalkSpeed,
@@ -3674,7 +3443,6 @@ const tronRunnerOrchestration = createTronRunnerOrchestrationRuntime({
   renderer,
   runnerSuitMaterial: tronRunnerSuitMat,
   runnerShadowMaterial: tronRunnerShadowMat,
-  runnerRealShadowMaterial: tronRunnerRealShadowMat,
   reveal: tronRunnerReveal,
   loadGltfClass: () => RunnerGLTFLoader,
   cloneRunnerSkeleton: () => cloneRunnerSkeleton,
@@ -3684,7 +3452,6 @@ const tronRunnerOrchestration = createTronRunnerOrchestrationRuntime({
     tronRunnerCrowdRuntime.build(model, animations);
   },
   buildIdleCharacter: (model) => tronRunnerIdleCharacterRuntime.build(model),
-  updateRealShadowRig: () => tronRunnerReflectionRig.updateRealShadowRig(),
   updateDynamicReflection: () => tronRunnerReflectionRig.updateDynamicReflection(),
   surfaceYAt: tronRunnerSurfaceYAt,
   roadTileTopY,
@@ -4121,7 +3888,6 @@ const cityRevealProfiler = createCityRevealProfiler({
   getCityRevealOverlayPass: () => cityRevealRender.getOverlayPass(),
   getCityRevealWirePass: () => cityRevealRender.getWirePass(),
   getCityRevealRoadGridPass: () => cityRevealRender.getRoadGridPass(),
-  getCityRevealWireFxaaPass: () => cityRevealRender.getWireFxaaPass(),
   getCityRevealScenePass: () => cityRevealRender.getScenePass(),
   getCityRevealMainLedRevealPass: cityRevealMainLedReveal.getPass,
   cityRevealPostRevealElapsedMs: (now) => tronRunnerCrowdRuntime.postRevealElapsedMs(now),
@@ -4135,7 +3901,7 @@ const cityRevealProfiler = createCityRevealProfiler({
 
 
 function shouldUpdateTronRunnerSourceCharacter() {
-  return Boolean(TRON_RUNNER_SOURCE_CHARACTER_VISIBLE || tronMainPlayerBody.enabled);
+  return Boolean(TRON_RUNNER_SOURCE_CHARACTER_VISIBLE);
 }
 
 // ---------- post (bloom) ----------
@@ -4187,7 +3953,7 @@ function resizeBloomTargets() {
 }
 
 function resizeFxaaTargets() {
-  if (!fxaaPass && !cityRevealRender.getWireFxaaPass()) return;
+  if (!fxaaPass) return;
   const composerPixelRatio = effectiveComposerPixelRatio();
   const width = Math.max(1, Math.round(window.innerWidth * composerPixelRatio));
   const height = Math.max(1, Math.round(window.innerHeight * composerPixelRatio));
@@ -4195,7 +3961,6 @@ function resizeFxaaTargets() {
   if (key === lastFxaaTargetKey) return;
   lastFxaaTargetKey = key;
   fxaaPass?.setSize(width, height);
-  cityRevealRender.resizeWireFxaaTarget(width, height);
   resizeFsrUpscaleTarget();
 }
 
@@ -6350,7 +6115,6 @@ async function bootSceneWithFinalDefaults() {
   setTronNoclip(false, { silent: true });
   applyPlayerSpawn(playerSpawn, false);
   await tronRunnerOrchestration.load();
-  tronMainPlayerBody.build();
   await tronRunnerCrowdRuntime.drainBuildQueue();
   prewarmSkinnedMeshBoneTextures(scene);
   prewarmSceneTextureUploads(scene);
@@ -6390,7 +6154,6 @@ window.__tronInspect = () => ({
   tronRunner: tronRunnerOrchestration.inspect(),
   tronRunnerCrowd: tronRunnerCrowdRuntime.inspect(),
   tronRunnerIdleCharacter: tronRunnerIdleCharacterRuntime.inspect(),
-  mainPlayerBody: tronMainPlayerBody.inspect(),
   surfaceReflections: {
     roadReflect: Number(controlEls.roadReflect.value),
     roadBuildingReflect: Number(controlEls.roadBuildingReflect.value),
@@ -6471,7 +6234,6 @@ window.__tronInspect = () => ({
   cityRevealScanGlow: cityRevealScanGlow.inspect(),
   ...cityRevealMainLedReveal.inspect(),
   cityRevealWireAaMode: 'global-fxaa-only',
-  cityRevealWireAaActive: Boolean(cityRevealRender.getWireFxaaPass()?.enabled),
   cityRevealWireAaLocalized: false,
   cityRevealVisibleObjects: cityRevealEstimatedVisibleObjects(),
   cityRevealWireObjects: cityRevealWireObjects.length,
@@ -6763,7 +6525,6 @@ function tick(now) {
     }
     tronRunnerReveal.update(now);
     tronRunnerBeatPulse.update();
-    tronMainPlayerBody.update(dt);
     updateMainFacadeVerticalReveal();
   }
   updateStaticCityCulling();
@@ -6809,8 +6570,10 @@ function tick(now) {
     updateMs: performanceDiagnostics.timing.updateMs,
     renderMs: performanceDiagnostics.timing.renderMs,
     frameMs: performanceDiagnostics.timing.frameMs,
-    renderInfo: { ...renderer.info.render },
-    memoryInfo: { ...renderer.info.memory },
+    // recordFrame reads these fields synchronously (and early-returns when idle),
+    // so pass the live info objects instead of allocating a copy every frame
+    renderInfo: renderer.info.render,
+    memoryInfo: renderer.info.memory,
   });
 }
 bootSceneWithFinalDefaults().then(() => {

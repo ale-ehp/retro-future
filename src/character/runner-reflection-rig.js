@@ -9,7 +9,6 @@ import {
   TRON_RUNNER_DYNAMIC_REFLECTION_OPACITY_SCALE,
   TRON_RUNNER_DYNAMIC_REFLECTION_Y,
   TRON_RUNNER_DYNAMIC_REFLECTION_Y_SCALE,
-  TRON_RUNNER_REAL_SHADOW_ENABLED,
   TRON_RUNNER_SOURCE_CHARACTER_VISIBLE,
 } from './characters.js';
 import {
@@ -93,13 +92,16 @@ export function createTronRunnerReflectionRigRuntime({
     }
     for (const material of bodyMaterials) {
       material.userData.tronRunnerBaseOpacity = bodyOpacity;
-      material.opacity = bodyOpacity;
-      material.needsUpdate = true;
+      // opacity is a uniform; skip the redundant write + program refresh when unchanged (mirrors character-reflections)
+      if (Math.abs((material.opacity ?? 0) - bodyOpacity) > 0.002) {
+        material.opacity = bodyOpacity;
+      }
     }
     for (const material of ledMaterials) {
       material.userData.tronRunnerBaseOpacity = ledOpacity;
-      material.opacity = ledOpacity;
-      material.needsUpdate = true;
+      if (Math.abs((material.opacity ?? 0) - ledOpacity) > 0.002) {
+        material.opacity = ledOpacity;
+      }
     }
     runnerState.dynamicReflectionVisible = visible;
     runnerState.dynamicReflectionOpacity = bodyOpacity;
@@ -111,22 +113,6 @@ export function createTronRunnerReflectionRigRuntime({
     runnerState.dynamicReflectionAnimated = Boolean(runnerParts.reflectionMixer && runnerParts.reflectionLedMixer);
   }
 
-  function updateRealShadowRig() {
-    if (!TRON_RUNNER_REAL_SHADOW_ENABLED || !runnerParts.realShadowLight || !runnerParts.realShadowTarget) return;
-    const light = runnerParts.realShadowLight;
-    const target = runnerParts.realShadowTarget;
-    const runnerX = runnerWalker.position.x;
-    const runnerY = runnerWalker.position.y;
-    const runnerZ = runnerWalker.position.z;
-    light.position.set(runnerX - 7.5, runnerY + 18, runnerZ - 9.5);
-    target.position.set(runnerX + 0.5, runnerY + 1.4, runnerZ + 2.2);
-    light.target.updateMatrixWorld();
-    light.updateMatrixWorld();
-    if (runnerParts.realShadowReceiver) {
-      runnerParts.realShadowReceiver.position.y = 0.012;
-    }
-  }
-
   return {
     makeMaterial,
     makeBodyMaterial,
@@ -135,6 +121,5 @@ export function createTronRunnerReflectionRigRuntime({
     bodyOpacityForSurface,
     ledOpacityForSurface,
     updateDynamicReflection,
-    updateRealShadowRig,
   };
 }
