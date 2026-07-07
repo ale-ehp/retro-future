@@ -294,19 +294,27 @@ export function buildSideBuildingDoorBatches() {
   updateSideBuildingDoorBatchMeshes();
 }
 
+// Civic numbers are drawn in a fixed 1024x640 virtual space but rasterized into a smaller canvas via
+// ctx.scale, cutting GPU texture memory (1024x640 -> 512x320 at 0.5 is ~31MB saved across the 12 numbers).
+// All drawing math below stays in virtual units so layout/stroke weights are preserved exactly.
+const SIDE_BUILDING_CIVIC_NUMBER_TEXTURE_SCALE = 0.5;
 function createSideBuildingCivicNumberTexture(value) {
   const key = String(value);
   if (sideBuildingCivicNumberTextureCache.has(key)) return sideBuildingCivicNumberTextureCache.get(key);
+  const VW = 1024;
+  const VH = 640;
+  const scale = SIDE_BUILDING_CIVIC_NUMBER_TEXTURE_SCALE;
   const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 640;
+  canvas.width = Math.max(1, Math.round(VW * scale));
+  canvas.height = Math.max(1, Math.round(VH * scale));
   const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
   const text = String(value);
   const fontSize = text.length > 1 ? 386 : 436;
-  const x = canvas.width * 0.5 - 20;
-  const y = canvas.height * 0.56;
+  const x = VW * 0.5 - 20;
+  const y = VH * 0.56;
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, VW, VH);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `900 ${fontSize}px Impact, Haettenschweiler, "Arial Narrow", sans-serif`;
