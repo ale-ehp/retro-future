@@ -23,9 +23,6 @@ import {
   TRON_RUNNER_GROUND_OFFSET,
   TRON_RUNNER_GROUND_SHADOW_ENABLED,
   TRON_RUNNER_MODEL_URL,
-  TRON_RUNNER_REAL_SHADOW_ENABLED,
-  TRON_RUNNER_REAL_SHADOW_LAYER,
-  TRON_RUNNER_REAL_SHADOW_RECEIVER_RADIUS,
   TRON_RUNNER_ROUTE_OFFSET,
   TRON_RUNNER_SIDEWALK_INSET,
   TRON_RUNNER_SIDEWALK_SIGN,
@@ -56,7 +53,6 @@ export function createTronRunnerOrchestrationRuntime({
   renderer,
   runnerSuitMaterial,
   runnerShadowMaterial,
-  runnerRealShadowMaterial,
   reveal,
   loadGltfClass,
   cloneRunnerSkeleton,
@@ -64,7 +60,6 @@ export function createTronRunnerOrchestrationRuntime({
   applyVisualControls,
   buildCrowd,
   buildIdleCharacter,
-  updateRealShadowRig,
   updateDynamicReflection,
   surfaceYAt,
   roadTileTopY,
@@ -356,17 +351,13 @@ export function createTronRunnerOrchestrationRuntime({
       runnerParts.reflectionMaterials = [];
       runnerParts.reflectionBodyMaterials = [];
       runnerParts.reflectionLedMaterials = [];
-      runnerParts.realShadowCasterCount = 0;
       runnerParts.dynamicReflectionMeshCount = 0;
       runnerParts.dynamicReflectionLedMeshCount = 0;
       runnerParts.revealScan = null;
       model.traverse((obj) => {
         if (!obj.isMesh) return;
         obj.frustumCulled = false;
-        obj.castShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
         obj.receiveShadow = false;
-        obj.layers.enable(TRON_RUNNER_REAL_SHADOW_LAYER);
-        if (TRON_RUNNER_REAL_SHADOW_ENABLED) runnerParts.realShadowCasterCount += 1;
         obj.material = runnerSuitMaterial.clone();
         runnerParts.materials.push(obj.material);
       });
@@ -434,20 +425,6 @@ export function createTronRunnerOrchestrationRuntime({
       groundShadow.scale.set(1, TRON_RUNNER_CONTACT_SHADOW_ROUNDNESS, 1);
       runnerWalker.add(groundShadow);
 
-      const realShadowReceiver = new THREE.Mesh(
-        new THREE.CircleGeometry(TRON_RUNNER_REAL_SHADOW_RECEIVER_RADIUS, 72),
-        runnerRealShadowMaterial.clone()
-      );
-      realShadowReceiver.name = 'tron-runner-real-shadow-receiver';
-      realShadowReceiver.rotation.x = -Math.PI / 2;
-      realShadowReceiver.position.set(0, 0.012, 0.2);
-      realShadowReceiver.receiveShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
-      realShadowReceiver.castShadow = false;
-      realShadowReceiver.depthWrite = false;
-      realShadowReceiver.renderOrder = 3;
-      realShadowReceiver.layers.enable(TRON_RUNNER_REAL_SHADOW_LAYER);
-      runnerWalker.add(realShadowReceiver);
-
       const mixer = new THREE.AnimationMixer(model);
       const actionSet = makeTronRunnerActionSet(gltf, mixer);
       runnerParts.actionNames = actionSet.actionNames;
@@ -456,7 +433,6 @@ export function createTronRunnerOrchestrationRuntime({
       runnerParts.actions = actionSet.actions;
       runnerParts.skeletonGlow = null;
       runnerParts.groundShadow = groundShadow;
-      runnerParts.realShadowReceiver = realShadowReceiver;
       runnerParts.reflectionGroup = reflectionGroup;
       runnerParts.reflectionModel = reflectionModel;
       runnerParts.reflectionLedModel = reflectionLedModel;
@@ -557,7 +533,6 @@ export function createTronRunnerOrchestrationRuntime({
     footstepRuntime.walkSpeed = getWalkSpeed();
     updateTronRunnerAutonomyFootsteps(footstepRuntime);
     updateAutonomyState(route, movedDistance, collision);
-    updateRealShadowRig();
     updateDynamicReflection();
 
     if (runnerParts.groundShadow) {
@@ -588,10 +563,6 @@ export function createTronRunnerOrchestrationRuntime({
       runnerSize.set(0, 0, 0);
     }
     const runnerMaterial = runnerParts.materials[0] || null;
-    const realShadowMaterial = runnerParts.realShadowReceiver?.material || null;
-    const realShadowReceiverType = realShadowMaterial?.isShadowMaterial || realShadowMaterial?.type === 'ShadowMaterial'
-      ? 'shadow-material'
-      : null;
     const groundShadowScaleX = runnerParts.groundShadow?.scale?.x ?? 0;
     const groundShadowScaleZ = runnerParts.groundShadow?.scale?.y ?? 0;
     return {
@@ -611,17 +582,6 @@ export function createTronRunnerOrchestrationRuntime({
         : 0,
       shadowMapEnabled: Boolean(renderer.shadowMap?.enabled),
       shadowMapType: renderer.shadowMap?.type ?? null,
-      realShadowEnabled: TRON_RUNNER_REAL_SHADOW_ENABLED,
-      realShadowReceiverType,
-      realShadowReceiverGeometryType: runnerParts.realShadowReceiver?.geometry?.type ?? null,
-      realShadowReceiverRadius: TRON_RUNNER_REAL_SHADOW_RECEIVER_RADIUS,
-      realShadowReceiverVisible: Boolean(runnerParts.realShadowReceiver?.visible),
-      realShadowReceiverOpacity: Number((runnerParts.realShadowReceiver?.material?.opacity ?? 0).toFixed(3)),
-      realShadowLightCastShadow: Boolean(runnerParts.realShadowLight?.castShadow),
-      realShadowLightVisible: Boolean(runnerParts.realShadowLight?.visible),
-      realShadowLightIntensity: Number((runnerParts.realShadowLight?.intensity ?? 0).toFixed(3)),
-      realShadowMapSize: runnerParts.realShadowLight?.shadow?.mapSize?.x ?? 0,
-      realShadowCasterCount: runnerParts.realShadowCasterCount,
       dynamicReflection: {
         enabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
         visible: Boolean(runnerParts.reflectionGroup?.visible),

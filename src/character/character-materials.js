@@ -26,37 +26,6 @@ export function makeTronRunnerCrowdSuitMaterial({
   return applyTronRunnerCrowdColorToMaterial(material, colorPreset);
 }
 
-export function makeTronMainPlayerBodySuitMaterial({
-  baseMaterial,
-  blackColor,
-}) {
-  const material = baseMaterial.clone();
-  material.color.copy(blackColor);
-  material.emissive.set(0x001216);
-  material.emissiveIntensity = 0.22;
-  material.metalness = 0.44;
-  material.roughness = 0.62;
-  material.envMapIntensity = 0.025;
-  material.depthWrite = false;
-  material.depthTest = true;
-  material.transparent = false;
-  material.userData.tronRunnerBaseEmissiveIntensity = material.emissiveIntensity;
-  material.userData.tronRunnerLedBloomBoost = 1.25;
-  return material;
-}
-
-export function makeTronMainPlayerBodyLedMaterial(color) {
-  return new THREE.MeshBasicMaterial({
-    color,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    depthTest: true,
-    opacity: 0.92,
-    toneMapped: false,
-    transparent: true,
-  });
-}
-
 export function makeTronRunnerReflectionMaterial({
   suitTexture,
 }) {

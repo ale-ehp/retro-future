@@ -33,5 +33,7 @@ export function tronRunnerCrowdGridCoord(value, cellSize) {
 }
 
 export function tronRunnerCrowdGridKey(cx, cz) {
-  return `${cx}:${cz}`;
+  // numeric key (mirrors hexTileBucketKey): collision-free for |cx|,|cz| < 100000, which the
+  // boulevard-bounded crowd cells never approach. Avoids ~5-13k string allocations/sec vs `${cx}:${cz}`.
+  return (cx + 100000) * 1000000 + (cz + 100000);
 }

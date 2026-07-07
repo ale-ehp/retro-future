@@ -127,14 +127,12 @@ export function applyTronRunnerCrowdReflectionState({
     material.userData.tronRunnerBaseOpacity = bodyOpacity;
     if (Math.abs((material.opacity ?? 0) - bodyOpacity) > 0.002) {
       material.opacity = bodyOpacity;
-      material.needsUpdate = true;
     }
   }
   for (const material of ledMaterials) {
     material.userData.tronRunnerBaseOpacity = ledOpacity;
     if (Math.abs((material.opacity ?? 0) - ledOpacity) > 0.002) {
       material.opacity = ledOpacity;
-      material.needsUpdate = true;
     }
   }
   member.dynamicReflectionVisible = visible;

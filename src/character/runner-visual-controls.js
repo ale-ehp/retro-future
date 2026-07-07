@@ -7,8 +7,6 @@ import {
   TRON_RUNNER_DISTANCE_DRIVEN_WALK_ENABLED,
   TRON_RUNNER_GROUND_SHADOW_ENABLED,
   TRON_RUNNER_LIGHTING_MODE,
-  TRON_RUNNER_REAL_SHADOW_BASE_OPACITY,
-  TRON_RUNNER_REAL_SHADOW_ENABLED,
   TRON_RUNNER_SHADOW_COLOR,
   TRON_RUNNER_SHADOW_CYAN_COLOR,
   TRON_RUNNER_SUIT_COLOR,
@@ -113,9 +111,6 @@ export function applyTronRunnerVisualControls({
   runnerState.ledBloom = controls.ledBloom;
   runnerState.ledScale = ledScale;
   runnerState.ledEmissiveMax = ledMax;
-  runnerState.realShadowEnabled = TRON_RUNNER_REAL_SHADOW_ENABLED;
-  runnerState.realShadowCasterCount = runnerParts.realShadowCasterCount;
-  runnerState.realShadowReceiverType = 'shadow-material';
   runnerState.selfLightIntensity = selfLightIntensity;
   runnerState.modelLineIntensity = lineIntensity;
   runnerState.pointLightCount = 0;
@@ -177,21 +172,6 @@ export function applyTronRunnerVisualControls({
     runnerParts.groundShadow.material.userData.tronRunnerBaseOpacity = groundShadowOpacity;
     runnerParts.groundShadow.material.opacity = groundShadowOpacity;
     runnerParts.groundShadow.material.needsUpdate = true;
-  }
-  if (runnerParts.realShadowReceiver) {
-    const realShadowOpacity = TRON_RUNNER_REAL_SHADOW_ENABLED
-      ? THREE.MathUtils.clamp(TRON_RUNNER_REAL_SHADOW_BASE_OPACITY + floorAmount * 0.34, 0, 0.36)
-      : 0;
-    runnerParts.realShadowReceiver.visible = realShadowOpacity > 0.001;
-    runnerParts.realShadowReceiver.material.userData.tronRunnerBaseOpacity = realShadowOpacity;
-    runnerParts.realShadowReceiver.material.opacity = realShadowOpacity;
-    runnerParts.realShadowReceiver.material.needsUpdate = true;
-    runnerState.realShadowOpacity = realShadowOpacity;
-  }
-  if (runnerParts.realShadowLight) {
-    runnerParts.realShadowLight.visible = TRON_RUNNER_REAL_SHADOW_ENABLED;
-    runnerParts.realShadowLight.castShadow = TRON_RUNNER_REAL_SHADOW_ENABLED;
-    runnerParts.realShadowLight.intensity = TRON_RUNNER_REAL_SHADOW_ENABLED ? 0.16 : 0;
   }
   runnerParts.keyLight = null;
   runnerParts.leftRim = null;

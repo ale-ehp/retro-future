@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import {
-  TRON_MAIN_PLAYER_BODY_ENABLED,
   TRON_RUNNER_BEAT_PULSE_BPM,
   TRON_RUNNER_BEAT_PULSE_DECAY,
   TRON_RUNNER_BEAT_PULSE_DIVISION,
@@ -31,8 +30,6 @@ import {
   TRON_RUNNER_IDLE_CHARACTER_STATIC,
   TRON_RUNNER_IDLE_CHARACTER_WALL_CONTACT_EPS,
   TRON_RUNNER_LIGHTING_MODE,
-  TRON_RUNNER_REAL_SHADOW_BASE_OPACITY,
-  TRON_RUNNER_REAL_SHADOW_ENABLED,
   TRON_RUNNER_REVEAL_DURATION_MS,
   TRON_RUNNER_REVEAL_EMISSIVE_BOOST,
   TRON_RUNNER_REVEAL_ENABLED,
@@ -44,13 +41,12 @@ import {
   TRON_RUNNER_DEFAULT_SPEED,
 } from './characters.js';
 
-export function createTronRunnerParts({ realShadowLight, realShadowTarget }) {
+export function createTronRunnerParts() {
   return {
     model: null,
     mixer: null,
     skeletonGlow: null,
     groundShadow: null,
-    realShadowReceiver: null,
     reflectionGroup: null,
     reflectionModel: null,
     reflectionLedModel: null,
@@ -67,9 +63,6 @@ export function createTronRunnerParts({ realShadowLight, realShadowTarget }) {
     reflectionLedActionNames: null,
     dynamicReflectionMeshCount: 0,
     dynamicReflectionLedMeshCount: 0,
-    realShadowLight,
-    realShadowTarget,
-    realShadowCasterCount: 0,
     revealScan: null,
     keyLight: null,
     leftRim: null,
@@ -118,10 +111,6 @@ export function createTronRunnerState({ footstepBus }) {
     contactShadowMaxOpacity: TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY,
     runnerLightingMode: TRON_RUNNER_LIGHTING_MODE,
     suitTextureMode: TRON_RUNNER_SUIT_TEXTURE_MODE,
-    realShadowEnabled: TRON_RUNNER_REAL_SHADOW_ENABLED,
-    realShadowOpacity: TRON_RUNNER_REAL_SHADOW_BASE_OPACITY,
-    realShadowCasterCount: 0,
-    realShadowReceiverType: 'shadow-material',
     dynamicReflectionEnabled: TRON_RUNNER_DYNAMIC_REFLECTION_ENABLED,
     dynamicReflectionVisible: false,
     dynamicReflectionOpacity: 0,
@@ -206,19 +195,6 @@ export function createTronRunnerState({ footstepBus }) {
       scanOuterOpacity: TRON_RUNNER_REVEAL_SCAN_OUTER_OPACITY,
       scanCoreOpacity: TRON_RUNNER_REVEAL_SCAN_CORE_OPACITY,
     },
-  };
-}
-
-export function createTronMainPlayerBodyState() {
-  return {
-    enabled: TRON_MAIN_PLAYER_BODY_ENABLED,
-    ready: false,
-    visible: false,
-    phase: 0,
-    walkAmount: 0,
-    speed: 0,
-    limbCount: 0,
-    ledCount: 0,
   };
 }
 

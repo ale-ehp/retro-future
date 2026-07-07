@@ -1107,6 +1107,9 @@ export function updateCityRevealWireframe(now) {
     setCityRevealWireAlpha(0);
     markCityRevealComplete(now);
     runtime.updatePointerLockHint();
+    // one-shot reveal finished: the render/update paths now early-return on cityRevealComplete,
+    // so free the wireframe geometries (they are never drawn again this session)
+    clearCityRevealWire();
   }
 }
 

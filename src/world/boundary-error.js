@@ -385,7 +385,8 @@ function ensureRoadBoundaryHexCapacity(count) {
   if (roadBoundaryHexBatch && roadBoundaryHexCapacity >= count) return;
   if (roadBoundaryHexBatch) {
     scene.remove(roadBoundaryHexBatch);
-    roadBoundaryHexBatch.geometry.dispose();
+    // dispose the retired InstancedMesh's instance buffers only; hexTileGeo is shared and reused below
+    roadBoundaryHexBatch.dispose();
   }
   roadBoundaryHexCapacity = Math.max(1, Math.ceil(count * 1.2));
   roadBoundaryHexBatch = new THREE.InstancedMesh(hexTileGeo, [roadBoundaryHexMat, roadBoundaryHexFillMat, roadBoundaryHexBottomMat], roadBoundaryHexCapacity);

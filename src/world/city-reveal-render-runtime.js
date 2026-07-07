@@ -32,7 +32,6 @@ export function createCityRevealRenderRuntime(deps) {
   let cityRevealOverlayPass = null;
   let cityRevealWirePass = null;
   let cityRevealRoadGridPass = null;
-  let cityRevealWireFxaaPass = null;
   let cityRevealScenePass = null;
   let cityRevealRealPrewarmTarget = null;
   let cityRevealRealPrewarmStatus = 'pending';
@@ -88,7 +87,6 @@ export function createCityRevealRenderRuntime(deps) {
     if (cityRevealOverlayPass) cityRevealOverlayPass.enabled = wireActive && isCityRevealBackplateActive();
     if (cityRevealWirePass) cityRevealWirePass.enabled = wireActive;
     if (cityRevealRoadGridPass) cityRevealRoadGridPass.enabled = wireActive;
-    if (cityRevealWireFxaaPass) cityRevealWireFxaaPass.enabled = false;
     cityRevealScenePass.enabled = !wireActive || realRevealActive;
     cityRevealScenePass.clear = !wireActive;
     cityRevealScenePass.clearDepth = realRevealActive;
@@ -153,6 +151,9 @@ export function createCityRevealRenderRuntime(deps) {
       renderer.autoClear = previousAutoClear;
       renderer.setRenderTarget(previousTarget);
       cityRevealRealPrewarmMs = performance.now() - started;
+      // one-shot prewarm: the guard above prevents re-entry, so free the target's GL buffers now
+      cityRevealRealPrewarmTarget?.dispose();
+      cityRevealRealPrewarmTarget = null;
     }
   }
 
@@ -187,7 +188,7 @@ export function createCityRevealRenderRuntime(deps) {
     renderer.autoClear = previousAutoClear;
   }
 
-  function addComposerPasses(composer, { RenderPass, FXAAPass }) {
+  function addComposerPasses(composer, { RenderPass }) {
     cityRevealSkyPass = new RenderPass(cityRevealSkyScene, camera);
     cityRevealSkyPass.clear = true;
     cityRevealOverlayPass = new RenderPass(cityRevealOverlayScene, cityRevealOverlayCamera);
@@ -196,8 +197,6 @@ export function createCityRevealRenderRuntime(deps) {
     cityRevealWirePass.clear = false;
     cityRevealRoadGridPass = new RenderPass(cityRevealRoadGridScene, camera);
     cityRevealRoadGridPass.clear = false;
-    cityRevealWireFxaaPass = new FXAAPass();
-    cityRevealWireFxaaPass.enabled = false;
     cityRevealScenePass = createCityRevealScenePass();
     cityRevealMainLedReveal.createPass();
     syncComposerPasses();
@@ -205,7 +204,6 @@ export function createCityRevealRenderRuntime(deps) {
     composer.addPass(cityRevealOverlayPass);
     composer.addPass(cityRevealRoadGridPass);
     composer.addPass(cityRevealWirePass);
-    composer.addPass(cityRevealWireFxaaPass);
     composer.addPass(cityRevealScenePass);
     composer.addPass(cityRevealMainLedReveal.getPass());
   }
@@ -215,13 +213,8 @@ export function createCityRevealRenderRuntime(deps) {
     cityRevealOverlayPass = null;
     cityRevealWirePass = null;
     cityRevealRoadGridPass = null;
-    cityRevealWireFxaaPass = null;
     cityRevealScenePass = null;
     cityRevealMainLedReveal.clearPass();
-  }
-
-  function resizeWireFxaaTarget(width, height) {
-    cityRevealWireFxaaPass?.setSize(width, height);
   }
 
   function inspectPasses() {
@@ -229,7 +222,6 @@ export function createCityRevealRenderRuntime(deps) {
       overlay: Boolean(cityRevealOverlayPass?.enabled),
       wireframe: Boolean(cityRevealWirePass?.enabled),
       roadGrid: Boolean(cityRevealRoadGridPass?.enabled),
-      wireAa: Boolean(cityRevealWireFxaaPass?.enabled),
       realCity: Boolean(cityRevealScenePass?.enabled),
     };
   }
@@ -247,7 +239,6 @@ export function createCityRevealRenderRuntime(deps) {
     addComposerPasses,
     clearComposerPasses,
     syncComposerPasses,
-    resizeWireFxaaTarget,
     renderCompositeFrame,
     prewarmRealPass,
     inspectRealPrewarm,
@@ -256,7 +247,6 @@ export function createCityRevealRenderRuntime(deps) {
     getOverlayPass: () => cityRevealOverlayPass,
     getWirePass: () => cityRevealWirePass,
     getRoadGridPass: () => cityRevealRoadGridPass,
-    getWireFxaaPass: () => cityRevealWireFxaaPass,
     getScenePass: () => cityRevealScenePass,
   };
 }

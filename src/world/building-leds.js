@@ -146,6 +146,8 @@ function ensureHorizontalLedLoopSegments(spec, count) {
   if (spec.segmentMesh) {
     spec.segmentGroup.remove(spec.segmentMesh);
     spec.segmentMesh.geometry.dispose();
+    // also free the retired InstancedMesh's instanceMatrix GL buffer
+    spec.segmentMesh.dispose();
   }
   const capacity = Math.max(needed, Math.ceil(needed * 1.2));
   const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), spec.material, capacity);
