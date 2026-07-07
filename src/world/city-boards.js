@@ -604,7 +604,10 @@ let SIDE_BUILDING_CIVIC_NUMBER_FIXED = null;
 // ---------- City role boards: fixed sector boards beside civic doors ----------
 export const CITY_ROLE_BOARD_ENABLED = true;
 const CITY_ROLE_BOARD_TARGET_CIVICS = Object.freeze([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-const CITY_ROLE_BOARD_TEXTURE_SCALE = 0.5;
+// Role boards draw entirely in the 2048x1024 virtual space (setTransform in drawCityRoleBoardTexture),
+// so this scale only sets the output canvas resolution. 0.25 -> 512x256, ~19MB GPU saved across 12 boards
+// (no mipmaps). Text is softer only when standing right at a board; identical at normal distance.
+const CITY_ROLE_BOARD_TEXTURE_SCALE = 0.25;
 const CITY_ROLE_BOARD_TEXTURE_WIDTH = 2048;
 const CITY_ROLE_BOARD_TEXTURE_HEIGHT = 1024;
 export const CITY_ROLE_BOARD_WIDTH = retroFutureSignScale(12);
