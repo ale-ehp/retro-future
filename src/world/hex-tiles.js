@@ -521,7 +521,6 @@ export const hexRoadTiles = [];
 export const hexRoadTileBatches = [];
 export const streetEdgeHexTiles = [];
 export const streetEdgeHexTileBatches = [];
-export const HEX_ROAD_CHUNK_LENGTH = GRID_BLOCK * 20;
 export const HEX_TILE_BUCKET_SIZE = 64;
 export const hexRoadTileBuckets = new Map();
 export const recoveringHexTiles = new Set();
@@ -616,7 +615,7 @@ export function updateZTileBand(tiles, centerX, centerZ, width, length) {
   rebuildHexRoadTileBuckets();
 }
 
-function addHexRoadTileBatch(batchSeeds, material, interactive, createdTiles) {
+function addHexRoadTileBatch(batchSeeds, material, interactive, createdTiles, stripIndex = null) {
   const batchMaterial = material.clone();
   batchMaterial.vertexColors = true;
   if (interactive) {
@@ -636,6 +635,7 @@ function addHexRoadTileBatch(batchSeeds, material, interactive, createdTiles) {
     renderVisible: true,
     lodVisible: true,
     bounds: null,
+    stripIndex,
   };
   if (interactive) hexRoadTileBatches.push(batchRecord);
   else streetEdgeHexTileBatches.push(batchRecord);
@@ -662,11 +662,22 @@ function addHexRoadTileBatch(batchSeeds, material, interactive, createdTiles) {
   return batchRecord;
 }
 
+// Batches partition tiles into fixed strips of SEED-pitch local z (the
+// min-gap row grid): 230.4 units = the historical worst-case partition
+// (length 4608 / 20 chunks, and 2304 is an exact strip multiple, so this is
+// the same grid shifted by a constant). Binning on seed-pitch local z — not
+// on world/current-gap positions — keeps batch membership, batch bounds and
+// therefore LOD/cull decisions identical to the old full-extent seeding, no
+// matter when a strip's tiles were created or where the band is centered.
+const HEX_ROAD_BATCH_STRIP_LENGTH = 230.4;
+
+function hexRoadBatchStripIndex(seedLocalZ) {
+  return Math.floor(seedLocalZ / HEX_ROAD_BATCH_STRIP_LENGTH);
+}
+
 export function addHexRoadTiles(width, length, centerX, centerZ, axis = "z", material = hexTileMat, interactive = true, y = 0) {
   const createdTiles = [];
-  const chunkCount = Math.max(1, Math.ceil(length / HEX_ROAD_CHUNK_LENGTH));
-  const chunkLength = length / chunkCount;
-  const tileSeedChunks = Array.from({ length: chunkCount }, () => []);
+  const tileSeedChunks = new Map();
   const halfW = width / 2;
   const halfL = length / 2;
   const maxCols = Math.ceil(halfW / hexTileSeedXStep) + 2;
@@ -681,8 +692,13 @@ export function addHexRoadTiles(width, length, centerX, centerZ, axis = "z", mat
       if (Math.abs(localZ) > halfL + edgeBleed) continue;
       const x = axis === "x" ? centerX + localZ : centerX + localX;
       const z = axis === "x" ? centerZ + localX : centerZ + localZ;
-      const chunkIndex = THREE.MathUtils.clamp(Math.floor((localZ + halfL) / chunkLength), 0, chunkCount - 1);
-      tileSeedChunks[chunkIndex].push({
+      const chunkIndex = hexRoadBatchStripIndex(localZ);
+      let chunkSeeds = tileSeedChunks.get(chunkIndex);
+      if (!chunkSeeds) {
+        chunkSeeds = [];
+        tileSeedChunks.set(chunkIndex, chunkSeeds);
+      }
+      chunkSeeds.push({
         x,
         z,
         col,
@@ -707,14 +723,141 @@ export function addHexRoadTiles(width, length, centerX, centerZ, axis = "z", mat
     }
   }
 
-  for (const chunkSeeds of tileSeedChunks) {
+  for (const [stripIndex, chunkSeeds] of tileSeedChunks) {
     if (!chunkSeeds.length) continue;
-    addHexRoadTileBatch(chunkSeeds, material, interactive, createdTiles);
+    addHexRoadTileBatch(chunkSeeds, material, interactive, createdTiles, stripIndex);
   }
   if (interactive) {
     rebuildHexRoadTileBuckets();
   }
   return createdTiles;
+}
+
+// Grow an existing strip batch in place: InstancedMesh capacity is fixed, so
+// replace the mesh with a larger one (same record identity, same material
+// object) and free the retired mesh's instance buffers. One batch per strip,
+// always — so the partition (and LOD/cull behaviour) never depends on WHEN a
+// strip's tiles were created.
+function growHexRoadTileBatch(record, newSeeds, createdTiles) {
+  const oldMesh = record.mesh;
+  const newTiles = [];
+  for (const seed of newSeeds) {
+    const tile = {
+      batch: null,
+      batchRecord: record,
+      instanceId: -1,
+      visible: true,
+      material: record.material,
+      userData: seed,
+    };
+    record.tiles.push(tile);
+    newTiles.push(tile);
+    createdTiles.push(tile);
+    if (record.interactive) hexRoadTiles.push(tile);
+    else streetEdgeHexTiles.push(tile);
+  }
+  const nextMesh = new THREE.InstancedMesh(hexTileGeo, record.material, record.tiles.length);
+  nextMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  nextMesh.frustumCulled = true;
+  hexTileScene.add(nextMesh);
+  record.mesh = nextMesh;
+  for (const tile of record.tiles) tile.batch = nextMesh;
+  dirtyHexTileBatches.delete(oldMesh);
+  hexTileScene.remove(oldMesh);
+  oldMesh.dispose();
+  for (const tile of newTiles) setHexTileLayoutPosition(tile, false);
+  compactHexTileBatch(record);
+  nextMesh.instanceMatrix.needsUpdate = true;
+  if (nextMesh.instanceColor) nextMesh.instanceColor.needsUpdate = true;
+}
+
+// Bands are seeded for the CURRENT control values, not the slider extremes.
+// When a control change (band width/length or a denser hex gap) needs cells
+// beyond what a band already has, this tops the band up in place. Cheap
+// watermark check per call; the exact cell diff runs only when it trips.
+const hexRoadBandSeedExtents = new WeakMap();
+
+export function ensureHexRoadTileCoverage(tiles, centerX, centerZ, width, length, axis = "z", material = hexTileMat, interactive = true, y = 0) {
+  const xStep = hexTileColumnStep();
+  const zStep = hexTileRowStep();
+  const halfW = width / 2;
+  const halfL = length / 2;
+  const edgeBleed = hexTileRadius * 0.08;
+  const neededCols = Math.ceil((halfW + edgeBleed) / xStep);
+  const neededRows = Math.ceil((halfL + edgeBleed) / zStep) + 1;
+  let extent = hexRoadBandSeedExtents.get(tiles);
+  if (!extent) {
+    extent = { maxCol: 0, maxRow: 0 };
+    for (const tile of tiles) {
+      const c = Math.abs(tile.userData.col);
+      const r = Math.abs(tile.userData.row);
+      if (c > extent.maxCol) extent.maxCol = c;
+      if (r > extent.maxRow) extent.maxRow = r;
+    }
+    hexRoadBandSeedExtents.set(tiles, extent);
+  }
+  if (neededCols <= extent.maxCol && neededRows <= extent.maxRow) return 0;
+
+  const existing = new Set();
+  for (const tile of tiles) {
+    existing.add((tile.userData.col + 100000) * 1000000 + (tile.userData.row + 100000));
+  }
+  const tileSeedChunks = new Map();
+  for (let col = -neededCols; col <= neededCols; col++) {
+    const localX = col * xStep;
+    if (Math.abs(localX) > halfW + edgeBleed) continue;
+    const zOffset = (col & 1) ? zStep * 0.5 : 0;
+    const seedZOffset = (col & 1) ? hexTileSeedZStep * 0.5 : 0;
+    for (let row = -neededRows; row <= neededRows; row++) {
+      const localZ = row * zStep + zOffset;
+      if (Math.abs(localZ) > halfL + edgeBleed) continue;
+      if (existing.has((col + 100000) * 1000000 + (row + 100000))) continue;
+      const x = axis === "x" ? centerX + localZ : centerX + localX;
+      const z = axis === "x" ? centerZ + localX : centerZ + localZ;
+      const chunkIndex = hexRoadBatchStripIndex(row * hexTileSeedZStep + seedZOffset);
+      let chunkSeeds = tileSeedChunks.get(chunkIndex);
+      if (!chunkSeeds) {
+        chunkSeeds = [];
+        tileSeedChunks.set(chunkIndex, chunkSeeds);
+      }
+      chunkSeeds.push({
+        x,
+        z,
+        col,
+        row,
+        axis,
+        centerX,
+        centerZ,
+        halfW,
+        halfL,
+        edgeBleed,
+        baseY: y,
+        depression: 0,
+        hitTime: 0,
+        wasInfluenced: false,
+        hitLight: 0,
+        playerLight: 0,
+        basePadLight: 0,
+        basePadOverlayId: -1,
+        interactive,
+        visible: true,
+      });
+    }
+  }
+  extent.maxCol = Math.max(extent.maxCol, neededCols);
+  extent.maxRow = Math.max(extent.maxRow, neededRows);
+  const createdTiles = [];
+  const batchList = interactive ? hexRoadTileBatches : streetEdgeHexTileBatches;
+  for (const [stripIndex, chunkSeeds] of tileSeedChunks) {
+    if (!chunkSeeds.length) continue;
+    const existingRecord = batchList.find((r) => r.stripIndex === stripIndex);
+    if (existingRecord) growHexRoadTileBatch(existingRecord, chunkSeeds, createdTiles);
+    else addHexRoadTileBatch(chunkSeeds, material, interactive, createdTiles, stripIndex);
+  }
+  if (!createdTiles.length) return 0;
+  for (const tile of createdTiles) tiles.push(tile);
+  if (interactive) rebuildHexRoadTileBuckets();
+  return createdTiles.length;
 }
 
 // ---------- hex-tile per-frame depression (A3e-4) ----------

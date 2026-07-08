@@ -654,6 +654,7 @@ import {
   HEX_ROAD_UPLOAD_BATCH_LIMIT,
   compactHexTileBatchesForTiles,
   addHexRoadTiles,
+  ensureHexRoadTileCoverage,
   applyHexRuntimeSettings,
   flushHexTileBatchUploads,
   getDirtyHexTileBatchCount,
@@ -2010,17 +2011,9 @@ initHexTileMaterials();
 const basePadSurfaceTex = makeBasePadSurfaceTexture();
 
 // ---------- Exact boulevard map constants (pure values -> world/boulevard-constants.js) ----------
-// Derived/runtime extents stay here: they read the controlEls DOM bag and depend on the pure imports.
-const MAIN_BUILDING_Z_MIN = Number(controlEls.mainBuildingZ?.min ?? -1800);
-const MAIN_BUILDING_Z_MAX = Number(controlEls.mainBuildingZ?.max ?? 900);
-const MAX_MAIN_BUILDING_Z_EXTENT = Math.max(Math.abs(MAIN_BUILDING_Z_MIN), Math.abs(MAIN_BUILDING_Z_MAX)) +
-  MAIN_BUILDING_BASE * MAX_BUILDING_AXIS_SCALE / 2;
-const MAX_DYNAMIC_ROAD_HALF = Math.max(
-  MAIN_ROAD_LENGTH / 2,
-  MAX_MAIN_BUILDING_Z_EXTENT,
-  Math.max(...laneZ.map((z) => Math.abs(z))) * 8 + SIDE_BUILDING_BASE * MAX_BUILDING_AXIS_SCALE / 2
-) + MAX_DYNAMIC_ROAD_MARGIN;
-const DYNAMIC_ROAD_MAX_LENGTH = Math.ceil(MAX_DYNAMIC_ROAD_HALF * 2);
+// The road band is seeded for the CURRENT control values; ensureHexRoadTileCoverage
+// (called from updateMainRoadLength) tops it up when sliders grow the requirement,
+// so the old slider-extreme constants (DYNAMIC_ROAD_MAX_LENGTH & co.) are gone.
 let streetEdgeWidth = 0;
 let sideBuildingWidthScale = 2;
 let sideBuildingDepthScale = 1;
@@ -2138,12 +2131,6 @@ const STREET_EDGE_OUTER = BRIDGE_INNER_BUILDING_FACE_X; // streetEdge x range 44
 const Z_FLOOR_LEN = MAIN_ROAD_LENGTH;
 const Z_FLOOR_CENTER = MAIN_ROAD_Z;
 let dynamicRoadSurfaceWidth = roadSurfaceWidthForBuildings();
-const MAIN_ROAD_TILE_SEED_WIDTH = roadSurfaceWidthForBuildings(
-  sideBuildingWidthScale,
-  mainBuildingWidthScale,
-  streetEdgeWidth,
-  MAX_BOULEVARD_WIDTH_SCALE
-);
 // Road backing — pure unlit black under the hex tiles.
 const roadMat = new THREE.MeshBasicMaterial({
   color: 0x000000,
@@ -2261,6 +2248,7 @@ function updateMainRoadLength(centerZ, length) {
     mesh.scale.z = boxScale;
   }
   syncRoadBacking();
+  ensureHexRoadTileCoverage(mainRoadTiles, 0, centerZ, dynamicRoadSurfaceWidth, length);
   updateZTileBand(mainRoadTiles, 0, centerZ, dynamicRoadSurfaceWidth, length);
 }
 
@@ -2292,7 +2280,15 @@ function roadHexBoundaryLimits() {
   };
 }
 
-const mainRoadTiles = addHexRoadTiles(MAIN_ROAD_TILE_SEED_WIDTH, DYNAMIC_ROAD_MAX_LENGTH, 0, MAIN_ROAD_Z);
+// Seed the real boot-time band (not the slider worst case): with default
+// controls the first applyControls pass then needs zero extra tiles, so every
+// z-strip keeps a single batch exactly like the old full seeding.
+{
+  const initialRoadBounds = computeDynamicRoadBounds(sideBuildingSpacingScale, sideBuildingDepthScale, mainBuildingDepthScale);
+  dynamicRoadCenter = initialRoadBounds.center;
+  dynamicRoadLength = initialRoadBounds.length;
+}
+const mainRoadTiles = addHexRoadTiles(dynamicRoadSurfaceWidth, dynamicRoadLength, 0, dynamicRoadCenter);
 initBoundaryError(ctx, {
   roadHexBoundaryLimits,
   roadBoundaryHexRowOffsets,
