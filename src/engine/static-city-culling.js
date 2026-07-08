@@ -42,6 +42,10 @@ function setStaticCityEdgeSpecVisible(spec, visible) {
   if (spec?.mesh) setStaticCityObjectVisible(spec.mesh, visible);
   if (spec?.segmentGroup) setStaticCityObjectVisible(spec.segmentGroup, visible);
   if (spec?.segmentMesh) setStaticCityObjectVisible(spec.segmentMesh, visible);
+  // Batched bridge strips have no mesh of their own: cull via their instance.
+  if (spec && !spec.mesh && spec.edgeRole === 'bridge' && deps.setBridgeEdgeSpecCullVisible) {
+    deps.setBridgeEdgeSpecCullVisible(spec, visible);
+  }
 }
 
 function staticCityRecordSphere(record, target = staticCityCullSphere) {

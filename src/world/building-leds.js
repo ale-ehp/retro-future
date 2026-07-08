@@ -26,12 +26,18 @@ let updateFacadeLedRibbons = () => {};
 
 export const edgeStripSpecs = [];
 const sideBuildingEdgeSpecs = [];
+const bridgeEdgeSpecs = [];
 export const horizontalBuildingLedRings = [];
 
 export const sideBuildingEdgeBatch = {
   mesh: null,
   material: null,
   enabled: true,
+};
+
+export const bridgeEdgeBatch = {
+  mesh: null,
+  material: null,
 };
 
 export const sideHorizontalLedRingBatches = {
@@ -300,6 +306,28 @@ export function elStrip(p1, p2, color = PAL.tealLight, thickness = 0.04, options
     edgeStripSpecs.push(spec);
     return new THREE.Object3D();
   }
+  if (options.edge && options.edgeRole === 'bridge') {
+    const spec = {
+      mesh: null,
+      p1: [...p1],
+      p2: [...p2],
+      center: options.center ? [...options.center] : [0, 0],
+      centerY: options.centerY ?? 0,
+      baseColor: new THREE.Color(color),
+      edgeRole: 'bridge',
+      edgeBand: options.edgeBand || 'body',
+      roundedLoopOffsetMode: Boolean(options.roundedLoopOffsetMode),
+      bridgeRecord: options.bridgeRecord || null,
+      instanceId: bridgeEdgeSpecs.length,
+      instanceMatrix: new THREE.Matrix4(),
+      hasTransform: false,
+      cullHidden: false,
+      lastVisible: true,
+    };
+    bridgeEdgeSpecs.push(spec);
+    edgeStripSpecs.push(spec);
+    return new THREE.Object3D();
+  }
 
   const v1 = new THREE.Vector3(...p1);
   const v2 = new THREE.Vector3(...p2);
@@ -484,6 +512,43 @@ export function buildSideBuildingEdgeBatch(group) {
   group.add(mesh);
 }
 
+export function buildBridgeEdgeBatch(group) {
+  if (!bridgeEdgeSpecs.length || bridgeEdgeBatch.mesh) return;
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  // Plain material on purpose: bridge strips never had the travelling
+  // edge-pulse shader the side-building batch carries.
+  const material = new THREE.MeshBasicMaterial({
+    color: PAL.tealLight,
+    toneMapped: false,
+    depthWrite: true,
+  });
+  const mesh = new THREE.InstancedMesh(geometry, material, bridgeEdgeSpecs.length);
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mesh.frustumCulled = true;
+  mesh.count = bridgeEdgeSpecs.length;
+  bridgeEdgeBatch.mesh = mesh;
+  bridgeEdgeBatch.material = material;
+  group.add(mesh);
+}
+
+// Hidden instances collapse to zero scale (no fragments); a bridge strip is
+// hidden by the per-bridge static cull or by its bridge's visible toggle.
+const bridgeEdgeHiddenMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+
+function syncBridgeEdgeInstance(spec) {
+  if (!bridgeEdgeBatch.mesh) return;
+  const visible = !spec.cullHidden && spec.hasTransform && readBridgeVisible(spec.bridgeRecord);
+  spec.lastVisible = visible;
+  bridgeEdgeBatch.mesh.setMatrixAt(spec.instanceId, visible ? spec.instanceMatrix : bridgeEdgeHiddenMatrix);
+  bridgeEdgeBatch.mesh.instanceMatrix.needsUpdate = true;
+}
+
+export function setBridgeEdgeSpecCullVisible(spec, visible) {
+  if (spec.cullHidden === !visible) return;
+  spec.cullHidden = !visible;
+  syncBridgeEdgeInstance(spec);
+}
+
 export function addBuildingEdges(group, w, h, d, x, y, z, color = PAL.tealLight, bevelPadding = 0, edgeRole = 'global', edgeMeta = {}) {
   const thickness = edgeStripThickness;
   const offset = Math.max(0, bevelPadding + thickness * 0.18);
@@ -666,8 +731,12 @@ export function updateEdgeStrips(brightness, thickness, verticalDistance, hueDeg
   const ledColor = tunedColor(new THREE.Color(PAL.tealLight), hueDeg, 1, brightness);
   const mainLedColor = tunedColor(new THREE.Color(PAL.tealLight), mainHueDeg, 1, mainBrightness);
   let sideBatchChanged = false;
+  let bridgeBatchChanged = false;
   if (sideBuildingEdgeBatch.material) {
     sideBuildingEdgeBatch.material.color.copy(ledColor);
+  }
+  if (bridgeEdgeBatch.material) {
+    bridgeEdgeBatch.material.color.copy(ledColor);
   }
   for (const spec of edgeStripSpecs) {
     const isMainBuilding = spec.edgeRole === 'main-building';
@@ -707,15 +776,28 @@ export function updateEdgeStrips(brightness, thickness, verticalDistance, hueDeg
       sideBatchChanged = true;
       continue;
     }
+    if (spec.edgeRole === 'bridge') {
+      if (bridgeEdgeBatch.mesh) {
+        spec.instanceMatrix.copy(setStripInstanceTransform(bridgeEdgeBatch.mesh, spec.instanceId, p1, p2, stripThickness));
+        spec.hasTransform = true;
+        syncBridgeEdgeInstance(spec);
+        bridgeBatchChanged = true;
+      }
+      continue;
+    }
     setStripTransform(spec.mesh, p1, p2, stripThickness);
     spec.mesh.material.color.copy(isMainBuilding ? mainLedColor : ledColor);
-    spec.mesh.visible = spec.edgeRole !== 'bridge' || readBridgeVisible(spec.bridgeRecord);
+    spec.mesh.visible = true;
   }
   if (sideBatchChanged && sideBuildingEdgeBatch.mesh) {
     sideBuildingEdgeBatch.mesh.instanceMatrix.needsUpdate = true;
     sideBuildingEdgeBatch.mesh.userData.staticCullBaseVisible = sideBuildingEdgeBatch.enabled;
     sideBuildingEdgeBatch.mesh.visible = sideBuildingEdgeBatch.enabled;
     refreshCullingBounds(sideBuildingEdgeBatch.mesh);
+  }
+  if (bridgeBatchChanged && bridgeEdgeBatch.mesh) {
+    bridgeEdgeBatch.mesh.instanceMatrix.needsUpdate = true;
+    refreshCullingBounds(bridgeEdgeBatch.mesh);
   }
   updateFacadeStripOutsets(nextSideWidthScale, nextSideDepthScale, nextMainWidthScale, nextMainDepthScale);
   updateHorizontalBuildingLedRings(brightness, hueDeg, mainBrightness, mainHueDeg, horizontalDistance, mainHorizontalDistance, horizontalThickness, mainHorizontalThickness, horizontalRadius, mainHorizontalRadius, buildingLowOffset, buildingHighOffset, mainLowOffset, mainHighOffset, buildingLowY, buildingHighY, mainLowY, mainHighY, sideScale, mainScale, nextSideWidthScale, nextSideDepthScale, nextMainWidthScale, nextMainDepthScale, nextSideSpacingScale, nextStreetEdgeWidth, tunedColor);
