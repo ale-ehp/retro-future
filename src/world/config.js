@@ -3,7 +3,7 @@ export const CITY_REVEAL_DEFAULT_FADE_MS = 1500;
 export const CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS = 0;
 // Artistic nudge for the beat-drop anchor: positive = sweep starts this many
 // ms BEFORE the drop. One knob, in track time; refresh-to-refresh it is exact.
-export const CITY_REVEAL_BEAT_DROP_LEAD_MS = 0;
+export const CITY_REVEAL_BEAT_DROP_LEAD_MS = 200;
 // If the soundtrack is playing but its clock stalls (endless buffering), give
 // up waiting for the drop this long after the legacy delay and start anyway.
 export const CITY_REVEAL_MUSIC_WAIT_CAP_MS = 6000;
