@@ -1380,10 +1380,14 @@ function lerpAngle(from, to, t) {
   return from + delta * t;
 }
 
+const TRON_MUSIC_START_DELAY_MS = 400;
 function triggerBackspaceDroneIntro(source = 'backspace') {
   dismissWelcomeWindow();
   ensureFootstepAudioReady();
-  startTronProceduralMusic(source);
+  // start the soundtrack 400ms after the reveal begins so the drop lands on the sweep.
+  // ensureFootstepAudioReady() above unlocks the audio context on this gesture; sticky activation
+  // keeps play() allowed for the delayed start.
+  setTimeout(() => startTronProceduralMusic(source), TRON_MUSIC_START_DELAY_MS);
   if (!backspaceIntroTriggered) {
     backspaceIntroTriggered = true;
     cameraCollisionUnlockedByBackspace = true;
