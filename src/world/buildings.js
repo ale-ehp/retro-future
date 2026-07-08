@@ -61,7 +61,14 @@ export function addBuildingCollider(x, z, w, d, h = Infinity, y = 0, role = 'sid
   return collider;
 }
 
+// Identical (w,h,d,chamfer) boxes share one geometry (building pairs, repeated
+// bridge frames). Callers must not mutate or dispose the returned instance.
+const chamferedBoxGeometryCache = new Map();
+
 export function makeChamferedBox(w, h, d, chamfer = 1.5) {
+  const cacheKey = `${w}|${h}|${d}|${chamfer}`;
+  const cached = chamferedBoxGeometryCache.get(cacheKey);
+  if (cached) return cached;
   const c = Math.min(chamfer, w * 0.4, d * 0.4);
   const hw = w / 2, hd = d / 2;
   const shape = new THREE.Shape();
@@ -84,6 +91,7 @@ export function makeChamferedBox(w, h, d, chamfer = 1.5) {
     steps: 1,
   });
   geo.rotateX(-Math.PI / 2);
+  chamferedBoxGeometryCache.set(cacheKey, geo);
   return geo;
 }
 
@@ -119,11 +127,14 @@ export function buildBuildingShells({
   const SIDE_X = SIDE_BUILDING_X;
   const SIDE_BASE = SIDE_BUILDING_BASE;
   const sideHeights = [220, 190, 172, 158, 145, 132];
+  // All side shells are tuned in lockstep (updateBuildingMaterials writes the
+  // same values to every entry), so one material instance serves all twelve.
+  const sideFacadeMaterial = createWetAsphaltFacadeMaterial(PAL.buildingSkin, 1.3);
 
   function buildSideBuilding(x, z, h) {
     const chamfer = 11.5;
     const geo = makeChamferedBox(SIDE_BASE, h, SIDE_BASE, chamfer);
-    const mat = createWetAsphaltFacadeMaterial(PAL.buildingSkin, 1.3);
+    const mat = sideFacadeMaterial;
     const m = new THREE.Mesh(geo, mat);
     addTronFacadeTreatment(m, SIDE_BASE, h, SIDE_BASE, {
       face: 'x',

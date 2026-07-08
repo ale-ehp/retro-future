@@ -25,6 +25,9 @@ export function createBridgeRuntime(deps) {
   } = deps;
 
   const records = [];
+  // Bridge frames are tuned in lockstep with the side buildings (same
+  // updateBuildingMaterials call writes every entry), so one material serves all.
+  let sharedLinkMaterial = null;
   let bridgeXOffset = 0;
   let bridgeZOffset = 0;
   let bridgeYOffset = 0;
@@ -68,7 +71,8 @@ export function createBridgeRuntime(deps) {
     const linkBaseY = GRID_BLOCK * (heroPortal ? 7.4 : 6.2);
     const linkHeight = GRID_BLOCK * (heroPortal ? 1.18 : 0.92);
     const depth = GRID_BLOCK * (heroPortal ? 2.15 : 1.64);
-    const linkMat = createWetAsphaltFacadeMaterial(PAL.buildingSkin, 1.3);
+    if (!sharedLinkMaterial) sharedLinkMaterial = createWetAsphaltFacadeMaterial(PAL.buildingSkin, 1.3);
+    const linkMat = sharedLinkMaterial;
 
     const chamfer = 1.6;
     const link = new THREE.Mesh(makeChamferedBox(linkWidth, linkHeight, depth, chamfer), linkMat);
