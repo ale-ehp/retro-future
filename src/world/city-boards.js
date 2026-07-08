@@ -392,15 +392,23 @@ function buildCityDepartmentBoards() {
   }
 }
 
+// Pose signatures only change when layout controls / spawn poses move, so
+// rebuilding the ~12-string signature every frame is pure GC churn: recheck
+// on a 250ms cadence instead (worst case: pose lags one interval on a drag).
+const CITY_BOARD_POSE_CHECK_INTERVAL_MS = 250;
+
 export function updateCityDepartmentBoards(now) {
   if (!cityDepartmentBoards.length) return;
-  const poseSignature = cityDepartmentBoardPoseSignature();
-  if (poseSignature !== cityDepartmentBoardState.lastPoseSignature) {
-    cityDepartmentBoardState.lastPoseSignature = poseSignature;
-    cityDepartmentBoardState.poseSyncs += 1;
-    for (const board of cityDepartmentBoards) syncCityDepartmentBoardPerimeterPose(board);
-  } else {
-    cityDepartmentBoardState.poseSkips += 1;
+  if (now - (cityDepartmentBoardState.lastPoseCheckMs || 0) >= CITY_BOARD_POSE_CHECK_INTERVAL_MS) {
+    cityDepartmentBoardState.lastPoseCheckMs = now;
+    const poseSignature = cityDepartmentBoardPoseSignature();
+    if (poseSignature !== cityDepartmentBoardState.lastPoseSignature) {
+      cityDepartmentBoardState.lastPoseSignature = poseSignature;
+      cityDepartmentBoardState.poseSyncs += 1;
+      for (const board of cityDepartmentBoards) syncCityDepartmentBoardPerimeterPose(board);
+    } else {
+      cityDepartmentBoardState.poseSkips += 1;
+    }
   }
   const revealFactor = cityDepartmentBoardRevealFactor();
   syncCityDepartmentBoardRevealVisibility(revealFactor);
@@ -1036,13 +1044,17 @@ function buildCityRoleBoards() {
 
 export function updateCityRoleBoard() {
   if (!cityRoleBoards.length) return;
-  const poseSignature = cityRoleBoardPoseSignature();
-  if (poseSignature !== cityRoleBoardRuntimeStats.lastPoseSignature) {
-    cityRoleBoardRuntimeStats.lastPoseSignature = poseSignature;
-    cityRoleBoardRuntimeStats.poseSyncs += 1;
-    for (const board of cityRoleBoards) syncCityRoleBoardDoorPose(board);
-  } else {
-    cityRoleBoardRuntimeStats.poseSkips += 1;
+  const now = performance.now();
+  if (now - (cityRoleBoardRuntimeStats.lastPoseCheckMs || 0) >= CITY_BOARD_POSE_CHECK_INTERVAL_MS) {
+    cityRoleBoardRuntimeStats.lastPoseCheckMs = now;
+    const poseSignature = cityRoleBoardPoseSignature();
+    if (poseSignature !== cityRoleBoardRuntimeStats.lastPoseSignature) {
+      cityRoleBoardRuntimeStats.lastPoseSignature = poseSignature;
+      cityRoleBoardRuntimeStats.poseSyncs += 1;
+      for (const board of cityRoleBoards) syncCityRoleBoardDoorPose(board);
+    } else {
+      cityRoleBoardRuntimeStats.poseSkips += 1;
+    }
   }
   syncCityRoleBoardRevealVisibility();
 }
