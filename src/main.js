@@ -832,14 +832,25 @@ let lastFsrTargetKey = '';
 let cityRevealPerformanceProfileActive = false;
 let secondaryEffectFrame = 0;
 let boundaryErrorAccumulatedDt = 0;
+// Kick off both module groups before awaiting either, so their network
+// fetches overlap instead of serializing across the two top-level awaits.
+const postModulesPromise = Promise.all([
+  import('three/addons/postprocessing/EffectComposer.js'),
+  import('three/addons/postprocessing/RenderPass.js'),
+  import('three/addons/postprocessing/UnrealBloomPass.js'),
+  import('three/addons/postprocessing/FXAAPass.js'),
+  import('three/addons/postprocessing/ShaderPass.js'),
+]);
+const runnerModulesPromise = Promise.all([
+  import('three/addons/loaders/GLTFLoader.js'),
+  import('three/addons/utils/SkeletonUtils.js'),
+]);
+// The rejection is consumed by the awaits below; this no-op handler only
+// keeps a rejection that lands while the other group is still pending from
+// surfacing as an unhandledrejection in that window.
+runnerModulesPromise.catch(() => {});
 try {
-  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { FXAAPass }, { ShaderPass }] = await Promise.all([
-    import('three/addons/postprocessing/EffectComposer.js'),
-    import('three/addons/postprocessing/RenderPass.js'),
-    import('three/addons/postprocessing/UnrealBloomPass.js'),
-    import('three/addons/postprocessing/FXAAPass.js'),
-    import('three/addons/postprocessing/ShaderPass.js'),
-  ]);
+  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { FXAAPass }, { ShaderPass }] = await postModulesPromise;
   window.__POST = { EffectComposer, RenderPass, UnrealBloomPass, FXAAPass, ShaderPass };
   usePost = true;
 } catch (e) {
@@ -849,10 +860,7 @@ try {
 let RunnerGLTFLoader = null;
 let cloneRunnerSkeleton = null;
 try {
-  const [{ GLTFLoader }, { clone }] = await Promise.all([
-    import('three/addons/loaders/GLTFLoader.js'),
-    import('three/addons/utils/SkeletonUtils.js'),
-  ]);
+  const [{ GLTFLoader }, { clone }] = await runnerModulesPromise;
   RunnerGLTFLoader = GLTFLoader;
   cloneRunnerSkeleton = clone;
 } catch (e) {
