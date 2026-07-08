@@ -256,6 +256,23 @@ function markHexTileBatchDirty(batch, colorChanged = false) {
   dirtyHexTileBatches.set(batch, Boolean(dirtyHexTileBatches.get(batch) || colorChanged));
 }
 
+// Past this many pending ranges a merged partial upload stops paying for itself:
+// collapse to one whole-buffer range (mass passes like compaction/layout hit this
+// immediately, keeping their upload identical to the pre-range behaviour).
+const HEX_TILE_MAX_UPDATE_RANGES = 512;
+
+function addHexInstanceUpdateRange(attribute, start, count) {
+  const ranges = attribute.updateRanges;
+  const total = attribute.array.length;
+  if (ranges.length === 1 && ranges[0].start === 0 && ranges[0].count >= total) return;
+  if (ranges.length >= HEX_TILE_MAX_UPDATE_RANGES) {
+    attribute.clearUpdateRanges();
+    attribute.addUpdateRange(0, total);
+    return;
+  }
+  attribute.addUpdateRange(start, count);
+}
+
 export function getDirtyHexTileBatchCount() {
   return dirtyHexTileBatches.size;
 }
@@ -439,8 +456,10 @@ export function syncHexTileInstance(tile, color = null) {
   hexTileInstanceScale.set(scaleXZ, scaleY, scaleXZ);
   hexTileInstanceMatrix.compose(hexTileInstancePosition, hexTileInstanceQuaternion, hexTileInstanceScale);
   tile.batch.setMatrixAt(tile.instanceId, hexTileInstanceMatrix);
+  addHexInstanceUpdateRange(tile.batch.instanceMatrix, tile.instanceId * 16, 16);
   if (color && tile.batch.setColorAt) {
     tile.batch.setColorAt(tile.instanceId, color);
+    addHexInstanceUpdateRange(tile.batch.instanceColor, tile.instanceId * 3, 3);
   }
   const basePadHexOverlay = hexTileSyncDeps.getBasePadHexOverlay();
   if (tile.userData.basePadOverlayId >= 0 && basePadHexOverlay) {
