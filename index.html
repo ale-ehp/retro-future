@@ -42,10 +42,10 @@
       <span class="splat-control-caption">Muovi</span>
     </div>
     <div class="splat-control-unit" data-symbol="mouse">
-      <button class="splat-glyph-box splat-mouse-button" type="button" data-splat-control="drag" aria-label="Guarda con il mouse" aria-pressed="false">
+      <button class="splat-glyph-box splat-mouse-button" type="button" data-splat-control="drag" aria-label="Clicca per guardarti intorno" aria-pressed="false">
         <span class="splat-mouse-outline" aria-hidden="true"></span>
       </button>
-      <span class="splat-control-caption">Guarda</span>
+      <span class="splat-control-caption" data-rf-look-caption>Clicca</span>
     </div>
   </div>
 </div>
@@ -56,8 +56,19 @@
   const overlay = document.querySelector('[data-rf-input-overlay]');
   if (!overlay) return;
   const inputControls = Array.from(overlay.querySelectorAll('[data-splat-control]'));
+  const lookCaption = overlay.querySelector('[data-rf-look-caption]');
   const inputTimers = new Map();
   let inputDragActive = false;
+  let hasLooked = false;
+
+  // First scene click (or a tap on the mouse icon) arms mouse-look: stop the
+  // orange "Clicca" pulse and settle the caption on "Guarda" for good.
+  function markLooked() {
+    if (hasLooked) return;
+    hasLooked = true;
+    overlay.classList.remove('is-look-hint');
+    if (lookCaption) lookCaption.textContent = 'Guarda';
+  }
 
   function setInputControl(control, active) {
     inputControls
@@ -80,6 +91,7 @@
 
   inputControls.forEach((button) => {
     button.addEventListener('click', () => {
+      if (button.dataset.splatControl === 'drag') markLooked();
       pulseInputControl(button.dataset.splatControl);
     });
   });
@@ -99,7 +111,11 @@
 
   // Scene drag: light the mouse while a button is held (works under pointer lock too).
   window.addEventListener('mousedown', (event) => {
+    // Only once the overlay is live: the "Esplora i reparti" start click is a
+    // window mousedown too, and must not pre-disarm the look hint.
+    if (!overlay.classList.contains('is-active')) return;
     if (overlay.contains(event.target)) return;
+    markLooked();
     inputDragActive = true;
     setInputControl('drag', true);
   });
@@ -119,6 +135,7 @@
     if (window.__tronInspect?.().cityRevealComplete !== true) return;
     window.clearInterval(activationPoll);
     overlay.classList.add('is-active');
+    if (!hasLooked) overlay.classList.add('is-look-hint');
   }, 400);
 })();
 </script>

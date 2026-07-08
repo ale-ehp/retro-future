@@ -1094,8 +1094,8 @@
     --splat-control-glass-hover: oklch(97% .006 260 / .16);
     --splat-control-glass-active: oklch(82% .18 67 / .24);
     --splat-control-hot: oklch(82% .18 67);
-    --splat-control-unit: clamp(2.85rem, 4.5vw, 4.1rem);
-    --splat-key-gap: clamp(.17rem, .31vw, .26rem);
+    --splat-control-unit: clamp(3.705rem, 5.85vw, 5.33rem);
+    --splat-key-gap: clamp(.221rem, .403vw, .338rem);
     --splat-stroke: 1.5px;
     z-index: 40;
     color: var(--splat-control-ink);
@@ -1233,9 +1233,29 @@
     line-height: 1;
     display: inline-flex;
   }
+  /* Look onboarding: until the scene is clicked, the mouse icon + its caption
+     pulse orange ("Clicca") to prompt entering mouse-look. First click swaps
+     the caption to "Guarda" and drops the .is-look-hint state. */
+  @keyframes rf-look-hint-mouse {
+    0%, 100% { border-color: var(--splat-control-border); background: var(--splat-control-glass); }
+    50% { border-color: var(--splat-control-hot); background: var(--splat-control-glass-active); }
+  }
+  @keyframes rf-look-hint-caption {
+    0%, 100% { border-color: var(--splat-control-border); color: var(--splat-control-ink); background: var(--splat-control-glass); }
+    50% { border-color: var(--splat-control-hot); color: var(--splat-control-hot); background: var(--splat-control-glass-active); }
+  }
+  .splat-input-overlay.is-look-hint [data-symbol="mouse"] .splat-mouse-outline {
+    animation: rf-look-hint-mouse 1.05s ease-in-out infinite;
+  }
+  .splat-input-overlay.is-look-hint [data-symbol="mouse"] .splat-control-caption {
+    animation: rf-look-hint-caption 1.05s ease-in-out infinite;
+  }
   @media (max-width: 640px) {
     .splat-input-overlay { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {
     .splat-input-overlay, .splat-key-button, .splat-mouse-outline { transition-duration: .01ms !important; }
+    /* No blink: keep a steady orange hint instead. */
+    .splat-input-overlay.is-look-hint [data-symbol="mouse"] .splat-mouse-outline { animation: none; border-color: var(--splat-control-hot); background: var(--splat-control-glass-active); }
+    .splat-input-overlay.is-look-hint [data-symbol="mouse"] .splat-control-caption { animation: none; border-color: var(--splat-control-hot); color: var(--splat-control-hot); background: var(--splat-control-glass-active); }
   }
