@@ -620,6 +620,7 @@ const canvases = Array.from(document.querySelectorAll('.welcome-department-face[
 const modelUrl = canvases[0]?.dataset.headModel || 'assets/models/anime-head-practice.glb';
 const state = {
   colors: canvases.map((canvas) => canvas.dataset.headColor || '#00d4ff'),
+  disposed: false,
   error: '',
   fullHeadTintCount: 0,
   hoverActiveCount: 0,
@@ -636,6 +637,7 @@ const state = {
 
 window.__welcomeDepartmentHeadsInspect = () => ({
   colors: state.colors,
+  disposed: state.disposed,
   count: canvases.length,
   error: state.error,
   fullHeadTintCount: state.fullHeadTintCount,
@@ -797,7 +799,7 @@ async function initWelcomeDepartmentHeads() {
   let lastHeadMotionTime = 0;
 
   function scheduleWelcomeHeadMotion() {
-    if (headMotionFrame) return;
+    if (state.disposed || headMotionFrame) return;
     headMotionFrame = requestAnimationFrame(animateWelcomeHeadMotion);
   }
 
@@ -860,6 +862,7 @@ async function initWelcomeDepartmentHeads() {
 
   const loader = new GLTFLoader();
   loader.load(modelUrl, (gltf) => {
+    if (state.disposed) return;
     views.forEach((view, index) => {
       const head = gltf.scene.clone(true);
       applyHeadFeatureTint(head, state.colors[index]);
@@ -890,10 +893,56 @@ async function initWelcomeDepartmentHeads() {
   });
 
   let resizeFrame = 0;
-  window.addEventListener('resize', () => {
+  const onWelcomeHeadsResize = () => {
     cancelAnimationFrame(resizeFrame);
     resizeFrame = requestAnimationFrame(() => views.forEach(renderView));
-  }, { passive: true });
+  };
+  window.addEventListener('resize', onWelcomeHeadsResize, { passive: true });
+
+  // The welcome overlay is one-shot: once dismissed (360ms fade), the four
+  // head renderers, their GL contexts and the cloned head geometry would
+  // otherwise stay resident for the whole session alongside the city renderer.
+  function disposeWelcomeDepartmentHeads() {
+    if (state.disposed) return;
+    state.disposed = true;
+    cancelAnimationFrame(headMotionFrame);
+    headMotionFrame = 0;
+    cancelAnimationFrame(resizeFrame);
+    window.removeEventListener('resize', onWelcomeHeadsResize);
+    const geometries = new Set();
+    const materials = new Set();
+    views.forEach((view) => {
+      view.head?.traverse((node) => {
+        if (!node.isMesh) return;
+        if (node.geometry) geometries.add(node.geometry);
+        const nodeMaterials = Array.isArray(node.material) ? node.material : [node.material];
+        for (const material of nodeMaterials) if (material) materials.add(material);
+      });
+      view.scene?.clear();
+      view.head = null;
+      view.renderer?.dispose();
+      view.renderer?.forceContextLoss();
+      view.renderer = null;
+      view.scene = null;
+      view.camera = null;
+    });
+    geometries.forEach((geometry) => geometry.dispose());
+    materials.forEach((material) => material.dispose());
+  }
+
+  const overlay = document.getElementById('welcome-window-overlay');
+  if (overlay) {
+    if (overlay.classList.contains('is-dismissed')) {
+      window.setTimeout(disposeWelcomeDepartmentHeads, 1200);
+    } else {
+      const dismissWatcher = new MutationObserver(() => {
+        if (!overlay.classList.contains('is-dismissed')) return;
+        dismissWatcher.disconnect();
+        window.setTimeout(disposeWelcomeDepartmentHeads, 1200);
+      });
+      dismissWatcher.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+    }
+  }
 }
 
 function scheduleWelcomeDepartmentHeads() {
