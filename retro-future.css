@@ -1265,3 +1265,53 @@
     .splat-input-overlay.is-look-hint [data-symbol="mouse"] .splat-mouse-outline { animation: none; border-color: var(--splat-control-hot); background: var(--splat-control-glass-active); }
     .splat-input-overlay.is-look-hint [data-symbol="mouse"] .splat-control-caption { animation: none; border-color: var(--splat-control-hot); color: var(--splat-control-hot); background: var(--splat-control-glass-active); }
   }
+
+  /* ---- rotate-to-landscape prompt (mobile portrait, blocks demo start) ---- */
+  #rf-rotate-prompt {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: none;
+    place-items: center;
+    background: oklch(0% 0 0);
+    color: rgba(98, 247, 255, 0.92);
+    font-family: Sora, Avenir Next, Segoe UI, sans-serif;
+    text-align: center;
+    padding: 24px;
+  }
+  body.rf-awaiting-landscape #rf-rotate-prompt {
+    display: grid;
+  }
+  .rf-rotate-card {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    max-width: 22rem;
+  }
+  .rf-rotate-icon {
+    color: rgba(98, 247, 255, 0.92);
+    filter: drop-shadow(0 0 16px rgba(98, 247, 255, 0.45));
+    transform-origin: 50% 50%;
+    animation: rf-rotate-hint 2.2s ease-in-out infinite;
+  }
+  @keyframes rf-rotate-hint {
+    0%, 18% { transform: rotate(0deg); }
+    48%, 72% { transform: rotate(-90deg); }
+    100% { transform: rotate(0deg); }
+  }
+  .rf-rotate-text {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .rf-rotate-sub {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 400;
+    color: rgba(232, 254, 255, 0.62);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rf-rotate-icon { animation: none; transform: rotate(-45deg); }
+  }
