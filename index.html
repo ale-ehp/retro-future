@@ -29,6 +29,99 @@
 </head>
 <body class="controls-hidden welcome-cover-visible">
 <div id="app"></div>
+
+<div class="splat-input-overlay" data-rf-input-overlay aria-label="Controlli demo">
+  <div class="splat-control-row" aria-label="Input demo">
+    <div class="splat-control-unit" data-symbol="wasd">
+      <div class="splat-glyph-box splat-wasd-pad" aria-label="Tasti WASD">
+        <button class="splat-key-button" type="button" data-splat-control="w" aria-label="Tasto W" aria-pressed="false">W</button>
+        <button class="splat-key-button" type="button" data-splat-control="a" aria-label="Tasto A" aria-pressed="false">A</button>
+        <button class="splat-key-button" type="button" data-splat-control="s" aria-label="Tasto S" aria-pressed="false">S</button>
+        <button class="splat-key-button" type="button" data-splat-control="d" aria-label="Tasto D" aria-pressed="false">D</button>
+      </div>
+      <span class="splat-control-caption">Muovi</span>
+    </div>
+    <div class="splat-control-unit" data-symbol="mouse">
+      <button class="splat-glyph-box splat-mouse-button" type="button" data-splat-control="drag" aria-label="Trascina con il mouse" aria-pressed="false">
+        <span class="splat-mouse-outline" aria-hidden="true"></span>
+      </button>
+      <span class="splat-control-caption">Trascina</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // WASD + mouse input indicator, same markup/logic as /tecnologie/gaussian-splatting.
+  const overlay = document.querySelector('[data-rf-input-overlay]');
+  if (!overlay) return;
+  const inputControls = Array.from(overlay.querySelectorAll('[data-splat-control]'));
+  const inputTimers = new Map();
+  let inputDragActive = false;
+
+  function setInputControl(control, active) {
+    inputControls
+      .filter((button) => button.dataset.splatControl === control)
+      .forEach((button) => {
+        button.classList.toggle('is-live', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+  }
+
+  function pulseInputControl(control, duration = 520) {
+    window.clearTimeout(inputTimers.get(control));
+    setInputControl(control, true);
+    inputTimers.set(control, window.setTimeout(() => {
+      if (control !== 'drag' || !inputDragActive) {
+        setInputControl(control, false);
+      }
+    }, duration));
+  }
+
+  inputControls.forEach((button) => {
+    button.addEventListener('click', () => {
+      pulseInputControl(button.dataset.splatControl);
+    });
+  });
+
+  window.addEventListener('keydown', (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+    const key = event.key.toLowerCase();
+    if (!['w', 'a', 's', 'd'].includes(key)) return;
+    setInputControl(key, true);
+  });
+
+  window.addEventListener('keyup', (event) => {
+    const key = event.key.toLowerCase();
+    if (!['w', 'a', 's', 'd'].includes(key)) return;
+    setInputControl(key, false);
+  });
+
+  // Scene drag: light the mouse while a button is held (works under pointer lock too).
+  window.addEventListener('mousedown', (event) => {
+    if (overlay.contains(event.target)) return;
+    inputDragActive = true;
+    setInputControl('drag', true);
+  });
+  const releaseDrag = () => {
+    inputDragActive = false;
+    setInputControl('drag', false);
+  };
+  window.addEventListener('mouseup', releaseDrag);
+  window.addEventListener('blur', releaseDrag);
+  window.addEventListener('wheel', () => {
+    pulseInputControl('drag', 420);
+  }, { passive: true });
+
+  // Appear when the reveal completes: that is when WASD/mouse actually start
+  // working, and it keeps the corner free for the "Attendi..." reveal label.
+  const activationPoll = window.setInterval(() => {
+    if (window.__tronInspect?.().cityRevealComplete !== true) return;
+    window.clearInterval(activationPoll);
+    overlay.classList.add('is-active');
+  }, 400);
+})();
+</script>
 <div id="loader" aria-hidden="true"></div>
 
 <div id="welcome-window-overlay" aria-live="polite">
