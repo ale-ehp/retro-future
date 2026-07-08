@@ -1110,10 +1110,10 @@
   .splat-input-overlay, .splat-input-overlay * { box-sizing: border-box; }
   .splat-control-row {
     --splat-key-size: calc((var(--splat-control-unit) - (2 * var(--splat-key-gap))) / 3);
-    right: max(1.1rem, env(safe-area-inset-right));
+    left: max(1.1rem, env(safe-area-inset-left));
     bottom: max(1rem, env(safe-area-inset-bottom));
     pointer-events: none;
-    justify-content: flex-end;
+    justify-content: flex-start;
     align-items: center;
     gap: clamp(.75rem, 2.1vw, 2rem);
     display: flex;
