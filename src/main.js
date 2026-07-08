@@ -1341,12 +1341,44 @@ if (typeof welcomeWindowTouchQuery.addEventListener === 'function') {
 welcomeWindowOverlay?.addEventListener('pointerdown', triggerWelcomeWindowTouch, { passive: false });
 welcomeWindowOverlay?.addEventListener('touchstart', triggerWelcomeWindowTouch, { passive: false });
 
-function triggerWelcomeButtonStart(event) {
-  event.preventDefault();
+function beginDemoReveal(event) {
   tronDiscRevealWaitingActive = true;
-  setTronDiscCursorRevealWaiting(true, event);
+  setTronDiscCursorRevealWaiting(true, event || null);
   tronRevealWaitLabel?.classList.toggle('is-active', tronDiscRevealWaitingActive);
   triggerBackspaceDroneIntro('welcome-button');
+}
+
+function isDeviceInLandscape() {
+  return window.matchMedia('(orientation: landscape)').matches || window.innerWidth > window.innerHeight;
+}
+
+// On a phone the demo needs landscape (matches the on-screen joystick + forced
+// fullscreen). If the user taps start in portrait, hold the demo and show a
+// rotate prompt until the device turns landscape, then begin the reveal.
+let awaitingLandscapeStart = false;
+function triggerWelcomeButtonStart(event) {
+  event.preventDefault();
+  if (awaitingLandscapeStart) return;
+  if (mobilePerformanceProfileActive() && !isDeviceInLandscape()) {
+    awaitingLandscapeStart = true;
+    document.body.classList.add('rf-awaiting-landscape');
+    requestLandscapeFullscreen('welcome-start');
+    const landscapeQuery = window.matchMedia('(orientation: landscape)');
+    const onOrientation = () => {
+      if (!isDeviceInLandscape()) return;
+      landscapeQuery.removeEventListener?.('change', onOrientation);
+      landscapeQuery.removeListener?.(onOrientation);
+      window.removeEventListener('resize', onOrientation);
+      awaitingLandscapeStart = false;
+      document.body.classList.remove('rf-awaiting-landscape');
+      beginDemoReveal(event);
+    };
+    if (typeof landscapeQuery.addEventListener === 'function') landscapeQuery.addEventListener('change', onOrientation);
+    else landscapeQuery.addListener?.(onOrientation);
+    window.addEventListener('resize', onOrientation);
+    return;
+  }
+  beginDemoReveal(event);
 }
 
 function isEventInsideWelcomeStartButton(event) {
