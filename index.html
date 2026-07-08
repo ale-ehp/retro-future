@@ -965,8 +965,117 @@ scheduleWelcomeDepartmentHeads();
 </script>
 
 <script type="module">
+// Flatten the module waterfall: the city's module graph is ~4 levels deep, so
+// discovery alone costs serial round-trips. Injecting modulepreload hints just
+// before the deferred import fetches the whole tree in parallel — after the
+// welcome screen's own critical resources have started, so it never competes
+// with first paint.
+const RETRO_MODULE_PRELOADS = [
+  './three.core.js',
+  './three.module.min.js',
+  './EffectComposer.js',
+  './RenderPass.js',
+  './UnrealBloomPass.js',
+  './FXAAPass.js',
+  './ShaderPass.js',
+  './GLTFLoader.js',
+  './SkeletonUtils.js',
+  './Pass.js',
+  './MaskPass.js',
+  './CopyShader.js',
+  './FXAAShader.js',
+  './LuminosityHighPassShader.js',
+  './BufferGeometryUtils.js',
+  './src/audio/audio.js',
+  './src/audio/footstep-audio.js',
+  './src/camera/disc-cursor.js',
+  './src/camera/drone-intro.js',
+  './src/camera/mouse-look.js',
+  './src/character/character-build.js',
+  './src/character/character-collision.js',
+  './src/character/character-colors.js',
+  './src/character/character-crowd.js',
+  './src/character/character-footsteps.js',
+  './src/character/character-inspect.js',
+  './src/character/character-materials.js',
+  './src/character/character-movement.js',
+  './src/character/character-reflections.js',
+  './src/character/character-routes.js',
+  './src/character/character-textures.js',
+  './src/character/characters.js',
+  './src/character/runner-animation.js',
+  './src/character/runner-beat-pulse.js',
+  './src/character/runner-controller.js',
+  './src/character/runner-crowd-leds.js',
+  './src/character/runner-crowd-lines.js',
+  './src/character/runner-crowd-materials.js',
+  './src/character/runner-crowd-routes.js',
+  './src/character/runner-crowd-runtime.js',
+  './src/character/runner-footsteps.js',
+  './src/character/runner-idle-character.js',
+  './src/character/runner-orchestration.js',
+  './src/character/runner-reflection-rig.js',
+  './src/character/runner-reveal.js',
+  './src/character/runner-state.js',
+  './src/character/runner-visual-controls.js',
+  './src/character/speech-bubbles.js',
+  './src/controls/bridge-controls.js',
+  './src/controls/building-live-controls.js',
+  './src/controls/control-settings-runtime.js',
+  './src/controls/controls.js',
+  './src/controls/equalizer.js',
+  './src/controls/facade-led-controls.js',
+  './src/controls/fx-panels.js',
+  './src/controls/keyboard.js',
+  './src/controls/mobile-movement.js',
+  './src/controls/movement.js',
+  './src/controls/welcome-ui.js',
+  './src/ctx.js',
+  './src/engine/city-reveal-profiler.js',
+  './src/engine/performance-diagnostics.js',
+  './src/engine/performance-mobile.js',
+  './src/engine/reflection-env.js',
+  './src/engine/retro-benchmark.js',
+  './src/engine/shaders.js',
+  './src/engine/static-city-culling.js',
+  './src/main.js',
+  './src/sign-opacity.js',
+  './src/world/atmosphere-particles.js',
+  './src/world/base-pads.js',
+  './src/world/boulevard-constants.js',
+  './src/world/boundary-error.js',
+  './src/world/bridges.js',
+  './src/world/building-doors.js',
+  './src/world/building-leds.js',
+  './src/world/buildings.js',
+  './src/world/city-boards.js',
+  './src/world/city-reveal-main-led.js',
+  './src/world/city-reveal-render-runtime.js',
+  './src/world/city-reveal-scan-glow.js',
+  './src/world/city-reveal-wireframe.js',
+  './src/world/config.js',
+  './src/world/energy-pulse.js',
+  './src/world/facade-led-treatment.js',
+  './src/world/ground-geometry.js',
+  './src/world/hex-tiles.js',
+  './src/world/material-textures.js',
+  './src/world/sky-dome.js',
+];
+
+function injectRetroModulePreloads() {
+  const fragment = document.createDocumentFragment();
+  for (const href of RETRO_MODULE_PRELOADS) {
+    const link = document.createElement('link');
+    link.rel = 'modulepreload';
+    link.href = href;
+    fragment.appendChild(link);
+  }
+  document.head.appendChild(fragment);
+}
+
 function scheduleRetroFutureCityBoot() {
   requestAnimationFrame(() => {
+    injectRetroModulePreloads();
     window.setTimeout(() => {
       import('./src/main.js').catch((error) => {
         console.error('[retro-future]', error);
