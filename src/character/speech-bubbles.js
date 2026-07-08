@@ -387,12 +387,27 @@ function makeGreeterBubbleTexture(html, options = {}) {
   return texture;
 }
 
+// LRU cap: visible bubbles re-fetch their texture every frame, so the (up to
+// ~6) on-screen entries are always most-recently-used and never evicted; an
+// evicted line is simply re-rasterized if it ever comes up again. Without the
+// cap the session converges toward one resident 896x360 texture per unique
+// crowd line (~40 lines, ~70MB GPU).
+const GREETER_BUBBLE_TEXTURE_CACHE_MAX = 12;
+
 function getGreeterBubbleTexture(html, options = {}) {
   const cacheKey = `${options.greeter ? 'greeter' : 'crowd'}:${html}`;
   let tex = greeterBubbleTextureCache.get(cacheKey);
-  if (!tex) {
-    tex = makeGreeterBubbleTexture(html, options);
+  if (tex) {
+    greeterBubbleTextureCache.delete(cacheKey);
     greeterBubbleTextureCache.set(cacheKey, tex);
+    return tex;
+  }
+  tex = makeGreeterBubbleTexture(html, options);
+  greeterBubbleTextureCache.set(cacheKey, tex);
+  while (greeterBubbleTextureCache.size > GREETER_BUBBLE_TEXTURE_CACHE_MAX) {
+    const oldest = greeterBubbleTextureCache.entries().next().value;
+    greeterBubbleTextureCache.delete(oldest[0]);
+    oldest[1]?.dispose?.();
   }
   return tex;
 }
