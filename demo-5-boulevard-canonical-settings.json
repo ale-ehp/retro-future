@@ -314,7 +314,7 @@
     "runner-beat-pulse-intensity": 3,
     "runner-beat-pulse-decay": 3,
     "runner-beat-pulse-division": 1,
-    "music-fx-enabled": "off",
+    "music-fx-enabled": "on",
     "music-fx-mix": 1,
     "music-fx-crusher": 0.32,
     "music-fx-bit-depth": 8,

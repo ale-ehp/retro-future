@@ -18,6 +18,10 @@ export const TRON_SOUNDTRACK_INITIAL_START_SECONDS = 0;
 export const TRON_SOUNDTRACK_LOOP_START_SECONDS = 30;
 export const TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS = 0.12;
 export const TRON_SOUNDTRACK_INTRO_FX_REVEAL_STOP_DELAY_MS = 350;
+// Measured bass-onset of the beat drop in retro-future.opus (rms lowpass 150Hz,
+// 50ms windows: jump -17.8 -> -10.5 dB at 9.35s). The reveal sweep anchors to
+// the track clock hitting this position. Re-measure if the track changes.
+export const TRON_SOUNDTRACK_BEAT_DROP_SECONDS = 9.35;
 export const TRON_SOUNDTRACK_INTRO_FX_CURVE_SIZE = 4096;
 export const TRON_SOUNDTRACK_INTRO_FX_WOBBLE_RATE_HZ = 7.5;
 export const TRON_SOUNDTRACK_INTRO_FX_MAX_WOBBLE_DEPTH_HZ = 1600;
@@ -359,7 +363,7 @@ export function monitorTronSoundtrackLoop(deps) {
   }
 }
 
-export function startTronFileSoundtrack(deps, source = 'manual') {
+export function startTronFileSoundtrack(deps, source = 'manual', options = {}) {
   const { soundtrack, ensureCtx } = deps;
   if (!TRON_SOUNDTRACK_ENABLED || soundtrack.playing) return Boolean(soundtrack.playing);
   const ctx = ensureCtx();
@@ -376,7 +380,10 @@ export function startTronFileSoundtrack(deps, source = 'manual') {
   soundtrack.loopCount = 0;
   soundtrack.error = '';
   soundtrack.gains.forEach((gain) => gain.gain.setValueAtTime(0.0001, ctx.currentTime));
-  if (soundtrack.introFx.enabled && !String(source).startsWith('welcome-')) setTronSoundtrackIntroLofi(soundtrack, ctx, true, 0.01);
+  // introLofi option overrides the legacy source-prefix heuristic: the welcome
+  // flow now asks for the muffled intro explicitly (released on the beat drop).
+  const wantIntroLofi = options.introLofi ?? !String(source).startsWith('welcome-');
+  if (soundtrack.introFx.enabled && wantIntroLofi) setTronSoundtrackIntroLofi(soundtrack, ctx, true, 0.01);
   startTronSoundtrackElement(deps, ctx, 0, TRON_SOUNDTRACK_INITIAL_START_SECONDS, TRON_SOUNDTRACK_FADE_IN_SECONDS, soundtrack.targetVolume);
   if (soundtrack.timer) window.clearInterval(soundtrack.timer);
   soundtrack.timer = window.setInterval(() => monitorTronSoundtrackLoop(deps), 250);

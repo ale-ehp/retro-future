@@ -278,6 +278,7 @@ import {
   TRON_SOUNDTRACK_INITIAL_START_SECONDS,
   TRON_SOUNDTRACK_INTRO_FX_CURVE_SIZE,
   TRON_SOUNDTRACK_INTRO_FX_DEFAULTS,
+  TRON_SOUNDTRACK_BEAT_DROP_SECONDS,
   TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS,
   TRON_SOUNDTRACK_INTRO_FX_MAX_NOISE_GAIN,
   TRON_SOUNDTRACK_INTRO_FX_MAX_WOBBLE_DEPTH_HZ,
@@ -1391,14 +1392,14 @@ function lerpAngle(from, to, t) {
   return from + delta * t;
 }
 
-const TRON_MUSIC_START_DELAY_MS = 400;
 function triggerBackspaceDroneIntro(source = 'backspace') {
   dismissWelcomeWindow();
   ensureFootstepAudioReady();
-  // start the soundtrack 400ms after the reveal begins so the drop lands on the sweep.
-  // ensureFootstepAudioReady() above unlocks the audio context on this gesture; sticky activation
-  // keeps play() allowed for the delayed start.
-  setTimeout(() => startTronProceduralMusic(source), TRON_MUSIC_START_DELAY_MS);
+  // The soundtrack is the reveal's master clock: start it immediately, muffled
+  // by the intro lofi. The sweep fires when the track reaches its beat drop
+  // (see getSoundtrackSyncState + updateCityRevealWireframe), so audio and
+  // reveal can never drift apart.
+  startTronProceduralMusic(source, { introLofi: true });
   if (!backspaceIntroTriggered) {
     backspaceIntroTriggered = true;
     cameraCollisionUnlockedByBackspace = true;
@@ -1703,8 +1704,8 @@ function monitorTronSoundtrackLoop() {
   return monitorTronSoundtrackLoopCore(tronSoundtrackDeps);
 }
 
-function startTronFileSoundtrack(source = 'manual') {
-  return startTronFileSoundtrackCore(tronSoundtrackDeps, source);
+function startTronFileSoundtrack(source = 'manual', options = {}) {
+  return startTronFileSoundtrackCore(tronSoundtrackDeps, source, options);
 }
 
 function stopTronFileSoundtrack(fadeSeconds = TRON_SOUNDTRACK_STOP_FADE_SECONDS) {
@@ -1715,8 +1716,8 @@ function setTronFileSoundtrackVolume(value = TRON_SOUNDTRACK_VOLUME) {
   return setTronFileSoundtrackVolumeCore(tronSoundtrackDeps, value);
 }
 
-function startTronProceduralMusic(source = 'manual') {
-  return startTronFileSoundtrack(source);
+function startTronProceduralMusic(source = 'manual', options = {}) {
+  return startTronFileSoundtrack(source, options);
 }
 
 function stopTronProceduralMusic(fadeSeconds = 0.75) {
@@ -3793,6 +3794,14 @@ initCityRevealWireframe({
   updatePointerLockHint,
   syncCityRevealSkyMaterial,
   scheduleTronSoundtrackIntroLofiStopForReveal,
+  // Master-clock feed for the beat-drop-anchored sweep: track position plus
+  // where the drop sits in the track and how long the lofi release fade takes.
+  getSoundtrackSyncState: () => ({
+    playing: Boolean(tronSoundtrack.playing),
+    currentTime: tronSoundtrack.elements[tronSoundtrack.activeIndex]?.currentTime ?? 0,
+    dropAtSeconds: TRON_SOUNDTRACK_BEAT_DROP_SECONDS,
+    lofiReleaseFadeSeconds: TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS,
+  }),
 });
 
 const cityRevealRender = createCityRevealRenderRuntime({

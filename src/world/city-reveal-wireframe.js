@@ -6,6 +6,8 @@ import {
 } from './boulevard-constants.js';
 import {
   CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS,
+  CITY_REVEAL_BEAT_DROP_LEAD_MS,
+  CITY_REVEAL_MUSIC_WAIT_CAP_MS,
   CITY_REVEAL_BACKPLATE_SWEEP_PORTION,
   CITY_REVEAL_DEFAULT_DELAY_MS,
   CITY_REVEAL_DEFAULT_FADE_MS,
@@ -1094,7 +1096,26 @@ export function updateCityRevealWireframe(now) {
   }
   if (cityRevealArmedAt && !cityRevealStartedAt) {
     const armedElapsed = now - cityRevealArmedAt;
-    if (armedElapsed < cityRevealEffectiveDelayMs()) return;
+    const sync = runtime.getSoundtrackSyncState ? runtime.getSoundtrackSyncState() : null;
+    const musicClockUsable = Boolean(sync?.playing)
+      && Number.isFinite(sync.currentTime) && sync.currentTime > 0
+      && Number.isFinite(sync.dropAtSeconds) && sync.dropAtSeconds > 0;
+    let shouldStart;
+    if (musicClockUsable) {
+      // The track is the master clock: the sweep fires when the music reaches
+      // its beat drop, so audio and reveal cannot drift. Release the intro
+      // lofi one fade ahead so the sound is fully open ON the drop.
+      const dropStartSeconds = sync.dropAtSeconds - CITY_REVEAL_BEAT_DROP_LEAD_MS / 1000;
+      const releaseFade = Number.isFinite(sync.lofiReleaseFadeSeconds) ? sync.lofiReleaseFadeSeconds : 0;
+      if (sync.currentTime >= dropStartSeconds - releaseFade) {
+        runtime.scheduleTronSoundtrackIntroLofiStopForReveal(0);
+      }
+      shouldStart = sync.currentTime >= dropStartSeconds
+        || armedElapsed >= cityRevealEffectiveDelayMs() + CITY_REVEAL_MUSIC_WAIT_CAP_MS;
+    } else {
+      shouldStart = armedElapsed >= cityRevealEffectiveDelayMs();
+    }
+    if (!shouldStart) return;
     cityRevealStartedAt = now - cityRevealEffectiveDelayMs();
     cityRevealSweepProgress = 0;
     cityRevealBackplateRevealFactor = 1;
