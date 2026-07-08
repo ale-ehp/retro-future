@@ -1250,8 +1250,11 @@
   .splat-input-overlay.is-look-hint [data-symbol="mouse"] .splat-control-caption {
     animation: rf-look-hint-caption 1.05s ease-in-out infinite;
   }
-  @media (max-width: 640px) {
-    .splat-input-overlay { display: none; }
+  /* Hide the pointer/keyboard indicator on every touch device (matches the
+     demo's own mobile query in MOBILE_PERFORMANCE_QUERY): a landscape phone is
+     wider than 640px but still has no mouse — it uses the touch joystick. */
+  @media (max-width: 760px), (hover: none), (pointer: coarse) {
+    .splat-input-overlay { display: none !important; }
   }
   @media (prefers-reduced-motion: reduce) {
     .splat-input-overlay, .splat-key-button, .splat-mouse-outline { transition-duration: .01ms !important; }
