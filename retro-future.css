@@ -674,7 +674,10 @@
     pointer-events: none;
     will-change: transform;
   }
-  body.mobile-landscape #mobile-movement-pad {
+  /* The touch joystick only appears once the reveal is complete (parity with
+     the desktop input overlay), not during the wireframe sweep. rf-reveal-done
+     is set on <body> at cityRevealComplete by the input-overlay script. */
+  body.mobile-landscape.rf-reveal-done #mobile-movement-pad {
     opacity: 1;
     visibility: visible;
     transform: translate3d(0, 0, 0);
