@@ -13,6 +13,7 @@ import {
   CITY_REVEAL_SWEEP_MARGIN_Z,
 } from './config.js';
 import { createCityRevealScanGlow } from './city-reveal-scan-glow.js';
+import { bridgeEdgeBatch } from './building-leds.js';
 
 const noop = () => {};
 const runtime = {
@@ -445,6 +446,19 @@ function tagCityRevealWireObject(object, role) {
 }
 
 function addCityWireStripCenterline(spec, material = cityRevealWireDimMat) {
+  if (spec && !spec.mesh && spec.instanceMatrix) {
+    // Batched bridge strip: endpoints are the unit box's local (0,0,±0.5)
+    // through the stored instance matrix (scaled to thickness×thickness×len).
+    if (!spec.lastVisible || !bridgeEdgeBatch.mesh) return null;
+    bridgeEdgeBatch.mesh.updateWorldMatrix(true, false);
+    cityRevealStripLineStart.set(0, 0, -0.5).applyMatrix4(spec.instanceMatrix).applyMatrix4(bridgeEdgeBatch.mesh.matrixWorld);
+    cityRevealStripLineEnd.set(0, 0, 0.5).applyMatrix4(spec.instanceMatrix).applyMatrix4(bridgeEdgeBatch.mesh.matrixWorld);
+    const line = addCityWireLineSegments([
+      cityRevealStripLineStart.clone(),
+      cityRevealStripLineEnd.clone(),
+    ], material);
+    return tagCityRevealWireObject(line, `${spec.edgeRole || 'edge'}-led-wire`);
+  }
   if (!spec?.mesh?.visible || !spec.mesh.geometry) return null;
   const geometry = spec.mesh.geometry;
   let length = Number(geometry.parameters?.depth);

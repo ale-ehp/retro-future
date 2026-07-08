@@ -380,12 +380,14 @@ import {
 } from './world/building-doors.js';
 import {
   addBuildingEdges,
+  buildBridgeEdgeBatch,
   buildSideBuildingEdgeBatch,
   buildSideHorizontalLedRingBatches,
   edgeStripSpecs,
   elStrip,
   horizontalBuildingLedRings,
   initBuildingLeds,
+  setBridgeEdgeSpecCullVisible,
   setStripInstanceTransform,
   sideBuildingEdgeBatch,
   sideHorizontalLedRingBatches,
@@ -3724,6 +3726,7 @@ function tronRunnerDroneAnchor() {
 
 // ---------- Exact boulevard elevated links, rendered with demo-5 cubemap materials ----------
 bridges.buildLinks([-144, -48, 48, 144]);
+buildBridgeEdgeBatch(overlayGroup);
 
 // (Ground rungs / spine strips removed — replaced by roadEdge tubes + clean median above)
 
@@ -3736,6 +3739,7 @@ initStaticCityCulling({
   cityRoleBoards: getCityRoleBoards(),
   edgeStripSpecs,
   horizontalBuildingLedRings,
+  setBridgeEdgeSpecCullVisible,
   basePadLedBatch,
   sideDoorBatchState,
   gridBlock: GRID_BLOCK,
