@@ -54,12 +54,10 @@ import {
   BOUNDARY_ERROR_FAST_CONTROL_IDS,
   BUILDING_MATERIAL_FAST_CONTROL_IDS,
   CHARACTER_FAST_CONTROL_IDS,
-  DEFAULT_PRODUCTION_PANEL,
   HEX_RUNTIME_FAST_CONTROL_IDS,
   LIGHT_FAST_CONTROL_IDS,
   MOVEMENT_FAST_CONTROL_IDS,
   POST_FAST_CONTROL_IDS,
-  PRODUCTION_CONTROL_PANELS,
   PRODUCTION_LIVE_CONTROL_SELECTOR,
   ROAD_MATERIAL_FAST_CONTROL_IDS,
   SKY_FAST_CONTROL_IDS,
@@ -2350,7 +2348,6 @@ initMovement(ctx, {
   getBackwardSpeedScale: () => backwardSpeedScale,
   getStrafeSpeedScale: () => strafeSpeedScale,
   getDiagonalSpeedScale: () => diagonalSpeedScale,
-  getVerticalSpeed: () => verticalSpeed,
   getMovementAcceleration: () => movementAcceleration,
   getMovementDeceleration: () => movementDeceleration,
   resolveCameraBuildingCollision,
@@ -4505,22 +4502,11 @@ function updateControlTabs() {
 
 
 function trimProductionControls() {
-  document.querySelectorAll('#hud-controls .control-tab').forEach((tab) => {
-    const keep = PRODUCTION_CONTROL_PANELS.has(tab.dataset.tab);
-    if (!keep) {
-      tab.remove();
-      return;
-    }
-    tab.classList.toggle('active', tab.dataset.tab === DEFAULT_PRODUCTION_PANEL);
-  });
-  document.querySelectorAll('#hud-controls .control-panel').forEach((panel) => {
-    const keep = PRODUCTION_CONTROL_PANELS.has(panel.dataset.panel);
-    if (!keep) {
-      panel.remove();
-      return;
-    }
-    panel.classList.toggle('active', panel.dataset.panel === DEFAULT_PRODUCTION_PANEL);
-  });
+  // The live-tuning UI is retired: control VALUES still come from the markup
+  // defaults + canonical settings applied at boot (controlEls keeps reading
+  // the detached elements), but no user-facing settings button or panel stays.
+  document.getElementById('settings-toggle')?.remove();
+  document.getElementById('hud-controls')?.remove();
 }
 
 // mountFxCategoryPanels moved to ./fx-panels.js (called once below, after performanceDiagnosticsEl).

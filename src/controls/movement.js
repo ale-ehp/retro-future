@@ -56,7 +56,6 @@ let getSpeedSprint = null;
 let getBackwardSpeedScale = null;
 let getStrafeSpeedScale = null;
 let getDiagonalSpeedScale = null;
-let getVerticalSpeed = null;
 let getMovementAcceleration = null;
 let getMovementDeceleration = null;
 let resolveCameraBuildingCollision = null;
@@ -89,7 +88,6 @@ export function initMovement(ctx, deps) {
   getBackwardSpeedScale = deps.getBackwardSpeedScale;
   getStrafeSpeedScale = deps.getStrafeSpeedScale;
   getDiagonalSpeedScale = deps.getDiagonalSpeedScale;
-  getVerticalSpeed = deps.getVerticalSpeed;
   getMovementAcceleration = deps.getMovementAcceleration;
   getMovementDeceleration = deps.getMovementDeceleration;
   resolveCameraBuildingCollision = deps.resolveCameraBuildingCollision;
@@ -136,12 +134,11 @@ export function applyMovement(dt) {
   const backwardSpeedScale = getBackwardSpeedScale();
   const strafeSpeedScale = getStrafeSpeedScale();
   const diagonalSpeedScale = getDiagonalSpeedScale();
-  const verticalSpeed = getVerticalSpeed();
   const movementAcceleration = getMovementAcceleration();
   const movementDeceleration = getMovementDeceleration();
   desiredVelocity.set(0, 0, 0);
   moveVec.set(0, 0, 0);
-  let mx = 0, mz = 0, my = 0;
+  let mx = 0, mz = 0;
   if (keys['KeyW'] || keys['ArrowUp'])    mz -= 1;
   if (keys['KeyS'] || keys['ArrowDown'])  mz += 1;
   if (keys['KeyA'] || keys['ArrowLeft'])  mx -= 1;
@@ -150,12 +147,9 @@ export function applyMovement(dt) {
     mx += mobileTouchControlsState.movement.x;
     mz += mobileTouchControlsState.movement.z;
   }
-  if (keys['KeyE'] || keys['Space'])      my += 1;
-  if (keys['KeyQ'] || keys['KeyC'])       my -= 1;
-
+  // Flight input removed: the player walks, the surface resolver always snaps.
   const hasHorizontalInput = mx !== 0 || mz !== 0;
-  const hasVerticalInput = my !== 0;
-  const hasInput = hasHorizontalInput || hasVerticalInput;
+  const hasInput = hasHorizontalInput;
   const speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? speedSprint : speedBase;
 
   if (hasHorizontalInput) {
@@ -191,8 +185,6 @@ export function applyMovement(dt) {
     movementStrafeDirection = 0;
   }
 
-  if (hasVerticalInput) desiredVelocity.y = my * verticalSpeed;
-
   const response = hasInput ? movementAcceleration : movementDeceleration;
   movementVelocity.lerp(desiredVelocity, Math.min(1, response * dt));
   if (!hasInput && movementVelocity.lengthSq() < 0.0004) movementVelocity.set(0, 0, 0);
@@ -208,7 +200,7 @@ export function applyMovement(dt) {
     resolveCameraBuildingCollision();
     resolveCameraRoadHexBoundaryCollision();
     resolveCameraCrowdCollision();
-    resolveCameraWalkSurface(hasVerticalInput);
+    resolveCameraWalkSurface(false);
     return;
   }
 
@@ -217,7 +209,7 @@ export function applyMovement(dt) {
   resolveCameraRoadHexBoundaryCollision();
   resolveCameraCrowdCollision();
 
-  resolveCameraWalkSurface(hasVerticalInput);
+  resolveCameraWalkSurface(false);
 }
 
 export function updateWalkSimulation(dt) {
