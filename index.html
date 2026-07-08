@@ -134,6 +134,9 @@
   const activationPoll = window.setInterval(() => {
     if (window.__tronInspect?.().cityRevealComplete !== true) return;
     window.clearInterval(activationPoll);
+    // Gate both the desktop indicator and the mobile touch joystick on the
+    // reveal finishing (the joystick keys off body.rf-reveal-done in CSS).
+    document.body.classList.add('rf-reveal-done');
     overlay.classList.add('is-active');
     if (!hasLooked) overlay.classList.add('is-look-hint');
   }, 400);
