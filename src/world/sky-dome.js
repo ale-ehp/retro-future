@@ -31,7 +31,7 @@ export function createSkyDome(deps) {
   // drift/lightning re-steps on re-bake. Mobile + steady-state only. ?skyBake=1|0
   // overrides; SKY_BAKE_MOBILE_DEFAULT is the shipped default (kept OFF until a
   // device A/B validates the fill win vs the periodic bake spike).
-  const SKY_BAKE_MOBILE_DEFAULT = false;
+  const SKY_BAKE_MOBILE_DEFAULT = true;
   const SKY_BAKE_CUBE_SIZE = 128;
   const SKY_BAKE_STRIDE = 12;
   let skyBakeRequestedOverride = null;

@@ -828,9 +828,10 @@ const antialiasUrlOverride = (() => {
     return (p === 'msaa' || p === 'fxaa' || p === 'off') ? p : null;
   } catch { return null; }
 })();
-// Default: MSAA on DESKTOP (sharper edges than FXAA, ample headroom); FXAA on
-// mobile until the on-device MSAA A/B confirms a win. ?aa= overrides.
-let antialiasMode = antialiasUrlOverride || (mobilePerformanceProfileActive() ? 'fxaa' : 'msaa');
+// Default: MSAA everywhere (on-device A/B confirmed it's sharper and not slower —
+// cheap on tile GPUs, resolved once). Falls back to FXAA on contexts without
+// multisampling. ?aa= overrides.
+let antialiasMode = antialiasUrlOverride || 'msaa';
 let composerMsaaActive = false;
 let fsrUpscaleEnabled = false;
 let fsrInternalScale = 1;
@@ -4245,10 +4246,9 @@ function rebuildComposer() {
 }
 
 function applyAntialiasControls(mode = antialiasMode) {
-  // ?aa URL override wins. Otherwise desktop defaults to msaa (the control default
-  // is fxaa); mobile keeps the control mode. 'off' is always honored.
-  const effective = antialiasUrlOverride
-    || (mobilePerformanceProfileActive() ? mode : (mode === 'off' ? 'off' : 'msaa'));
+  // ?aa URL override wins. Otherwise default to msaa everywhere (the control
+  // default is fxaa); 'off' is always honored.
+  const effective = antialiasUrlOverride || (mode === 'off' ? 'off' : 'msaa');
   antialiasMode = normalizedAntialiasMode(effective);
   syncGlobalFxaaPass();
   resizeFxaaTargets();
