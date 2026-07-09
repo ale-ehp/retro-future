@@ -818,18 +818,19 @@ let manualRenderScale = 1;
 let requestedBloomResolutionScale = 0.32;
 let bloomResolutionScale = 0.32;
 let bloomEnabled = true;
-let antialiasMode = 'fxaa';
 // AA mode: fxaa (post pass) | msaa (hardware multisample — cheaper on tile GPUs:
-// iOS + Android Adreno/Mali/PowerVR) | off. ?aa=msaa|fxaa|off is authoritative
-// (wins over the control default) so a benchmark URL pins the mode; msaa falls
-// back to fxaa when the WebGL2 context can't provide >=2 samples.
+// iOS + Android Adreno/Mali/PowerVR, and Apple-Silicon Macs) | off. ?aa=msaa|fxaa|off
+// is authoritative (wins over the control default). msaa falls back to fxaa when
+// the WebGL2 context can't provide >=2 samples.
 const antialiasUrlOverride = (() => {
   try {
     const p = new URLSearchParams(location.search).get('aa');
     return (p === 'msaa' || p === 'fxaa' || p === 'off') ? p : null;
   } catch { return null; }
 })();
-if (antialiasUrlOverride) antialiasMode = antialiasUrlOverride;
+// Default: MSAA on DESKTOP (sharper edges than FXAA, ample headroom); FXAA on
+// mobile until the on-device MSAA A/B confirms a win. ?aa= overrides.
+let antialiasMode = antialiasUrlOverride || (mobilePerformanceProfileActive() ? 'fxaa' : 'msaa');
 let composerMsaaActive = false;
 let fsrUpscaleEnabled = false;
 let fsrInternalScale = 1;
@@ -4244,8 +4245,11 @@ function rebuildComposer() {
 }
 
 function applyAntialiasControls(mode = antialiasMode) {
-  // The ?aa URL override wins over the control-driven mode so a benchmark URL pins it.
-  antialiasMode = normalizedAntialiasMode(antialiasUrlOverride || mode);
+  // ?aa URL override wins. Otherwise desktop defaults to msaa (the control default
+  // is fxaa); mobile keeps the control mode. 'off' is always honored.
+  const effective = antialiasUrlOverride
+    || (mobilePerformanceProfileActive() ? mode : (mode === 'off' ? 'off' : 'msaa'));
+  antialiasMode = normalizedAntialiasMode(effective);
   syncGlobalFxaaPass();
   resizeFxaaTargets();
 }
