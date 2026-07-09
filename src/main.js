@@ -1080,6 +1080,7 @@ function retroBenchmarkEnvironment() {
       // Applied state of every per-subsystem debug toggle (see fx-debug-toggles.js)
       // so each capture self-documents which subsystems were disabled.
       fx: fxLevers(),
+      benchmarkSettleMs: RETRO_BENCHMARK_AUTO_SETTLE_MS,
       urlParams: window.location.search || '(none)',
     },
     diagnostics: performanceDiagnostics.summary(latestMeasuredFps),
@@ -1237,8 +1238,33 @@ window.__retroBenchmarkStart = (options = {}) => {
 window.__retroBenchmarkInspect = () => retroBenchmarkRuntime.inspect();
 window.__retroBenchmarkDownload = () => downloadRetroBenchmarkJson();
 
-function maybeStartRetroBenchmarkAuto() {
-  if (!retroBenchmarkAutoStartPending || !cityRevealComplete) return;
+// The auto-run must measure STEADY STATE, not the intro. cityRevealComplete alone
+// is too early: the wireframe/roadGrid/reveal-sky composer passes and the main-LED
+// facade reveal keep running for ~1-2s after it, so a benchmark started there
+// captures the 6-pass reveal compositor (down to ~20fps p1) instead of the 3-pass
+// steady city. Wait until the scene is fully settled AND has held that state for a
+// short buffer (material/opacity fades + crowd appear). ?benchmarkSettleMs=N tunes
+// it (0 = old behaviour, start at reveal-complete).
+const RETRO_BENCHMARK_AUTO_SETTLE_MS = (() => {
+  const raw = retroBenchmarkSearchParams.get('benchmarkSettleMs');
+  if (raw == null) return 1500; // Number(null) === 0, so guard the absent param
+  const v = Number(raw);
+  return Number.isFinite(v) && v >= 0 ? v : 1500;
+})();
+let retroBenchmarkSettleSinceMs = 0;
+function retroBenchmarkSceneSettled() {
+  return Boolean(
+    cityRevealComplete
+    && hasDroneIntroLanded()
+    && !isCityRevealCompositeActive()
+    && !cityRevealMainLedReveal.isOverlayActive()
+  );
+}
+function maybeStartRetroBenchmarkAuto(now = performance.now()) {
+  if (!retroBenchmarkAutoStartPending) return;
+  if (!retroBenchmarkSceneSettled()) { retroBenchmarkSettleSinceMs = 0; return; }
+  if (retroBenchmarkSettleSinceMs === 0) retroBenchmarkSettleSinceMs = now;
+  if (now - retroBenchmarkSettleSinceMs < RETRO_BENCHMARK_AUTO_SETTLE_MS) return;
   retroBenchmarkAutoStartPending = false;
   window.__retroBenchmarkStart({ source: 'query-param', durationMs: retroBenchmarkDurationMs });
 }
@@ -6650,7 +6676,7 @@ function tick(now) {
   updateCityRevealWireframe(now);
   syncTronDiscRevealWaiting();
   syncCityRevealPerformanceProfile();
-  maybeStartRetroBenchmarkAuto();
+  maybeStartRetroBenchmarkAuto(now);
   const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
   const bypassBloomForReveal = shouldBypassBloomForRevealPerformance();
   if (bloomPass) bloomPass.enabled = bloomEnabled && postRevealPerfIsolationState.bloom && !bypassBloomForReveal && fxEnabled('bloom');
