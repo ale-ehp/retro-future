@@ -1075,6 +1075,7 @@ function retroBenchmarkEnvironment() {
       floorLite: floorLiteActive,
       floorReflect: floorReflectLite ? 'lite' : 'full',
       buildingReflect: buildingReflectLite ? 'lite' : 'full',
+      dirLight: dirLightActive ? 'on' : 'off',
       antialias: antialiasMode,
       activePixelRatio,
       forcedPixelRatio: forcedRenderPixelRatio(),
@@ -2735,7 +2736,14 @@ ambientLight.visible = fxEnabled('hemiLight');
 const dirKey = new THREE.DirectionalLight(0x6ec8e6, 0.18);
 dirKey.position.set(40, 220, 120);
 scene.add(dirKey);
-dirKey.visible = fxEnabled('dirLight');
+// Mobile: drop the directional key light by default. Measured +3.7fps on a real
+// iPhone (it runs a per-fragment BRDF on every lit pixel of the huge floor +
+// facades). At intensity 0.18 the mood is carried by the hemisphere fill + the
+// emissive LEDs, so the look barely changes. ?dirLight=on re-adds it for A/B;
+// fx.dirLight=0 still forces it off anywhere; desktop keeps it.
+const dirLightParam = (() => { try { return new URLSearchParams(location.search).get('dirLight'); } catch { return null; } })();
+const dirLightActive = dirLightParam != null ? dirLightParam !== 'off' : !mobilePerformanceProfileActive();
+dirKey.visible = fxEnabled('dirLight') && dirLightActive;
 
 // ---------- Tron overlay buildings ----------
 const overlayGroup = new THREE.Group();
