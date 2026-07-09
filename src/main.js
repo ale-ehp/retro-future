@@ -1003,6 +1003,10 @@ const retroBenchmarkDurationMs = Number.isFinite(retroBenchmarkQuerySeconds) && 
   ? retroBenchmarkQuerySeconds * 1000
   : RETRO_BENCHMARK_DEFAULT_DURATION_MS;
 let retroBenchmarkAutoStartPending = retroBenchmarkSearchParams.get('benchmark') === '1';
+// Auto-download the JSON when the benchmark auto-ran from ?benchmark=1 (zero taps
+// for a phone capture). Opt out with ?benchmarkDownload=0 (headless tooling reads
+// the result programmatically and passes this).
+const retroBenchmarkAutoDownload = retroBenchmarkSearchParams.get('benchmarkDownload') !== '0';
 let retroBenchmarkPanelEl = null;
 let retroBenchmarkCopyButton = null;
 let retroBenchmarkDownloadButton = null;
@@ -1205,6 +1209,17 @@ const retroBenchmarkRuntime = createRetroBenchmarkRuntime({
   onComplete: (summary) => {
     renderRetroBenchmarkPanel(retroBenchmarkRuntime.inspect());
     console.info('[retro-benchmark]', summary);
+    // Zero-tap capture on the phone: when the run auto-started from ?benchmark=1,
+    // save the JSON automatically. Best effort — iOS Safari may surface it via the
+    // preview/share sheet instead of a silent save; the panel's "Scarica JSON"
+    // button stays as the fallback.
+    if (retroBenchmarkAutoDownload && summary?.source === 'query-param') {
+      try {
+        downloadRetroBenchmarkJson();
+      } catch (error) {
+        console.warn('[retro-benchmark] auto-download failed', error);
+      }
+    }
   },
 });
 
