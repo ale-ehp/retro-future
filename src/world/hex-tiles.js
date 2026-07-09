@@ -113,6 +113,13 @@ export let roadMicroNormalTex = null;
 export let hexTileMat = null;
 export let streetEdgeHexMat = null;
 
+// Lite-reflection floor (mobile fill lever): drops the per-pixel envMap sample
+// and fakes the wet sheen with a cheap Schlick grazing-angle fresnel toward a
+// dark cyan — added alongside the existing per-tile glow.
+const HEX_FLOOR_SHEEN_COLOR = new THREE.Color(0x123f49);
+const HEX_FLOOR_SHEEN_STRENGTH = 0.9;
+let hexFloorReflectLite = false;
+
 export function configureHexRoadMaterial(material) {
   if (material.userData.hexRoadConfigured) return material;
   material.userData.hexRoadConfigured = true;
@@ -120,22 +127,30 @@ export function configureHexRoadMaterial(material) {
   material.userData.hexGlowBaseColor = material.userData.hexGlowBaseColor?.isColor
     ? material.userData.hexGlowBaseColor
     : hexTileDisplayBaseColor.clone();
+  const lite = hexFloorReflectLite;
   material.onBeforeCompile = (shader) => {
     shader.uniforms.hexInstanceGlow = { value: material.userData.hexInstanceGlow };
     shader.uniforms.hexGlowBaseColor = { value: material.userData.hexGlowBaseColor };
     material.userData.hexInstanceGlowUniform = shader.uniforms.hexInstanceGlow;
     material.userData.hexGlowBaseColorUniform = shader.uniforms.hexGlowBaseColor;
-    shader.fragmentShader = `uniform float hexInstanceGlow;\nuniform vec3 hexGlowBaseColor;\n${shader.fragmentShader}`;
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <emissivemap_fragment>',
-      `#include <emissivemap_fragment>
+    let prelude = 'uniform float hexInstanceGlow;\nuniform vec3 hexGlowBaseColor;\n';
+    let inject = `#include <emissivemap_fragment>
 #ifdef USE_COLOR
   vec3 hexInstanceGlowColor = max(vColor.rgb - hexGlowBaseColor, vec3(0.0));
   totalEmissiveRadiance += hexInstanceGlowColor * hexInstanceGlow;
-#endif`
-    );
+#endif`;
+    if (lite) {
+      shader.uniforms.hexFloorSheenColor = { value: HEX_FLOOR_SHEEN_COLOR };
+      shader.uniforms.hexFloorSheenStrength = { value: HEX_FLOOR_SHEEN_STRENGTH };
+      prelude += 'uniform vec3 hexFloorSheenColor;\nuniform float hexFloorSheenStrength;\n';
+      inject += `
+  float hexFloorFres = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0), 5.0);
+  totalEmissiveRadiance += hexFloorSheenColor * hexFloorFres * hexFloorSheenStrength;`;
+    }
+    shader.fragmentShader = prelude + shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', inject);
   };
-  material.customProgramCacheKey = () => 'hex-road-instance-glow-v1';
+  material.customProgramCacheKey = () => (lite ? 'hex-road-instance-glow-lite-v1' : 'hex-road-instance-glow-v1');
   material.needsUpdate = true;
   return material;
 }
@@ -149,35 +164,40 @@ export function setHexRoadMaterialGlow(material, glowStrength, baseColor) {
   if (material.userData.hexGlowBaseColorUniform) material.userData.hexGlowBaseColorUniform.value.copy(baseColor);
 }
 
-export function initHexTileMaterials({ dropNormalMap = false } = {}) {
+export function initHexTileMaterials({ dropNormalMap = false, liteReflect = false } = {}) {
   if (hexTileMat) return;
+  hexFloorReflectLite = liteReflect;
   roadMicroNormalTex = makeRoadMicroNormalTexture();
-  hexTileMat = new THREE.MeshStandardMaterial({
+  const hexProps = {
     color: hexTileBaseColor,
-    metalness: 0.88,
-    roughness: 0.16,
-    envMap: getRoadReflectionEnvMap(),
-    envMapIntensity: 1.15,
+    // Without the envMap the floor loses its metal reflection, so drop metalness
+    // and raise roughness (mobile lite) to keep it lit by the scene instead of
+    // going black; the fresnel sheen + per-tile glow carry the wet Tron look.
+    metalness: liteReflect ? 0.32 : 0.88,
+    roughness: liteReflect ? 0.5 : 0.16,
     normalMap: roadMicroNormalTex,
     normalScale: new THREE.Vector2(0, 0),
     emissive: 0x061419,
     emissiveIntensity: 0.18,
-  });
+  };
+  if (!liteReflect) {
+    hexProps.envMap = getRoadReflectionEnvMap();
+    hexProps.envMapIntensity = 1.15;
+  }
+  hexTileMat = new THREE.MeshStandardMaterial(hexProps);
   // The road normalMap is sampled + perturbed per floor pixel for ZERO visual
-  // effect (normalScale is (0,0) and the road-normal control defaults to 0 with
-  // no UI to change it). Dropping it on the fill-bound mobile floor removes a
-  // texture fetch per pixel over the largest surface, pixel-identically. The
-  // normalScale property stays intact so applyLiveControls stays safe.
-  if (dropNormalMap) {
+  // effect (normalScale is (0,0), road-normal control defaults to 0 with no UI).
+  // Dropping it removes a per-pixel fetch on the largest surface, pixel-identically.
+  if (dropNormalMap || liteReflect) {
     hexTileMat.normalMap = null;
     hexTileMat.needsUpdate = true;
   }
   configureHexRoadMaterial(hexTileMat);
   streetEdgeHexMat = new THREE.MeshStandardMaterial({
     color: 0x2a6371,
-    metalness: 0.58,
-    roughness: 0.28,
-    envMap: getReflectionEnvMap(),
+    metalness: liteReflect ? 0.3 : 0.58,
+    roughness: liteReflect ? 0.5 : 0.28,
+    envMap: liteReflect ? null : getReflectionEnvMap(),
     envMapIntensity: 0.88,
     emissive: 0x061a20,
     emissiveIntensity: 0.12,
