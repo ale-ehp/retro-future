@@ -9,7 +9,20 @@ export const TRON_SYNTH_MUSIC_STEP_SEC = 60 / TRON_SYNTH_MUSIC_BPM / 4;
 export const TRON_SYNTH_MUSIC_PATTERN_STEPS = 64;
 
 export const TRON_SOUNDTRACK_ENABLED = true;
-export const TRON_SOUNDTRACK_URL = 'audio/music/retro-future.opus';
+// Safari/iOS does not support the Ogg container, so the .opus soundtrack never
+// loads there — the <audio> element stays silent and the equalizer's analyser
+// reads nothing. Pick Opus (smaller) only where the browser can actually play
+// Ogg/Opus, otherwise fall back to AAC/M4A (universally supported).
+function pickTronSoundtrackUrl() {
+  try {
+    const probe = document.createElement('audio');
+    if (probe.canPlayType && probe.canPlayType('audio/ogg; codecs="opus"')) {
+      return 'audio/music/retro-future.opus';
+    }
+  } catch {}
+  return 'audio/music/retro-future.m4a';
+}
+export const TRON_SOUNDTRACK_URL = pickTronSoundtrackUrl();
 export const TRON_SOUNDTRACK_VOLUME = 0.09;
 export const TRON_SOUNDTRACK_FADE_IN_SECONDS = 3;
 export const TRON_SOUNDTRACK_STOP_FADE_SECONDS = 0.75;

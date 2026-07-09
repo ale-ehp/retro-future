@@ -11,8 +11,21 @@
 <link rel="icon" href="data:," />
 <link rel="stylesheet" href="./retro-future.css" />
 <!-- warm the soundtrack cache during boot (low priority, doesn't compete with three.js/GLB) so the
-     music is ready the instant the reveal starts and stays in sync even on a cold/incognito load -->
-<link rel="prefetch" href="./audio/music/retro-future.opus" as="audio" />
+     music is ready the instant the reveal starts and stays in sync even on a cold/incognito load.
+     Format-aware: Safari/iOS can't play Ogg/Opus, so it warms the AAC/M4A fallback instead. -->
+<script>
+(() => {
+  try {
+    const probe = document.createElement('audio');
+    const canOpus = probe.canPlayType && probe.canPlayType('audio/ogg; codecs="opus"');
+    const link = document.createElement('link');
+    link.rel = 'prefetch';
+    link.as = 'audio';
+    link.href = canOpus ? './audio/music/retro-future.opus' : './audio/music/retro-future.m4a';
+    document.head.appendChild(link);
+  } catch {}
+})();
+</script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
