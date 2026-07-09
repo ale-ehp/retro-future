@@ -4336,12 +4336,14 @@ function shouldUseComposer() {
   );
 }
 
-// Mobile now renders at a FIXED target pixel ratio (default 2x) instead of the
-// adaptive ~720p budget, so benchmarks reflect the resolution we actually want.
-// A forced ratio (mobile default or ?pixelRatio=N) pins the render resolution:
-// it bypasses the mobile caps + adaptive target, and disables the auto quality
-// downscaler (see tunePerformanceBudget) so it stays put during a benchmark.
-const MOBILE_TARGET_PIXEL_RATIO = 2;
+// Mobile renders at a FIXED target pixel ratio instead of the adaptive ~720p
+// budget. Lowered 2 -> 1.8 (user decision): fill scales with pixel COUNT, so 1.8x
+// is (1.8/2)^2 = 0.81 = ~19% fewer pixels than 2x, and FXAA hides the slight
+// softness. A forced ratio (mobile default or ?pixelRatio=N) pins the render
+// resolution: it bypasses the mobile caps + adaptive target, and disables the
+// auto quality downscaler (tunePerformanceBudget) so it stays put in a benchmark.
+// ?pixelRatio=2 still forces the old resolution for A/B.
+const MOBILE_TARGET_PIXEL_RATIO = 1.8;
 const forcedPixelRatioParam = (() => {
   try {
     const v = Number(new URLSearchParams(window.location.search).get('pixelRatio'));
