@@ -313,6 +313,7 @@ import {
   crossfadeTronSoundtrack as crossfadeTronSoundtrackCore,
   monitorTronSoundtrackLoop as monitorTronSoundtrackLoopCore,
   startTronFileSoundtrack as startTronFileSoundtrackCore,
+  primeTronSoundtrackForGesture as primeTronSoundtrackForGestureCore,
   stopTronFileSoundtrack as stopTronFileSoundtrackCore,
   setTronFileSoundtrackVolume as setTronFileSoundtrackVolumeCore,
 } from './audio/audio.js';
@@ -1359,6 +1360,12 @@ let awaitingLandscapeStart = false;
 function triggerWelcomeButtonStart(event) {
   event.preventDefault();
   if (awaitingLandscapeStart) return;
+  // Unlock audio inside THIS tap gesture, always. On mobile the real start can
+  // be deferred to the post-rotation orientationchange handler, which carries
+  // no user activation — iOS would then reject play(). Resuming the context and
+  // blessing the soundtrack elements here keeps the deferred start allowed.
+  ensureFootstepAudioReady();
+  primeTronSoundtrackForGesture();
   if (mobilePerformanceProfileActive() && !isDeviceInLandscape()) {
     awaitingLandscapeStart = true;
     document.body.classList.add('rf-awaiting-landscape');
@@ -1736,6 +1743,10 @@ function monitorTronSoundtrackLoop() {
 
 function startTronFileSoundtrack(source = 'manual', options = {}) {
   return startTronFileSoundtrackCore(tronSoundtrackDeps, source, options);
+}
+
+function primeTronSoundtrackForGesture() {
+  return primeTronSoundtrackForGestureCore(tronSoundtrackDeps);
 }
 
 function stopTronFileSoundtrack(fadeSeconds = TRON_SOUNDTRACK_STOP_FADE_SECONDS) {

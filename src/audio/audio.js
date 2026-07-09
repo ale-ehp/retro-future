@@ -363,6 +363,38 @@ export function monitorTronSoundtrackLoop(deps) {
   }
 }
 
+// iOS/Safari autoplay: play() and the AudioContext must be unlocked inside a
+// user gesture. When the real start is deferred (mobile rotate gate starts the
+// soundtrack from an orientationchange handler, which carries no activation),
+// call this from the tap so the context is resumed and both media elements are
+// blessed with a muted play/pause while activation is still valid.
+export function primeTronSoundtrackForGesture(deps) {
+  const { soundtrack, ensureCtx } = deps;
+  if (!TRON_SOUNDTRACK_ENABLED) return false;
+  const ctx = ensureCtx();
+  if (!ctx) return false;
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  setupTronSoundtrackGraph(deps, ctx);
+  if (soundtrack.primed) return true;
+  soundtrack.primed = true;
+  // Gain nodes sit at 0.0001 until the real start ramps them, so this prime
+  // play is silent — no mute juggling needed. settle() re-pauses only if the
+  // real start hasn't taken over yet (guards a fast rotate-then-start race).
+  soundtrack.elements.forEach((audio) => {
+    if (!audio) return;
+    try {
+      const settle = () => {
+        if (soundtrack.playing) return;
+        try { audio.pause(); setAudioCurrentTime(audio, 0); } catch {}
+      };
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.then === 'function') playPromise.then(settle, () => {});
+      else settle();
+    } catch {}
+  });
+  return true;
+}
+
 export function startTronFileSoundtrack(deps, source = 'manual', options = {}) {
   const { soundtrack, ensureCtx } = deps;
   if (!TRON_SOUNDTRACK_ENABLED || soundtrack.playing) return Boolean(soundtrack.playing);
