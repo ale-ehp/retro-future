@@ -4142,11 +4142,20 @@ function normalizedAntialiasMode(mode) {
 }
 
 // Hardware MSAA sample count the context can give (WebGL2 only). 0 = unsupported.
+// Default 2x: 2 samples is far cheaper than 4x (half the MSAA bandwidth/tile) and
+// still resolves most edge jaggies. ?aaSamples=N overrides for A/B.
+const msaaSamplesParam = (() => {
+  try {
+    const v = Number(new URLSearchParams(location.search).get('aaSamples'));
+    return Number.isFinite(v) && v >= 2 ? Math.round(v) : null;
+  } catch { return null; }
+})();
 function msaaSampleCount() {
   try {
     if (!renderer.capabilities?.isWebGL2) return 0;
     const max = renderer.getContext().getParameter(renderer.getContext().MAX_SAMPLES) || 0;
-    return max >= 2 ? Math.min(4, max) : 0;
+    if (max < 2) return 0;
+    return Math.min(msaaSamplesParam || 2, max);
   } catch {
     return 0;
   }
@@ -4192,6 +4201,15 @@ function rebuildComposer() {
       { samples: msaaSamples }
     );
     composer = new EffectComposer(renderer, msaaTarget);
+    // OPTIMIZED: multisample ONLY the scene target (rt1). EffectComposer clones
+    // rt1 for rt2, which would make the fullscreen ping-pong passes (bloom/fsr)
+    // render at Nx samples for zero AA benefit — pure bandwidth. Swap rt2 for a
+    // single-sample target so the scene resolves ONCE and the post passes are 1x.
+    try {
+      const singleTarget = new THREE.WebGLRenderTarget(msaaTarget.width, msaaTarget.height);
+      composer.renderTarget2?.dispose?.();
+      composer.renderTarget2 = singleTarget;
+    } catch {}
   } else {
     composer = new EffectComposer(renderer);
   }
