@@ -2033,6 +2033,7 @@ const skyDome = createSkyDome({
   controlEls,
   tunedColor,
   getRevealBudgetActive: () => cityRevealWireframeEnabled && !cityRevealComplete,
+  getMobileProfileActive: () => mobilePerformanceProfileActive(),
 });
 const {
   domeGeo,

@@ -1,7 +1,17 @@
 import * as THREE from 'three';
 
 export function createSkyDome(deps) {
-  const { scene, camera, renderer, controlEls, tunedColor, getRevealBudgetActive } = deps;
+  const { scene, camera, renderer, controlEls, tunedColor, getRevealBudgetActive, getMobileProfileActive = () => false } = deps;
+
+  // The procedural sky "full" branch is ~3.5x the per-pixel cost of "balanced"
+  // and covers the upper half of the frame — a top fill cost on mobile. Mobile
+  // is forced to "balanced"; ?skyQuality=full|balanced overrides it (for on-
+  // device A/B against the benchmark overlay).
+  let skyQualityUrlOverride = null;
+  try {
+    const q = new URLSearchParams(location.search).get('skyQuality');
+    if (q === 'full' || q === 'balanced') skyQualityUrlOverride = q;
+  } catch {}
 
   const skyPalette = {
     storm: new THREE.Color(0x041a20),
@@ -362,7 +372,8 @@ export function createSkyDome(deps) {
     domeMat.uniforms.uCloudAmount.value = 1;
     domeMat.uniforms.uLightningMode.value = lightingEnabled ? 1 : 0;
     domeMat.uniforms.uLightningHue.value = hueDeg;
-    domeMat.uniforms.uSkyQuality.value = quality === 'full' ? 1 : 0;
+    const effectiveQuality = skyQualityUrlOverride || (getMobileProfileActive() ? 'balanced' : quality);
+    domeMat.uniforms.uSkyQuality.value = effectiveQuality === 'full' ? 1 : 0;
     domeMat.uniforms.uSkyTint.value.copy(skyDisplayColor);
     domeMat.uniforms.uSkyTintStrength.value = choice === 'void' ? 0.08 : (choice === 'steel' ? 0.26 : 0.42);
     domeMesh.visible = true;
