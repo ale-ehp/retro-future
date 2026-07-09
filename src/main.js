@@ -1074,6 +1074,7 @@ function retroBenchmarkEnvironment() {
       skyQuality: skyDome.inspectStorm().mainQuality === 0 ? 'balanced' : 'full',
       floorLite: floorLiteActive,
       floorReflect: floorReflectLite ? 'lite' : 'full',
+      buildingReflect: buildingReflectLite ? 'lite' : 'full',
       antialias: antialiasMode,
       activePixelRatio,
       forcedPixelRatio: forcedRenderPixelRatio(),
@@ -2113,10 +2114,15 @@ const {
 } = skyDome;
 // ---------- Reflection environment maps (extracted -> reflection-env.js) ----------
 initReflectionEnv(ctx);
-// fx.envReflections=0 (mobile A/B) drops the per-pixel envMap reflection sample
-// on buildings + base pads by handing every material a null env map. The PMREM
-// bake at initReflectionEnv still runs (VRAM only); this measures the fill.
-const reflectionEnvMap = fxEnabled('envReflections') ? getReflectionEnvMap() : null;
+// Mobile is fill-bound: buildings + base pads now DROP their per-pixel envMap
+// reflection by default (the road floor is already lite). Measured +1.7fps on a
+// real iPhone, cost = a subtle wet sheen on facades/sidewalks (the wet FLOOR, the
+// signature look, is kept via its own lite fresnel). ?buildingReflect=full re-adds
+// it for A/B; fx.envReflections=0 still forces it off anywhere. The PMREM bake at
+// initReflectionEnv still runs (VRAM only) so desktop is unchanged.
+const buildingReflectParam = (() => { try { return new URLSearchParams(location.search).get('buildingReflect'); } catch { return null; } })();
+const buildingReflectLite = buildingReflectParam != null ? buildingReflectParam === 'lite' : mobilePerformanceProfileActive();
+const reflectionEnvMap = (fxEnabled('envReflections') && !buildingReflectLite) ? getReflectionEnvMap() : null;
 scene.environment = null;
 scene.environmentIntensity = 1;
 
