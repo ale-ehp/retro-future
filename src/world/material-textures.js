@@ -7,12 +7,23 @@ import * as THREE from 'three';
 // basePadSurfaceTex) from these.
 
 let renderer = null;
-export function initMaterialTextures(ctx) { renderer = ctx.renderer; }
+let anisotropyCap = Infinity;
+export function initMaterialTextures(ctx, { anisotropyCap: cap = Infinity } = {}) {
+  renderer = ctx.renderer;
+  anisotropyCap = cap;
+}
+
+// The reflective road/asphalt/base-pad textures sample at up to 16 anisotropic
+// taps/pixel at grazing angle — a bandwidth cost on the fill-bound mobile floor.
+// Capping to ~4 on mobile is imperceptible (sharp underfoot, slightly softer far).
+function resolveAnisotropy() {
+  return Math.min(anisotropyCap, renderer.capabilities.getMaxAnisotropy());
+}
 
 function setupRepeatingTexture(texture, repeatX, repeatY, color = false) {
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(repeatX, repeatY);
-  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  texture.anisotropy = resolveAnisotropy();
   if (color) texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
@@ -64,7 +75,7 @@ export function makeRoadMicroNormalTexture(size = 256) {
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(18, 42);
-  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  tex.anisotropy = resolveAnisotropy();
   return tex;
 }
 
@@ -95,7 +106,7 @@ export function makeBasePadSurfaceTexture(size = 512) {
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  tex.anisotropy = resolveAnisotropy();
   tex.needsUpdate = true;
   return tex;
 }

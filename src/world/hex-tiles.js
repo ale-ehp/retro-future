@@ -149,7 +149,7 @@ export function setHexRoadMaterialGlow(material, glowStrength, baseColor) {
   if (material.userData.hexGlowBaseColorUniform) material.userData.hexGlowBaseColorUniform.value.copy(baseColor);
 }
 
-export function initHexTileMaterials() {
+export function initHexTileMaterials({ dropNormalMap = false } = {}) {
   if (hexTileMat) return;
   roadMicroNormalTex = makeRoadMicroNormalTexture();
   hexTileMat = new THREE.MeshStandardMaterial({
@@ -163,6 +163,15 @@ export function initHexTileMaterials() {
     emissive: 0x061419,
     emissiveIntensity: 0.18,
   });
+  // The road normalMap is sampled + perturbed per floor pixel for ZERO visual
+  // effect (normalScale is (0,0) and the road-normal control defaults to 0 with
+  // no UI to change it). Dropping it on the fill-bound mobile floor removes a
+  // texture fetch per pixel over the largest surface, pixel-identically. The
+  // normalScale property stays intact so applyLiveControls stays safe.
+  if (dropNormalMap) {
+    hexTileMat.normalMap = null;
+    hexTileMat.needsUpdate = true;
+  }
   configureHexRoadMaterial(hexTileMat);
   streetEdgeHexMat = new THREE.MeshStandardMaterial({
     color: 0x2a6371,

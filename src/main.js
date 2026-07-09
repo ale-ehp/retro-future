@@ -2058,9 +2058,14 @@ scene.environment = null;
 scene.environmentIntensity = 1;
 
 // ---------- material texture helpers (extracted -> material-textures.js) ----------
-initMaterialTextures(ctx);
+// Mobile is fill-bound: trim per-pixel floor cost with no visual change — cap
+// floor anisotropy (16->4) and drop the no-op road normalMap. ?floorLite=1|0
+// overrides the mobile default for on-device A/B against the benchmark overlay.
+const floorLiteParam = (() => { try { return new URLSearchParams(location.search).get('floorLite'); } catch { return null; } })();
+const floorLiteActive = floorLiteParam != null ? floorLiteParam === '1' : mobilePerformanceProfileActive();
+initMaterialTextures(ctx, { anisotropyCap: floorLiteActive ? 4 : Infinity });
 const asphalt = makeWetAsphaltFacadeTexture();
-initHexTileMaterials();
+initHexTileMaterials({ dropNormalMap: floorLiteActive });
 const basePadSurfaceTex = makeBasePadSurfaceTexture();
 
 // ---------- Exact boulevard map constants (pure values -> world/boulevard-constants.js) ----------
