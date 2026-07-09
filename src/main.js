@@ -1064,6 +1064,7 @@ function retroBenchmarkEnvironment() {
     levers: {
       skyQuality: skyDome.inspectStorm().mainQuality === 0 ? 'balanced' : 'full',
       floorLite: floorLiteActive,
+      floorReflect: floorReflectLite ? 'lite' : 'full',
       antialias: antialiasMode,
       activePixelRatio,
       forcedPixelRatio: forcedRenderPixelRatio(),
@@ -2073,9 +2074,13 @@ scene.environmentIntensity = 1;
 // overrides the mobile default for on-device A/B against the benchmark overlay.
 const floorLiteParam = (() => { try { return new URLSearchParams(location.search).get('floorLite'); } catch { return null; } })();
 const floorLiteActive = floorLiteParam != null ? floorLiteParam === '1' : mobilePerformanceProfileActive();
+// Bigger fill lever: swap the floor's per-pixel envMap reflection for a cheap
+// fresnel sheen on mobile. ?floorReflect=full|lite overrides for on-device A/B.
+const floorReflectParam = (() => { try { return new URLSearchParams(location.search).get('floorReflect'); } catch { return null; } })();
+const floorReflectLite = floorReflectParam != null ? floorReflectParam === 'lite' : mobilePerformanceProfileActive();
 initMaterialTextures(ctx, { anisotropyCap: floorLiteActive ? 4 : Infinity });
 const asphalt = makeWetAsphaltFacadeTexture();
-initHexTileMaterials({ dropNormalMap: floorLiteActive });
+initHexTileMaterials({ dropNormalMap: floorLiteActive, liteReflect: floorReflectLite });
 const basePadSurfaceTex = makeBasePadSurfaceTexture();
 
 // ---------- Exact boulevard map constants (pure values -> world/boulevard-constants.js) ----------
