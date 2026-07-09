@@ -13,6 +13,17 @@ export function createSkyDome(deps) {
     const q = new URLSearchParams(location.search).get('skyQuality');
     if (q === 'full' || q === 'balanced') skyQualityUrlOverride = q;
   } catch {}
+  // Cheaper cloud tiers for the mobile ("balanced") sky: 0 = full clouds (4-oct
+  // fbm + 3-oct ridge), 1 = conservative (2-oct + 2-oct, coarser detail),
+  // 2 = aggressive (2-oct broad, ridge dropped). The sky is the top mobile fill
+  // cost (+5.4fps measured). ?skyCheap=0|1|2 previews each; SKY_CHEAP_MOBILE_DEFAULT
+  // is the shipped mobile default (set after a before/after look review).
+  const SKY_CHEAP_MOBILE_DEFAULT = 0;
+  let skyCheapUrlOverride = null;
+  try {
+    const c = new URLSearchParams(location.search).get('skyCheap');
+    if (c === '0' || c === '1' || c === '2') skyCheapUrlOverride = Number(c);
+  } catch {}
 
   const skyPalette = {
     storm: new THREE.Color(0x041a20),
@@ -37,6 +48,7 @@ export function createSkyDome(deps) {
       uLightningMode: { value: 0 },
       uLightningHue: { value: 0 },
       uSkyQuality: { value: 0 },
+      uSkyCheap: { value: 0 },
       uSkyTint: { value: new THREE.Color(0x041a20) },
       uSkyTintStrength: { value: 0.38 },
       uStormFrequency: { value: 1 },
@@ -64,6 +76,7 @@ export function createSkyDome(deps) {
       uniform float uLightningMode;
       uniform float uLightningHue;
       uniform float uSkyQuality;
+      uniform float uSkyCheap;
       uniform vec3 uSkyTint;
       uniform float uSkyTintStrength;
       uniform float uStormFrequency;
@@ -160,6 +173,30 @@ export function createSkyDome(deps) {
         return value;
       }
 
+      // Cheaper 2-octave variants for the mobile "balanced" sky tiers.
+      float fbm3lo(vec3 p) {
+        float value = 0.0;
+        float amp = 0.5;
+        for (int i = 0; i < 2; i++) {
+          value += amp * noise3(p);
+          p = p * 2.03 + vec3(12.73, 4.17, 9.31);
+          amp *= 0.52;
+        }
+        return value;
+      }
+
+      float ridge3lo(vec3 p) {
+        float value = 0.0;
+        float amp = 0.55;
+        for (int i = 0; i < 2; i++) {
+          float n = noise3(p);
+          value += amp * (1.0 - abs(n * 2.0 - 1.0));
+          p = p * 2.18 + vec3(9.41, 17.2, 6.8);
+          amp *= 0.48;
+        }
+        return value;
+      }
+
       vec3 hueShift(vec3 color, float hueDeg) {
         float a = radians(hueDeg);
         const vec3 k = vec3(0.57735026919);
@@ -230,6 +267,18 @@ export function createSkyDome(deps) {
           detail = mix(detailA, detailB, smoothstep(0.0, 1.0, morphB));
           rolling = mix(rollingA, rollingB, morphA);
           under = mix(underA, underB, morphB);
+        } else if (uSkyCheap > 1.5) {
+          // aggressive: 2-octave broad, ridge detail dropped to one cheap sample
+          broad = fbm3lo(warpedP * 1.12 + cloudPulse * 0.48);
+          detail = noise3(warpedP * 2.54 + vec3(flow * 0.039, flow * 0.015, flow * 0.021));
+          rolling = noise3(dir * 1.78 + warp * 0.18 + vec3(flow * 0.027, flow * 0.0135, flow * 0.018));
+          under = noise3(dir * 1.36 + warp * 0.12 + vec3(flow * 0.018, flow * 0.012, flow * 0.015));
+        } else if (uSkyCheap > 0.5) {
+          // conservative: 2-octave broad + 2-octave ridge detail
+          broad = fbm3lo(warpedP * 1.12 + cloudPulse * 0.48);
+          detail = ridge3lo(warpedP * 2.54 + vec3(flow * 0.039, flow * 0.015, flow * 0.021));
+          rolling = noise3(dir * 1.78 + warp * 0.18 + vec3(flow * 0.027, flow * 0.0135, flow * 0.018));
+          under = noise3(dir * 1.36 + warp * 0.12 + vec3(flow * 0.018, flow * 0.012, flow * 0.015));
         } else {
           broad = fbm3(warpedP * 1.12 + cloudPulse * 0.48);
           detail = ridge3(warpedP * 2.54 + vec3(flow * 0.039, flow * 0.015, flow * 0.021));
@@ -375,6 +424,9 @@ export function createSkyDome(deps) {
     domeMat.uniforms.uLightningHue.value = hueDeg;
     const effectiveQuality = skyQualityUrlOverride || (getMobileProfileActive() ? 'balanced' : quality);
     domeMat.uniforms.uSkyQuality.value = effectiveQuality === 'full' ? 1 : 0;
+    domeMat.uniforms.uSkyCheap.value = skyCheapUrlOverride != null
+      ? skyCheapUrlOverride
+      : (getMobileProfileActive() ? SKY_CHEAP_MOBILE_DEFAULT : 0);
     domeMat.uniforms.uSkyTint.value.copy(skyDisplayColor);
     domeMat.uniforms.uSkyTintStrength.value = choice === 'void' ? 0.08 : (choice === 'steel' ? 0.26 : 0.42);
     domeMesh.visible = fxEnabled('sky');
