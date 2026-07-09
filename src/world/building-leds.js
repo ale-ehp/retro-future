@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fxEnabled } from '../engine/fx-debug-toggles.js';
 import {
   MAIN_BUILDING_BASE,
   SIDE_BUILDING_BASE,
@@ -529,6 +530,8 @@ export function buildBridgeEdgeBatch(group) {
   bridgeEdgeBatch.mesh = mesh;
   bridgeEdgeBatch.material = material;
   group.add(mesh);
+  // fx.bridgeEdges=0: nothing re-asserts this batch's mesh-level visibility.
+  mesh.visible = fxEnabled('bridgeEdges');
 }
 
 // Hidden instances collapse to zero scale (no fragments); a bridge strip is
@@ -691,8 +694,8 @@ function updateHorizontalBuildingLedRings(brightness, hueDeg, mainBrightness, ma
       batch.material.color.copy(ledColor);
       batch.mesh.count = batch.count;
       const batchBaseVisible = brightness > 0.001 && stripWidth > 0.01 && batch.count > 0;
-      batch.mesh.userData.staticCullBaseVisible = batchBaseVisible;
-      batch.mesh.visible = batchBaseVisible;
+      batch.mesh.userData.staticCullBaseVisible = batchBaseVisible && fxEnabled('ledRings');
+      batch.mesh.visible = batchBaseVisible && fxEnabled('ledRings');
       changedSideRingBatches.add(batch);
       continue;
     }
@@ -791,8 +794,8 @@ export function updateEdgeStrips(brightness, thickness, verticalDistance, hueDeg
   }
   if (sideBatchChanged && sideBuildingEdgeBatch.mesh) {
     sideBuildingEdgeBatch.mesh.instanceMatrix.needsUpdate = true;
-    sideBuildingEdgeBatch.mesh.userData.staticCullBaseVisible = sideBuildingEdgeBatch.enabled;
-    sideBuildingEdgeBatch.mesh.visible = sideBuildingEdgeBatch.enabled;
+    sideBuildingEdgeBatch.mesh.userData.staticCullBaseVisible = sideBuildingEdgeBatch.enabled && fxEnabled('sideEdges');
+    sideBuildingEdgeBatch.mesh.visible = sideBuildingEdgeBatch.enabled && fxEnabled('sideEdges');
     refreshCullingBounds(sideBuildingEdgeBatch.mesh);
   }
   if (bridgeBatchChanged && bridgeEdgeBatch.mesh) {

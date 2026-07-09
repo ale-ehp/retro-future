@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fxEnabled } from '../engine/fx-debug-toggles.js';
 import { retroFutureSignOpacity, retroFutureSignScale, retroFutureSignTextOpacity } from '../sign-opacity.js';
 
 export function cityDepartmentPageItems(page, config) {
@@ -464,7 +465,7 @@ export function cityDepartmentBoardRevealFactor() {
 
 function syncCityDepartmentBoardRevealVisibility(revealFactor = cityDepartmentBoardRevealFactor()) {
   const factor = THREE.MathUtils.clamp(revealFactor, 0, 1);
-  const visible = Boolean(CITY_DEPARTMENT_BOARD_ENABLED && (factor > 0.002 || deps.getRevealActive()));
+  const visible = Boolean(CITY_DEPARTMENT_BOARD_ENABLED && (factor > 0.002 || deps.getRevealActive()) && fxEnabled('deptBoards'));
   if (
     Math.abs(factor - cityDepartmentBoardState.lastRevealFactor) < CITY_DEPARTMENT_BOARD_REVEAL_EPS
     && cityDepartmentBoardState.lastRevealVisible === visible
@@ -958,7 +959,7 @@ function syncCityRoleBoardRevealVisibility(revealFactor = cityDepartmentBoardRev
   cityRoleBoardRuntimeStats.lastRevealFactor = factor;
   cityRoleBoardRuntimeStats.lastVisibleCount = visibleCount;
   for (const board of cityRoleBoards) {
-    const visible = Boolean(CITY_ROLE_BOARD_ENABLED && board.enabled && factor > 0.002);
+    const visible = Boolean(CITY_ROLE_BOARD_ENABLED && board.enabled && factor > 0.002 && fxEnabled('roleBoards'));
     if (board.group.visible !== visible) board.group.visible = visible;
     for (const material of board.revealMaterials) {
       const baseOpacity = Number.isFinite(material.userData.cityRoleBoardBaseOpacity)

@@ -9,6 +9,7 @@
 // the getters); roadTileTopY reads hexTileHeightScale directly since it lives here.
 
 import * as THREE from 'three';
+import { fxEnabled } from '../engine/fx-debug-toggles.js';
 import { GRID_BLOCK } from './boulevard-constants.js';
 import { HEX_ROAD_UPDATE_FRAME_STRIDE, MAX_HEX_ROAD_ACCUMULATED_DT } from './config.js';
 import { getReflectionEnvMap, getRoadReflectionEnvMap } from '../engine/reflection-env.js';
@@ -139,7 +140,7 @@ export function configureHexRoadMaterial(material) {
   vec3 hexInstanceGlowColor = max(vColor.rgb - hexGlowBaseColor, vec3(0.0));
   totalEmissiveRadiance += hexInstanceGlowColor * hexInstanceGlow;
 #endif`;
-    if (lite) {
+    if (lite && fxEnabled('floorSheen')) {
       shader.uniforms.hexFloorSheenColor = { value: HEX_FLOOR_SHEEN_COLOR };
       shader.uniforms.hexFloorSheenStrength = { value: HEX_FLOOR_SHEEN_STRENGTH };
       prelude += 'uniform vec3 hexFloorSheenColor;\nuniform float hexFloorSheenStrength;\n';
@@ -310,7 +311,7 @@ function syncHexTileBatchVisibility(batchRecord) {
   if (!batchRecord?.mesh) return;
   const renderVisible = batchRecord.renderVisible !== false;
   const lodVisible = batchRecord.lodVisible !== false;
-  batchRecord.mesh.visible = renderVisible && lodVisible;
+  batchRecord.mesh.visible = renderVisible && lodVisible && fxEnabled('hexFloor');
 }
 
 export function refreshHexRoadBatchBounds(batchRecord) {

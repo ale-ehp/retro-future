@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fxEnabled } from '../engine/fx-debug-toggles.js';
 import {
   TRON_RUNNER_CROWD_COLOR_PRESETS,
 } from './character-colors.js';
@@ -246,6 +247,7 @@ export function createTronRunnerIdleCharacterRuntime({
     });
     model.rotation.z += record.sign * idleCharacter.leanRad;
     group.add(model);
+    model.visible = fxEnabled('idleCharacter');
     idleCharacter.model = model;
     idleCharacter.materials = [material];
     idleCharacter.built = true;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fxEnabled } from '../engine/fx-debug-toggles.js';
 
 // ---------- Atmospheric particles: dust/embers drifting in the boulevard fog ----------
 // A camera-anchored additive point cloud that drifts and wraps inside a box around the camera, fading
@@ -85,6 +86,6 @@ export function initAtmosphereParticles(injected) {
 
 export function updateAtmosphereParticles(visible, timeSeconds) {
   if (!atmosphereParticles) return;
-  atmosphereParticles.visible = visible;
+  atmosphereParticles.visible = visible && fxEnabled('particles');
   if (atmosphereParticleTimeUniform) atmosphereParticleTimeUniform.value = timeSeconds;
 }

@@ -335,6 +335,7 @@ import {
   mobilePerformanceProfileActive as mobilePerformanceProfileActiveCore,
   mobilePerformanceProfileState as mobilePerformanceProfileStateCore,
 } from './engine/performance-mobile.js';
+import { fxEnabled, fxLevers, fxToggleInspect } from './engine/fx-debug-toggles.js';
 import { createCityRevealProfiler } from './engine/city-reveal-profiler.js';
 import { createPerformanceDiagnostics } from './engine/performance-diagnostics.js';
 import {
@@ -925,6 +926,7 @@ function applyPostRevealPerfIsolation(next = {}) {
 
 window.__tronPerfIsolation = applyPostRevealPerfIsolation;
 window.__tronPerfIsolationInspect = postRevealPerfIsolationInspect;
+window.__fxToggles = fxToggleInspect;
 renderer.setPixelRatio(activePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.localClippingEnabled = true;
@@ -1068,6 +1070,9 @@ function retroBenchmarkEnvironment() {
       antialias: antialiasMode,
       activePixelRatio,
       forcedPixelRatio: forcedRenderPixelRatio(),
+      // Applied state of every per-subsystem debug toggle (see fx-debug-toggles.js)
+      // so each capture self-documents which subsystems were disabled.
+      fx: fxLevers(),
       urlParams: window.location.search || '(none)',
     },
     diagnostics: performanceDiagnostics.summary(latestMeasuredFps),
@@ -2064,7 +2069,10 @@ const {
 } = skyDome;
 // ---------- Reflection environment maps (extracted -> reflection-env.js) ----------
 initReflectionEnv(ctx);
-const reflectionEnvMap = getReflectionEnvMap();
+// fx.envReflections=0 (mobile A/B) drops the per-pixel envMap reflection sample
+// on buildings + base pads by handing every material a null env map. The PMREM
+// bake at initReflectionEnv still runs (VRAM only); this measures the fill.
+const reflectionEnvMap = fxEnabled('envReflections') ? getReflectionEnvMap() : null;
 scene.environment = null;
 scene.environmentIntensity = 1;
 
@@ -2228,6 +2236,9 @@ road.rotation.x = -Math.PI / 2;
 road.position.set(0, roadBaseY, Z_FLOOR_CENTER);
 syncRoadBacking();
 scene.add(road);
+// fx.roadBacking=0: hide the large unlit black under-floor plane (pure overdraw
+// beneath the hex tiles). syncRoadBacking only touches scale, so this persists.
+road.visible = fxEnabled('roadBacking');
 const floorPlaneLengthMeshes = [road];
 const floorBoxLengthMeshes = [];
 
@@ -2667,9 +2678,14 @@ const longitudinalRoadEdgeRecords = [];
 // soft fills (low — let env + emissives carry mood)
 const ambientLight = new THREE.HemisphereLight(0x182a32, 0x02050a, 0.10);
 scene.add(ambientLight);
+// fx.hemiLight=0 / fx.dirLight=0: drop a light from the render list so lit
+// shaders recompile without its per-fragment term (visible=false is how three
+// omits a light). Intensity writes elsewhere stay harmless.
+ambientLight.visible = fxEnabled('hemiLight');
 const dirKey = new THREE.DirectionalLight(0x6ec8e6, 0.18);
 dirKey.position.set(40, 220, 120);
 scene.add(dirKey);
+dirKey.visible = fxEnabled('dirLight');
 
 // ---------- Tron overlay buildings ----------
 const overlayGroup = new THREE.Group();
@@ -4052,7 +4068,9 @@ function normalizedAntialiasMode(mode) {
 
 function syncGlobalFxaaPass() {
   if (!fxaaPass) return;
-  fxaaPass.enabled = antialiasMode === 'fxaa';
+  // fx.fxaa=0 drops the fullscreen FXAA pass; if bloom+fsr are also inactive,
+  // shouldUseComposer() then bypasses the composer entirely (direct render).
+  fxaaPass.enabled = antialiasMode === 'fxaa' && fxEnabled('fxaa');
 }
 
 function disposeComposerTargets() {
@@ -4248,7 +4266,10 @@ function syncHexRoadLodForFrame() {
 }
 
 function shouldUseComposer() {
-  if (!composer || !postEnabled) return false;
+  // fx.post=0 master switch: skip the whole composer (RenderPass-to-target +
+  // FXAA + FSR output) and fall to a single direct renderer.render(scene,camera)
+  // — the cleanest aggregate measure of post-processing fill.
+  if (!composer || !postEnabled || !fxEnabled('post')) return false;
   return Boolean(
     isBloomPassActive() ||
     fxaaPass?.enabled ||
@@ -6603,8 +6624,10 @@ function tick(now) {
     const edgePulseSeconds = now * 0.001;
     updateEdgePulse(edgePulseSeconds);
     updateAtmosphereParticles(cityRevealComplete, edgePulseSeconds);
-    updateGreeterSpeechBubble();
-    updateTronRunnerCrowdSpeechBubbles();
+    if (fxEnabled('speechBubbles')) {
+      updateGreeterSpeechBubble();
+      updateTronRunnerCrowdSpeechBubbles();
+    }
   }
   updateCityRevealWireframe(now);
   syncTronDiscRevealWaiting();
@@ -6612,7 +6635,7 @@ function tick(now) {
   maybeStartRetroBenchmarkAuto();
   const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
   const bypassBloomForReveal = shouldBypassBloomForRevealPerformance();
-  if (bloomPass) bloomPass.enabled = bloomEnabled && postRevealPerfIsolationState.bloom && !bypassBloomForReveal;
+  if (bloomPass) bloomPass.enabled = bloomEnabled && postRevealPerfIsolationState.bloom && !bypassBloomForReveal && fxEnabled('bloom');
   syncBloomTemporalBudget();
   if (!postRevealPerformanceCritical) {
     if (postRevealPerfIsolationState.equalizer) {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fxEnabled } from '../engine/fx-debug-toggles.js';
 
 export function createSkyDome(deps) {
   const { scene, camera, renderer, controlEls, tunedColor, getRevealBudgetActive, getMobileProfileActive = () => false } = deps;
@@ -376,7 +377,7 @@ export function createSkyDome(deps) {
     domeMat.uniforms.uSkyQuality.value = effectiveQuality === 'full' ? 1 : 0;
     domeMat.uniforms.uSkyTint.value.copy(skyDisplayColor);
     domeMat.uniforms.uSkyTintStrength.value = choice === 'void' ? 0.08 : (choice === 'steel' ? 0.26 : 0.42);
-    domeMesh.visible = true;
+    domeMesh.visible = fxEnabled('sky');
     scene.background = skyDisplayColor;
   }
 

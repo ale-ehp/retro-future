@@ -4,6 +4,8 @@
 // Fully self-contained: no scene/camera/THREE deps. Owns its tuning state + the registered material
 // list. main.js calls applyEdgePulseShader(material) at build time and updateEdgePulse(seconds) per tick.
 
+import { fxEnabled } from '../engine/fx-debug-toggles.js';
+
 const edgePulseState = {
   speed: -30,
   period: 42,
@@ -19,7 +21,7 @@ export function applyEdgePulseShader(material) {
     shader.uniforms.uEdgePulseTime = { value: 0 };
     shader.uniforms.uEdgePulseSpeed = { value: edgePulseState.speed };
     shader.uniforms.uEdgePulsePeriod = { value: edgePulseState.period };
-    shader.uniforms.uEdgePulseIntensity = { value: edgePulseState.intensity };
+    shader.uniforms.uEdgePulseIntensity = { value: fxEnabled('edgePulse') ? edgePulseState.intensity : 0 };
     material.userData.edgePulseTimeUniform = shader.uniforms.uEdgePulseTime;
     // vEdgeAlong = signed distance along the strip's own length (world units, from its centre).
     // The instance's local Z axis is the strip direction, scaled by the strip length.
