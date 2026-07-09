@@ -94,10 +94,10 @@ function setStaticCityBasePadVisible(basePad, visible) {
 
 function setStaticCityBuildingClusterVisible(record, visible) {
   setStaticCityObjectVisible(record.mesh, visible && fxEnabled('buildingShells'));
-  setStaticCityBasePadVisible(record.basePad, visible);
+  setStaticCityBasePadVisible(record.basePad, visible && fxEnabled('basePad'));
   setStaticCityObjectVisible(record.civicNumberGroup, visible && fxEnabled('civicNumbers'));
   if (record.sideDoor) {
-    const nextDoorVisible = Boolean(visible && deps.getSideDoorEnabled());
+    const nextDoorVisible = Boolean(visible && deps.getSideDoorEnabled() && fxEnabled('doors'));
     if (record.sideDoor.visible !== nextDoorVisible) staticCityDoorCullDirty = true;
     setStaticCityObjectVisible(record.sideDoor, nextDoorVisible);
   }
@@ -218,7 +218,8 @@ export function updateStaticCityCulling() {
 
   const departmentBoardBaseVisible = Boolean(
     departmentBoardEnabled &&
-    (deps.departmentBoardRevealFactor() > 0.002 || deps.getRevealActive())
+    (deps.departmentBoardRevealFactor() > 0.002 || deps.getRevealActive()) &&
+    fxEnabled('deptBoards')
   );
   for (const board of cityDepartmentBoards) {
     const visible = setStaticCityBoardVisible(board, departmentBoardBaseVisible);
@@ -233,7 +234,7 @@ export function updateStaticCityCulling() {
 
   const roleBoardRevealFactor = deps.departmentBoardRevealFactor();
   for (const board of cityRoleBoards) {
-    const baseVisible = Boolean(roleBoardEnabled && board.enabled && roleBoardRevealFactor > 0.002);
+    const baseVisible = Boolean(roleBoardEnabled && board.enabled && roleBoardRevealFactor > 0.002 && fxEnabled('roleBoards'));
     const visible = setStaticCityBoardVisible(board, baseVisible);
     staticCityCullStats.total++;
     if (visible) {

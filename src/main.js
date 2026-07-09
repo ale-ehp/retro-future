@@ -927,6 +927,9 @@ function applyPostRevealPerfIsolation(next = {}) {
 window.__tronPerfIsolation = applyPostRevealPerfIsolation;
 window.__tronPerfIsolationInspect = postRevealPerfIsolationInspect;
 window.__fxToggles = fxToggleInspect;
+// Debug-only scene accessor for viewpoint-independent toggle verification
+// (walk the graph and confirm a subsystem's objects are hidden). No render effect.
+window.__fxScene = () => scene;
 renderer.setPixelRatio(activePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.localClippingEnabled = true;

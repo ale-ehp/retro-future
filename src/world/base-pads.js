@@ -436,6 +436,7 @@ export function createBuildingBasePad(group, x, z) {
   mesh.position.set(x, DEFAULT_BASE_PAD_Y - DEFAULT_BASE_PAD_THICKNESS, z);
   mesh.renderOrder = 1;
   mesh.frustumCulled = BASE_PAD_FRUSTUM_CULLING_ENABLED;
+  mesh.name = 'base-pad-surface';
   group.add(mesh);
   // fx.basePad=0: hide the large opaque sidewalk-pad top surface (envMap PBR, the
   // second-largest floor fill after the hex tiles). No per-frame writer touches
