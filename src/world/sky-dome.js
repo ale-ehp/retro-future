@@ -24,6 +24,21 @@ export function createSkyDome(deps) {
     const c = new URLSearchParams(location.search).get('skyCheap');
     if (c === '0' || c === '1' || c === '2') skyCheapUrlOverride = Number(c);
   } catch {}
+  // Sky BACKGROUND BAKE: instead of running the procedural noise for every sky
+  // pixel every frame, bake the sky into a low-res cube every few frames and
+  // reuse it as scene.background (a cheap cube sample). The sky is a smooth
+  // backdrop at infinity, so the cube stays valid across camera moves; only slow
+  // drift/lightning re-steps on re-bake. Mobile + steady-state only. ?skyBake=1|0
+  // overrides; SKY_BAKE_MOBILE_DEFAULT is the shipped default (kept OFF until a
+  // device A/B validates the fill win vs the periodic bake spike).
+  const SKY_BAKE_MOBILE_DEFAULT = false;
+  const SKY_BAKE_CUBE_SIZE = 128;
+  const SKY_BAKE_STRIDE = 12;
+  let skyBakeRequestedOverride = null;
+  try {
+    const b = new URLSearchParams(location.search).get('skyBake');
+    if (b === '0' || b === '1') skyBakeRequestedOverride = b === '1';
+  } catch {}
 
   const skyPalette = {
     storm: new THREE.Color(0x041a20),
@@ -497,11 +512,51 @@ export function createSkyDome(deps) {
     };
   }
 
+  const skyBakeState = { active: false, cubeRT: null, cubeCam: null, frames: 0 };
+  function skyBakeRequested() {
+    return skyBakeRequestedOverride != null
+      ? skyBakeRequestedOverride
+      : (SKY_BAKE_MOBILE_DEFAULT && getMobileProfileActive());
+  }
+  // Called once per frame from the tick. steadyState = post-reveal & no reveal
+  // compositing (so the reveal's own sky path is untouched).
+  function syncSkyBackgroundBake(now, steadyState) {
+    const enabled = Boolean(skyBakeRequested() && steadyState);
+    if (enabled) {
+      if (!skyBakeState.cubeRT) {
+        skyBakeState.cubeRT = new THREE.WebGLCubeRenderTarget(SKY_BAKE_CUBE_SIZE);
+        skyBakeState.cubeCam = new THREE.CubeCamera(1, 20000, skyBakeState.cubeRT);
+      }
+      skyBakeState.active = true;
+      domeMesh.visible = false; // main pass uses the cheap cube background instead
+      if (skyBakeState.frames % SKY_BAKE_STRIDE === 0) {
+        domeMat.uniforms.uTime.value = now * 0.001 * SKY_ANIMATION_SPEED;
+        const prevRevealVis = cityRevealSkyDome.visible;
+        const prevRevealBg = cityRevealSkyScene.background;
+        cityRevealSkyDome.visible = true;
+        cityRevealSkyDome.position.copy(camera.position);
+        cityRevealSkyScene.background = null; // dome covers all directions; avoid a flat clear tint
+        syncCityRevealSkyMaterial();
+        skyBakeState.cubeCam.position.copy(camera.position);
+        skyBakeState.cubeCam.update(renderer, cityRevealSkyScene);
+        cityRevealSkyDome.visible = prevRevealVis;
+        cityRevealSkyScene.background = prevRevealBg;
+        scene.background = skyBakeState.cubeRT.texture;
+      }
+      skyBakeState.frames += 1;
+    } else if (skyBakeState.active) {
+      skyBakeState.active = false;
+      domeMesh.visible = fxEnabled('sky');
+      scene.background = skyDisplayColor;
+    }
+  }
+
   return {
     domeGeo,
     domeMat,
     domeMesh,
     skyDisplayColor,
+    syncSkyBackgroundBake,
     revealScene: cityRevealSkyScene,
     revealMat: cityRevealSkyMat,
     revealDome: cityRevealSkyDome,

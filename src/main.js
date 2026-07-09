@@ -6677,6 +6677,9 @@ function tick(now) {
   }
   applyViewMotionOffset();
   skyDome.update(now);
+  // Sky background bake (mobile A/B, ?skyBake=1): only in steady state — post-
+  // reveal with no reveal compositing active — so the reveal's own sky is untouched.
+  skyDome.syncSkyBackgroundBake(now, cityRevealComplete && !isCityRevealCompositeActive());
   if (!revealPerformanceCritical) {
     updateCityDepartmentBoards(now);
     updateCityRoleBoard();
