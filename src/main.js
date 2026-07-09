@@ -1059,6 +1059,14 @@ function retroBenchmarkEnvironment() {
       fsrSharpness,
       mobileProfile: mobilePerformanceProfileInspect(),
     },
+    // Self-documenting FPS-lever state so each benchmark JSON records exactly
+    // which optimizations were active — without this an A/B is untrustworthy.
+    levers: {
+      skyQuality: skyDome.inspectStorm().mainQuality === 0 ? 'balanced' : 'full',
+      floorLite: floorLiteActive,
+      antialias: antialiasMode,
+      urlParams: window.location.search || '(none)',
+    },
     diagnostics: performanceDiagnostics.summary(latestMeasuredFps),
     hexRoad: hexRoadInspect(),
   };
