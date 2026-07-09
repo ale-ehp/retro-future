@@ -1065,6 +1065,8 @@ function retroBenchmarkEnvironment() {
       skyQuality: skyDome.inspectStorm().mainQuality === 0 ? 'balanced' : 'full',
       floorLite: floorLiteActive,
       antialias: antialiasMode,
+      activePixelRatio,
+      forcedPixelRatio: forcedRenderPixelRatio(),
       urlParams: window.location.search || '(none)',
     },
     diagnostics: performanceDiagnostics.summary(latestMeasuredFps),
@@ -4250,21 +4252,44 @@ function shouldUseComposer() {
   );
 }
 
+// Mobile now renders at a FIXED target pixel ratio (default 2x) instead of the
+// adaptive ~720p budget, so benchmarks reflect the resolution we actually want.
+// A forced ratio (mobile default or ?pixelRatio=N) pins the render resolution:
+// it bypasses the mobile caps + adaptive target, and disables the auto quality
+// downscaler (see tunePerformanceBudget) so it stays put during a benchmark.
+const MOBILE_TARGET_PIXEL_RATIO = 2;
+const forcedPixelRatioParam = (() => {
+  try {
+    const v = Number(new URLSearchParams(window.location.search).get('pixelRatio'));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch { return null; }
+})();
+function forcedRenderPixelRatio() {
+  if (forcedPixelRatioParam != null) return forcedPixelRatioParam;
+  if (mobilePerformanceProfileActive()) return MOBILE_TARGET_PIXEL_RATIO;
+  return null;
+}
+
 function applyRenderResolution(requestedPixelRatio) {
-  const requestedBase = Number.isFinite(requestedPixelRatio) ? requestedPixelRatio : MAX_RENDER_PIXEL_RATIO;
-  const requested = effectivePixelRatioForDevice(requestedBase);
-  const renderScale = effectiveRenderScaleForDevice(manualRenderScale);
-  const dynamicPixelRatio = Math.max(MIN_DYNAMIC_PIXEL_RATIO, requested * renderScale * dynamicQualityScale);
   const revealPixelRatioCap = cityRevealPerformanceProfileActive
     ? CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP
     : MAX_RENDER_PIXEL_RATIO;
-  activePixelRatio = Math.min(
-    window.devicePixelRatio || 1,
-    dynamicPixelRatio,
-    MAX_RENDER_PIXEL_RATIO,
-    revealPixelRatioCap,
-    adaptiveRenderTargetPixelRatio()
-  );
+  const forced = forcedRenderPixelRatio();
+  if (forced != null) {
+    activePixelRatio = Math.min(window.devicePixelRatio || 1, forced, revealPixelRatioCap);
+  } else {
+    const requestedBase = Number.isFinite(requestedPixelRatio) ? requestedPixelRatio : MAX_RENDER_PIXEL_RATIO;
+    const requested = effectivePixelRatioForDevice(requestedBase);
+    const renderScale = effectiveRenderScaleForDevice(manualRenderScale);
+    const dynamicPixelRatio = Math.max(MIN_DYNAMIC_PIXEL_RATIO, requested * renderScale * dynamicQualityScale);
+    activePixelRatio = Math.min(
+      window.devicePixelRatio || 1,
+      dynamicPixelRatio,
+      MAX_RENDER_PIXEL_RATIO,
+      revealPixelRatioCap,
+      adaptiveRenderTargetPixelRatio()
+    );
+  }
   if (Math.abs(activePixelRatio - lastAppliedRendererPixelRatio) > 0.0001) {
     renderer.setPixelRatio(activePixelRatio);
     lastAppliedRendererPixelRatio = activePixelRatio;
@@ -4285,6 +4310,9 @@ function applyRenderResolution(requestedPixelRatio) {
 }
 
 function tunePerformanceBudget(measuredFps) {
+  // A forced/pinned render resolution must stay fixed (benchmark intent) — never
+  // let the auto budget claw the quality scale down underneath it.
+  if (forcedRenderPixelRatio() != null) return;
   if (performanceMode !== 'auto' || !Number.isFinite(measuredFps)) return;
   if (performanceAdjustCooldown > 0) {
     performanceAdjustCooldown--;
