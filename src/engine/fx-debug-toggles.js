@@ -90,3 +90,19 @@ export function fxToggleInspect() {
   }
   return { gatingActive: gatingActive(), forceMobile: params.get('forceMobile') === '1', toggles };
 }
+
+// Canonical list of every subsystem toggle. Pre-registering them at module load
+// guarantees environment.levers.fx documents ALL toggles even when a subsystem's
+// hook has its fxEnabled() short-circuited by a leading && (e.g. bloom, which is
+// already bypassed on mobile, or a board that is faded out) so the call site is
+// never reached. A pre-registered toggle still resolves to the correct applied
+// state; a real hook call later just re-confirms it.
+export const FX_KNOWN_TOGGLES = Object.freeze([
+  'post', 'bloom', 'fxaa', 'sky', 'particles', 'hexFloor', 'floorSheen',
+  'roadBacking', 'basePad', 'envReflections', 'dirLight', 'hemiLight',
+  'buildingShells', 'bridges', 'facadeLeds', 'ledRings', 'sideEdges',
+  'bridgeEdges', 'basePadLeds', 'edgePulse', 'deptBoards', 'roleBoards',
+  'civicNumbers', 'doors', 'crowd', 'greeter', 'crowdReflections',
+  'idleCharacter', 'speechBubbles',
+]);
+for (const name of FX_KNOWN_TOGGLES) fxEnabled(name);
