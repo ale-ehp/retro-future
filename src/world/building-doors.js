@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fxEnabled } from '../engine/fx-debug-toggles.js';
 import { retroFutureSignScale } from '../sign-opacity.js';
 import { DEFAULT_BASE_PAD_Y } from './boulevard-constants.js';
 
@@ -428,7 +429,7 @@ function updateSideBuildingCivicNumberTransform(record, faceSign) {
     : SIDE_BUILDING_CIVIC_NUMBER_FIXED.singleWidth) * doorScaleRatio;
   const numberHeight = SIDE_BUILDING_CIVIC_NUMBER_FIXED.height * doorScaleRatio;
   const doorTopY = sideDoorY + sideDoorHeight * sideDoorScale;
-  group.visible = record.mesh.visible;
+  group.visible = record.mesh.visible && fxEnabled('civicNumbers');
   group.position.set(
     record.mesh.position.x + faceSign * (record.collider.hw + sideDoorFaceOffset + SIDE_BUILDING_CIVIC_NUMBER_FIXED.faceOffset),
     doorTopY + numberHeight * SIDE_BUILDING_CIVIC_NUMBER_FIXED.verticalLift,
@@ -442,7 +443,7 @@ export function updateSideBuildingDoorTransforms() {
   for (const record of sideBuildingRecords) {
     const faceSign = record.sign < 0 ? 1 : -1;
     if (record.sideDoor) {
-      record.sideDoor.visible = sideDoorEnabled && record.mesh.visible;
+      record.sideDoor.visible = sideDoorEnabled && record.mesh.visible && fxEnabled('doors');
       record.sideDoor.position.set(
         record.mesh.position.x + faceSign * (record.collider.hw + sideDoorFaceOffset),
         sideDoorY,

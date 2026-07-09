@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fxEnabled } from '../engine/fx-debug-toggles.js';
 import { GRID_BLOCK, SIDE_FACADE_LED_REFERENCE_HEIGHT } from './boulevard-constants.js';
 import { SIDE_DOOR_FIXED } from './building-doors.js';
 
@@ -628,7 +629,7 @@ export function updateFacadeLedRibbons(brightness, hueDeg, mainBrightness, mainH
     const isMain = spec.edgeRole === 'main-building';
     const amount = isMain ? mainFacadeAmount : brightness;
     spec.material.color.copy(isMain ? mainColor : sideColor);
-    spec.mesh.visible = amount > 0.001;
+    spec.mesh.visible = amount > 0.001 && fxEnabled('facadeLeds');
   }
 }
 

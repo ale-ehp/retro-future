@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fxEnabled } from '../engine/fx-debug-toggles.js';
 import {
   DEFAULT_BASE_PAD_THICKNESS,
   DEFAULT_BASE_PAD_Y,
@@ -94,7 +95,7 @@ export const basePadLedBatch = {
   material: null,
   capacity: 0,
   count: 0,
-  sceneVisible: true,
+  sceneVisible: fxEnabled('basePadLeds'),
   batches: [],
 };
 const BASE_PAD_LED_RENDER_ORDER = 12;
@@ -436,6 +437,10 @@ export function createBuildingBasePad(group, x, z) {
   mesh.renderOrder = 1;
   mesh.frustumCulled = BASE_PAD_FRUSTUM_CULLING_ENABLED;
   group.add(mesh);
+  // fx.basePad=0: hide the large opaque sidewalk-pad top surface (envMap PBR, the
+  // second-largest floor fill after the hex tiles). No per-frame writer touches
+  // the outer surface mesh, so this one-shot persists.
+  mesh.visible = fxEnabled('basePad');
 
   const curbRamp = new THREE.Mesh(new THREE.BufferGeometry(), basePadSurfaceMat);
   curbRamp.position.set(x, 0, z);

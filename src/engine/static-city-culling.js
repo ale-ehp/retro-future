@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fxEnabled } from './fx-debug-toggles.js';
 
 const STATIC_CITY_CULLING_ENABLED = true;
 const staticCityCullMatrix = new THREE.Matrix4();
@@ -92,9 +93,9 @@ function setStaticCityBasePadVisible(basePad, visible) {
 }
 
 function setStaticCityBuildingClusterVisible(record, visible) {
-  setStaticCityObjectVisible(record.mesh, visible);
+  setStaticCityObjectVisible(record.mesh, visible && fxEnabled('buildingShells'));
   setStaticCityBasePadVisible(record.basePad, visible);
-  setStaticCityObjectVisible(record.civicNumberGroup, visible);
+  setStaticCityObjectVisible(record.civicNumberGroup, visible && fxEnabled('civicNumbers'));
   if (record.sideDoor) {
     const nextDoorVisible = Boolean(visible && deps.getSideDoorEnabled());
     if (record.sideDoor.visible !== nextDoorVisible) staticCityDoorCullDirty = true;
@@ -113,13 +114,13 @@ function setStaticCityMainLedClusterVisible(visible) {
     if (spec.edgeRole === 'main-building') setStaticCityEdgeSpecVisible(spec, visible);
   }
   for (const spec of deps.horizontalBuildingLedRings) {
-    if (spec.edgeRole === 'main-building') setStaticCityEdgeSpecVisible(spec, visible);
+    if (spec.edgeRole === 'main-building') setStaticCityEdgeSpecVisible(spec, visible && fxEnabled('ledRings'));
   }
 }
 
 function setStaticCityBridgeClusterVisible(record, visible) {
   const effectiveVisible = Boolean(record.visible && visible);
-  setStaticCityObjectVisible(record.mesh, effectiveVisible);
+  setStaticCityObjectVisible(record.mesh, effectiveVisible && fxEnabled('bridges'));
   for (const spec of deps.edgeStripSpecs) {
     if (spec.edgeRole === 'bridge' && spec.bridgeRecord === record) setStaticCityEdgeSpecVisible(spec, effectiveVisible);
   }

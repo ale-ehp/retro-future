@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fxEnabled } from '../engine/fx-debug-toggles.js';
 
 import {
   createTronRunnerCrowdMemberRecord,
@@ -451,6 +452,10 @@ export function buildTronRunnerCrowdMemberRuntime({
     mesh.material = crowdMaterial;
   });
   group.add(cloneModel);
+  // fx.crowd=0 hides every crowd body; fx.greeter=0 hides only the greeter member.
+  // cloneModel.visible is never rewritten by culling/reveal (they touch group.visible
+  // / material.opacity), so this persists and skips only the body draw.
+  cloneModel.visible = fxEnabled('crowd') && (globalIndex !== greeterIndex || fxEnabled('greeter'));
 
   const animationScaleOffset = 0.92 + (globalIndex % 5) * 0.035;
   const speedScaleOffset = 0.86 + (globalIndex % 5) * 0.035;
@@ -470,7 +475,7 @@ export function buildTronRunnerCrowdMemberRuntime({
     reflectionRig,
     effectiveAnimationSpeed: runnerState.effectiveAnimationSpeed,
   });
-  if (reflection.group) group.add(reflection.group);
+  if (fxEnabled('crowdReflections') && reflection.group) group.add(reflection.group);
   const route = routes.buildRoute(globalIndex);
   const fallback = routes.fallbackPlacement(globalIndex);
   const startInfo = routes.roadFacingStart(route, globalIndex, fallback);
