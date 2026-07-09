@@ -819,6 +819,18 @@ let requestedBloomResolutionScale = 0.32;
 let bloomResolutionScale = 0.32;
 let bloomEnabled = true;
 let antialiasMode = 'fxaa';
+// AA mode: fxaa (post pass) | msaa (hardware multisample — cheaper on tile GPUs:
+// iOS + Android Adreno/Mali/PowerVR) | off. ?aa=msaa|fxaa|off is authoritative
+// (wins over the control default) so a benchmark URL pins the mode; msaa falls
+// back to fxaa when the WebGL2 context can't provide >=2 samples.
+const antialiasUrlOverride = (() => {
+  try {
+    const p = new URLSearchParams(location.search).get('aa');
+    return (p === 'msaa' || p === 'fxaa' || p === 'off') ? p : null;
+  } catch { return null; }
+})();
+if (antialiasUrlOverride) antialiasMode = antialiasUrlOverride;
+let composerMsaaActive = false;
 let fsrUpscaleEnabled = false;
 let fsrInternalScale = 1;
 let fsrSharpness = 0;
@@ -1058,6 +1070,8 @@ function retroBenchmarkEnvironment() {
       manualRenderScale,
       dynamicQualityScale,
       antialiasMode,
+      composerMsaaActive,
+      msaaSamples: composerMsaaActive ? msaaSampleCount() : 0,
       bloomEnabled,
       bloomActive: isBloomPassActive(),
       bloomPassEnabled: Boolean(bloomPass?.enabled),
@@ -1077,6 +1091,7 @@ function retroBenchmarkEnvironment() {
       buildingReflect: buildingReflectLite ? 'lite' : 'full',
       dirLight: dirLightActive ? 'on' : 'off',
       antialias: antialiasMode,
+      msaaActive: composerMsaaActive,
       activePixelRatio,
       forcedPixelRatio: forcedRenderPixelRatio(),
       // Applied state of every per-subsystem debug toggle (see fx-debug-toggles.js)
@@ -4121,14 +4136,29 @@ function resizeFxaaTargets() {
 }
 
 function normalizedAntialiasMode(mode) {
-  return mode === 'off' ? 'off' : 'fxaa';
+  if (mode === 'off') return 'off';
+  if (mode === 'msaa') return 'msaa';
+  return 'fxaa';
+}
+
+// Hardware MSAA sample count the context can give (WebGL2 only). 0 = unsupported.
+function msaaSampleCount() {
+  try {
+    if (!renderer.capabilities?.isWebGL2) return 0;
+    const max = renderer.getContext().getParameter(renderer.getContext().MAX_SAMPLES) || 0;
+    return max >= 2 ? Math.min(4, max) : 0;
+  } catch {
+    return 0;
+  }
 }
 
 function syncGlobalFxaaPass() {
   if (!fxaaPass) return;
-  // fx.fxaa=0 drops the fullscreen FXAA pass; if bloom+fsr are also inactive,
-  // shouldUseComposer() then bypasses the composer entirely (direct render).
-  fxaaPass.enabled = antialiasMode === 'fxaa' && fxEnabled('fxaa');
+  // FXAA runs in 'fxaa' mode, OR as the fallback when 'msaa' was requested but the
+  // device gave no usable multisampling. fx.fxaa=0 still drops it (composer may
+  // then be bypassed to a direct render via shouldUseComposer).
+  const fxaaFallback = antialiasMode === 'msaa' && !composerMsaaActive;
+  fxaaPass.enabled = (antialiasMode === 'fxaa' || fxaaFallback) && fxEnabled('fxaa');
 }
 
 function disposeComposerTargets() {
@@ -4149,7 +4179,22 @@ function rebuildComposer() {
   if (!usePost) return;
   const { EffectComposer, RenderPass, UnrealBloomPass, FXAAPass, ShaderPass } = window.__POST;
   disposeComposerTargets();
-  composer = new EffectComposer(renderer);
+  // MSAA mode: give the composer a multisampled render target so the scene pass
+  // is antialiased by hardware (tile-resolved, cheap on mobile) instead of the
+  // FXAA post pass. Falls back to a plain composer + FXAA if unsupported.
+  const msaaSamples = antialiasMode === 'msaa' ? msaaSampleCount() : 0;
+  composerMsaaActive = msaaSamples >= 2;
+  if (composerMsaaActive) {
+    const dpr = effectiveComposerPixelRatio();
+    const msaaTarget = new THREE.WebGLRenderTarget(
+      Math.max(1, Math.round(window.innerWidth * dpr)),
+      Math.max(1, Math.round(window.innerHeight * dpr)),
+      { samples: msaaSamples }
+    );
+    composer = new EffectComposer(renderer, msaaTarget);
+  } else {
+    composer = new EffectComposer(renderer);
+  }
   lastAppliedComposerPixelRatio = -1;
   lastBloomTargetKey = '';
   lastFxaaTargetKey = '';
@@ -4181,7 +4226,8 @@ function rebuildComposer() {
 }
 
 function applyAntialiasControls(mode = antialiasMode) {
-  antialiasMode = normalizedAntialiasMode(mode);
+  // The ?aa URL override wins over the control-driven mode so a benchmark URL pins it.
+  antialiasMode = normalizedAntialiasMode(antialiasUrlOverride || mode);
   syncGlobalFxaaPass();
   resizeFxaaTargets();
 }
@@ -4332,6 +4378,7 @@ function shouldUseComposer() {
     isBloomPassActive() ||
     fxaaPass?.enabled ||
     isFsrUpscaleActive() ||
+    (antialiasMode === 'msaa' && composerMsaaActive) ||
     (cityRevealWireframeEnabled && cityRevealWireAlpha > 0.002)
   );
 }
