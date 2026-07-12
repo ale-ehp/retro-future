@@ -263,10 +263,9 @@
       line-height: 1.45;
       max-width: calc(100vw - 24px);
     }
+    /* No perf/FPS counter on mobile (production). */
     #hud-tl {
-      padding: 6px 9px;
-      width: max-content;
-      max-width: max-content;
+      display: none !important;
     }
     .perf-live-overlay {
       width: min(220px, calc(100vw - 44px));
