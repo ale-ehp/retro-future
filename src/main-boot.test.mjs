@@ -7,6 +7,7 @@ const mainSource = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
 const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const cssSource = readFileSync(new URL('../retro-future.css', import.meta.url), 'utf8');
 const discCursorSource = readFileSync(new URL('./camera/disc-cursor.js', import.meta.url), 'utf8');
+const droneIntroSource = readFileSync(new URL('./camera/drone-intro.js', import.meta.url), 'utf8');
 const shadersSource = readFileSync(new URL('./engine/shaders.js', import.meta.url), 'utf8');
 const temporalAaSource = readFileSync(new URL('./engine/temporal-aa-pass.js', import.meta.url), 'utf8');
 
@@ -211,6 +212,16 @@ test('welcome cover button starts the existing reveal flow', () => {
   assert.match(mainSource, /document\.getElementById\('welcome-start-button'\)/);
   assert.match(mainSource, /welcomeStartButton\?\.addEventListener\('click'/);
   assert.match(mainSource, /triggerBackspaceDroneIntro\('welcome-button'\)/);
+});
+
+test('hero opening shot is URL-gated and keeps the default intro path unchanged', () => {
+  assert.match(droneIntroSource, /export function droneIntroHeroShotRequestedFromParams/);
+  assert.match(droneIntroSource, /DRONE_INTRO_HERO_DURATION_MS/);
+  assert.match(droneIntroSource, /droneIntroFlight\.heroShot/);
+  assert.match(droneIntroSource, /cubicBezierVector/);
+  assert.match(mainSource, /droneIntroHeroShotRequestedFromParams\(new URLSearchParams\(window\.location\.search\)\)/);
+  assert.match(mainSource, /heroShotEnabled:\s*droneIntroHeroShotEnabled/);
+  assert.match(mainSource, /heroShot:\s*droneIntroHeroShotEnabled/);
 });
 
 test('welcome cover page stays static while the button starts the reveal flow', () => {
