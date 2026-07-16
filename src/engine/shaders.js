@@ -1,13 +1,17 @@
 import * as THREE from 'three';
 
 const TRUEY = new Set(['1', 'true', 'on', 'yes']);
+const FALSEY = new Set(['0', 'false', 'off', 'no']);
 
 export function cinematicLookRequestedFromParams(params) {
   const explicit = params?.get?.('look.cinematic');
   if (explicit != null) return TRUEY.has(String(explicit).trim().toLowerCase());
   const alias = params?.get?.('cinematicLook');
   if (alias != null) return TRUEY.has(String(alias).trim().toLowerCase());
-  return String(params?.get?.('look') || '').trim().toLowerCase() === 'cinematic';
+  const look = String(params?.get?.('look') || '').trim().toLowerCase();
+  if (look === 'cinematic') return true;
+  if (look === 'classic' || look === 'raw' || FALSEY.has(look)) return false;
+  return true;
 }
 
 export const TRON_CINEMATIC_LOOK_SHADER = {
