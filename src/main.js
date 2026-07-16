@@ -53,6 +53,10 @@ import {
   cinematicLookRequestedFromParams,
 } from './engine/shaders.js';
 import {
+  TemporalAaPass,
+  temporalAaRequestedFromParams,
+} from './engine/temporal-aa-pass.js';
+import {
   AUDIO_FX_FAST_CONTROL_IDS,
   BASE_PAD_MATERIAL_FAST_CONTROL_IDS,
   BOUNDARY_ERROR_FAST_CONTROL_IDS,
@@ -772,7 +776,7 @@ import {
 } from './controls/equalizer.js';
 
 // Postprocessing (optional bloom + FXAA). Best-effort — fallback to plain renderer if any module fails.
-let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null, cinematicLookPass = null;
+let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null, cinematicLookPass = null, temporalAaPass = null;
 let postEnabled = true;
 let usePost = false;
 const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
@@ -846,6 +850,7 @@ let fsrUpscaleEnabled = false;
 let fsrInternalScale = 1;
 let fsrSharpness = 0;
 const cinematicLookEnabled = cinematicLookRequestedFromParams(new URLSearchParams(window.location.search));
+const temporalAaEnabled = temporalAaRequestedFromParams(new URLSearchParams(window.location.search));
 let dynamicQualityScale = 1;
 let performanceMode = 'auto';
 let performanceAdjustCooldown = 0;
@@ -855,6 +860,9 @@ let lastBloomTargetKey = '';
 let lastFxaaTargetKey = '';
 let lastFsrTargetKey = '';
 let lastCinematicLookTargetKey = '';
+let temporalAaMotionPrimed = false;
+const temporalAaCameraPosition = new THREE.Vector3();
+const temporalAaCameraQuaternion = new THREE.Quaternion();
 let cityRevealPerformanceProfileActive = false;
 let secondaryEffectFrame = 0;
 let boundaryErrorAccumulatedDt = 0;
@@ -1095,6 +1103,8 @@ function retroBenchmarkEnvironment() {
       fsrSharpness,
       cinematicLookEnabled,
       cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
+      temporalAaEnabled,
+      temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
       mobileProfile: mobilePerformanceProfileInspect(),
     },
     // Self-documenting FPS-lever state so each benchmark JSON records exactly
@@ -1112,6 +1122,7 @@ function retroBenchmarkEnvironment() {
       skyBakeSpread: skyDome.inspectSkyBake().spread,
       skyBakeFaceStride: skyDome.inspectSkyBake().faceStride,
       cinematicLook: cinematicLookEnabled ? 'on' : 'off',
+      temporalAa: temporalAaEnabled ? 'on' : 'off',
       // Applied state of every per-subsystem debug toggle (see fx-debug-toggles.js)
       // so each capture self-documents which subsystems were disabled.
       fx: fxLevers(),
@@ -4074,6 +4085,7 @@ const cityRevealProfiler = createCityRevealProfiler({
   getFxaaPass: () => fxaaPass,
   getFsrUpscalePass: () => fsrUpscalePass,
   getCinematicLookPass: () => cinematicLookPass,
+  getTemporalAaPass: () => temporalAaPass,
   getCityRevealSkyPass: () => cityRevealRender.getSkyPass(),
   getCityRevealOverlayPass: () => cityRevealRender.getOverlayPass(),
   getCityRevealWirePass: () => cityRevealRender.getWirePass(),
@@ -4146,6 +4158,53 @@ function syncCinematicLookPass(now = performance.now()) {
   cinematicLookPass.uniforms.time.value = now * 0.001;
 }
 
+function temporalAaMotionAmount() {
+  if (!temporalAaMotionPrimed) {
+    temporalAaCameraPosition.copy(camera.position);
+    temporalAaCameraQuaternion.copy(camera.quaternion);
+    temporalAaMotionPrimed = true;
+    return 1;
+  }
+  const moved = Math.min(1, camera.position.distanceTo(temporalAaCameraPosition) * 2.5);
+  const rotated = Math.min(1, (1 - Math.abs(camera.quaternion.dot(temporalAaCameraQuaternion))) * 64);
+  temporalAaCameraPosition.copy(camera.position);
+  temporalAaCameraQuaternion.copy(camera.quaternion);
+  return Math.max(moved, rotated);
+}
+
+function syncTemporalAaPass() {
+  if (!temporalAaPass) return;
+  const stable = temporalAaEnabled && cityRevealComplete && !isCityRevealCompositeActive();
+  temporalAaPass.enabled = stable;
+  if (!stable) {
+    temporalAaPass.sync({ stable: false, motionAmount: 1 });
+    temporalAaMotionPrimed = false;
+    return;
+  }
+  temporalAaPass.sync({ stable: true, motionAmount: temporalAaMotionAmount() });
+}
+
+function applyTemporalAaJitterForRender() {
+  if (!temporalAaPass?.enabled) return false;
+  const jitter = temporalAaPass.nextJitter();
+  camera.setViewOffset(
+    temporalAaPass.width,
+    temporalAaPass.height,
+    jitter.x,
+    jitter.y,
+    temporalAaPass.width,
+    temporalAaPass.height
+  );
+  camera.updateProjectionMatrix();
+  return true;
+}
+
+function clearTemporalAaJitterForRender(active) {
+  if (!active) return;
+  camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
+
 function resizeBloomTargets() {
   if (!bloomPass) return;
   const requestedScale = Math.min(effectiveBloomScaleForDevice(requestedBloomResolutionScale), BLOOM_RESOLUTION_CAP);
@@ -4215,11 +4274,14 @@ function disposeComposerTargets() {
   fsrUpscalePass?.dispose?.();
   cinematicLookPass?.material?.dispose?.();
   cinematicLookPass?.dispose?.();
+  temporalAaPass?.dispose?.();
   composer.dispose?.();
   bloomPass = null;
   fxaaPass = null;
   fsrUpscalePass = null;
   cinematicLookPass = null;
+  temporalAaPass = null;
+  temporalAaMotionPrimed = false;
   cityRevealRender.clearComposerPasses();
   composer = null;
 }
@@ -4285,6 +4347,11 @@ function rebuildComposer() {
     };
     syncCinematicLookPass();
     composer.addPass(cinematicLookPass);
+  }
+  if (temporalAaEnabled) {
+    temporalAaPass = new TemporalAaPass();
+    temporalAaPass.enabled = false;
+    composer.addPass(temporalAaPass);
   }
   resizeBloomTargets();
   resizeFxaaTargets();
@@ -4450,6 +4517,7 @@ function shouldUseComposer() {
     fxaaPass?.enabled ||
     isFsrUpscaleActive() ||
     cinematicLookPass?.enabled ||
+    temporalAaPass?.enabled ||
     (antialiasMode === 'msaa' && composerMsaaActive) ||
     (cityRevealWireframeEnabled && cityRevealWireAlpha > 0.002)
   );
@@ -4513,6 +4581,7 @@ function applyRenderResolution(requestedPixelRatio) {
     resizeFxaaTargets();
     syncFsrUpscalePass();
     syncCinematicLookPass();
+    syncTemporalAaPass();
   }
 }
 
@@ -6642,6 +6711,8 @@ window.__tronInspect = () => ({
     bloomActive: isBloomPassActive(),
     cinematicLookEnabled,
     cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
+    temporalAaEnabled,
+    temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
     bloomStrength: bloomPass?.strength ?? 0,
     bloomRadius: bloomPass?.radius ?? 0,
     bloomThreshold: bloomPass?.threshold ?? 0,
@@ -6695,6 +6766,8 @@ window.__tronPerfInspect = () => ({
   antialiasMode,
   cinematicLookEnabled,
   cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
+  temporalAaEnabled,
+  temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
   bloomResolutionScale,
   bloomResolutionCap: BLOOM_RESOLUTION_CAP,
   bloomActiveMips: bloomPass?.activeMips ?? 0,
@@ -6714,6 +6787,7 @@ window.__tronPerfInspect = () => ({
   },
   storm: skyDome.inspectStorm(),
   skyBake: skyDome.inspectSkyBake(),
+  temporalAa: temporalAaPass?.inspect(),
   hexUpdateEnabled,
   hexTiles: hexRoadTiles.length,
   hexRoad: hexRoadInspect(),
@@ -6844,6 +6918,7 @@ function tick(now) {
   if (bloomPass) bloomPass.enabled = bloomEnabled && postRevealPerfIsolationState.bloom && !bypassBloomForReveal && fxEnabled('bloom');
   syncBloomTemporalBudget();
   syncCinematicLookPass(now);
+  syncTemporalAaPass();
   if (!postRevealPerformanceCritical) {
     if (postRevealPerfIsolationState.equalizer) {
       updateLabEqualizer(now, dt);
@@ -6864,9 +6939,11 @@ function tick(now) {
   }
   performanceDiagnostics.pollGpuTimerSamples();
   performanceDiagnostics.beginGpuTimerSample();
+  const temporalAaJittered = applyTemporalAaJitterForRender();
   try {
     cityRevealRender.renderCompositeFrame();
   } finally {
+    clearTemporalAaJitterForRender(temporalAaJittered);
     performanceDiagnostics.endGpuTimerSample();
   }
   const frameRenderInfo = captureRevealRenderInfo ? { ...renderer.info.render } : null;
