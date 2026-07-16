@@ -133,9 +133,11 @@ test('tech breakdown overlay is URL-gated and fed from live diagnostics', () => 
   assert.match(cssSource, /\.tech-breakdown-overlay dd\s*\{[\s\S]*text-overflow:\s*ellipsis/);
 });
 
-test('cinematic look pass is opt-in and inserted after FSR output', () => {
+test('cinematic look pass is default-on with URL rollback and inserted after FSR output', () => {
   assert.match(shadersSource, /export function cinematicLookRequestedFromParams/);
   assert.match(shadersSource, /export const TRON_CINEMATIC_LOOK_SHADER/);
+  assert.match(shadersSource, /return true;/);
+  assert.match(shadersSource, /look === 'classic'/);
   assert.match(mainSource, /cinematicLookRequestedFromParams\(new URLSearchParams\(window\.location\.search\)\)/);
   assert.match(mainSource, /cinematicLookEnabled/);
   assert.match(mainSource, /new ShaderPass\(TRON_CINEMATIC_LOOK_SHADER\)/);

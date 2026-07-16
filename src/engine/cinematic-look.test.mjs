@@ -6,13 +6,15 @@ import {
   cinematicLookRequestedFromParams,
 } from './shaders.js';
 
-test('cinematic look flag is opt-in only', () => {
-  assert.equal(cinematicLookRequestedFromParams(new URLSearchParams('')), false);
+test('cinematic look defaults on and can be disabled from the URL', () => {
+  assert.equal(cinematicLookRequestedFromParams(new URLSearchParams('')), true);
   assert.equal(cinematicLookRequestedFromParams(new URLSearchParams('look.cinematic=1')), true);
   assert.equal(cinematicLookRequestedFromParams(new URLSearchParams('look.cinematic=on')), true);
   assert.equal(cinematicLookRequestedFromParams(new URLSearchParams('cinematicLook=1')), true);
   assert.equal(cinematicLookRequestedFromParams(new URLSearchParams('look=cinematic')), true);
   assert.equal(cinematicLookRequestedFromParams(new URLSearchParams('look.cinematic=0')), false);
+  assert.equal(cinematicLookRequestedFromParams(new URLSearchParams('cinematicLook=0')), false);
+  assert.equal(cinematicLookRequestedFromParams(new URLSearchParams('look=classic')), false);
 });
 
 test('cinematic look shader exposes subtle filmic controls', () => {
