@@ -33,10 +33,15 @@ function halton(index, base) {
 
 export function temporalAaRequestedFromParams(params) {
   const raw = params?.get?.('taa');
-  if (raw != null) return TRUEY.has(String(raw).trim().toLowerCase());
+  if (raw != null) {
+    const normalized = String(raw).trim().toLowerCase();
+    if (FALSEY.has(normalized)) return false;
+    if (TRUEY.has(normalized)) return true;
+  }
   const aa = String(params?.get?.('aa') || '').trim().toLowerCase();
   if (aa === 'taa') return true;
-  return !FALSEY.has(aa) && false;
+  if (aa === 'fxaa' || aa === 'msaa' || aa === 'none' || FALSEY.has(aa)) return false;
+  return true;
 }
 
 export function temporalAaJitterForFrame(frameIndex, width = 1, height = 1) {

@@ -147,7 +147,7 @@ test('cinematic look pass is default-on with URL rollback and inserted after FSR
   assert.match(mainSource, /cinematicLookPassEnabled:\s*Boolean\(cinematicLookPass\?\.enabled\)/);
 });
 
-test('temporal AA is URL-gated and runs after the cinematic look pass', () => {
+test('temporal AA defaults on and runs after the cinematic look pass', () => {
   assert.match(temporalAaSource, /export class TemporalAaPass/);
   assert.match(temporalAaSource, /export function temporalAaRequestedFromParams/);
   assert.match(mainSource, /temporalAaRequestedFromParams\(new URLSearchParams\(window\.location\.search\)\)/);
