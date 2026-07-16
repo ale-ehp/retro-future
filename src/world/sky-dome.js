@@ -1,6 +1,19 @@
 import * as THREE from 'three';
 import { fxEnabled } from '../engine/fx-debug-toggles.js';
 
+export function skyBakeSpreadRequestedFromParams(params, fallback = true) {
+  const raw = params?.get?.('skyBakeSpread');
+  if (raw === '0') return false;
+  if (raw === '1') return true;
+  return Boolean(fallback);
+}
+
+export function skyBakeFaceStride(frameStride, faceCount = 6) {
+  const stride = Number.isFinite(frameStride) ? Math.max(1, Math.round(frameStride)) : 1;
+  const faces = Number.isFinite(faceCount) ? Math.max(1, Math.round(faceCount)) : 1;
+  return Math.max(1, Math.round(stride / faces));
+}
+
 export function createSkyDome(deps) {
   const { scene, camera, renderer, controlEls, tunedColor, getRevealBudgetActive, getMobileProfileActive = () => false } = deps;
 
@@ -34,10 +47,16 @@ export function createSkyDome(deps) {
   const SKY_BAKE_MOBILE_DEFAULT = true;
   const SKY_BAKE_CUBE_SIZE = 128;
   const SKY_BAKE_STRIDE = 12;
+  const SKY_BAKE_FACE_COUNT = 6;
+  const SKY_BAKE_FACE_STRIDE = skyBakeFaceStride(SKY_BAKE_STRIDE, SKY_BAKE_FACE_COUNT);
+  const SKY_BAKE_SPREAD_DEFAULT = true;
   let skyBakeRequestedOverride = null;
+  let skyBakeSpreadEnabled = SKY_BAKE_SPREAD_DEFAULT;
   try {
-    const b = new URLSearchParams(location.search).get('skyBake');
+    const skyBakeParams = new URLSearchParams(location.search);
+    const b = skyBakeParams.get('skyBake');
     if (b === '0' || b === '1') skyBakeRequestedOverride = b === '1';
+    skyBakeSpreadEnabled = skyBakeSpreadRequestedFromParams(skyBakeParams, SKY_BAKE_SPREAD_DEFAULT);
   } catch {}
 
   const skyPalette = {
@@ -512,43 +531,144 @@ export function createSkyDome(deps) {
     };
   }
 
-  const skyBakeState = { active: false, cubeRT: null, cubeCam: null, frames: 0 };
+  const skyBakeState = {
+    active: false,
+    ready: false,
+    cubeRT: null,
+    cubeCam: null,
+    frames: 0,
+    nextFace: 0,
+    lastRenderedFace: -1,
+    cycles: 0,
+    spread: skyBakeSpreadEnabled,
+  };
   function skyBakeRequested() {
     return skyBakeRequestedOverride != null
       ? skyBakeRequestedOverride
       : (SKY_BAKE_MOBILE_DEFAULT && getMobileProfileActive());
+  }
+  function ensureSkyBakeTarget() {
+    if (skyBakeState.cubeRT && skyBakeState.cubeCam) return;
+    skyBakeState.cubeRT = new THREE.WebGLCubeRenderTarget(SKY_BAKE_CUBE_SIZE);
+    skyBakeState.cubeCam = new THREE.CubeCamera(1, 20000, skyBakeState.cubeRT);
+  }
+  function withSkyBakeScene(now, render) {
+    domeMat.uniforms.uTime.value = now * 0.001 * SKY_ANIMATION_SPEED;
+    const prevRevealVis = cityRevealSkyDome.visible;
+    const prevRevealBg = cityRevealSkyScene.background;
+    cityRevealSkyDome.visible = true;
+    cityRevealSkyDome.position.copy(camera.position);
+    cityRevealSkyScene.background = null; // dome covers all directions; avoid a flat clear tint
+    syncCityRevealSkyMaterial();
+    try {
+      render();
+    } finally {
+      cityRevealSkyDome.visible = prevRevealVis;
+      cityRevealSkyScene.background = prevRevealBg;
+    }
+  }
+  function renderSkyBakeFull(now) {
+    withSkyBakeScene(now, () => {
+      skyBakeState.cubeCam.position.copy(camera.position);
+      skyBakeState.cubeCam.update(renderer, cityRevealSkyScene);
+    });
+    skyBakeState.ready = true;
+    skyBakeState.cycles += 1;
+    skyBakeState.nextFace = 0;
+    skyBakeState.lastRenderedFace = SKY_BAKE_FACE_COUNT - 1;
+    scene.background = skyBakeState.cubeRT.texture;
+  }
+  function renderSkyBakeFace(now, faceIndex) {
+    withSkyBakeScene(now, () => {
+      const cubeCam = skyBakeState.cubeCam;
+      const cubeRT = skyBakeState.cubeRT;
+      if (!cubeCam || !cubeRT) return;
+      if (cubeCam.parent === null) cubeCam.updateMatrixWorld();
+      if (cubeCam.coordinateSystem !== renderer.coordinateSystem) {
+        cubeCam.coordinateSystem = renderer.coordinateSystem;
+        cubeCam.updateCoordinateSystem();
+      }
+      cubeCam.position.copy(camera.position);
+      cubeCam.updateMatrixWorld(true);
+      const faceCamera = cubeCam.children[faceIndex];
+      if (!faceCamera) return;
+
+      const currentRenderTarget = renderer.getRenderTarget();
+      const currentActiveCubeFace = renderer.getActiveCubeFace?.() ?? 0;
+      const currentActiveMipmapLevel = renderer.getActiveMipmapLevel?.() ?? 0;
+      const currentXrEnabled = renderer.xr.enabled;
+      const generateMipmaps = cubeRT.texture.generateMipmaps;
+      const isLastFace = faceIndex === SKY_BAKE_FACE_COUNT - 1;
+
+      renderer.xr.enabled = false;
+      cubeRT.texture.generateMipmaps = isLastFace ? generateMipmaps : false;
+      try {
+        renderer.setRenderTarget(cubeRT, faceIndex, 0);
+        renderer.render(cityRevealSkyScene, faceCamera);
+      } finally {
+        cubeRT.texture.generateMipmaps = generateMipmaps;
+        renderer.setRenderTarget(currentRenderTarget, currentActiveCubeFace, currentActiveMipmapLevel);
+        renderer.xr.enabled = currentXrEnabled;
+      }
+      cubeRT.texture.needsPMREMUpdate = true;
+    });
+    skyBakeState.lastRenderedFace = faceIndex;
+    skyBakeState.nextFace = (faceIndex + 1) % SKY_BAKE_FACE_COUNT;
+    if (faceIndex === SKY_BAKE_FACE_COUNT - 1) {
+      skyBakeState.ready = true;
+      skyBakeState.cycles += 1;
+      scene.background = skyBakeState.cubeRT.texture;
+    }
+  }
+  function syncSkyBakePresentation() {
+    if (skyBakeState.ready) {
+      domeMesh.visible = false;
+      scene.background = skyBakeState.cubeRT.texture;
+    } else {
+      domeMesh.visible = fxEnabled('sky');
+      scene.background = skyDisplayColor;
+    }
   }
   // Called once per frame from the tick. steadyState = post-reveal & no reveal
   // compositing (so the reveal's own sky path is untouched).
   function syncSkyBackgroundBake(now, steadyState) {
     const enabled = Boolean(skyBakeRequested() && steadyState);
     if (enabled) {
-      if (!skyBakeState.cubeRT) {
-        skyBakeState.cubeRT = new THREE.WebGLCubeRenderTarget(SKY_BAKE_CUBE_SIZE);
-        skyBakeState.cubeCam = new THREE.CubeCamera(1, 20000, skyBakeState.cubeRT);
-      }
+      ensureSkyBakeTarget();
       skyBakeState.active = true;
-      domeMesh.visible = false; // main pass uses the cheap cube background instead
-      if (skyBakeState.frames % SKY_BAKE_STRIDE === 0) {
-        domeMat.uniforms.uTime.value = now * 0.001 * SKY_ANIMATION_SPEED;
-        const prevRevealVis = cityRevealSkyDome.visible;
-        const prevRevealBg = cityRevealSkyScene.background;
-        cityRevealSkyDome.visible = true;
-        cityRevealSkyDome.position.copy(camera.position);
-        cityRevealSkyScene.background = null; // dome covers all directions; avoid a flat clear tint
-        syncCityRevealSkyMaterial();
-        skyBakeState.cubeCam.position.copy(camera.position);
-        skyBakeState.cubeCam.update(renderer, cityRevealSkyScene);
-        cityRevealSkyDome.visible = prevRevealVis;
-        cityRevealSkyScene.background = prevRevealBg;
-        scene.background = skyBakeState.cubeRT.texture;
+      skyBakeState.spread = skyBakeSpreadEnabled;
+      if (skyBakeSpreadEnabled) {
+        const shouldRenderFace = !skyBakeState.ready || skyBakeState.frames % SKY_BAKE_FACE_STRIDE === 0;
+        if (shouldRenderFace) renderSkyBakeFace(now, skyBakeState.nextFace);
+      } else if (skyBakeState.frames % SKY_BAKE_STRIDE === 0) {
+        renderSkyBakeFull(now);
       }
+      syncSkyBakePresentation();
       skyBakeState.frames += 1;
     } else if (skyBakeState.active) {
       skyBakeState.active = false;
+      skyBakeState.ready = false;
+      skyBakeState.frames = 0;
+      skyBakeState.nextFace = 0;
+      skyBakeState.lastRenderedFace = -1;
       domeMesh.visible = fxEnabled('sky');
       scene.background = skyDisplayColor;
     }
+  }
+  function inspectSkyBake() {
+    return {
+      requested: skyBakeRequested(),
+      active: skyBakeState.active,
+      ready: skyBakeState.ready,
+      spread: skyBakeState.spread,
+      cubeSize: SKY_BAKE_CUBE_SIZE,
+      frameStride: SKY_BAKE_STRIDE,
+      faceStride: SKY_BAKE_FACE_STRIDE,
+      nextFace: skyBakeState.nextFace,
+      lastRenderedFace: skyBakeState.lastRenderedFace,
+      frames: skyBakeState.frames,
+      cycles: skyBakeState.cycles,
+    };
   }
 
   return {
@@ -570,5 +690,6 @@ export function createSkyDome(deps) {
     update,
     inspectRevealSky,
     inspectStorm,
+    inspectSkyBake,
   };
 }

@@ -1097,6 +1097,8 @@ function retroBenchmarkEnvironment() {
       msaaActive: composerMsaaActive,
       activePixelRatio,
       forcedPixelRatio: forcedRenderPixelRatio(),
+      skyBakeSpread: skyDome.inspectSkyBake().spread,
+      skyBakeFaceStride: skyDome.inspectSkyBake().faceStride,
       // Applied state of every per-subsystem debug toggle (see fx-debug-toggles.js)
       // so each capture self-documents which subsystems were disabled.
       fx: fxLevers(),
@@ -6659,6 +6661,7 @@ window.__tronPerfInspect = () => ({
     backplate: cityRevealBackplateOpacityScale,
   },
   storm: skyDome.inspectStorm(),
+  skyBake: skyDome.inspectSkyBake(),
   hexUpdateEnabled,
   hexTiles: hexRoadTiles.length,
   hexRoad: hexRoadInspect(),
