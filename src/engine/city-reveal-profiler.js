@@ -40,6 +40,7 @@ export function createCityRevealProfiler(deps) {
     getBloomPass,
     getFxaaPass,
     getFsrUpscalePass,
+    getCinematicLookPass,
     getCityRevealSkyPass,
     getCityRevealOverlayPass,
     getCityRevealWirePass,
@@ -116,6 +117,7 @@ export function createCityRevealProfiler(deps) {
       bloom: Boolean(getBloomPass()?.enabled),
       fxaa: Boolean(getFxaaPass()?.enabled),
       fsrUpscale: Boolean(getFsrUpscalePass()?.enabled),
+      cinematicLook: Boolean(getCinematicLookPass?.()?.enabled),
       output: Boolean(getComposer() && !getFsrUpscalePass()),
     };
     const mainLedSceneRenders = passes.mainLedReveal ? 2 : 0;
@@ -126,7 +128,7 @@ export function createCityRevealProfiler(deps) {
       passes.roadGrid,
       passes.realCity,
     ].filter(Boolean).length + mainLedSceneRenders;
-    const postPasses = [passes.bloom, passes.fxaa, passes.fsrUpscale, passes.output].filter(Boolean).length;
+    const postPasses = [passes.bloom, passes.fxaa, passes.fsrUpscale, passes.cinematicLook, passes.output].filter(Boolean).length;
     return {
       composer: shouldUseComposer(),
       passes,
