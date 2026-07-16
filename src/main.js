@@ -2512,6 +2512,7 @@ initDroneIntro(ctx, {
   getDroneLandingPose: () => droneLandingPose,
   getDefaultDroneLandingPose: () => DEFAULT_DRONE_LANDING_POSE,
   getSideBuildingRecords: () => sideBuildingRecords,
+  getMainBuildingRecords: () => mainBuildingRecords,
   getSideBuildingDepthScale: () => sideBuildingDepthScale,
   getDynamicRoadCenter: () => dynamicRoadCenter,
   getDynamicRoadLength: () => dynamicRoadLength,
