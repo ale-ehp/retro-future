@@ -217,8 +217,14 @@ test('welcome cover button starts the existing reveal flow', () => {
 test('hero opening shot is URL-gated and keeps the default intro path unchanged', () => {
   assert.match(droneIntroSource, /export function droneIntroHeroShotRequestedFromParams/);
   assert.match(droneIntroSource, /DRONE_INTRO_HERO_DURATION_MS/);
+  assert.match(droneIntroSource, /DRONE_INTRO_HERO_ORBIT_TURNS\s*=\s*1/);
   assert.match(droneIntroSource, /droneIntroFlight\.heroShot/);
-  assert.match(droneIntroSource, /cubicBezierVector/);
+  assert.match(droneIntroSource, /computeHeroShotOrbitCamera/);
+  assert.match(droneIntroSource, /Math\.PI\s*\*\s*2\s*\*\s*DRONE_INTRO_HERO_ORBIT_TURNS/);
+  assert.match(droneIntroSource, /droneIntroStart\.copy\(camera\.position\)/);
+  assert.match(droneIntroSource, /heroShotEnabled\s*&&\s*getDefaultDroneLandingPose/);
+  assert.match(mainSource, /getDefaultDroneLandingPose:\s*\(\)\s*=>\s*DEFAULT_DRONE_LANDING_POSE/);
+  assert.doesNotMatch(droneIntroSource, /applyHeroShotStartPose/);
   assert.match(mainSource, /droneIntroHeroShotRequestedFromParams\(new URLSearchParams\(window\.location\.search\)\)/);
   assert.match(mainSource, /heroShotEnabled:\s*droneIntroHeroShotEnabled/);
   assert.match(mainSource, /heroShot:\s*droneIntroHeroShotEnabled/);
