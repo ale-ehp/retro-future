@@ -54,7 +54,7 @@ import {
 } from './engine/shaders.js';
 import {
   TemporalAaPass,
-  temporalAaRequestedFromParams,
+  temporalAaSettingsFromParams,
 } from './engine/temporal-aa-pass.js';
 import {
   AUDIO_FX_FAST_CONTROL_IDS,
@@ -850,7 +850,8 @@ let fsrUpscaleEnabled = false;
 let fsrInternalScale = 1;
 let fsrSharpness = 0;
 const cinematicLookEnabled = cinematicLookRequestedFromParams(new URLSearchParams(window.location.search));
-const temporalAaEnabled = temporalAaRequestedFromParams(new URLSearchParams(window.location.search));
+const temporalAaSettings = temporalAaSettingsFromParams(new URLSearchParams(window.location.search), { mobile: mobilePerformanceProfileActive() });
+const temporalAaEnabled = temporalAaSettings.enabled;
 let dynamicQualityScale = 1;
 let performanceMode = 'auto';
 let performanceAdjustCooldown = 0;
@@ -1105,6 +1106,7 @@ function retroBenchmarkEnvironment() {
       cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
       temporalAaEnabled,
       temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
+      temporalAaProfile: temporalAaSettings.profile,
       mobileProfile: mobilePerformanceProfileInspect(),
     },
     // Self-documenting FPS-lever state so each benchmark JSON records exactly
@@ -1123,6 +1125,7 @@ function retroBenchmarkEnvironment() {
       skyBakeFaceStride: skyDome.inspectSkyBake().faceStride,
       cinematicLook: cinematicLookEnabled ? 'on' : 'off',
       temporalAa: temporalAaEnabled ? 'on' : 'off',
+      temporalAaProfile: temporalAaSettings.profile,
       // Applied state of every per-subsystem debug toggle (see fx-debug-toggles.js)
       // so each capture self-documents which subsystems were disabled.
       fx: fxLevers(),
@@ -4172,6 +4175,21 @@ function temporalAaMotionAmount() {
   return Math.max(moved, rotated);
 }
 
+function temporalAaInteractionMotionAmount() {
+  const keyMotion = (
+    keys['KeyW'] || keys['ArrowUp'] ||
+    keys['KeyS'] || keys['ArrowDown'] ||
+    keys['KeyA'] || keys['ArrowLeft'] ||
+    keys['KeyD'] || keys['ArrowRight'] ||
+    keys['ShiftLeft'] || keys['ShiftRight']
+  ) ? 0.72 : 0;
+  const mobileMotion = mobileTouchControlsState.movement?.active
+    ? Math.min(1, mobileTouchControlsState.movement.magnitude || 0)
+    : 0;
+  const velocityMotion = Math.min(1, movementVelocity.length() / 24);
+  return Math.max(keyMotion, mobileMotion, velocityMotion);
+}
+
 function syncTemporalAaPass() {
   if (!temporalAaPass) return;
   const stable = temporalAaEnabled && cityRevealComplete && !isCityRevealCompositeActive();
@@ -4181,7 +4199,7 @@ function syncTemporalAaPass() {
     temporalAaMotionPrimed = false;
     return;
   }
-  temporalAaPass.sync({ stable: true, motionAmount: temporalAaMotionAmount() });
+  temporalAaPass.sync({ stable: true, motionAmount: Math.max(temporalAaMotionAmount(), temporalAaInteractionMotionAmount()) });
 }
 
 function applyTemporalAaJitterForRender() {
@@ -4349,7 +4367,7 @@ function rebuildComposer() {
     composer.addPass(cinematicLookPass);
   }
   if (temporalAaEnabled) {
-    temporalAaPass = new TemporalAaPass();
+    temporalAaPass = new TemporalAaPass(temporalAaSettings);
     temporalAaPass.enabled = false;
     composer.addPass(temporalAaPass);
   }
@@ -6832,6 +6850,8 @@ function collectTechBreakdownStats() {
   return {
     ...performanceDiagnostics.summary(latestMeasuredFps),
     skyBake: skyDome.inspectSkyBake(),
+    temporalAa: temporalAaPass?.inspect() || { enabled: false, profile: temporalAaSettings.profile },
+    webgpu: { roadmap: 'compute TAA + motion vectors' },
     hexRoad: hexRoadInspect(),
     fxDisabled,
   };

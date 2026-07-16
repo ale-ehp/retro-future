@@ -9,6 +9,20 @@ import { FullScreenQuad, Pass } from '../../Pass.js';
 
 const TRUEY = new Set(['1', 'true', 'on', 'yes']);
 const FALSEY = new Set(['0', 'false', 'off', 'no']);
+const TAA_PROFILES = {
+  quality: {
+    profile: 'quality',
+    stillHistoryBlend: 0.78,
+    movingHistoryBlend: 0.42,
+    clampStrength: 0.045,
+  },
+  lite: {
+    profile: 'lite',
+    stillHistoryBlend: 0.62,
+    movingHistoryBlend: 0.28,
+    clampStrength: 0.035,
+  },
+};
 
 function clamp01(value) {
   return Math.min(1, Math.max(0, Number(value) || 0));
@@ -44,6 +58,20 @@ export function temporalAaRequestedFromParams(params) {
   return true;
 }
 
+export function temporalAaSettingsFromParams(params, { mobile = false } = {}) {
+  const enabled = temporalAaRequestedFromParams(params);
+  const rawProfile = String(
+    params?.get?.('taa.profile') ?? params?.get?.('taaProfile') ?? ''
+  ).trim().toLowerCase();
+  const profile = rawProfile === 'quality' || rawProfile === 'lite'
+    ? rawProfile
+    : (mobile ? 'lite' : 'quality');
+  return {
+    enabled,
+    ...TAA_PROFILES[profile],
+  };
+}
+
 export function temporalAaJitterForFrame(frameIndex, width = 1, height = 1) {
   const sample = (Math.max(0, Math.floor(frameIndex)) % 8) + 1;
   const x = halton(sample, 2) - 0.5;
@@ -56,10 +84,15 @@ export function temporalAaJitterForFrame(frameIndex, width = 1, height = 1) {
   };
 }
 
-export function temporalAaHistoryBlend({ stable = true, motionAmount = 0 } = {}) {
+export function temporalAaHistoryBlend({
+  stable = true,
+  motionAmount = 0,
+  stillBlend = 0.78,
+  movingBlend = 0.42,
+} = {}) {
   if (!stable) return 0;
   const motion = smoothstep(0.015, 0.22, motionAmount);
-  return Number((0.78 + (0.42 - 0.78) * motion).toFixed(3));
+  return Number((stillBlend + (movingBlend - stillBlend) * motion).toFixed(3));
 }
 
 const ACCUMULATION_SHADER = {
@@ -130,10 +163,19 @@ const COPY_SHADER = {
 };
 
 export class TemporalAaPass extends Pass {
-  constructor({ historyBlend = 0.78, clampStrength = 0.045 } = {}) {
+  constructor({
+    profile = 'quality',
+    stillHistoryBlend = 0.78,
+    movingHistoryBlend = 0.42,
+    clampStrength = 0.045,
+  } = {}) {
     super();
     this.name = 'TemporalAaPass';
     this.needsSwap = true;
+    this.profile = profile;
+    this.stillHistoryBlend = stillHistoryBlend;
+    this.movingHistoryBlend = movingHistoryBlend;
+    this.lastMotionAmount = 1;
     this.frameIndex = 0;
     this.validHistory = false;
     this.historyTarget = null;
@@ -143,7 +185,7 @@ export class TemporalAaPass extends Pass {
       tDiffuse: { value: null },
       tHistory: { value: null },
       resolution: { value: new Vector2(1, 1) },
-      historyBlend: { value: historyBlend },
+      historyBlend: { value: stillHistoryBlend },
       validHistory: { value: 0 },
       clampStrength: { value: clampStrength },
     };
@@ -193,7 +235,13 @@ export class TemporalAaPass extends Pass {
   }
 
   sync({ stable = true, motionAmount = 0 } = {}) {
-    const blend = temporalAaHistoryBlend({ stable, motionAmount });
+    this.lastMotionAmount = motionAmount;
+    const blend = temporalAaHistoryBlend({
+      stable,
+      motionAmount,
+      stillBlend: this.stillHistoryBlend,
+      movingBlend: this.movingHistoryBlend,
+    });
     this.uniforms.historyBlend.value = blend;
     if (!stable) this.reset();
   }
@@ -232,7 +280,11 @@ export class TemporalAaPass extends Pass {
       height: this.height,
       frameIndex: this.frameIndex,
       validHistory: this.validHistory,
+      profile: this.profile,
+      stillHistoryBlend: this.stillHistoryBlend,
+      movingHistoryBlend: this.movingHistoryBlend,
       historyBlend: this.uniforms.historyBlend.value,
+      motionAmount: Number(this.lastMotionAmount.toFixed(3)),
       clampStrength: this.uniforms.clampStrength.value,
     };
   }
