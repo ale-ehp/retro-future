@@ -175,6 +175,7 @@ import {
 } from './character/runner-reveal.js';
 import {
   applyTronRunnerVisualControls as applyTronRunnerVisualControlsCore,
+  cinematicGroundingSettingsFromParams,
   createTronRunnerShadowTextureState,
 } from './character/runner-visual-controls.js';
 import {
@@ -854,6 +855,7 @@ const cinematicLookEnabled = cinematicLookRequestedFromParams(new URLSearchParam
 const temporalAaSettings = temporalAaSettingsFromParams(new URLSearchParams(window.location.search), { mobile: mobilePerformanceProfileActive() });
 const temporalAaEnabled = temporalAaSettings.enabled;
 const droneIntroHeroShotEnabled = droneIntroHeroShotRequestedFromParams(new URLSearchParams(window.location.search));
+const cinematicGroundingSettings = cinematicGroundingSettingsFromParams(new URLSearchParams(window.location.search));
 let dynamicQualityScale = 1;
 let performanceMode = 'auto';
 let performanceAdjustCooldown = 0;
@@ -1109,6 +1111,7 @@ function retroBenchmarkEnvironment() {
       temporalAaEnabled,
       temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
       temporalAaProfile: temporalAaSettings.profile,
+      cinematicGrounding: cinematicGroundingSettings,
       mobileProfile: mobilePerformanceProfileInspect(),
     },
     // Self-documenting FPS-lever state so each benchmark JSON records exactly
@@ -3273,13 +3276,13 @@ const tronRunnerCrowdMaterials = createTronRunnerCrowdMaterialsRuntime({
 let tronRunnerMaterialReflect = 0.06;
 let tronRunnerMaterialMetalness = 0.12;
 let tronRunnerMaterialRoughness = 0.92;
-let tronRunnerFloorReflection = 0.16;
-let tronRunnerFloorReflectionScale = 0.55;
-let tronRunnerShadowSoftness = 1.15;
-let tronRunnerShadowPulse = 0.08;
-let tronRunnerShadowCyan = 0;
+let tronRunnerFloorReflection = cinematicGroundingSettings.floorReflection;
+let tronRunnerFloorReflectionScale = cinematicGroundingSettings.floorReflectionScale;
+let tronRunnerShadowSoftness = cinematicGroundingSettings.shadowSoftness;
+let tronRunnerShadowPulse = cinematicGroundingSettings.shadowPulse;
+let tronRunnerShadowCyan = cinematicGroundingSettings.shadowCyan;
 let tronRunnerShadowOffsetX = 0;
-let tronRunnerShadowOffsetZ = 0.2;
+let tronRunnerShadowOffsetZ = cinematicGroundingSettings.shadowOffsetZ;
 let tronRunnerKeyLightY = 3.1;
 let tronRunnerKeyLightZ = 1.9;
 let tronRunnerRimLightX = 1.9;
@@ -3288,6 +3291,7 @@ let tronRunnerScale = 1;
 let tronRunnerWalkSpeed = TRON_RUNNER_DEFAULT_SPEED;
 let tronRunnerAnimationSpeed = 1;
 let tronRunnerStrideSync = 1;
+let cinematicGroundingInitialControlsApplied = false;
 const tronRunnerCrowd = [];
 const tronRunnerCrowdBox = new THREE.Box3();
 const tronRunnerIdleCharacterRuntime = createTronRunnerIdleCharacterRuntime({
@@ -3609,6 +3613,7 @@ const applyTronRunnerVisualControls = () => applyTronRunnerVisualControlsCore({
     shadowCyan: tronRunnerShadowCyan,
     shadowOffsetX: tronRunnerShadowOffsetX,
     shadowOffsetZ: tronRunnerShadowOffsetZ,
+    cinematicGrounding: cinematicGroundingSettings,
     keyLightY: tronRunnerKeyLightY,
     keyLightZ: tronRunnerKeyLightZ,
     rimLightX: tronRunnerRimLightX,
@@ -5444,6 +5449,17 @@ function applyCharacterControlsFromUI() {
   controlEls.runnerStrideSyncVal.textContent = tronRunnerStrideSync.toFixed(2);
 }
 
+function applyCinematicGroundingInitialControls() {
+  if (!cinematicGroundingSettings.enabled || cinematicGroundingInitialControlsApplied) return;
+  cinematicGroundingInitialControlsApplied = true;
+  controlEls.runnerFloorReflection.value = cinematicGroundingSettings.floorReflection.toFixed(2);
+  controlEls.runnerFloorReflectionScale.value = cinematicGroundingSettings.floorReflectionScale.toFixed(2);
+  controlEls.runnerShadowSoftness.value = cinematicGroundingSettings.shadowSoftness.toFixed(2);
+  controlEls.runnerShadowPulse.value = cinematicGroundingSettings.shadowPulse.toFixed(2);
+  controlEls.runnerShadowCyan.value = cinematicGroundingSettings.shadowCyan.toFixed(2);
+  controlEls.runnerShadowOffsetZ.value = cinematicGroundingSettings.shadowOffsetZ.toFixed(2);
+}
+
 function applyLightControlsFromUI() {
   const ambient = Number(controlEls.ambientLight.value);
   const key = Number(controlEls.keyLight.value);
@@ -6247,6 +6263,7 @@ function applyLiveControls() {
   controlEls.bloomQualityVal.textContent = bloomQuality.toFixed(2);
   controlEls.pixelRatioVal.textContent = pixelRatio.toFixed(2);
   applyTronSoundtrackIntroFxControlsFromUI();
+  applyCinematicGroundingInitialControls();
   applyCharacterControlsFromUI();
 }
 
@@ -6737,6 +6754,7 @@ window.__tronInspect = () => ({
     cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
     temporalAaEnabled,
     temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
+    cinematicGrounding: cinematicGroundingSettings,
     bloomStrength: bloomPass?.strength ?? 0,
     bloomRadius: bloomPass?.radius ?? 0,
     bloomThreshold: bloomPass?.threshold ?? 0,
@@ -6792,6 +6810,7 @@ window.__tronPerfInspect = () => ({
   cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
   temporalAaEnabled,
   temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
+  cinematicGrounding: cinematicGroundingSettings,
   bloomResolutionScale,
   bloomResolutionCap: BLOOM_RESOLUTION_CAP,
   bloomActiveMips: bloomPass?.activeMips ?? 0,

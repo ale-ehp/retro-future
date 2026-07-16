@@ -19,6 +19,44 @@ import {
   makeTronRunnerShadowTexture,
 } from './character-textures.js';
 
+const TRUEY = new Set(['1', 'true', 'on', 'yes']);
+const FALSEY = new Set(['0', 'false', 'off', 'no']);
+
+const DEFAULT_GROUNDING_SETTINGS = Object.freeze({
+  enabled: false,
+  floorReflection: 0.16,
+  floorReflectionScale: 0.55,
+  shadowSoftness: 1.15,
+  shadowPulse: 0.08,
+  shadowCyan: 0,
+  shadowOffsetZ: 0.2,
+});
+
+const CINEMATIC_GROUNDING_SETTINGS = Object.freeze({
+  enabled: true,
+  floorReflection: 0.31,
+  floorReflectionScale: 0.78,
+  shadowSoftness: 1.35,
+  shadowPulse: 0.12,
+  shadowCyan: 0.28,
+  shadowOffsetZ: 0.26,
+});
+
+export function cinematicGroundingSettingsFromParams(params) {
+  const explicit = params?.get?.('cinematicGrounding') ?? params?.get?.('grounding.cinematic');
+  if (explicit != null) {
+    const normalized = String(explicit).trim().toLowerCase();
+    if (FALSEY.has(normalized)) return { ...DEFAULT_GROUNDING_SETTINGS };
+    if (TRUEY.has(normalized)) return { ...CINEMATIC_GROUNDING_SETTINGS };
+  }
+  const grounding = String(params?.get?.('grounding') || '').trim().toLowerCase();
+  if (grounding === 'cinematic') return { ...CINEMATIC_GROUNDING_SETTINGS };
+  if (grounding === 'default' || grounding === 'classic' || FALSEY.has(grounding)) {
+    return { ...DEFAULT_GROUNDING_SETTINGS };
+  }
+  return { ...DEFAULT_GROUNDING_SETTINGS };
+}
+
 export function createTronRunnerShadowTextureState(renderer) {
   return {
     texture: makeTronRunnerShadowTexture(renderer),
@@ -105,6 +143,7 @@ export function applyTronRunnerVisualControls({
   runnerState.shadowOffsetZ = controls.shadowOffsetZ;
   runnerState.groundShadowEnabled = TRON_RUNNER_GROUND_SHADOW_ENABLED;
   runnerState.contactShadowMaxOpacity = TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY;
+  runnerState.cinematicGrounding = controls.cinematicGrounding || { enabled: false };
   runnerState.runnerLightingMode = TRON_RUNNER_LIGHTING_MODE;
   runnerState.suitTextureMode = TRON_RUNNER_SUIT_TEXTURE_MODE;
   runnerState.ledBrightness = controls.ledBrightness;
