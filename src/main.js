@@ -613,6 +613,7 @@ import {
 } from './world/boundary-error.js';
 import {
   computeDroneIntroTargetPose,
+  droneIntroHeroShotRequestedFromParams,
   droneIntroInspect,
   getDroneIntroActive,
   getDroneIntroProgress,
@@ -852,6 +853,7 @@ let fsrSharpness = 0;
 const cinematicLookEnabled = cinematicLookRequestedFromParams(new URLSearchParams(window.location.search));
 const temporalAaSettings = temporalAaSettingsFromParams(new URLSearchParams(window.location.search), { mobile: mobilePerformanceProfileActive() });
 const temporalAaEnabled = temporalAaSettings.enabled;
+const droneIntroHeroShotEnabled = droneIntroHeroShotRequestedFromParams(new URLSearchParams(window.location.search));
 let dynamicQualityScale = 1;
 let performanceMode = 'auto';
 let performanceAdjustCooldown = 0;
@@ -2512,6 +2514,7 @@ initDroneIntro(ctx, {
   getSideBuildingDepthScale: () => sideBuildingDepthScale,
   getDynamicRoadCenter: () => dynamicRoadCenter,
   getDynamicRoadLength: () => dynamicRoadLength,
+  heroShotEnabled: droneIntroHeroShotEnabled,
 });
 
 initMovement(ctx, {
@@ -6574,6 +6577,7 @@ window.__tronInspect = () => ({
   cameraCollisionUnlockedByBackspace,
   droneIntro: {
     ...droneIntroInspect(),
+    heroShot: droneIntroHeroShotEnabled,
     landed: hasDroneIntroLanded(),
     landingPose: { ...droneLandingPose },
   },
