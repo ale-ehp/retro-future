@@ -1,5 +1,84 @@
 import * as THREE from 'three';
 
+const TRUEY = new Set(['1', 'true', 'on', 'yes']);
+
+export function cinematicLookRequestedFromParams(params) {
+  const explicit = params?.get?.('look.cinematic');
+  if (explicit != null) return TRUEY.has(String(explicit).trim().toLowerCase());
+  const alias = params?.get?.('cinematicLook');
+  if (alias != null) return TRUEY.has(String(alias).trim().toLowerCase());
+  return String(params?.get?.('look') || '').trim().toLowerCase() === 'cinematic';
+}
+
+export const TRON_CINEMATIC_LOOK_SHADER = {
+  name: 'TronCinematicLook',
+  uniforms: {
+    tDiffuse: { value: null },
+    resolution: { value: new THREE.Vector2(1, 1) },
+    time: { value: 0 },
+    intensity: { value: 0.42 },
+    grainStrength: { value: 0.032 },
+    chromaticStrength: { value: 0.72 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform float time;
+    uniform float intensity;
+    uniform float grainStrength;
+    uniform float chromaticStrength;
+    varying vec2 vUv;
+
+    float tronFilmRandom(vec2 p) {
+      return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453123);
+    }
+
+    float tronLuma(vec3 color) {
+      return dot(color, vec3(0.299, 0.587, 0.114));
+    }
+
+    vec3 tronCinematicGrade(vec3 color, float amount) {
+      float luma = tronLuma(color);
+      vec3 contrast = (color - 0.5) * 1.08 + 0.5;
+      vec3 cyanBias = color * vec3(0.94, 1.03, 1.08) + vec3(0.0, 0.004, 0.012);
+      vec3 lifted = mix(contrast, cyanBias, 0.35);
+      vec3 softShoulder = lifted / (lifted + vec3(0.22));
+      softShoulder *= 1.18;
+      vec3 graded = mix(lifted, softShoulder, smoothstep(0.48, 1.0, luma) * 0.34);
+      return mix(color, graded, amount);
+    }
+
+    void main() {
+      vec2 texel = 1.0 / max(resolution, vec2(1.0));
+      vec2 centered = vUv * 2.0 - 1.0;
+      float radiusSq = dot(centered, centered);
+      float vignette = mix(0.82, 1.0, 1.0 - smoothstep(0.20, 0.98, radiusSq));
+      vec2 chromaDir = normalize(centered + vec2(0.0001, -0.0001));
+      vec2 chromaOffset = chromaDir * texel * chromaticStrength * smoothstep(0.10, 0.92, radiusSq);
+
+      vec3 center = texture2D(tDiffuse, vUv).rgb;
+      vec3 color = center;
+      color.r = texture2D(tDiffuse, vUv + chromaOffset).r;
+      color.b = texture2D(tDiffuse, vUv - chromaOffset).b;
+      color = tronCinematicGrade(color, intensity);
+      color *= mix(1.0, vignette, intensity * 0.45);
+
+      float grain = tronFilmRandom(vUv * resolution + vec2(time * 59.0, time * 17.0));
+      float grainMask = smoothstep(0.02, 0.92, tronLuma(color));
+      color += (grain - 0.5) * grainStrength * intensity * grainMask;
+
+      gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+    }
+  `,
+};
+
 export const TRON_FSR_UPSCALE_SHADER = {
   name: 'TronFsrLikeUpscale',
   uniforms: {

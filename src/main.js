@@ -47,7 +47,11 @@ import {
   MOBILE_PERFORMANCE_RENDER_SCALE_CAP,
   SECONDARY_EFFECT_UPDATE_STRIDE,
 } from './world/config.js';
-import { TRON_FSR_UPSCALE_SHADER } from './engine/shaders.js';
+import {
+  TRON_CINEMATIC_LOOK_SHADER,
+  TRON_FSR_UPSCALE_SHADER,
+  cinematicLookRequestedFromParams,
+} from './engine/shaders.js';
 import {
   AUDIO_FX_FAST_CONTROL_IDS,
   BASE_PAD_MATERIAL_FAST_CONTROL_IDS,
@@ -768,7 +772,7 @@ import {
 } from './controls/equalizer.js';
 
 // Postprocessing (optional bloom + FXAA). Best-effort — fallback to plain renderer if any module fails.
-let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null;
+let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null, cinematicLookPass = null;
 let postEnabled = true;
 let usePost = false;
 const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
@@ -841,6 +845,7 @@ let composerMsaaActive = false;
 let fsrUpscaleEnabled = false;
 let fsrInternalScale = 1;
 let fsrSharpness = 0;
+const cinematicLookEnabled = cinematicLookRequestedFromParams(new URLSearchParams(window.location.search));
 let dynamicQualityScale = 1;
 let performanceMode = 'auto';
 let performanceAdjustCooldown = 0;
@@ -849,6 +854,7 @@ let lastAppliedComposerPixelRatio = -1;
 let lastBloomTargetKey = '';
 let lastFxaaTargetKey = '';
 let lastFsrTargetKey = '';
+let lastCinematicLookTargetKey = '';
 let cityRevealPerformanceProfileActive = false;
 let secondaryEffectFrame = 0;
 let boundaryErrorAccumulatedDt = 0;
@@ -1087,6 +1093,8 @@ function retroBenchmarkEnvironment() {
       fsrUpscaleEnabled,
       fsrInternalScale,
       fsrSharpness,
+      cinematicLookEnabled,
+      cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
       mobileProfile: mobilePerformanceProfileInspect(),
     },
     // Self-documenting FPS-lever state so each benchmark JSON records exactly
@@ -1103,6 +1111,7 @@ function retroBenchmarkEnvironment() {
       forcedPixelRatio: forcedRenderPixelRatio(),
       skyBakeSpread: skyDome.inspectSkyBake().spread,
       skyBakeFaceStride: skyDome.inspectSkyBake().faceStride,
+      cinematicLook: cinematicLookEnabled ? 'on' : 'off',
       // Applied state of every per-subsystem debug toggle (see fx-debug-toggles.js)
       // so each capture self-documents which subsystems were disabled.
       fx: fxLevers(),
@@ -4064,6 +4073,7 @@ const cityRevealProfiler = createCityRevealProfiler({
   getBloomPass: () => bloomPass,
   getFxaaPass: () => fxaaPass,
   getFsrUpscalePass: () => fsrUpscalePass,
+  getCinematicLookPass: () => cinematicLookPass,
   getCityRevealSkyPass: () => cityRevealRender.getSkyPass(),
   getCityRevealOverlayPass: () => cityRevealRender.getOverlayPass(),
   getCityRevealWirePass: () => cityRevealRender.getWirePass(),
@@ -4119,6 +4129,23 @@ function resizeFsrUpscaleTarget() {
   fsrUpscalePass.uniforms?.sourceResolution?.value?.set(width, height);
 }
 
+function resizeCinematicLookTarget() {
+  if (!cinematicLookPass) return;
+  const composerPixelRatio = effectiveComposerPixelRatio();
+  const width = Math.max(1, Math.round(window.innerWidth * composerPixelRatio));
+  const height = Math.max(1, Math.round(window.innerHeight * composerPixelRatio));
+  const key = `${width}x${height}`;
+  if (key === lastCinematicLookTargetKey) return;
+  lastCinematicLookTargetKey = key;
+  cinematicLookPass.uniforms?.resolution?.value?.set(width, height);
+}
+
+function syncCinematicLookPass(now = performance.now()) {
+  if (!cinematicLookPass) return;
+  cinematicLookPass.enabled = cinematicLookEnabled;
+  cinematicLookPass.uniforms.time.value = now * 0.001;
+}
+
 function resizeBloomTargets() {
   if (!bloomPass) return;
   const requestedScale = Math.min(effectiveBloomScaleForDevice(requestedBloomResolutionScale), BLOOM_RESOLUTION_CAP);
@@ -4142,6 +4169,7 @@ function resizeFxaaTargets() {
   lastFxaaTargetKey = key;
   fxaaPass?.setSize(width, height);
   resizeFsrUpscaleTarget();
+  resizeCinematicLookTarget();
 }
 
 function normalizedAntialiasMode(mode) {
@@ -4185,10 +4213,13 @@ function disposeComposerTargets() {
   fxaaPass?.dispose?.();
   fsrUpscalePass?.material?.dispose?.();
   fsrUpscalePass?.dispose?.();
+  cinematicLookPass?.material?.dispose?.();
+  cinematicLookPass?.dispose?.();
   composer.dispose?.();
   bloomPass = null;
   fxaaPass = null;
   fsrUpscalePass = null;
+  cinematicLookPass = null;
   cityRevealRender.clearComposerPasses();
   composer = null;
 }
@@ -4226,6 +4257,7 @@ function rebuildComposer() {
   lastBloomTargetKey = '';
   lastFxaaTargetKey = '';
   lastFsrTargetKey = '';
+  lastCinematicLookTargetKey = '';
   composer.setSize(window.innerWidth, window.innerHeight);
   composer.setPixelRatio(effectiveComposerPixelRatio());
   cityRevealRender.addComposerPasses(composer, { RenderPass, FXAAPass });
@@ -4246,9 +4278,18 @@ function rebuildComposer() {
   };
   syncFsrUpscalePass();
   composer.addPass(fsrUpscalePass);
+  if (cinematicLookEnabled) {
+    cinematicLookPass = new ShaderPass(TRON_CINEMATIC_LOOK_SHADER);
+    cinematicLookPass.setSize = (width, height) => {
+      cinematicLookPass.uniforms?.resolution?.value?.set(Math.max(1, width), Math.max(1, height));
+    };
+    syncCinematicLookPass();
+    composer.addPass(cinematicLookPass);
+  }
   resizeBloomTargets();
   resizeFxaaTargets();
   resizeFsrUpscaleTarget();
+  resizeCinematicLookTarget();
   applyBloomEnabled(bloomEnabled);
 }
 
@@ -4408,6 +4449,7 @@ function shouldUseComposer() {
     isBloomPassActive() ||
     fxaaPass?.enabled ||
     isFsrUpscaleActive() ||
+    cinematicLookPass?.enabled ||
     (antialiasMode === 'msaa' && composerMsaaActive) ||
     (cityRevealWireframeEnabled && cityRevealWireAlpha > 0.002)
   );
@@ -4465,10 +4507,12 @@ function applyRenderResolution(requestedPixelRatio) {
       lastBloomTargetKey = '';
       lastFxaaTargetKey = '';
       lastFsrTargetKey = '';
+      lastCinematicLookTargetKey = '';
     }
     resizeBloomTargets();
     resizeFxaaTargets();
     syncFsrUpscalePass();
+    syncCinematicLookPass();
   }
 }
 
@@ -6596,6 +6640,8 @@ window.__tronInspect = () => ({
     bloomRevealBypassed: isBloomRevealBypassed(),
     bloomRevealBypassActive: shouldBypassBloomForRevealPerformance(),
     bloomActive: isBloomPassActive(),
+    cinematicLookEnabled,
+    cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
     bloomStrength: bloomPass?.strength ?? 0,
     bloomRadius: bloomPass?.radius ?? 0,
     bloomThreshold: bloomPass?.threshold ?? 0,
@@ -6647,6 +6693,8 @@ window.__tronPerfInspect = () => ({
   bloomActive: isBloomPassActive(),
   fxaaEnabled: Boolean(fxaaPass?.enabled),
   antialiasMode,
+  cinematicLookEnabled,
+  cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
   bloomResolutionScale,
   bloomResolutionCap: BLOOM_RESOLUTION_CAP,
   bloomActiveMips: bloomPass?.activeMips ?? 0,
@@ -6795,6 +6843,7 @@ function tick(now) {
   const bypassBloomForReveal = shouldBypassBloomForRevealPerformance();
   if (bloomPass) bloomPass.enabled = bloomEnabled && postRevealPerfIsolationState.bloom && !bypassBloomForReveal && fxEnabled('bloom');
   syncBloomTemporalBudget();
+  syncCinematicLookPass(now);
   if (!postRevealPerformanceCritical) {
     if (postRevealPerfIsolationState.equalizer) {
       updateLabEqualizer(now, dt);
