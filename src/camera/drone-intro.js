@@ -17,7 +17,7 @@ import {
 // injected read-only. setTronNoclip is the already-extracted world/boundary-error.js binding.
 
 const DRONE_INTRO_DURATION_MS = 5600;
-const DRONE_INTRO_HERO_DURATION_MS = 15200;
+const DRONE_INTRO_HERO_DURATION_MS = 7600;
 const DRONE_INTRO_AUTO_DELAY_MS = 3000;
 const DRONE_INTRO_AUTO_ENABLED = false;
 const DRONE_INTRO_APPROACH_GAP = 18;
@@ -121,6 +121,11 @@ function droneIntroSmoothstep(edge0, edge1, value) {
   return x * x * (3 - 2 * x);
 }
 
+function droneIntroSmootherstep(edge0, edge1, value) {
+  const x = THREE.MathUtils.clamp((value - edge0) / Math.max(0.00001, edge1 - edge0), 0, 1);
+  return x * x * x * (x * (x * 6 - 15) + 10);
+}
+
 function heroShotBuildingRecords() {
   return [
     ...(getSideBuildingRecords?.() || []),
@@ -185,23 +190,23 @@ function computeHeroShotOrbitCamera(out, orbitProgress) {
 }
 
 function applyHeroShotCamera(raw, eased) {
-  const orbitProgress = droneIntroSmoothstep(0, DRONE_INTRO_HERO_ORBIT_PORTION, raw);
-  const landingProgress = droneIntroSmoothstep(DRONE_INTRO_HERO_ORBIT_PORTION, 1, raw);
+  const orbitProgress = droneIntroSmootherstep(0, DRONE_INTRO_HERO_ORBIT_PORTION, raw);
+  const landingProgress = droneIntroSmootherstep(DRONE_INTRO_HERO_ORBIT_PORTION, 1, raw);
   computeHeroShotOrbitCamera(droneIntroHeroScratchA, orbitProgress);
   camera.position.copy(droneIntroHeroScratchA);
   if (landingProgress > 0) {
     camera.position.lerp(droneIntroTarget, landingProgress);
     camera.position.y += Math.sin(Math.PI * landingProgress) * DRONE_INTRO_HERO_LANDING_LIFT;
   }
-  const lookSettle = droneIntroSmoothstep(0.82, 1, raw);
+  const lookSettle = droneIntroSmootherstep(0.82, 1, raw);
   const lookTarget = droneIntroHeroScratchC.copy(droneIntroHeroLookAt).lerp(droneIntroLookAt, lookSettle);
   const heroLook = computeYawPitchForLookAt(camera.position, lookTarget);
-  const openingLookBlend = droneIntroSmoothstep(0.04, 0.18, raw);
+  const openingLookBlend = droneIntroSmootherstep(0.04, 0.18, raw);
   const cinematicYaw = lerpAngle(droneIntroFlight.startYaw, heroLook.yaw, openingLookBlend);
   const cinematicPitch = THREE.MathUtils.lerp(droneIntroFlight.startPitch, heroLook.pitch, openingLookBlend);
   setYaw(lerpAngle(cinematicYaw, droneIntroFlight.targetYaw, lookSettle));
   setPitch(THREE.MathUtils.lerp(cinematicPitch, droneIntroFlight.targetPitch, lookSettle));
-  const roll = Math.sin(Math.PI * eased) * DRONE_INTRO_HERO_ROLL * (1 - droneIntroSmoothstep(0.78, 1, raw));
+  const roll = Math.sin(Math.PI * eased) * DRONE_INTRO_HERO_ROLL * (1 - droneIntroSmootherstep(0.78, 1, raw));
   setViewRoll(roll);
 }
 
