@@ -7,12 +7,14 @@ import {
   temporalAaRequestedFromParams,
 } from './temporal-aa-pass.js';
 
-test('temporal AA is URL-gated and off by default', () => {
-  assert.equal(temporalAaRequestedFromParams(new URLSearchParams('')), false);
+test('temporal AA is on by default with explicit rollback URLs', () => {
+  assert.equal(temporalAaRequestedFromParams(new URLSearchParams('')), true);
   assert.equal(temporalAaRequestedFromParams(new URLSearchParams('taa=1')), true);
   assert.equal(temporalAaRequestedFromParams(new URLSearchParams('taa=on')), true);
   assert.equal(temporalAaRequestedFromParams(new URLSearchParams('aa=taa')), true);
   assert.equal(temporalAaRequestedFromParams(new URLSearchParams('taa=0')), false);
+  assert.equal(temporalAaRequestedFromParams(new URLSearchParams('taa=off')), false);
+  assert.equal(temporalAaRequestedFromParams(new URLSearchParams('aa=fxaa')), false);
 });
 
 test('temporal AA jitter is deterministic and subpixel', () => {
