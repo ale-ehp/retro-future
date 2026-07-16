@@ -55,7 +55,7 @@ export function temporalAaRequestedFromParams(params) {
   const aa = String(params?.get?.('aa') || '').trim().toLowerCase();
   if (aa === 'taa') return true;
   if (aa === 'fxaa' || aa === 'msaa' || aa === 'none' || FALSEY.has(aa)) return false;
-  return true;
+  return false;
 }
 
 export function temporalAaSettingsFromParams(params, { mobile = false } = {}) {
