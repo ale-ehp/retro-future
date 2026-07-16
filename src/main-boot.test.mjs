@@ -8,6 +8,7 @@ const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8
 const cssSource = readFileSync(new URL('../retro-future.css', import.meta.url), 'utf8');
 const discCursorSource = readFileSync(new URL('./camera/disc-cursor.js', import.meta.url), 'utf8');
 const shadersSource = readFileSync(new URL('./engine/shaders.js', import.meta.url), 'utf8');
+const temporalAaSource = readFileSync(new URL('./engine/temporal-aa-pass.js', import.meta.url), 'utf8');
 
 test('boot drains the runner crowd queue before prewarming textures', () => {
   const body = mainSource.match(/async function bootSceneWithFinalDefaults\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
@@ -144,6 +145,18 @@ test('cinematic look pass is default-on with URL rollback and inserted after FSR
   assert.match(mainSource, /composer\.addPass\(fsrUpscalePass\)[\s\S]*composer\.addPass\(cinematicLookPass\)/);
   assert.match(mainSource, /cinematicLookPass\?\.enabled/);
   assert.match(mainSource, /cinematicLookPassEnabled:\s*Boolean\(cinematicLookPass\?\.enabled\)/);
+});
+
+test('temporal AA is URL-gated and runs after the cinematic look pass', () => {
+  assert.match(temporalAaSource, /export class TemporalAaPass/);
+  assert.match(temporalAaSource, /export function temporalAaRequestedFromParams/);
+  assert.match(mainSource, /temporalAaRequestedFromParams\(new URLSearchParams\(window\.location\.search\)\)/);
+  assert.match(mainSource, /new TemporalAaPass\(/);
+  assert.match(mainSource, /composer\.addPass\(cinematicLookPass\)[\s\S]*composer\.addPass\(temporalAaPass\)/);
+  assert.match(mainSource, /applyTemporalAaJitterForRender\(\)/);
+  assert.match(mainSource, /clearTemporalAaJitterForRender\(temporalAaJittered\)/);
+  assert.match(mainSource, /temporalAaPass\?\.enabled/);
+  assert.match(mainSource, /temporalAa:\s*temporalAaPass\?\.inspect\(\)/);
 });
 
 test('retro benchmark is query-startable and exports diagnostic json', () => {
