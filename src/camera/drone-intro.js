@@ -17,15 +17,16 @@ import {
 // injected read-only. setTronNoclip is the already-extracted world/boundary-error.js binding.
 
 const DRONE_INTRO_DURATION_MS = 5600;
-const DRONE_INTRO_HERO_DURATION_MS = 7600;
+const DRONE_INTRO_HERO_DURATION_MS = 15200;
 const DRONE_INTRO_AUTO_DELAY_MS = 3000;
 const DRONE_INTRO_AUTO_ENABLED = false;
 const DRONE_INTRO_APPROACH_GAP = 18;
 const DRONE_INTRO_LOOK_HEIGHT = 22;
+const DRONE_INTRO_HERO_EXPECTED_BUILDINGS = 13;
 const DRONE_INTRO_HERO_ORBIT_TURNS = 1;
 const DRONE_INTRO_HERO_ORBIT_PORTION = 0.68;
 const DRONE_INTRO_HERO_MIN_ORBIT_RADIUS = GRID_BLOCK * 34;
-const DRONE_INTRO_HERO_ORBIT_LIFT = GRID_BLOCK * 8;
+const DRONE_INTRO_HERO_ORBIT_LIFT = 0;
 const DRONE_INTRO_HERO_LANDING_LIFT = GRID_BLOCK * 7;
 const DRONE_INTRO_HERO_ROLL = 0.052;
 
@@ -83,10 +84,13 @@ let getLast = null;
 let getDroneLandingPose = null;
 let getDefaultDroneLandingPose = null;
 let getSideBuildingRecords = null;
+let getMainBuildingRecords = null;
 let getSideBuildingDepthScale = null;
 let getDynamicRoadCenter = null;
 let getDynamicRoadLength = null;
 let heroShotEnabled = false;
+let droneIntroHeroOrbitRadius = 0;
+let droneIntroHeroBuildingCount = 0;
 
 export function droneIntroHeroShotRequestedFromParams(params) {
   const raw = params?.get?.('heroShot') ?? params?.get?.('hero') ?? params?.get?.('intro');
@@ -117,38 +121,66 @@ function droneIntroSmoothstep(edge0, edge1, value) {
   return x * x * (3 - 2 * x);
 }
 
+function heroShotBuildingRecords() {
+  return [
+    ...(getSideBuildingRecords?.() || []),
+    ...(getMainBuildingRecords?.() || []),
+  ].filter((record) => record?.mesh?.visible !== false && record?.collider);
+}
+
 function configureHeroShotOrbit(target) {
-  const roadLength = Math.max(GRID_BLOCK * 20, Number(getDynamicRoadLength?.()) || MAIN_ROAD_LENGTH);
-  const roadCenterZ = Number(getDynamicRoadCenter?.());
-  const centerZBase = Number.isFinite(roadCenterZ) ? roadCenterZ : target.lookAtZ;
-  const centerZ = THREE.MathUtils.clamp(
-    target.z - Math.min(roadLength * 0.3, GRID_BLOCK * 24),
-    centerZBase - roadLength * 0.42,
-    centerZBase + roadLength * 0.42
+  const records = heroShotBuildingRecords();
+  droneIntroHeroBuildingCount = records.length;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  let maxY = target.lookAtY + DRONE_INTRO_LOOK_HEIGHT;
+  for (const record of records) {
+    const collider = record.collider;
+    const x = Number(collider.x);
+    const z = Number(collider.z);
+    const hw = Math.max(1, Number(collider.hw) || Number(record.baseW) * 0.5 || SIDE_BUILDING_BASE * 0.5);
+    const hd = Math.max(1, Number(collider.hd) || Number(record.baseD) * 0.5 || SIDE_BUILDING_BASE * 0.5);
+    const h = Number(collider.h);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
+    minX = Math.min(minX, x - hw);
+    maxX = Math.max(maxX, x + hw);
+    minZ = Math.min(minZ, z - hd);
+    maxZ = Math.max(maxZ, z + hd);
+    if (Number.isFinite(h)) maxY = Math.max(maxY, h);
+  }
+  const hasFullCityBounds = records.length >= DRONE_INTRO_HERO_EXPECTED_BUILDINGS
+    && [minX, maxX, minZ, maxZ].every(Number.isFinite);
+  const centerX = hasFullCityBounds ? (minX + maxX) * 0.5 : target.lookAtX;
+  const centerZ = hasFullCityBounds ? (minZ + maxZ) * 0.5 : target.lookAtZ;
+  const startRadius = Math.max(
+    DRONE_INTRO_HERO_MIN_ORBIT_RADIUS,
+    Math.hypot(droneIntroStart.x - centerX, droneIntroStart.z - centerZ)
   );
+  droneIntroHeroOrbitRadius = startRadius;
   droneIntroControlA.set(
-    target.lookAtX,
-    Math.max(target.lookAtY + 116, target.y + GRID_BLOCK * 10),
+    centerX,
+    droneIntroStart.y,
     centerZ
   );
   droneIntroHeroLookAt.set(
-    target.lookAtX,
-    Math.max(target.lookAtY + 84, target.y + GRID_BLOCK * 9),
-    centerZ - GRID_BLOCK * 5
+    centerX,
+    Math.max(target.lookAtY + 84, maxY * 0.5),
+    centerZ
   );
 }
 
 function computeHeroShotOrbitCamera(out, orbitProgress) {
   const startDx = droneIntroStart.x - droneIntroControlA.x;
   const startDz = droneIntroStart.z - droneIntroControlA.z;
-  const startRadius = Math.max(DRONE_INTRO_HERO_MIN_ORBIT_RADIUS, Math.hypot(startDx, startDz));
+  const startRadius = droneIntroHeroOrbitRadius || Math.max(DRONE_INTRO_HERO_MIN_ORBIT_RADIUS, Math.hypot(startDx, startDz));
   const startAngle = Math.atan2(startDz, startDx);
   const angle = startAngle + Math.PI * 2 * DRONE_INTRO_HERO_ORBIT_TURNS * orbitProgress;
-  const radius = startRadius * (1 - Math.sin(Math.PI * orbitProgress) * 0.08);
   return out.set(
-    droneIntroControlA.x + Math.cos(angle) * radius,
+    droneIntroControlA.x + Math.cos(angle) * startRadius,
     droneIntroStart.y + Math.sin(Math.PI * orbitProgress) * DRONE_INTRO_HERO_ORBIT_LIFT,
-    droneIntroControlA.z + Math.sin(angle) * radius
+    droneIntroControlA.z + Math.sin(angle) * startRadius
   );
 }
 
@@ -316,6 +348,11 @@ export function droneIntroInspect() {
     source: droneIntroFlight.source,
     heroShotEnabled,
     heroShot: droneIntroFlight.heroShot,
+    heroOrbitBuildingCount: droneIntroHeroBuildingCount,
+    heroOrbitRadius: droneIntroHeroOrbitRadius,
+    heroOrbitCenterX: droneIntroControlA.x,
+    heroOrbitCenterY: droneIntroControlA.y,
+    heroOrbitCenterZ: droneIntroControlA.z,
     targetX: droneIntroTarget.x,
     targetY: droneIntroTarget.y,
     targetZ: droneIntroTarget.z,
@@ -353,6 +390,7 @@ export function initDroneIntro(ctx, injected) {
     getDroneLandingPose,
     getDefaultDroneLandingPose,
     getSideBuildingRecords,
+    getMainBuildingRecords,
     getSideBuildingDepthScale,
     getDynamicRoadCenter,
     getDynamicRoadLength,
