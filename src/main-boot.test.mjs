@@ -113,6 +113,12 @@ test('mobile performance caps pixel ratio at native scale', () => {
   assert.equal(MOBILE_PERFORMANCE_PIXEL_RATIO_CAP, 1);
 });
 
+test('sky bake spread is recorded in benchmark and perf inspectors', () => {
+  assert.match(mainSource, /skyBake:\s*skyDome\.inspectSkyBake\(\)/);
+  assert.match(mainSource, /skyBakeSpread:\s*skyDome\.inspectSkyBake\(\)\.spread/);
+  assert.match(mainSource, /skyBakeFaceStride:\s*skyDome\.inspectSkyBake\(\)\.faceStride/);
+});
+
 test('retro benchmark is query-startable and exports diagnostic json', () => {
   assert.match(mainSource, /createRetroBenchmarkRuntime/);
   assert.match(mainSource, /RETRO_BENCHMARK_DEFAULT_DURATION_MS/);
