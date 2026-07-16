@@ -5,6 +5,7 @@ import {
   temporalAaHistoryBlend,
   temporalAaJitterForFrame,
   temporalAaRequestedFromParams,
+  temporalAaSettingsFromParams,
 } from './temporal-aa-pass.js';
 
 test('temporal AA is on by default with explicit rollback URLs', () => {
@@ -34,4 +35,39 @@ test('temporal AA lowers history weight while moving or during reveal', () => {
   assert.equal(temporalAaHistoryBlend({ stable: false, motionAmount: 0 }), 0);
   assert.equal(temporalAaHistoryBlend({ stable: true, motionAmount: 0 }), 0.78);
   assert.equal(temporalAaHistoryBlend({ stable: true, motionAmount: 1 }), 0.42);
+});
+
+test('temporal AA selects quality desktop and lite mobile profiles by default', () => {
+  assert.deepEqual(temporalAaSettingsFromParams(new URLSearchParams(''), { mobile: false }), {
+    enabled: true,
+    profile: 'quality',
+    stillHistoryBlend: 0.78,
+    movingHistoryBlend: 0.42,
+    clampStrength: 0.045,
+  });
+  assert.deepEqual(temporalAaSettingsFromParams(new URLSearchParams(''), { mobile: true }), {
+    enabled: true,
+    profile: 'lite',
+    stillHistoryBlend: 0.62,
+    movingHistoryBlend: 0.28,
+    clampStrength: 0.035,
+  });
+  assert.equal(temporalAaSettingsFromParams(new URLSearchParams('taa.profile=quality'), { mobile: true }).profile, 'quality');
+  assert.equal(temporalAaSettingsFromParams(new URLSearchParams('taa.profile=lite'), { mobile: false }).profile, 'lite');
+  assert.equal(temporalAaSettingsFromParams(new URLSearchParams('taa=0'), { mobile: true }).enabled, false);
+});
+
+test('temporal AA history blend is profile-tunable for motion-aware accumulation', () => {
+  assert.equal(temporalAaHistoryBlend({
+    stable: true,
+    motionAmount: 0,
+    stillBlend: 0.62,
+    movingBlend: 0.28,
+  }), 0.62);
+  assert.equal(temporalAaHistoryBlend({
+    stable: true,
+    motionAmount: 1,
+    stillBlend: 0.62,
+    movingBlend: 0.28,
+  }), 0.28);
 });

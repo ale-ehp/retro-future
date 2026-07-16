@@ -150,13 +150,21 @@ test('cinematic look pass is default-on with URL rollback and inserted after FSR
 test('temporal AA defaults on and runs after the cinematic look pass', () => {
   assert.match(temporalAaSource, /export class TemporalAaPass/);
   assert.match(temporalAaSource, /export function temporalAaRequestedFromParams/);
-  assert.match(mainSource, /temporalAaRequestedFromParams\(new URLSearchParams\(window\.location\.search\)\)/);
-  assert.match(mainSource, /new TemporalAaPass\(/);
+  assert.match(temporalAaSource, /export function temporalAaSettingsFromParams/);
+  assert.match(mainSource, /temporalAaSettingsFromParams\(new URLSearchParams\(window\.location\.search\), \{ mobile: mobilePerformanceProfileActive\(\) \}\)/);
+  assert.match(mainSource, /new TemporalAaPass\(temporalAaSettings\)/);
+  assert.match(mainSource, /temporalAaInteractionMotionAmount\(\)/);
   assert.match(mainSource, /composer\.addPass\(cinematicLookPass\)[\s\S]*composer\.addPass\(temporalAaPass\)/);
   assert.match(mainSource, /applyTemporalAaJitterForRender\(\)/);
   assert.match(mainSource, /clearTemporalAaJitterForRender\(temporalAaJittered\)/);
   assert.match(mainSource, /temporalAaPass\?\.enabled/);
   assert.match(mainSource, /temporalAa:\s*temporalAaPass\?\.inspect\(\)/);
+});
+
+test('mobile benchmark panel uses a compact landscape layout', () => {
+  assert.match(cssSource, /body\.mobile-landscape \.retro-benchmark-panel\s*\{/);
+  assert.match(cssSource, /body\.mobile-landscape \.retro-benchmark-grid\s*\{/);
+  assert.match(cssSource, /body\.mobile-landscape \.retro-benchmark-actions\s*\{/);
 });
 
 test('retro benchmark is query-startable and exports diagnostic json', () => {

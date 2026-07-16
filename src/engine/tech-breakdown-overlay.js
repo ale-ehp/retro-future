@@ -25,6 +25,8 @@ export function formatTechBreakdownRows(stats = {}) {
     : 'direct';
   const skyBake = stats.skyBake || {};
   const hexRoad = stats.hexRoad || {};
+  const temporalAa = stats.temporalAa || {};
+  const webgpu = stats.webgpu || {};
   const fxDisabled = Array.isArray(stats.fxDisabled) && stats.fxDisabled.length
     ? stats.fxDisabled.join(', ')
     : 'none';
@@ -54,6 +56,16 @@ export function formatTechBreakdownRows(stats = {}) {
       value: skyBake.active
         ? `${skyBake.spread ? 'spread' : 'full'} 1f/${number(skyBake.faceStride, 1)} · face ${number(skyBake.lastRenderedFace, -1)} · cycle ${number(skyBake.cycles)}`
         : 'inactive',
+    },
+    {
+      label: 'TAA',
+      value: temporalAa.enabled
+        ? `${temporalAa.profile || 'quality'} · history ${rounded(temporalAa.historyBlend, 2)} · ${temporalAa.validHistory ? 'valid' : 'warming'}`
+        : 'off',
+    },
+    {
+      label: 'WebGPU',
+      value: webgpu.roadmap || 'compute TAA + motion vectors',
     },
     {
       label: 'LOD',

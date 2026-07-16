@@ -26,12 +26,16 @@ test('tech breakdown rows summarize pipeline, frame, scene, lod and bake state',
     triangles: 287919,
     textures: 240,
     skyBake: { active: true, spread: true, faceStride: 2, lastRenderedFace: 3, cycles: 4 },
+    temporalAa: { enabled: true, profile: 'lite', historyBlend: 0.62, validHistory: true },
+    webgpu: { roadmap: 'compute TAA + motion vectors' },
     hexRoad: { lodVisibleBatches: 9, lodHiddenBatches: 4, lodSavedTriangles: 12744 },
     fxDisabled: ['bloom', 'particles'],
   });
 
-  assert.deepEqual(rows.map((row) => row.label), ['FPS', 'Frame', 'Pipeline', 'Scene', 'Sky bake', 'LOD', 'FX off']);
+  assert.deepEqual(rows.map((row) => row.label), ['FPS', 'Frame', 'Pipeline', 'Scene', 'Sky bake', 'TAA', 'WebGPU', 'LOD', 'FX off']);
   assert.match(rows.find((row) => row.label === 'Pipeline')?.value || '', /realCity -> bloom -> fxaa/);
   assert.match(rows.find((row) => row.label === 'Sky bake')?.value || '', /spread 1f\/2/);
+  assert.match(rows.find((row) => row.label === 'TAA')?.value || '', /lite/);
+  assert.match(rows.find((row) => row.label === 'WebGPU')?.value || '', /motion vectors/);
   assert.match(rows.find((row) => row.label === 'LOD')?.value || '', /9\/13 batches/);
 });
