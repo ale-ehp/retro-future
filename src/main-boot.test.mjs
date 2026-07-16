@@ -119,6 +119,19 @@ test('sky bake spread is recorded in benchmark and perf inspectors', () => {
   assert.match(mainSource, /skyBakeFaceStride:\s*skyDome\.inspectSkyBake\(\)\.faceStride/);
 });
 
+test('tech breakdown overlay is URL-gated and fed from live diagnostics', () => {
+  assert.match(mainSource, /createTechBreakdownOverlay/);
+  assert.match(mainSource, /techBreakdownRequestedFromParams\(retroBenchmarkSearchParams\)/);
+  assert.match(mainSource, /performanceDiagnostics\.summary\(latestMeasuredFps\)/);
+  assert.match(mainSource, /fxToggleInspect\(\)/);
+  assert.match(mainSource, /skyBake:\s*skyDome\.inspectSkyBake\(\)/);
+  assert.match(mainSource, /hexRoad:\s*hexRoadInspect\(\)/);
+  assert.match(mainSource, /techBreakdownOverlay\?\.update\(now\)/);
+  assert.match(cssSource, /\.tech-breakdown-overlay\s*\{/);
+  assert.match(cssSource, /\.tech-breakdown-overlay\s*\{[\s\S]*z-index:\s*82/);
+  assert.match(cssSource, /\.tech-breakdown-overlay dd\s*\{[\s\S]*text-overflow:\s*ellipsis/);
+});
+
 test('retro benchmark is query-startable and exports diagnostic json', () => {
   assert.match(mainSource, /createRetroBenchmarkRuntime/);
   assert.match(mainSource, /RETRO_BENCHMARK_DEFAULT_DURATION_MS/);

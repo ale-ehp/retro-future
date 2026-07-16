@@ -256,6 +256,55 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .tech-breakdown-overlay {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 82;
+    width: min(340px, calc(100vw - 28px));
+    box-sizing: border-box;
+    pointer-events: none;
+    background: rgba(2, 9, 11, 0.72);
+    border: 1px solid rgba(98, 247, 255, 0.35);
+    color: #cdf6ff;
+    padding: 12px 14px;
+    font-size: 11px;
+    line-height: 1.45;
+    letter-spacing: 0.02em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    contain: layout paint;
+    text-shadow: 0 0 6px rgba(98, 247, 255, 0.25);
+  }
+  .tech-breakdown-title {
+    margin: 0 0 8px;
+    color: #f2feff;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .tech-breakdown-overlay dl {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+  }
+  .tech-breakdown-overlay dl > div {
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 10px;
+    min-width: 0;
+  }
+  .tech-breakdown-overlay dt {
+    color: rgba(183, 239, 246, 0.72);
+  }
+  .tech-breakdown-overlay dd {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: #f2feff;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   @media (max-width: 760px), (hover: none), (pointer: coarse) {
     .hud {
       padding: 8px 10px;
@@ -294,6 +343,18 @@
     }
     .perf-live-extra-mobile {
       display: none;
+    }
+    .tech-breakdown-overlay {
+      top: max(12px, env(safe-area-inset-top));
+      right: 12px;
+      width: min(312px, calc(100vw - 24px));
+      padding: 10px 12px;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+    .tech-breakdown-overlay dl > div {
+      grid-template-columns: 68px minmax(0, 1fr);
+      gap: 8px;
     }
   }
   #welcome-window-overlay {

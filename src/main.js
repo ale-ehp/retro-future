@@ -339,6 +339,10 @@ import { fxEnabled, fxLevers, fxToggleInspect } from './engine/fx-debug-toggles.
 import { createCityRevealProfiler } from './engine/city-reveal-profiler.js';
 import { createPerformanceDiagnostics } from './engine/performance-diagnostics.js';
 import {
+  createTechBreakdownOverlay,
+  techBreakdownRequestedFromParams,
+} from './engine/tech-breakdown-overlay.js';
+import {
   RETRO_BENCHMARK_DEFAULT_DURATION_MS,
   createRetroBenchmarkRuntime,
 } from './engine/retro-benchmark.js';
@@ -6698,6 +6702,23 @@ let fpsAccum = 0, fpsFrames = 0, fpsLast = last;
 let startPositionLabelLast = 0;
 let latestMeasuredFps = 0;
 
+function collectTechBreakdownStats() {
+  const fxInspect = fxToggleInspect();
+  const fxDisabled = Object.entries(fxInspect.toggles || {})
+    .filter(([, entry]) => entry.applied === false)
+    .map(([name]) => name);
+  return {
+    ...performanceDiagnostics.summary(latestMeasuredFps),
+    skyBake: skyDome.inspectSkyBake(),
+    hexRoad: hexRoadInspect(),
+    fxDisabled,
+  };
+}
+
+const techBreakdownOverlay = techBreakdownRequestedFromParams(retroBenchmarkSearchParams)
+  ? createTechBreakdownOverlay({ getStats: collectTechBreakdownStats })
+  : null;
+
 
 // ---------- Atmospheric particles (extracted -> atmosphere-particles.js) ----------
 initAtmosphereParticles({ getScene: () => scene, cyan: PAL.cyan });
@@ -6832,6 +6853,7 @@ function tick(now) {
     renderInfo: renderer.info.render,
     memoryInfo: renderer.info.memory,
   });
+  techBreakdownOverlay?.update(now);
 }
 bootSceneWithFinalDefaults().then(() => {
   trimProductionControls();
