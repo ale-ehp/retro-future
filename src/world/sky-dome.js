@@ -14,6 +14,8 @@ export function skyBakeFaceStride(frameStride, faceCount = 6) {
   return Math.max(1, Math.round(stride / faces));
 }
 
+const SKY_BRIGHTNESS_SHADER_MAX = 2.4;
+
 export function createSkyDome(deps) {
   const { scene, camera, renderer, controlEls, tunedColor, getRevealBudgetActive, getMobileProfileActive = () => false } = deps;
 
@@ -451,7 +453,7 @@ export function createSkyDome(deps) {
     const base = skyPalette[choice] || skyPalette.grid;
     const lightingEnabled = choice === 'tron-lighting';
     skyDisplayColor.copy(tunedColor(base, hueDeg, 1, brightness));
-    domeMat.uniforms.uBrightness.value = THREE.MathUtils.clamp(brightness, 0.05, 2);
+    domeMat.uniforms.uBrightness.value = THREE.MathUtils.clamp(brightness, 0.05, SKY_BRIGHTNESS_SHADER_MAX);
     domeMat.uniforms.uHue.value = hueDeg;
     domeMat.uniforms.uCloudAmount.value = 1;
     domeMat.uniforms.uLightningMode.value = lightingEnabled ? 1 : 0;
@@ -518,6 +520,9 @@ export function createSkyDome(deps) {
 
   function inspectStorm() {
     return {
+      brightness: Number(controlEls.skyBrightness.value),
+      brightnessUniform: domeMat.uniforms.uBrightness.value,
+      brightnessMax: SKY_BRIGHTNESS_SHADER_MAX,
       frequency: domeMat.uniforms.uStormFrequency.value,
       cloudContrast: domeMat.uniforms.uCloudContrast.value,
       intensity: domeMat.uniforms.uStormIntensity.value,
