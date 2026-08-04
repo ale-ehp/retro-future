@@ -10,6 +10,7 @@ const discCursorSource = readFileSync(new URL('./camera/disc-cursor.js', import.
 const droneIntroSource = readFileSync(new URL('./camera/drone-intro.js', import.meta.url), 'utf8');
 const shadersSource = readFileSync(new URL('./engine/shaders.js', import.meta.url), 'utf8');
 const temporalAaSource = readFileSync(new URL('./engine/temporal-aa-pass.js', import.meta.url), 'utf8');
+const atmosphereSource = readFileSync(new URL('./world/atmosphere-particles.js', import.meta.url), 'utf8');
 
 test('boot drains the runner crowd queue before prewarming textures', () => {
   const body = mainSource.match(/async function bootSceneWithFinalDefaults\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
@@ -146,6 +147,15 @@ test('cinematic look pass is default-on with URL rollback and inserted after FSR
   assert.match(mainSource, /composer\.addPass\(fsrUpscalePass\)[\s\S]*composer\.addPass\(cinematicLookPass\)/);
   assert.match(mainSource, /cinematicLookPass\?\.enabled/);
   assert.match(mainSource, /cinematicLookPassEnabled:\s*Boolean\(cinematicLookPass\?\.enabled\)/);
+});
+
+test('cinematic atmosphere is opt-in, reveal-gated, and device-aware', () => {
+  assert.match(atmosphereSource, /export function cinematicAtmosphereSettingsFromParams/);
+  assert.match(atmosphereSource, /export function createCinematicAtmosphere/);
+  assert.match(mainSource, /cinematicAtmosphereSettingsFromParams\(new URLSearchParams\(window\.location\.search\), \{ mobile: mobilePerformanceProfileActive\(\) \}\)/);
+  assert.match(mainSource, /createCinematicAtmosphere\(\{ scene, camera, settings: cinematicAtmosphereSettings \}\)/);
+  assert.match(mainSource, /cinematicAtmosphere\.update\(cityRevealComplete && !isCityRevealCompositeActive\(\), edgePulseSeconds\)/);
+  assert.match(mainSource, /cinematicAtmosphere:\s*cinematicAtmosphere\.inspect\(\)/);
 });
 
 test('temporal AA defaults on and runs after the cinematic look pass', () => {

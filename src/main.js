@@ -576,6 +576,8 @@ import {
   updateTronRunnerCrowdSpeechBubbles,
 } from './character/speech-bubbles.js';
 import {
+  cinematicAtmosphereSettingsFromParams,
+  createCinematicAtmosphere,
   initAtmosphereParticles,
   updateAtmosphereParticles,
 } from './world/atmosphere-particles.js';
@@ -856,6 +858,7 @@ const temporalAaSettings = temporalAaSettingsFromParams(new URLSearchParams(wind
 const temporalAaEnabled = temporalAaSettings.enabled;
 const droneIntroHeroShotEnabled = droneIntroHeroShotRequestedFromParams(new URLSearchParams(window.location.search));
 const cinematicGroundingSettings = cinematicGroundingSettingsFromParams(new URLSearchParams(window.location.search));
+const cinematicAtmosphereSettings = cinematicAtmosphereSettingsFromParams(new URLSearchParams(window.location.search), { mobile: mobilePerformanceProfileActive() });
 let dynamicQualityScale = 1;
 let performanceMode = 'auto';
 let performanceAdjustCooldown = 0;
@@ -1112,6 +1115,7 @@ function retroBenchmarkEnvironment() {
       temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
       temporalAaProfile: temporalAaSettings.profile,
       cinematicGrounding: cinematicGroundingSettings,
+      cinematicAtmosphere: cinematicAtmosphere.inspect(),
       mobileProfile: mobilePerformanceProfileInspect(),
     },
     // Self-documenting FPS-lever state so each benchmark JSON records exactly
@@ -1131,6 +1135,7 @@ function retroBenchmarkEnvironment() {
       cinematicLook: cinematicLookEnabled ? 'on' : 'off',
       temporalAa: temporalAaEnabled ? 'on' : 'off',
       temporalAaProfile: temporalAaSettings.profile,
+      cinematicAtmosphere: cinematicAtmosphereSettings.enabled ? cinematicAtmosphereSettings.profile : 'off',
       // Applied state of every per-subsystem debug toggle (see fx-debug-toggles.js)
       // so each capture self-documents which subsystems were disabled.
       fx: fxLevers(),
@@ -1325,6 +1330,7 @@ function maybeStartRetroBenchmarkAuto(now = performance.now()) {
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(FIXED_CAMERA_FOV, window.innerWidth / window.innerHeight, 0.1, 10000);
+const cinematicAtmosphere = createCinematicAtmosphere({ scene, camera, settings: cinematicAtmosphereSettings });
 // World/context object (design §4). composer is created later in the deferred postprocessing setup,
 // so it is read through a late-bound getter. Subsystems are migrated onto ctx phase by phase.
 const ctx = createCtx({ scene, camera, renderer, getComposer: () => composer });
@@ -6755,6 +6761,7 @@ window.__tronInspect = () => ({
     temporalAaEnabled,
     temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
     cinematicGrounding: cinematicGroundingSettings,
+    cinematicAtmosphere: cinematicAtmosphere.inspect(),
     bloomStrength: bloomPass?.strength ?? 0,
     bloomRadius: bloomPass?.radius ?? 0,
     bloomThreshold: bloomPass?.threshold ?? 0,
@@ -6811,6 +6818,7 @@ window.__tronPerfInspect = () => ({
   temporalAaEnabled,
   temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
   cinematicGrounding: cinematicGroundingSettings,
+  cinematicAtmosphere: cinematicAtmosphere.inspect(),
   bloomResolutionScale,
   bloomResolutionCap: BLOOM_RESOLUTION_CAP,
   bloomActiveMips: bloomPass?.activeMips ?? 0,
@@ -6875,6 +6883,7 @@ function collectTechBreakdownStats() {
   return {
     ...performanceDiagnostics.summary(latestMeasuredFps),
     skyBake: skyDome.inspectSkyBake(),
+    cinematicAtmosphere: cinematicAtmosphere.inspect(),
     temporalAa: temporalAaPass?.inspect() || { enabled: false, profile: temporalAaSettings.profile },
     webgpu: { roadmap: 'compute TAA + motion vectors' },
     hexRoad: hexRoadInspect(),
@@ -6942,11 +6951,12 @@ function tick(now) {
   // Sky background bake (mobile A/B, ?skyBake=1): only in steady state — post-
   // reveal with no reveal compositing active — so the reveal's own sky is untouched.
   skyDome.syncSkyBackgroundBake(now, cityRevealComplete && !isCityRevealCompositeActive());
+  const edgePulseSeconds = now * 0.001;
+  cinematicAtmosphere.update(cityRevealComplete && !isCityRevealCompositeActive(), edgePulseSeconds);
   if (!revealPerformanceCritical) {
     updateCityDepartmentBoards(now);
     updateCityRoleBoard();
     flushHexTileBatchUploads();
-    const edgePulseSeconds = now * 0.001;
     updateEdgePulse(edgePulseSeconds);
     updateAtmosphereParticles(cityRevealComplete, edgePulseSeconds);
     if (fxEnabled('speechBubbles')) {
