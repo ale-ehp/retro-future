@@ -126,6 +126,10 @@ function resetMobileMovementPad() {
   }
 }
 
+export function resetMobileMovementInput() {
+  resetMobileMovementPad();
+}
+
 function updateMobileMovementPadFromPoint(clientX, clientY) {
   if (!mobileMovementPadEl || !mobileMovementKnobEl) return;
   const rect = mobileMovementPadEl.getBoundingClientRect();
