@@ -16,7 +16,7 @@ poi apri http://localhost:8000/
 - `one-building-lab.html`, `music-mockups.html`, `character-mockups/` laboratori e mockup
 - `audio/` colonna sonora, footstep e music mockup (.opus / .wav)
 - `demo-5-boulevard-canonical-settings.json` preset del pannello controlli
-- three.js + postprocessing vendored (EffectComposer, SMAA, UnrealBloom, GLTFLoader, ...)
+- three.js + postprocessing vendored (EffectComposer, FXAA, UnrealBloom, GLTFLoader, ...)
 - `scripts/` generatore dei music mockup + verifica audio footstep
 
 ## Provenienza
