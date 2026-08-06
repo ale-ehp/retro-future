@@ -1,0 +1,262 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import * as THREE from 'three';
+
+import {
+  CONTACT_TERMINAL_CONTACTS,
+  CONTACT_TERMINAL_STATES,
+  contactTerminalAvailability,
+  contactTerminalKeyCommand,
+  contactTerminalUri,
+  createContactTerminalRuntime,
+  createContactTerminalStateController,
+  horizontalContactMetrics,
+  nextContactSelection,
+} from './contact-terminal.js';
+
+function createClassList() {
+  const values = new Set();
+  return {
+    add: (...names) => names.forEach((name) => values.add(name)),
+    remove: (...names) => names.forEach((name) => values.delete(name)),
+    toggle(name, force) {
+      const active = force === undefined ? !values.has(name) : Boolean(force);
+      if (active) values.add(name);
+      else values.delete(name);
+      return active;
+    },
+    contains: (name) => values.has(name),
+  };
+}
+
+function createElementStub() {
+  const element = new EventTarget();
+  element.hidden = true;
+  element.classList = createClassList();
+  element.focused = false;
+  element.focus = () => { element.focused = true; };
+  element.setAttribute = () => {};
+  return element;
+}
+
+function createCanvasStub() {
+  const context = new Proxy({}, {
+    get(target, key) {
+      if (!(key in target)) target[key] = () => {};
+      return target[key];
+    },
+    set(target, key, value) {
+      target[key] = value;
+      return true;
+    },
+  });
+  return { width: 0, height: 0, getContext: () => context };
+}
+
+function createRuntimeFixture() {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(50, 2, 0.1, 2000);
+  camera.position.set(53.6, 11.975, 807.35);
+  const canvasTarget = createElementStub();
+  canvasTarget.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 500 });
+  const actionButton = createElementStub();
+  const backButton = createElementStub();
+  const interactionSurface = createElementStub();
+  const liveRegion = createElementStub();
+  liveRegion.textContent = '';
+  const body = { classList: createClassList() };
+  const activated = [];
+  const records = [
+    { civicNumberValue: 1, mesh: { position: { x: -80, z: 760 } } },
+    {
+      civicNumberValue: 2,
+      mesh: { position: { x: 80, z: 760 } },
+      basePad: {
+        border: { position: { x: 4, z: 7 } },
+        hitPolygon: [[40, 740], [100, 740], [100, 770], [40, 770]],
+      },
+    },
+  ];
+  let yaw = 0;
+  let pitch = 0;
+  let roll = 0;
+  const runtime = createContactTerminalRuntime({
+    scene,
+    camera,
+    renderer: {
+      capabilities: { getMaxAnisotropy: () => 1 },
+      domElement: canvasTarget,
+    },
+    sideBuildingRecords: records,
+    PAL: { tealLight: 0x8ffcff },
+    elStrip: () => new THREE.Object3D(),
+    getBottomY: () => 4.1,
+    getPlayerSpawn: () => ({ z: 800 }),
+    getRevealComplete: () => true,
+    getRevealFactor: () => 1,
+    getEffectEnabled: () => true,
+    getOtherCameraActive: () => false,
+    getYaw: () => yaw,
+    setYaw: (value) => { yaw = value; },
+    getPitch: () => pitch,
+    setPitch: (value) => { pitch = value; },
+    getViewRoll: () => roll,
+    setViewRoll: (value) => { roll = value; },
+    applyCameraLook: () => {},
+    clearMovement: () => {},
+    clearViewMotion: () => {},
+    stopMouseLook: () => {},
+    resetMobileMovement: () => {},
+    getPointerLocked: () => false,
+    prefersReducedMotion: () => true,
+    isMobile: () => false,
+    createCanvas: createCanvasStub,
+    actionButton,
+    backButton,
+    interactionSurface,
+    liveRegion,
+    body,
+    eventTarget: new EventTarget(),
+    activateUri: (uri) => activated.push(uri),
+    now: () => 10,
+  });
+  return { runtime, camera, actionButton, backButton, interactionSurface, liveRegion, body, activated };
+}
+
+test('contact terminal availability includes the exact distance and alignment thresholds', () => {
+  const base = { revealComplete: true, enabled: true, cameraFree: true };
+
+  assert.equal(contactTerminalAvailability({ ...base, distance: 42, alignment: 0.45 }), true);
+  assert.equal(contactTerminalAvailability({ ...base, distance: 42.001, alignment: 0.45 }), false);
+  assert.equal(contactTerminalAvailability({ ...base, distance: 42, alignment: 0.449 }), false);
+  assert.equal(contactTerminalAvailability({ ...base, distance: 2, alignment: 1, revealComplete: false }), false);
+  assert.equal(contactTerminalAvailability({ ...base, distance: 2, alignment: 1, cameraFree: false }), false);
+});
+
+test('horizontal contact metrics ignore camera height and return forward alignment', () => {
+  const metrics = horizontalContactMetrics(
+    { x: 0, y: 200, z: 0 },
+    { x: 0, y: -0.8, z: 0.6 },
+    { x: 0, y: 10, z: 30 },
+  );
+
+  assert.equal(metrics.distance, 30);
+  assert.equal(metrics.alignment, 1);
+});
+
+test('contact selection wraps across the two fixed contacts', () => {
+  assert.equal(CONTACT_TERMINAL_CONTACTS.length, 2);
+  assert.equal(nextContactSelection(0, -1), 1);
+  assert.equal(nextContactSelection(1, 1), 0);
+  assert.equal(nextContactSelection(0, 1), 1);
+});
+
+test('contact actions expose normalized mail and phone URIs', () => {
+  assert.equal(CONTACT_TERMINAL_CONTACTS[0].value, 'info@avstudio.ai');
+  assert.equal(CONTACT_TERMINAL_CONTACTS[1].value, '+39 351 7436 007');
+  assert.equal(contactTerminalUri(0), 'mailto:info@avstudio.ai');
+  assert.equal(contactTerminalUri(1), 'tel:+393517436007');
+});
+
+test('contact state controller follows focus and return states', () => {
+  const controller = createContactTerminalStateController();
+
+  assert.equal(controller.snapshot().state, CONTACT_TERMINAL_STATES.HIDDEN);
+  controller.setAvailable(true);
+  assert.equal(controller.snapshot().state, CONTACT_TERMINAL_STATES.AVAILABLE);
+  assert.equal(controller.beginFocus(), true);
+  assert.deepEqual(controller.snapshot(), {
+    state: CONTACT_TERMINAL_STATES.FOCUSING,
+    available: true,
+    selection: 0,
+    savedPose: true,
+    lastRequestedAction: null,
+    lastInputSource: null,
+  });
+  assert.equal(controller.completeFocus(), true);
+  assert.equal(controller.snapshot().state, CONTACT_TERMINAL_STATES.ACTIVE);
+  assert.equal(controller.select(1), 1);
+  controller.recordAction(contactTerminalUri(1), 'keyboard');
+  assert.equal(controller.beginReturn(), true);
+  assert.equal(controller.snapshot().state, CONTACT_TERMINAL_STATES.RETURNING);
+  assert.equal(controller.completeReturn(false), true);
+  assert.deepEqual(controller.snapshot(), {
+    state: CONTACT_TERMINAL_STATES.HIDDEN,
+    available: false,
+    selection: 1,
+    savedPose: false,
+    lastRequestedAction: 'tel:+393517436007',
+    lastInputSource: 'keyboard',
+  });
+});
+
+test('contact key routing owns only relevant keys in relevant states', () => {
+  assert.deepEqual(contactTerminalKeyCommand({ code: 'KeyE' }, {
+    state: CONTACT_TERMINAL_STATES.AVAILABLE,
+  }), { handled: true, command: 'enter' });
+  assert.deepEqual(contactTerminalKeyCommand({ code: 'KeyE' }, {
+    state: CONTACT_TERMINAL_STATES.ACTIVE,
+  }), { handled: true, command: 'return' });
+  assert.deepEqual(contactTerminalKeyCommand({ code: 'Escape' }, {
+    state: CONTACT_TERMINAL_STATES.FOCUSING,
+  }), { handled: true, command: 'return' });
+  assert.deepEqual(contactTerminalKeyCommand({ code: 'ArrowUp' }, {
+    state: CONTACT_TERMINAL_STATES.ACTIVE,
+  }), { handled: true, command: 'select', delta: -1 });
+  assert.deepEqual(contactTerminalKeyCommand({ code: 'ArrowRight' }, {
+    state: CONTACT_TERMINAL_STATES.ACTIVE,
+  }), { handled: true, command: 'select', delta: 1 });
+  assert.deepEqual(contactTerminalKeyCommand({ code: 'Enter' }, {
+    state: CONTACT_TERMINAL_STATES.ACTIVE,
+  }), { handled: true, command: 'activate' });
+  assert.deepEqual(contactTerminalKeyCommand({ code: 'ArrowDown' }, {
+    state: CONTACT_TERMINAL_STATES.AVAILABLE,
+  }), { handled: false, command: null });
+  assert.deepEqual(contactTerminalKeyCommand({ code: 'KeyE', repeat: true }, {
+    state: CONTACT_TERMINAL_STATES.AVAILABLE,
+  }), { handled: false, command: null });
+});
+
+test('contact runtime builds civic 2, focuses, activates, and restores the camera', () => {
+  const fixture = createRuntimeFixture();
+  const { runtime, camera, actionButton, backButton, body, activated } = fixture;
+  const initialPosition = camera.position.clone();
+  const initialQuaternion = camera.quaternion.clone();
+
+  runtime.update(0);
+  let inspect = runtime.inspect();
+  assert.equal(inspect.civicNumberValue, 2);
+  assert.equal(inspect.perimeterSide, 'start-player');
+  assert.ok(Math.abs(inspect.worldPosition.x - 53.6) < 1e-12);
+  assert.ok(Math.abs(inspect.worldPosition.y - 11.975) < 1e-12);
+  assert.ok(Math.abs(inspect.worldPosition.z - 777.35) < 1e-12);
+  assert.equal(inspect.textureWidth, 1024);
+  assert.equal(inspect.textureHeight, 512);
+  assert.equal(inspect.hitTargetCount, 2);
+  assert.equal(inspect.state, CONTACT_TERMINAL_STATES.AVAILABLE);
+  assert.equal(actionButton.hidden, false);
+
+  assert.equal(runtime.handleKeyDown({ code: 'KeyE', repeat: false, preventDefault() {} }), true);
+  inspect = runtime.inspect();
+  assert.equal(inspect.state, CONTACT_TERMINAL_STATES.ACTIVE);
+  assert.equal(body.classList.contains('contact-terminal-focus'), true);
+  assert.equal(backButton.hidden, false);
+  assert.equal(camera.position.z, 801.35);
+
+  assert.equal(runtime.handleKeyDown({ code: 'ArrowUp', repeat: false, preventDefault() {} }), true);
+  assert.equal(runtime.inspect().selection, 1);
+  assert.equal(runtime.handleKeyDown({ code: 'Enter', repeat: false, preventDefault() {} }), true);
+  assert.deepEqual(activated, ['tel:+393517436007']);
+  assert.equal(runtime.inspect().lastInputSource, 'keyboard');
+
+  assert.equal(runtime.handleKeyDown({ code: 'KeyE', repeat: false, preventDefault() {} }), true);
+  assert.equal(runtime.inspect().state, CONTACT_TERMINAL_STATES.AVAILABLE);
+  assert.equal(body.classList.contains('contact-terminal-focus'), false);
+  assert.ok(camera.position.distanceTo(initialPosition) < 1e-12);
+  assert.ok(1 - Math.abs(camera.quaternion.dot(initialQuaternion)) < 1e-12);
+
+  const stableTextureUpdates = runtime.inspect().textureUpdates;
+  runtime.update(1000);
+  runtime.update(2000);
+  assert.equal(runtime.inspect().textureUpdates, stableTextureUpdates);
+});
