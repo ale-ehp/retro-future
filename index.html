@@ -2213,8 +2213,10 @@ if (typeof welcomeWindowTouchQuery.addEventListener === 'function') {
 welcomeWindowOverlay?.addEventListener('pointerdown', triggerWelcomeWindowTouch, { passive: false });
 welcomeWindowOverlay?.addEventListener('touchstart', triggerWelcomeWindowTouch, { passive: false });
 
+const cameraLookEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+
 function applyCameraLook() {
-  camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, viewRoll, 'YXZ'));
+  camera.quaternion.setFromEuler(cameraLookEuler.set(pitch, yaw, viewRoll, 'YXZ'));
 }
 
 const lockEl = renderer.domElement;
@@ -3653,21 +3655,23 @@ function applyViewMotionOffset() {
 }
 
 function basePadAtPoint(x, z) {
-  const records = [...sideBuildingRecords, ...mainBuildingRecords];
   let bestHit = null;
   let bestTopY = -Infinity;
-  for (const record of records) {
-    const pad = record.basePad;
-    if (!pad?.hitPolygon?.length) continue;
-    const dx = x - pad.border.position.x;
-    const dz = z - pad.border.position.z;
-    if (Math.abs(dx) > (pad.hitHalfSize || 0) || Math.abs(dz) > (pad.hitHalfSize || 0)) continue;
-    if (!pointInBasePadPolygon(dx, dz, pad.hitPolygon)) continue;
-    const onInner = pad.innerHitPolygon?.length && pointInBasePadPolygon(dx, dz, pad.innerHitPolygon);
-    const topY = onInner ? (pad.innerTopY ?? pad.topY ?? roadTileTopY()) : (pad.topY ?? roadTileTopY());
-    if (topY > bestTopY) {
-      bestTopY = topY;
-      bestHit = { pad, topY };
+  for (let listIndex = 0; listIndex < 2; listIndex++) {
+    const records = listIndex === 0 ? sideBuildingRecords : mainBuildingRecords;
+    for (const record of records) {
+      const pad = record.basePad;
+      if (!pad?.hitPolygon?.length) continue;
+      const dx = x - pad.border.position.x;
+      const dz = z - pad.border.position.z;
+      if (Math.abs(dx) > (pad.hitHalfSize || 0) || Math.abs(dz) > (pad.hitHalfSize || 0)) continue;
+      if (!pointInBasePadPolygon(dx, dz, pad.hitPolygon)) continue;
+      const onInner = pad.innerHitPolygon?.length && pointInBasePadPolygon(dx, dz, pad.innerHitPolygon);
+      const topY = onInner ? (pad.innerTopY ?? pad.topY ?? roadTileTopY()) : (pad.topY ?? roadTileTopY());
+      if (topY > bestTopY) {
+        bestTopY = topY;
+        bestHit = { pad, topY };
+      }
     }
   }
   return bestHit;
@@ -5678,8 +5682,11 @@ function updateRoadBoundaryHexMaterial(hueDeg, brightness = 1) {
   roadBoundaryHexFillMat.opacity = roadBoundaryHexAlpha;
 }
 
+let roadBoundaryPulseMeshList = [];
+
 function ensureRoadBoundaryPulseMeshes() {
   if (roadBoundaryPulseMeshes.minX) return;
+  roadBoundaryPulseMeshList = [];
   ['minX', 'maxX', 'minZ', 'maxZ'].forEach((edge) => {
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), roadBoundaryPulseMat.clone());
     mesh.visible = false;
@@ -5689,6 +5696,7 @@ function ensureRoadBoundaryPulseMeshes() {
     mesh.renderOrder = 8;
     scene.add(mesh);
     roadBoundaryPulseMeshes[edge] = mesh;
+    roadBoundaryPulseMeshList.push(mesh);
   });
 }
 
@@ -5737,7 +5745,7 @@ function triggerRoadBoundaryPulse(edge) {
 
 function updateRoadBoundaryPulse(dt) {
   ensureRoadBoundaryPulseMeshes();
-  for (const mesh of Object.values(roadBoundaryPulseMeshes)) {
+  for (const mesh of roadBoundaryPulseMeshList) {
     const pulse = Math.max(0, (mesh.userData.pulse || 0) - dt * 1.8);
     mesh.userData.pulse = pulse;
     mesh.visible = pulse > 0.01;
@@ -9070,7 +9078,6 @@ function syncCityDepartmentBoardRevealVisibility(revealFactor = cityDepartmentBo
       const nextOpacity = baseOpacity * factor;
       if (Math.abs((material.opacity ?? 0) - nextOpacity) < CITY_DEPARTMENT_BOARD_REVEAL_EPS) continue;
       material.opacity = nextOpacity;
-      material.needsUpdate = true;
       cityDepartmentBoardState.revealWrites += 1;
     }
   }
@@ -9502,7 +9509,6 @@ function syncCityRoleBoardRevealVisibility(revealFactor = cityDepartmentBoardRev
       const nextOpacity = baseOpacity * factor;
       if (Math.abs((material.opacity ?? 0) - nextOpacity) < CITY_ROLE_BOARD_REVEAL_EPS) continue;
       material.opacity = nextOpacity;
-      material.needsUpdate = true;
       cityRoleBoardRuntimeStats.revealWrites += 1;
     }
   }
@@ -11136,6 +11142,7 @@ let tronRunnerRevealProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
 let tronRunnerRevealRawProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
 let tronRunnerRevealActive = false;
 let tronRunnerRevealComplete = !TRON_RUNNER_REVEAL_ENABLED;
+let tronRunnerRevealCompleteVisualsApplied = false;
 let tronRunnerCrowdAccumulatedDt = 0;
 const tronRunnerCrowd = [];
 const tronRunnerIdleCharacter = {
@@ -11604,6 +11611,7 @@ function setTronRunnerRevealState(progress, rawProgress, phase, active, complete
   tronRunnerRevealRawProgress = THREE.MathUtils.clamp(rawProgress, 0, 1);
   tronRunnerRevealActive = Boolean(active);
   tronRunnerRevealComplete = Boolean(complete);
+  if (!tronRunnerRevealComplete) tronRunnerRevealCompleteVisualsApplied = false;
   tronRunnerState.reveal = {
     enabled: TRON_RUNNER_REVEAL_ENABLED,
     mode: 'post-city-scan-pulse',
@@ -11734,7 +11742,6 @@ function applyTronRunnerRevealVisuals() {
     const baseOpacity = baseMaterialOpacity(groundShadow.material, groundShadow.material.opacity);
     groundShadow.visible = shouldRenderRunner && TRON_RUNNER_GROUND_SHADOW_ENABLED && baseOpacity * visibleFactor > 0.002;
     groundShadow.material.opacity = baseOpacity * visibleFactor;
-    groundShadow.material.needsUpdate = true;
   }
 
   const reflectionGroup = tronRunnerParts.reflectionGroup;
@@ -11743,7 +11750,6 @@ function applyTronRunnerRevealVisuals() {
   for (const material of tronRunnerParts.reflectionMaterials || []) {
     const baseOpacity = baseMaterialOpacity(material, material.opacity);
     material.opacity = baseOpacity * reflectionFactor;
-    material.needsUpdate = true;
   }
   tronRunnerState.dynamicReflectionOpacity *= reflectionFactor;
   tronRunnerState.dynamicReflectionBodyOpacity *= reflectionFactor;
@@ -11761,7 +11767,6 @@ function applyTronRunnerRevealVisuals() {
       object.material.opacity = scanPulse * (object.name.includes('core')
         ? TRON_RUNNER_REVEAL_SCAN_CORE_OPACITY
         : TRON_RUNNER_REVEAL_SCAN_OUTER_OPACITY);
-      object.material.needsUpdate = true;
     });
   }
 
@@ -11789,7 +11794,10 @@ function updateTronRunnerReveal(now) {
     return;
   }
   if (tronRunnerRevealComplete) {
-    applyTronRunnerRevealVisuals();
+    if (!tronRunnerRevealCompleteVisualsApplied) {
+      tronRunnerRevealCompleteVisualsApplied = true;
+      applyTronRunnerRevealVisuals();
+    }
     return;
   }
   const raw = THREE.MathUtils.clamp((now - tronRunnerRevealStartedAt) / TRON_RUNNER_REVEAL_DURATION_MS, 0, 1);
@@ -11976,12 +11984,10 @@ function updateTronRunnerDynamicReflection() {
   for (const material of bodyMaterials) {
     material.userData.tronRunnerBaseOpacity = bodyOpacity;
     material.opacity = bodyOpacity;
-    material.needsUpdate = true;
   }
   for (const material of ledMaterials) {
     material.userData.tronRunnerBaseOpacity = ledOpacity;
     material.opacity = ledOpacity;
-    material.needsUpdate = true;
   }
   tronRunnerState.dynamicReflectionVisible = visible;
   tronRunnerState.dynamicReflectionOpacity = bodyOpacity;
@@ -13405,8 +13411,21 @@ function tronRunnerCrowdPointInsideRoute(member, x, z) {
   return pointInBasePadPolygon(localX, localZ, polygon);
 }
 
+let tronRunnerCrowdColliderRecordsCache = null;
+let tronRunnerCrowdColliderRecordsCacheSideCount = -1;
+let tronRunnerCrowdColliderRecordsCacheMainCount = -1;
+
 function tronRunnerCrowdColliderRecords() {
-  return [...sideBuildingRecords, ...mainBuildingRecords].filter((record) => record.collider);
+  if (
+    !tronRunnerCrowdColliderRecordsCache
+    || tronRunnerCrowdColliderRecordsCacheSideCount !== sideBuildingRecords.length
+    || tronRunnerCrowdColliderRecordsCacheMainCount !== mainBuildingRecords.length
+  ) {
+    tronRunnerCrowdColliderRecordsCacheSideCount = sideBuildingRecords.length;
+    tronRunnerCrowdColliderRecordsCacheMainCount = mainBuildingRecords.length;
+    tronRunnerCrowdColliderRecordsCache = [...sideBuildingRecords, ...mainBuildingRecords].filter((record) => record.collider);
+  }
+  return tronRunnerCrowdColliderRecordsCache;
 }
 
 function tronRunnerCrowdColliderLabel(record) {
@@ -15224,7 +15243,10 @@ function cityRevealFrontForProgress(progress) {
   return THREE.MathUtils.lerp(cityRevealSweepStartZ, cityRevealSweepEndZ, warped.progress);
 }
 
+let cityRevealScanGlowDimensionsCache = null;
+
 function cityRevealScanGlowDimensions() {
+  if (cityRevealScanGlowDimensionsCache) return cityRevealScanGlowDimensionsCache;
   let minX = -dynamicRoadSurfaceWidth * 0.5;
   let maxX = dynamicRoadSurfaceWidth * 0.5;
   let maxY = 230;
@@ -15246,12 +15268,13 @@ function cityRevealScanGlowDimensions() {
   }
   const width = Math.max(dynamicRoadSurfaceWidth + CITY_REVEAL_SCAN_GLOW_EDGE_PADDING * 2, (maxX - minX) + CITY_REVEAL_SCAN_GLOW_EDGE_PADDING * 2);
   const height = Math.max(GRID_BLOCK * 8, maxY + CITY_REVEAL_SCAN_GLOW_HEIGHT_PADDING);
-  return {
+  cityRevealScanGlowDimensionsCache = {
     width,
     height,
     centerX: (minX + maxX) * 0.5,
     baseY: roadTileTopY() + 0.22,
   };
+  return cityRevealScanGlowDimensionsCache;
 }
 
 function updateCityRevealScanGlow(now = performance.now()) {
@@ -15356,7 +15379,10 @@ function cityRevealMainBuildingSlowDiagnostics() {
   };
 }
 
+let mainFacadeVerticalRevealLedBoundsCache = null;
+
 function mainFacadeVerticalRevealLedBounds() {
+  if (cityRevealComplete && mainFacadeVerticalRevealLedBoundsCache) return mainFacadeVerticalRevealLedBoundsCache;
   const specs = mainFacadeVerticalRevealLedSpecs.filter((spec) => spec.batchMesh && spec.edgeRole === 'main-building');
   if (!specs.length) return null;
   let minY = Infinity;
@@ -15387,7 +15413,9 @@ function mainFacadeVerticalRevealLedBounds() {
     maxY = Math.max(maxY, facadeRevealWorldPoint.y);
   }
   if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY <= minY) return null;
-  return { minY, maxY, count: specs.length };
+  const bounds = { minY, maxY, count: specs.length };
+  if (cityRevealComplete) mainFacadeVerticalRevealLedBoundsCache = bounds;
+  return bounds;
 }
 
 function mainFacadeVerticalRevealProgress() {
@@ -15704,6 +15732,7 @@ function cityRevealProfileInspect() {
 }
 
 function buildCityRevealWireframe() {
+  cityRevealScanGlowDimensionsCache = null;
   clearCityRevealWire();
   const roadY = roadTileTopY() + 0.18;
   addCityWireBox(dynamicRoadSurfaceWidth, 0.08, dynamicRoadLength, 0, roadY, dynamicRoadCenter, cityRevealWireDimMat);
@@ -18421,6 +18450,8 @@ function applyLiveControls() {
   updateBuildingScale(mainBuildingMeshes, mainBuildingColliders, mainBuildingScale);
   updateBasePadHexInfluence();
   refreshRoadTileInstances();
+  cityRevealScanGlowDimensionsCache = null;
+  mainFacadeVerticalRevealLedBoundsCache = null;
 
   if (bloomPass) {
     bloomPass.enabled = bloomEnabled;
