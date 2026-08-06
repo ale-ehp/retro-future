@@ -1,8 +1,9 @@
 import { readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 
-const demoRoots = ['.'];
+const demoRoots = [join(dirname(fileURLToPath(import.meta.url)), '..')];
 
 const expectedBanks = {
   road: ['ROUTER1A.wav', 'ROUTER1B.wav', 'ROUTER2A.wav', 'ROUTER2B.wav'],
