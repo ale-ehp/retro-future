@@ -9797,7 +9797,6 @@ let labEqualizerAudioContext = null;
 let labEqualizerGain = null;
 let labEqualizerAnalyser = null;
 let labEqualizerFrequencyData = null;
-let labEqualizerStartedAt = 0;
 let labEqualizerLastTextureAt = -Infinity;
 let labEqualizerLastGraphEnsureAt = -Infinity;
 let labEqualizerLastPoseAt = -Infinity;
@@ -9850,16 +9849,6 @@ const labEqualizerState = {
   yaw: 0,
 };
 
-const LAB_EQUALIZER_PULSE_CONTROLS = Object.freeze([
-  { stateKey: 'pulseMaster', inputKey: 'labEqPulseMaster', outputKey: 'labEqPulseMasterVal', fallback: 1.44 },
-  { stateKey: 'pulseBlue', inputKey: 'labEqPulseBlue', outputKey: 'labEqPulseBlueVal', fallback: 2.89 },
-  { stateKey: 'pulseCyan', inputKey: 'labEqPulseCyan', outputKey: 'labEqPulseCyanVal', fallback: 1.51 },
-  { stateKey: 'pulseMagenta', inputKey: 'labEqPulseMagenta', outputKey: 'labEqPulseMagentaVal', fallback: 2.46 },
-  { stateKey: 'pulseRed', inputKey: 'labEqPulseRed', outputKey: 'labEqPulseRedVal', fallback: 1.74 },
-  { stateKey: 'pulseYellow', inputKey: 'labEqPulseYellow', outputKey: 'labEqPulseYellowVal', fallback: 0 },
-  { stateKey: 'pulseGreen', inputKey: 'labEqPulseGreen', outputKey: 'labEqPulseGreenVal', fallback: 1.49 },
-]);
-
 function ensureLabEqualizerVisualResources() {
   if (labEqualizerCanvas && labEqualizerTexture && labEqualizerPanelMat && labEqualizerDisplayMat) return true;
   labEqualizerCanvas = document.createElement('canvas');
@@ -9891,25 +9880,8 @@ function ensureLabEqualizerVisualResources() {
   return Boolean(labEqualizerCtx);
 }
 
-function updateLabEqualizerButton() {
-  if (!controlEls.labEqStart) return;
-  controlEls.labEqStart.textContent = labEqualizerState.playing ? 'Musica demo sincronizzata' : 'Equalizer in attesa';
-}
-
 function applyLabEqualizerControlsFromUI() {
-  labEqualizerState.volume = THREE.MathUtils.clamp(Number(controlEls.labEqVolume?.value ?? 0.55), 0, 1);
-  labEqualizerState.sensitivity = THREE.MathUtils.clamp(Number(controlEls.labEqSensitivity?.value ?? 0.84), 0.35, 3);
-  labEqualizerState.peakFall = THREE.MathUtils.clamp(Number(controlEls.labEqPeakFall?.value ?? 0.8), -6, 6);
-  labEqualizerState.reflectionStrength = THREE.MathUtils.clamp(Number(controlEls.labEqReflection?.value ?? 1.46), 0, 3);
-  LAB_EQUALIZER_PULSE_CONTROLS.forEach((control) => {
-    const value = THREE.MathUtils.clamp(Number(controlEls[control.inputKey]?.value ?? control.fallback), 0, 3);
-    labEqualizerState[control.stateKey] = value;
-    if (controlEls[control.outputKey]) controlEls[control.outputKey].textContent = `${value.toFixed(2)}x`;
-  });
-  if (controlEls.labEqVolumeVal) controlEls.labEqVolumeVal.textContent = labEqualizerState.volume.toFixed(2);
-  if (controlEls.labEqSensitivityVal) controlEls.labEqSensitivityVal.textContent = labEqualizerState.sensitivity.toFixed(2);
-  if (controlEls.labEqPeakFallVal) controlEls.labEqPeakFallVal.textContent = labEqualizerState.peakFall.toFixed(1);
-  if (controlEls.labEqReflectionVal) controlEls.labEqReflectionVal.textContent = `${labEqualizerState.reflectionStrength.toFixed(2)}x`;
+  // I controlli UI del lab non esistono piu': i parametri restano i default costanti di labEqualizerState.
   if (labEqualizerGain && labEqualizerAudioContext) {
     labEqualizerGain.gain.setValueAtTime(0, labEqualizerAudioContext.currentTime);
   }
@@ -9930,6 +9902,7 @@ function ensureLabEqualizerAudioGraph() {
     labEqualizerAnalyser.smoothingTimeConstant = 0.42;
     labEqualizerFrequencyData = new Uint8Array(labEqualizerAnalyser.frequencyBinCount);
     labEqualizerGain = ctx.createGain();
+    // Gain inchiodato a 0 di proposito: la catena analyser e' muta, l'audio udibile esce dal grafo soundtrack (setupTronSoundtrackGraph).
     labEqualizerGain.gain.setValueAtTime(0, ctx.currentTime);
     labEqualizerAnalyser.connect(labEqualizerGain).connect(ctx.destination);
   }
@@ -9962,12 +9935,9 @@ async function startLabEqualizerAudio() {
     await labEqualizerAudioContext.resume();
     labEqualizerState.playing = Boolean(tronSoundtrack.playing);
     labEqualizerState.audioSynced = true;
-    labEqualizerStartedAt = performance.now();
-    updateLabEqualizerButton();
     return true;
   } catch (error) {
     labEqualizerState.error = error?.message || String(error);
-    updateLabEqualizerButton();
     return false;
   }
 }
@@ -10366,7 +10336,6 @@ function buildLabEqualizer() {
   labEqualizerState.boardChildren = labEqualizerGroup.children.length;
   drawLabEqualizerCanvas(performance.now(), 0, 0);
   applyLabEqualizerControlsFromUI();
-  updateLabEqualizerButton();
 }
 
 function activateLabEqualizerAfterReveal() {
@@ -10374,7 +10343,6 @@ function activateLabEqualizerAfterReveal() {
   buildLabEqualizer();
   ensureLabEqualizerAudioGraphIfNeeded(performance.now(), true);
   labEqualizerActivatedAfterReveal = true;
-  labEqualizerStartedAt = performance.now();
   return true;
 }
 
