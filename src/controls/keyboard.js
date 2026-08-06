@@ -39,6 +39,12 @@ let triggerBackspaceDroneIntro = null;
 let resetCameraHeightToDefault = null;
 let captureLivePlayerSpawn = null;
 let getBackspaceIntroTriggered = null;
+let handleContactTerminalKeyDown = null;
+
+export function routeContactTerminalKeyDown(event, handler) {
+  if (event?.repeat || typeof handler !== 'function') return false;
+  return Boolean(handler(event));
+}
 
 export function initKeyboard(deps) {
   DEMO_START_KEY = deps.DEMO_START_KEY;
@@ -48,8 +54,10 @@ export function initKeyboard(deps) {
   resetCameraHeightToDefault = deps.resetCameraHeightToDefault;
   captureLivePlayerSpawn = deps.captureLivePlayerSpawn;
   getBackspaceIntroTriggered = deps.getBackspaceIntroTriggered;
+  handleContactTerminalKeyDown = deps.handleContactTerminalKeyDown;
 
   window.addEventListener('keydown', (e) => {
+    if (routeContactTerminalKeyDown(e, handleContactTerminalKeyDown)) return;
     if (e.repeat) return;
     if (e.code === 'Escape') {
       stopMouseLookInput();

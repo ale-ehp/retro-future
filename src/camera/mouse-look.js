@@ -40,6 +40,7 @@ let requestLandscapeFullscreen = null;
 let isMobileMovementControlTarget = null;
 let getCityRevealComplete = null;
 let getMouseSensitivityScale = null;
+let contactTerminalOwnsCamera = null;
 
 // ---------- exported accessors (read by main's disc-cursor + debug inspect) ----------
 export function getPointerLocked() {
@@ -50,8 +51,15 @@ export function getUnlockedMouseLookActive() {
   return unlockedMouseLookActive;
 }
 
+export function mouseLookAllowed({ revealComplete, contactCameraOwned }) {
+  return Boolean(revealComplete && !contactCameraOwned);
+}
+
 export function isMouseLookEnabled() {
-  return getCityRevealComplete();
+  return mouseLookAllowed({
+    revealComplete: getCityRevealComplete?.(),
+    contactCameraOwned: contactTerminalOwnsCamera?.(),
+  });
 }
 
 export function getCameraTouchCandidates(touchList, movementTargetFn = isMobileMovementControlTarget) {
@@ -128,6 +136,7 @@ export function initMouseLook(ctx, injected) {
     getCityRevealComplete,
     getMouseSensitivityScale,
   } = injected);
+  contactTerminalOwnsCamera = injected.contactTerminalOwnsCamera || (() => false);
 
   lockEl.addEventListener('click', (e) => {
     if (!isMouseLookEnabled()) {
