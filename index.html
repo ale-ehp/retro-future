@@ -1849,7 +1849,9 @@ app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(FIXED_CAMERA_FOV, window.innerWidth / window.innerHeight, 0.1, 10000);
-camera.position.set(701.4907301468677, 591.0351224586902, 1110.9745792178219);
+// Spawn coordinates captured from the live camera readout in the control panel.
+const DEFAULT_CAMERA_SPAWN = { x: 701.4907301468677, y: 591.0351224586902, z: 1110.9745792178219 };
+camera.position.set(DEFAULT_CAMERA_SPAWN.x, DEFAULT_CAMERA_SPAWN.y, DEFAULT_CAMERA_SPAWN.z);
 camera.lookAt(0, 80, -300);
 
 function setFixedCameraFov() {
@@ -1926,6 +1928,8 @@ let ignoredPointerLookMoves = 0;
 let mouseSensitivityScale = 1;
 let cameraMinHeight = 1.8;
 let viewRoll = 0;
+
+// ---------- welcome window + mobile touch: DOM refs, state and visibility helpers ----------
 const welcomeWindowOverlay = document.getElementById('welcome-window-overlay');
 const welcomeWindowPanel = welcomeWindowOverlay?.querySelector('.welcome-window');
 const welcomeWindowAction = welcomeWindowOverlay?.querySelector('.welcome-action');
@@ -1989,6 +1993,7 @@ function welcomeWindowUsesTouchPrompt() {
   return Boolean(welcomeWindowTouchQuery.matches || welcomeWindowMobileQuery.matches || navigator.maxTouchPoints > 0);
 }
 
+// ---------- mobile fullscreen + landscape touch controls (state machine) ----------
 function isMobileLandscapeMode() {
   return Boolean(mobilePerformanceProfileActive() && (mobileLandscapeQuery.matches || window.innerWidth > window.innerHeight));
 }
@@ -2115,6 +2120,7 @@ function mobileTouchControlsInspect() {
   };
 }
 
+// ---------- welcome window: input prompt + pointer-follow motion ----------
 function applyWelcomeWindowInputMode() {
   if (!welcomeWindowKeyLabel) return;
   const useTouchPrompt = welcomeWindowUsesTouchPrompt();
@@ -2213,6 +2219,7 @@ if (typeof welcomeWindowTouchQuery.addEventListener === 'function') {
 welcomeWindowOverlay?.addEventListener('pointerdown', triggerWelcomeWindowTouch, { passive: false });
 welcomeWindowOverlay?.addEventListener('touchstart', triggerWelcomeWindowTouch, { passive: false });
 
+// ---------- camera look apply + pointer-lock tuning constants ----------
 const cameraLookEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
 function applyCameraLook() {
@@ -2223,6 +2230,8 @@ const lockEl = renderer.domElement;
 const DRAG_ACTIVATE_PX = 4;
 const POINTER_LOCK_SETTLE_MS = 220;
 const POINTER_CLICK_SUPPRESS_MS = 420;
+
+// ---------- disc cursor (spinning pointer over the 3D canvas) ----------
 const TRON_DISC_CURSOR_IDLE_SPIN = 78;
 const TRON_DISC_CURSOR_MAX_SPIN = 28500;
 const TRON_DISC_CURSOR_SPEED_GAIN = 12.8;
@@ -2309,6 +2318,7 @@ function updateTronDiscCursor(dt) {
   tronDiscCursor.style.transform = `translate3d(${tronDiscCursorState.x}px, ${tronDiscCursorState.y}px, 0) translate(-50%, -50%) rotate(${tronDiscCursorState.rotationDeg.toFixed(2)}deg)`;
 }
 
+// ---------- free fly movement, drone intro flight + input handlers ----------
 function clearVerticalMovementState() {
   keys.KeyE = false;
   keys.Space = false;
@@ -2813,6 +2823,8 @@ let walkSurfaceLift = 0;
 let walkSurfaceKind = 'road';
 let activeWalkSurfacePad = null;
 const WALK_SURFACE_SNAP_TOLERANCE = 0.45;
+
+// ---------- footstep audio: sample banks + WebAudio context/decode ----------
 const TRON_FOOTSTEP_BANKS = Object.freeze({
   road: [
     { side: 'right', key: 'ROUTER1A', url: 'audio/footsteps/road/ROUTER1A.wav' },
@@ -2932,6 +2944,7 @@ function ensureFootstepAudioReady() {
   return footstepAudioReadyPromise;
 }
 
+// ---------- soundtrack (streamed music loop + intro lo-fi FX) ----------
 const TRON_SOUNDTRACK_ENABLED = true;
 const TRON_SOUNDTRACK_URL = 'audio/music/retro-future.opus';
 const TRON_SOUNDTRACK_VOLUME = 0.09;
@@ -3395,6 +3408,7 @@ function setTronProceduralMusicVolume(value = TRON_SOUNDTRACK_VOLUME) {
   return setTronFileSoundtrackVolume(value);
 }
 
+// ---------- footstep audio: playback, spatialization + walk cadence ----------
 function pickFootstepSample(surfaceKind, side) {
   const surface = footstepBuffers[surfaceKind]?.length ? surfaceKind : 'road';
   const candidates = (footstepBuffers[surface] || []).filter((sample) => sample.side === side);
@@ -3639,6 +3653,7 @@ window.__tronMusicInspect = () => ({
   error: tronSoundtrack.error,
 });
 
+// ---------- walk simulation + movement application ----------
 function removeViewMotionOffset() {
   if (appliedHeadMotion.lengthSq() <= 0) return;
   camera.position.sub(appliedHeadMotion);
@@ -4296,12 +4311,12 @@ pmrem.dispose();
 
 function applySkyPreset(choice, brightness, hueDeg, quality = controlEls.skyQuality?.value || 'balanced') {
   const base = skyPalette[choice] || skyPalette.grid;
-  const lightingEnabled = choice === 'tron-lighting';
+  const lightningEnabled = choice === 'tron-lighting';
   skyDisplayColor.copy(tunedColor(base, hueDeg, 1, brightness));
   domeMat.uniforms.uBrightness.value = THREE.MathUtils.clamp(brightness, 0.05, 2);
   domeMat.uniforms.uHue.value = hueDeg;
   domeMat.uniforms.uCloudAmount.value = 1;
-  domeMat.uniforms.uLightningMode.value = lightingEnabled ? 1 : 0;
+  domeMat.uniforms.uLightningMode.value = lightningEnabled ? 1 : 0;
   domeMat.uniforms.uLightningHue.value = hueDeg;
   domeMat.uniforms.uSkyQuality.value = quality === 'full' ? 1 : 0;
   domeMat.uniforms.uSkyTint.value.copy(skyDisplayColor);
@@ -4439,7 +4454,7 @@ function makeBasePadSurfaceTexture(size = 512) {
 }
 const basePadSurfaceTex = makeBasePadSurfaceTexture();
 
-// ---------- Exact boulevard map constants from tron-boulevard-map-walk.html ----------
+// ---------- Exact boulevard map constants (baseline boulevard prototype layout) ----------
 const GRID_BLOCK = 12;
 const MAIN_ROAD_WIDTH = 88;
 const SIDE_BUILDING_X = 96;
@@ -4601,7 +4616,7 @@ function roadSurfaceWidthForBuildings(
   return Math.max(baseRoadWidth, sideSpan, mainSpan);
 }
 
-// ---------- Floor: streetEdges (hex tile) + road (metal mirror) + outer floor ----------
+// ---------- Floor: streetEdges (hex tile) + road backing (unlit black) + outer floor ----------
 const ROAD_HALF = MAIN_ROAD_WIDTH / 2;     // road x range -44..+44
 const Z_FLOOR_LEN = MAIN_ROAD_LENGTH;
 const Z_FLOOR_CENTER = MAIN_ROAD_Z;
@@ -4639,7 +4654,7 @@ scene.add(road);
 const floorPlaneLengthMeshes = [road];
 const floorBoxLengthMeshes = [];
 
-// Main road hex tiles: same design/function as mockup-hex-road-tiles.html.
+// Main road hex tiles: animated hex grid (drop + recovery) forming the road surface.
 const hexRoadTiles = [];
 const hexRoadTileBatches = [];
 const streetEdgeHexTiles = [];
@@ -6082,7 +6097,7 @@ const longitudinalRoadEdgeRecords = [];
   [-1, 1].forEach((sign) => addLongitudinalRoadEdgeSegments(sign, 'outer', outerRoadEdgeMat, 0.30, 0.15));
 }
 
-// Crosswalk/racetrack markings from demo-5 intentionally removed: this variant
+// Crosswalk/racetrack markings intentionally omitted: this variant
 // keeps only the exact boulevard road network.
 
 // soft fills (low — let env + emissives carry mood)
@@ -8159,7 +8174,7 @@ function addBuildingEdges(group, w, h, d, x, y, z, color = PAL.tealLight, bevelP
   }
 }
 
-// 6 + 6 side buildings + main hero — same layout as baseline tron-boulevard-map-walk.html
+// 6 + 6 side buildings + main hero, same layout as the baseline boulevard prototype
 // GRID_BLOCK 12, SIDE_BUILDING_BASE 72, SIDE_BUILDING_X 96
 // laneZ slots [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5] × 96 = [-240, -144, -48, 48, 144, 240]
 // heights = [220, 190, 172, 158, 145, 132]
@@ -14621,7 +14636,7 @@ function tronRunnerInspect() {
   };
 }
 
-// ---------- Exact boulevard elevated links, rendered with demo-5 cubemap materials ----------
+// ---------- Exact boulevard elevated links, rendered with demo-5 PMREM env materials ----------
 function bridgeSpanLength(nextSideWidthScale = sideBuildingWidthScale, width = streetEdgeWidth) {
   return 2 * (roadHalf() + width + SIDE_BUILDING_BASE * nextSideWidthScale / 2);
 }
@@ -14684,6 +14699,7 @@ function addPortalFrame(z) {
 
 // (Ground rungs / spine strips removed — replaced by roadEdge tubes + clean median above)
 
+// ---------- city reveal (wireframe sweep) ----------
 const cityRevealOverlayScene = new THREE.Scene();
 const cityRevealOverlayCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
 cityRevealOverlayCamera.position.z = 1;
@@ -15089,20 +15105,20 @@ function addCityWireBoxDensity(width, height, depth, x, y, z, material = cityRev
     points.push(new THREE.Vector3(a[0], a[1], a[2]), new THREE.Vector3(b[0], b[1], b[2]));
   };
   for (let index = 1; index < cityRevealWireframeDensity; index += 1) {
-    const x = -hw + width * (index / cityRevealWireframeDensity);
+    const gridX = -hw + width * (index / cityRevealWireframeDensity);
     const yMid = -hh + height * (index / cityRevealWireframeDensity);
-    const z = -hd + depth * (index / cityRevealWireframeDensity);
+    const gridZ = -hd + depth * (index / cityRevealWireframeDensity);
     [-hd, hd].forEach((zSide) => {
-      push([x, -hh, zSide], [x, hh, zSide]);
+      push([gridX, -hh, zSide], [gridX, hh, zSide]);
       push([-hw, yMid, zSide], [hw, yMid, zSide]);
     });
     [-hw, hw].forEach((xSide) => {
-      push([xSide, -hh, z], [xSide, hh, z]);
+      push([xSide, -hh, gridZ], [xSide, hh, gridZ]);
       push([xSide, yMid, -hd], [xSide, yMid, hd]);
     });
     [-hh, hh].forEach((ySide) => {
-      push([-hw, ySide, z], [hw, ySide, z]);
-      push([x, ySide, -hd], [x, ySide, hd]);
+      push([-hw, ySide, gridZ], [hw, ySide, gridZ]);
+      push([gridX, ySide, -hd], [gridX, ySide, hd]);
     });
   }
 
@@ -16746,7 +16762,7 @@ function updateBuildingFootprints(nextSideWidthScale, nextSideDepthScale, nextMa
   }
 }
 
-function updateControlTabs() {
+function bindControlTabs() {
   const tabs = document.querySelectorAll('#hud-controls .control-tab');
   const panels = document.querySelectorAll('#hud-controls .control-panel');
   tabs.forEach((tab) => {
@@ -18242,10 +18258,10 @@ function applyLiveControls() {
   buildingFacadeLedX = nextBuildingFacadeLedX;
   buildingFacadeLedY = nextBuildingFacadeLedY;
   buildingFacadeLedZ = nextBuildingFacadeLedZ;
-  nextSideFacadeSegmentOffsets.forEach((offset, index) => {
-    sideBuildingFacadeLedSegmentOffsets[index].u = offset.u;
-    sideBuildingFacadeLedSegmentOffsets[index].y = offset.y;
-    sideBuildingFacadeLedSegmentOffsets[index].normal = offset.normal;
+  nextSideFacadeSegmentOffsets.forEach((segmentOffset, index) => {
+    sideBuildingFacadeLedSegmentOffsets[index].u = segmentOffset.u;
+    sideBuildingFacadeLedSegmentOffsets[index].y = segmentOffset.y;
+    sideBuildingFacadeLedSegmentOffsets[index].normal = segmentOffset.normal;
   });
   mainBuildingFacadeLedBrightness = nextMainBuildingFacadeLedBrightness;
   mainBuildingFacadeLedNormal = nextMainBuildingFacadeLedNormal;
@@ -18253,10 +18269,10 @@ function applyLiveControls() {
   mainBuildingFacadeLedY = nextMainBuildingFacadeLedY;
   mainBuildingFacadeLedZ = nextMainBuildingFacadeLedZ;
   mainBuildingFacadeLedThickness = nextMainBuildingFacadeLedThickness;
-  nextMainFacadeSegmentOffsets.forEach((offset, index) => {
-    mainBuildingFacadeLedSegmentOffsets[index].u = offset.u;
-    mainBuildingFacadeLedSegmentOffsets[index].y = offset.y;
-    mainBuildingFacadeLedSegmentOffsets[index].normal = offset.normal;
+  nextMainFacadeSegmentOffsets.forEach((segmentOffset, index) => {
+    mainBuildingFacadeLedSegmentOffsets[index].u = segmentOffset.u;
+    mainBuildingFacadeLedSegmentOffsets[index].y = segmentOffset.y;
+    mainBuildingFacadeLedSegmentOffsets[index].normal = segmentOffset.normal;
   });
   basePadGlobalY = nextBasePadGlobalY;
   basePadCurbEnabled = nextBasePadCurbEnabled;
@@ -18766,7 +18782,7 @@ controlEls.goStartPosition.addEventListener('click', () => applyPlayerSpawn(play
 controlEls.droneIntroFlight?.addEventListener('click', () => startDroneIntroFlight('manual'));
 bindSaveButtons();
 
-updateControlTabs();
+bindControlTabs();
 setupSettingsToggle();
 async function bootSceneWithFinalDefaults() {
   await loadProjectCanonicalDefaults();
@@ -18848,6 +18864,9 @@ function inspectSideBuildingDoorBatching() {
   };
 }
 
+// Inspection harness: window.__tron* getters were used during development for
+// automated verification (headless probes, console snapshots). They are left
+// exposed deliberately as a stable debug contract for the live demo.
 window.__tronInspect = () => ({
   cameraX: camera.position.x,
   cameraY: camera.position.y,
