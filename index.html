@@ -1130,8 +1130,6 @@
 
     <section class="control-panel" data-panel="export">
       <div class="control-section">Preset</div>
-      <button id="export-settings" class="control-action" type="button">Export settings JSON</button>
-      <button id="save-default-settings" class="control-action" type="button">Salva tutti come default</button>
       <button class="control-action save-tab-settings" type="button" data-save-tab="export">Salva scheda Export</button>
     </section>
   </div>
@@ -1818,8 +1816,6 @@ const controlEls = {
   musicFxWobbleVal: document.getElementById('music-fx-wobble-val'),
   musicFxNoise: document.getElementById('music-fx-noise'),
   musicFxNoiseVal: document.getElementById('music-fx-noise-val'),
-  exportSettings: document.getElementById('export-settings'),
-  saveDefaultSettings: document.getElementById('save-default-settings'),
   resetCameraHeight: document.getElementById('reset-camera-height'),
   playerSpawnVal: document.getElementById('player-spawn-val'),
   saveLiveSpawn: document.getElementById('save-live-spawn'),
@@ -4546,10 +4542,6 @@ function sideBuildingVisualWidth() {
   return SIDE_BUILDING_BASE * sideBuildingWidthScale;
 }
 
-function sideBuildingZSpacing() {
-  return SIDE_BUILDING_SPACING * sideBuildingSpacingScale;
-}
-
 function safeSideBuildingSpacingScale(requestedScale, depthScale) {
   const input = controlEls?.sideBuildingSpacingScale;
   const min = Number(input?.min ?? 1);
@@ -4560,20 +4552,12 @@ function safeSideBuildingSpacingScale(requestedScale, depthScale) {
   return THREE.MathUtils.clamp(Math.max(requested, noOverlapScale), min, max);
 }
 
-function sideBuildingVisualDepth() {
-  return SIDE_BUILDING_BASE * sideBuildingDepthScale;
-}
-
 function boulevardRoadWidth(scale = boulevardWidthScale) {
   return MAIN_ROAD_WIDTH * scale;
 }
 
 function roadHalf(scale = boulevardWidthScale) {
   return boulevardRoadWidth(scale) / 2;
-}
-
-function sideBuildingX(sign) {
-  return sign * (roadHalf() + streetEdgeWidth + sideBuildingVisualWidth() / 2);
 }
 
 function roadSideHexExtraWidth(rows = roadSideHexExtraRows) {
@@ -4844,19 +4828,6 @@ basePadHexClipMesh.renderOrder = 4;
 scene.add(basePadHexClipMesh);
 let basePadClippedHexPolygons = 0;
 let basePadFullHexOverlays = 0;
-
-function ensureBasePadHexOverlayCapacity(count) {
-  const needed = Math.max(1, count);
-  if (basePadHexOverlay && basePadHexOverlayCapacity >= needed) return;
-  if (basePadHexOverlay) scene.remove(basePadHexOverlay);
-  basePadHexOverlayCapacity = needed;
-  basePadHexOverlay = new THREE.InstancedMesh(hexTileGeo, basePadHexMat, basePadHexOverlayCapacity);
-  basePadHexOverlay.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  basePadHexOverlay.count = 0;
-  basePadHexOverlay.frustumCulled = false;
-  basePadHexOverlay.renderOrder = 3;
-  scene.add(basePadHexOverlay);
-}
 
 function hexTileBucketKey(ix, iz) {
   return `${ix}:${iz}`;
@@ -6587,71 +6558,6 @@ function segmentIntersection(a, b, c, d) {
   return [a[0] + bax * t, a[1] + baz * t];
 }
 
-function clipPolygonToConvex(subject, clip) {
-  let output = subject.slice();
-  if (output.length < 3 || clip.length < 3) return [];
-  const orientation = polygonSignedArea(clip) >= 0 ? 1 : -1;
-  const inside = (point, a, b) => {
-    const cross = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]);
-    return orientation * cross >= -0.001;
-  };
-
-  for (let i = 0; i < clip.length; i++) {
-    const a = clip[i];
-    const b = clip[(i + 1) % clip.length];
-    const input = output;
-    output = [];
-    if (!input.length) break;
-    let previous = input[input.length - 1];
-    let previousInside = inside(previous, a, b);
-    for (const current of input) {
-      const currentInside = inside(current, a, b);
-      if (currentInside) {
-        if (!previousInside) output.push(segmentIntersection(previous, current, a, b));
-        output.push(current);
-      } else if (previousInside) {
-        output.push(segmentIntersection(previous, current, a, b));
-      }
-      previous = current;
-      previousInside = currentInside;
-    }
-  }
-  return output;
-}
-
-function hexTilePolygonLocalToPad(tile, pad) {
-  const localX = tile.userData.x - pad.border.position.x;
-  const localZ = tile.userData.z - pad.border.position.z;
-  const radius = hexTileRadius * hexTileScale;
-  const points = [];
-  for (let i = 0; i < 6; i++) {
-    const angle = Math.PI / 6 + i * Math.PI / 3;
-    points.push([
-      localX + Math.cos(angle) * radius,
-      localZ + Math.sin(angle) * radius,
-    ]);
-  }
-  return points;
-}
-
-function appendClippedHexSurface(positions, tile, pad, clippedPolygon) {
-  if (clippedPolygon.length < 3) return false;
-  const y = tile.userData.baseY + tile.userData.depression + (hexTileHeight * hexTileHeightScale * 0.5) + 0.16;
-  const originX = pad.border.position.x;
-  const originZ = pad.border.position.z;
-  for (let i = 1; i < clippedPolygon.length - 1; i++) {
-    const a = clippedPolygon[0];
-    const b = clippedPolygon[i];
-    const c = clippedPolygon[i + 1];
-    positions.push(
-      originX + a[0], y, originZ + a[1],
-      originX + b[0], y, originZ + b[1],
-      originX + c[0], y, originZ + c[1],
-    );
-  }
-  return true;
-}
-
 function updateBasePadHexInfluence() {
   for (const tile of hexRoadTiles) {
     if ((tile.userData.basePadLight || 0) > 0 || tile.userData.basePadOverlayId >= 0) {
@@ -7545,14 +7451,6 @@ function getMainFacadeVerticalRevealLedMaterial() {
   return mainFacadeVerticalRevealLedMaterial;
 }
 
-function getMainBuildingEdgeVerticalRevealLedMaterial(color = PAL.tealLight) {
-  if (!mainBuildingEdgeVerticalRevealLedMaterial) {
-    mainBuildingEdgeVerticalRevealLedMaterial = createMainFacadeVerticalRevealLedMaterial(color);
-    mainBuildingEdgeVerticalRevealLedMaterial.customProgramCacheKey = () => 'main-building-edge-vertical-led-reveal-v1';
-  }
-  return mainBuildingEdgeVerticalRevealLedMaterial;
-}
-
 function setMainFacadeVerticalRevealUniforms(revealY, feather, enabled) {
   for (const material of [mainFacadeVerticalRevealLedMaterial, mainBuildingEdgeVerticalRevealLedMaterial]) {
     if (!material) continue;
@@ -8080,14 +7978,6 @@ function syncBasePadLedBatchAggregate() {
   basePadLedBatch.count = basePadLedBatch.batches.reduce((sum, batch) => sum + batch.count, 0);
   basePadLedBatch.capacity = basePadLedBatch.batches.reduce((sum, batch) => sum + batch.capacity, 0);
   basePadLedBatch.mesh = basePadLedBatch.batches.length === 1 ? basePadLedBatch.batches[0].mesh : null;
-}
-
-function basePadLedSegmentCount() {
-  let count = 0;
-  for (const record of [...sideBuildingRecords, ...mainBuildingRecords]) {
-    count += basePadLedSegmentCountForRecord(record);
-  }
-  return count;
 }
 
 function updateBasePadLedStrips(brightness, thickness, offset, hueDeg) {
@@ -14477,14 +14367,14 @@ async function loadTronRunner() {
     tronRunnerParts.leftRim = null;
     tronRunnerParts.rightRim = null;
     tronRunnerParts.lowFill = null;
-	    playTronRunnerAction('walk');
-	    applyTronRunnerVisualControls();
-	    buildTronRunnerCrowd(model, gltf.animations);
-	    buildTronRunnerIdleCharacter(model);
+      playTronRunnerAction('walk');
+      applyTronRunnerVisualControls();
+      buildTronRunnerCrowd(model, gltf.animations);
+      buildTronRunnerIdleCharacter(model);
 
-		    tronRunnerElapsed = 0;
-	    tronRunnerVisualDistanceWalked = 0;
-	    tronRunnerYaw = 0;
+        tronRunnerElapsed = 0;
+      tronRunnerVisualDistanceWalked = 0;
+      tronRunnerYaw = 0;
     tronRunnerState.ready = true;
     tronRunnerState.loaded = 1;
     tronRunnerState.error = '';
@@ -15921,20 +15811,6 @@ function updateCityRevealWireframe(now) {
   }
 }
 
-function renderCityRevealWireframe() {
-  if (!cityRevealWireframeEnabled || cityRevealWireAlpha <= 0.002) return;
-  const previousAutoClear = renderer.autoClear;
-  renderer.autoClear = false;
-  renderer.clearDepth();
-  if (isCityRevealBackplateActive()) {
-    renderer.render(cityRevealOverlayScene, cityRevealOverlayCamera);
-    renderer.clearDepth();
-  }
-  renderer.render(cityRevealRoadGridScene, camera);
-  renderer.render(cityRevealWireScene, camera);
-  renderer.autoClear = previousAutoClear;
-}
-
 function isCityRevealCompositeActive() {
   return cityRevealWireframeEnabled && cityRevealWireAlpha > 0.002;
 }
@@ -16449,11 +16325,6 @@ function updateRoadTileMaterials(callback) {
     callback(batch.material);
     batch.material.color.set(0xffffff);
   }
-}
-
-function updateStreetEdgeTileMaterials(callback) {
-  callback(streetEdgeHexMat);
-  for (const batch of streetEdgeHexTileBatches) callback(batch.material);
 }
 
 function refreshRoadTileInstances() {
@@ -17006,16 +16877,6 @@ async function persistSettingsToProject(scope, settings, extra = {}) {
   }
 }
 
-function exportLiveSettings() {
-  const settings = collectAllControlSettings();
-  const text = JSON.stringify(settings, null, 2);
-  navigator.clipboard?.writeText(text).catch(() => {});
-  setButtonFeedback(controlEls.exportSettings, 'Settings copied');
-  persistSettingsToProject('export', settings).then((result) => {
-    if (result) setButtonFeedback(controlEls.exportSettings, 'Copied + JSON salvato');
-  });
-}
-
 const TAB_STORAGE_PREFIX = 'tron-boulevard-tab:';
 const DEFAULT_SETTINGS_KEY = 'tron-boulevard-default-settings';
 const PROJECT_SETTINGS_ENDPOINT = `${location.protocol}//${location.hostname || '127.0.0.1'}:60093/save-settings`;
@@ -17188,21 +17049,6 @@ function applyRetroFutureRevealTimingDefaults() {
       controlEls.wireframeFadeVal.textContent = `${fadeSeconds.toFixed(1)} s`;
     }
   }
-}
-
-function saveAllControlDefaults(button) {
-  const payload = {
-    savedAt: new Date().toISOString(),
-    settings: collectAllControlSettings(),
-  };
-  const text = JSON.stringify(payload, null, 2);
-  localStorage.setItem(DEFAULT_SETTINGS_KEY, text);
-  navigator.clipboard?.writeText(text).catch(() => {});
-  applyControlSettings(payload.settings, true);
-  setButtonFeedback(button, 'Default salvati');
-  persistSettingsToProject('all-defaults', payload.settings, { savedAt: payload.savedAt }).then((result) => {
-    if (result) setButtonFeedback(button, 'Default + JSON salvati');
-  });
 }
 
 function saveTabSettings(tabName, button) {
@@ -17566,7 +17412,6 @@ function fastScopeForControl(target) {
 function mergeLiveControlScope(currentScope, nextScope) {
   if (!currentScope) return nextScope;
   if (currentScope === nextScope) return currentScope;
-  if (currentScope === 'all' || nextScope === 'all') return 'all';
   return 'all';
 }
 
