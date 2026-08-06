@@ -2,10 +2,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
 
-const demoRoots = [
-  'public/tecnologie/retro-future',
-  'output/airdrop-tron-samsy-20260520-095217/tron-boulevard-led-cob-pulse',
-];
+const demoRoots = ['.'];
 
 const expectedBanks = {
   road: ['ROUTER1A.wav', 'ROUTER1B.wav', 'ROUTER2A.wav', 'ROUTER2B.wav'],

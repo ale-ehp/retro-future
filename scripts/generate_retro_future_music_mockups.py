@@ -3,6 +3,8 @@
 
 The output is intentionally original: no melodies, stems, or sampled material
 from existing scores. It renders short loopable cues for the retro-future demo.
+
+Requires numpy, scipy and an ffmpeg binary in PATH.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ BEAT = 60.0 / BPM
 LOOP_SECONDS = BEAT * 32
 CYCLES = 3
 ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = ROOT / "public" / "tecnologie" / "retro-future" / "audio" / "music-mockups"
+OUT_DIR = ROOT / "audio" / "music-mockups"
 
 
 def midi_to_hz(midi: float) -> float:
@@ -91,7 +93,7 @@ def synth_note(
     t = np.arange(length, dtype=np.float32) / SR
     f = freq * (2.0 ** (detune_cents / 1200.0))
     if vibrato:
-      f = f * (1.0 + np.sin(2.0 * np.pi * 4.7 * t) * vibrato)
+        f = f * (1.0 + np.sin(2.0 * np.pi * 4.7 * t) * vibrato)
     phase = 2.0 * np.pi * np.cumsum(np.full(length, f, dtype=np.float32)) / SR
     if shape == "saw":
         wave = saw(phase)
@@ -291,7 +293,7 @@ CUES = [
 ]
 
 
-def render_cycle(cue: Cue, cycle: int, buf: np.ndarray, offset_s: float) -> None:
+def render_cycle(cue: Cue, buf: np.ndarray, offset_s: float) -> None:
     for bar in range(8):
         root = cue.roots[(bar // 2) % len(cue.roots)]
         bar_start = offset_s + bar * BEAT * 4
@@ -336,7 +338,7 @@ def render_cue(cue: Cue) -> np.ndarray:
     total_seconds = LOOP_SECONDS * CYCLES
     buf = np.zeros((int(total_seconds * SR), 2), dtype=np.float32)
     for cycle in range(CYCLES):
-        render_cycle(cue, cycle, buf, cycle * LOOP_SECONDS)
+        render_cycle(cue, buf, cycle * LOOP_SECONDS)
     start = int(LOOP_SECONDS * SR)
     end = int(LOOP_SECONDS * 2 * SR)
     return master(buf[start:end])
