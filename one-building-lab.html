@@ -14805,6 +14805,8 @@ function setupSettingsToggle() {
 }
 
 async function persistSettingsToProject(scope, settings, extra = {}) {
+  // Endpoint di sviluppo locale: su host pubblici non esiste, non tentare il POST.
+  if (!['localhost', '127.0.0.1', ''].includes(location.hostname)) return null;
   try {
     const payload = {
       demo: 'demo-5-boulevard-map',

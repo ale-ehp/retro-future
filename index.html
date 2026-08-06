@@ -1129,7 +1129,6 @@
     </section>
 
     <section class="control-panel" data-panel="export">
-    <section class="control-panel" data-panel="export">
       <div class="control-section">Preset</div>
       <button id="export-settings" class="control-action" type="button">Export settings JSON</button>
       <button id="save-default-settings" class="control-action" type="button">Salva tutti come default</button>
@@ -1256,15 +1255,19 @@ let lastFxaaTargetKey = '';
 let secondaryEffectFrame = 0;
 let boundaryErrorAccumulatedDt = 0;
 const SECONDARY_EFFECT_UPDATE_STRIDE = 2;
+let EffectComposer = null;
+let RenderPass = null;
+let UnrealBloomPass = null;
+let OutputPass = null;
+let FXAAPass = null;
 try {
-  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { FXAAPass }] = await Promise.all([
+  [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { FXAAPass }] = await Promise.all([
     import('three/addons/postprocessing/EffectComposer.js'),
     import('three/addons/postprocessing/RenderPass.js'),
     import('three/addons/postprocessing/UnrealBloomPass.js'),
     import('three/addons/postprocessing/OutputPass.js'),
     import('three/addons/postprocessing/FXAAPass.js'),
   ]);
-  window.__POST = { EffectComposer, RenderPass, UnrealBloomPass, OutputPass, FXAAPass };
   usePost = true;
 } catch (e) {
   console.warn('Postprocessing unavailable, falling back to plain renderer:', e.message);
@@ -2406,7 +2409,6 @@ function startDroneIntroFlight(options = {}) {
   droneIntroFlight.arcLift = Math.min(90, Math.max(24, droneIntroStart.distanceTo(droneIntroTarget) * 0.08));
   droneIntroFlight.progress = 0;
   if (controlEls.droneIntroFlight) setButtonFeedback(controlEls.droneIntroFlight, 'Drone in volo');
-  return window.__tronInspect?.();
 }
 
 function triggerBackspaceDroneIntro(source = 'backspace') {
@@ -2431,7 +2433,6 @@ function updateDroneIntroFlight(now) {
   camera.position.y += Math.sin(Math.PI * eased) * droneIntroFlight.arcLift;
   yaw = lerpAngle(droneIntroFlight.startYaw, droneIntroFlight.targetYaw, eased);
   pitch = THREE.MathUtils.lerp(droneIntroFlight.startPitch, droneIntroFlight.targetPitch, eased);
-  viewRoll = THREE.MathUtils.lerp(viewRoll, 0, Math.min(1, 8 * Math.min(0.05, (now - last) / 1000)));
   headBobOffset = 0;
   sideSwayOffset = 0;
   movementHorizontalSpeed = 0;
@@ -2687,7 +2688,7 @@ lockEl.addEventListener('touchstart', (e) => {
   lastX = touch.clientX;
   lastY = touch.clientY;
 }, { passive: true });
-window.addEventListener('touchend', (e) => {
+function handleLookTouchRelease(e) {
   if (lookTouchIdentifier === null) {
     dragging = false;
     return;
@@ -2697,18 +2698,9 @@ window.addEventListener('touchend', (e) => {
     dragging = false;
     lookTouchIdentifier = null;
   }
-});
-window.addEventListener('touchcancel', (e) => {
-  if (lookTouchIdentifier === null) {
-    dragging = false;
-    return;
-  }
-  const cancelled = Array.from(e.changedTouches).some((touch) => touch.identifier === lookTouchIdentifier);
-  if (cancelled) {
-    dragging = false;
-    lookTouchIdentifier = null;
-  }
-});
+}
+window.addEventListener('touchend', handleLookTouchRelease);
+window.addEventListener('touchcancel', handleLookTouchRelease);
 window.addEventListener('touchmove', (e) => {
   if (!isMouseLookEnabled()) {
     stopMouseLookInput();
@@ -2752,11 +2744,13 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.code === 'KeyH') {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     e.preventDefault();
     resetCameraHeightToDefault();
     return;
   }
   if (e.code === 'KeyP') {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     e.preventDefault();
     captureLivePlayerSpawn();
     return;
@@ -2972,6 +2966,7 @@ const tronSoundtrack = {
   duration: 0,
   targetVolume: TRON_SOUNDTRACK_VOLUME,
   timer: 0,
+  crossfadeTimer: 0,
   loopCount: 0,
   lastLoopAt: 0,
   lastStartAt: 0,
@@ -3306,7 +3301,8 @@ function crossfadeTronSoundtrack() {
   tronSoundtrack.crossfading = true;
   startTronSoundtrackElement(nextIndex, loopStart, TRON_SOUNDTRACK_CROSSFADE_SECONDS, tronSoundtrack.targetVolume);
   rampGain(activeGain, 0.0001, TRON_SOUNDTRACK_CROSSFADE_SECONDS);
-  window.setTimeout(() => {
+  tronSoundtrack.crossfadeTimer = window.setTimeout(() => {
+    tronSoundtrack.crossfadeTimer = 0;
     pauseTronSoundtrackElement(activeIndex);
     tronSoundtrack.activeIndex = nextIndex;
     tronSoundtrack.crossfading = false;
@@ -3355,6 +3351,10 @@ function stopTronFileSoundtrack(fadeSeconds = TRON_SOUNDTRACK_STOP_FADE_SECONDS)
   if (tronSoundtrack.timer) {
     window.clearInterval(tronSoundtrack.timer);
     tronSoundtrack.timer = 0;
+  }
+  if (tronSoundtrack.crossfadeTimer) {
+    window.clearTimeout(tronSoundtrack.crossfadeTimer);
+    tronSoundtrack.crossfadeTimer = 0;
   }
   tronSoundtrack.playing = false;
   tronSoundtrack.crossfading = false;
@@ -5555,7 +5555,6 @@ function setTronNoclip(enabled = !tronNoclipEnabled, options = {}) {
     noclip: tronNoclipEnabled,
     command: 'tronNoclip() toggles, tronNoclip(true) enables, tronNoclip(false) disables',
   };
-  if (!options.silent) console.log(`TRON noclip ${tronNoclipEnabled ? 'on' : 'off'}`, status);
   return status;
 }
 
@@ -11510,7 +11509,7 @@ function tronRunnerEffectiveAnimationSpeed() {
 }
 
 function syncTronRunnerWalkCycleToDistance(mixer, action, distance, phaseOffset = 0) {
-  const clip = action?.getClip?.() || action?._clip;
+  const clip = action?.getClip();
   const duration = clip?.duration;
   if (!mixer || !action || !Number.isFinite(duration) || duration <= 0.001) return false;
   const cycleDistance = Math.max(0.001, TRON_RUNNER_WALK_CYCLE_DISTANCE);
@@ -16198,7 +16197,6 @@ function disposeComposerTargets() {
 
 function rebuildComposer() {
   if (!usePost) return;
-  const { EffectComposer, RenderPass, UnrealBloomPass, OutputPass, FXAAPass } = window.__POST;
   disposeComposerTargets();
   composer = new EffectComposer(renderer);
   lastAppliedComposerPixelRatio = -1;
@@ -16936,6 +16934,8 @@ function setupSettingsToggle() {
 }
 
 async function persistSettingsToProject(scope, settings, extra = {}) {
+  // Endpoint di sviluppo locale: su host pubblici non esiste, non tentare il POST.
+  if (!['localhost', '127.0.0.1', ''].includes(location.hostname)) return null;
   try {
     const payload = {
       demo: 'demo-5-boulevard-map',
@@ -16954,7 +16954,6 @@ async function persistSettingsToProject(scope, settings, extra = {}) {
     if (!response.ok || result.ok === false) {
       throw new Error(result.error || `HTTP ${response.status}`);
     }
-    console.log('TRON boulevard settings saved to project JSON', result);
     return result;
   } catch (error) {
     console.warn('TRON boulevard project JSON save failed', error);
@@ -16965,7 +16964,6 @@ async function persistSettingsToProject(scope, settings, extra = {}) {
 function exportLiveSettings() {
   const settings = collectAllControlSettings();
   const text = JSON.stringify(settings, null, 2);
-  console.log('TRON boulevard live settings', settings);
   navigator.clipboard?.writeText(text).catch(() => {});
   setButtonFeedback(controlEls.exportSettings, 'Settings copied');
   persistSettingsToProject('export', settings).then((result) => {
@@ -17117,11 +17115,6 @@ async function loadProjectCanonicalDefaults() {
     }
     const nextLanding = sanitizeDroneLandingPose(payload.landing);
     if (nextLanding) droneLandingPose = nextLanding;
-    console.log('TRON boulevard canonical settings loaded', {
-      source: payload.source,
-      firefoxSavedAt: payload.firefoxSavedAt,
-      settings: Object.keys(payload.settings).length,
-    });
     return true;
   } catch (error) {
     console.warn('TRON boulevard canonical settings load failed', error);
@@ -17161,7 +17154,6 @@ function saveAllControlDefaults(button) {
   localStorage.setItem(DEFAULT_SETTINGS_KEY, text);
   navigator.clipboard?.writeText(text).catch(() => {});
   applyControlSettings(payload.settings, true);
-  console.log('TRON boulevard default settings', payload);
   setButtonFeedback(button, 'Default salvati');
   persistSettingsToProject('all-defaults', payload.settings, { savedAt: payload.savedAt }).then((result) => {
     if (result) setButtonFeedback(button, 'Default + JSON salvati');
@@ -17180,7 +17172,6 @@ function saveTabSettings(tabName, button) {
   localStorage.setItem(`${TAB_STORAGE_PREFIX}${tabName}`, text);
   navigator.clipboard?.writeText(text).catch(() => {});
   applyControlSettings(payload.settings, true);
-  console.log('TRON boulevard tab settings', payload);
   setButtonFeedback(button, 'Scheda salvata');
   const canonicalSettings = collectAllControlSettings();
   persistSettingsToProject('tab', payload.settings, { tab: tabName, savedAt: payload.savedAt }).then((result) => {
@@ -17582,7 +17573,6 @@ function applyPostControlsFromUI() {
   }
   applyRenderResolution(requestedPixelRatio);
   if (bloomPass) {
-    bloomPass.enabled = bloomEnabled;
     bloomPass.strength = bloomStrength;
     bloomPass.radius = bloomRadius;
     bloomPass.threshold = bloomThreshold;
@@ -19455,6 +19445,9 @@ bootSceneWithFinalDefaults().then(() => {
     tick(now);
     loader.classList.add('hidden');
   });
+}).catch((error) => {
+  console.error('TRON boulevard boot failed', error);
+  loader.classList.add('hidden');
 });
 </script>
 </body>
