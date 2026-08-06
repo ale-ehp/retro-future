@@ -15,6 +15,7 @@ let unlockedMouseLookActive = false;
 let lastX = 0, lastY = 0;
 let lookTouchIdentifier = null;
 let dragStartX = 0, dragStartY = 0;
+let unlockedMouseLookNeedsOrigin = false;
 let suppressNextPointerLockMove = false;
 let pointerLockLookEnabledAt = 0;
 let pointerClickLookSuppressedUntil = 0;
@@ -103,6 +104,7 @@ export function stopMouseLookInput() {
   dragCandidate = false;
   lookTouchIdentifier = null;
   unlockedMouseLookActive = false;
+  unlockedMouseLookNeedsOrigin = false;
   suppressNextPointerLockMove = false;
   ignoredPointerLookMoves = 0;
   if (document.pointerLockElement === lockEl) {
@@ -111,6 +113,27 @@ export function stopMouseLookInput() {
   pointerLocked = false;
   syncMouseLookCursorState();
   updatePointerLockHint();
+}
+
+export function resumeMouseLookInput({ requestPointerLock = false } = {}) {
+  if (!isMouseLookEnabled() || !lockEl) return false;
+  dragging = false;
+  dragCandidate = false;
+  lookTouchIdentifier = null;
+  unlockedMouseLookActive = true;
+  unlockedMouseLookNeedsOrigin = true;
+  clearVerticalMovementState?.();
+  suppressPointerLook();
+  lockEl.focus?.({ preventScroll: true });
+  syncMouseLookCursorState();
+  updatePointerLockHint();
+  if (requestPointerLock) {
+    try {
+      const lockRequest = lockEl.requestPointerLock?.();
+      lockRequest?.catch?.(() => {});
+    } catch (_) {}
+  }
+  return true;
 }
 
 // ---------- init: wire deps + register the DOM handlers ----------
@@ -150,6 +173,7 @@ export function initMouseLook(ctx, injected) {
       dragging = false;
       dragCandidate = false;
       unlockedMouseLookActive = true;
+      unlockedMouseLookNeedsOrigin = false;
       lastX = e.clientX;
       lastY = e.clientY;
       pointerLockLookEnabledAt = performance.now() + POINTER_LOCK_SETTLE_MS;
@@ -197,6 +221,12 @@ export function initMouseLook(ctx, injected) {
       setPitch(Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, getPitch())));
       applyCameraLook();
     } else if (unlockedMouseLookActive) {
+      if (unlockedMouseLookNeedsOrigin) {
+        unlockedMouseLookNeedsOrigin = false;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        return;
+      }
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       lastX = e.clientX; lastY = e.clientY;
@@ -238,6 +268,7 @@ export function initMouseLook(ctx, injected) {
     suppressPointerLook();
     if (pointerLocked) return;
     unlockedMouseLookActive = false;
+    unlockedMouseLookNeedsOrigin = false;
     // A tiny drag activates rotate-fallback when browser pointer lock is unavailable,
     // declined, or not yet engaged after the click gesture.
     dragCandidate = true;

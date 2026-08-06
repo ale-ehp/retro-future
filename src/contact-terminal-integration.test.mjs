@@ -16,6 +16,7 @@ test('main composes contact terminal with camera and input ownership', () => {
   assert.match(mainSource, /contactTerminalOwnsCamera:\s*contactTerminalOwnsCamera/);
   assert.match(mainSource, /handleContactTerminalKeyDown:\s*handleContactTerminalKeyDown/);
   assert.match(mainSource, /resetMobileMovement:\s*resetMobileMovementInput/);
+  assert.match(mainSource, /resumeMouseLook:\s*resumeMouseLookInput/);
 
   const tickBody = mainSource.match(/function tick\(now\) \{([\s\S]*?)\n\}/)?.[1] || '';
   assert.match(tickBody, /const contactTerminalCameraOwned = contactTerminalOwnsCamera\(\)/);
