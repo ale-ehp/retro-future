@@ -1081,8 +1081,6 @@ ti auguriamo un esperienza illuminante.</p>
     "three/addons/postprocessing/FXAAPass.js": "./FXAAPass.js",
     "three/addons/postprocessing/Pass.js": "./Pass.js",
     "three/addons/postprocessing/MaskPass.js": "./MaskPass.js",
-    "three/addons/loaders/GLTFLoader.js": "./GLTFLoader.js",
-    "three/addons/utils/SkeletonUtils.js": "./SkeletonUtils.js",
     "three/addons/shaders/CopyShader.js": "./CopyShader.js",
     "three/addons/shaders/LuminosityHighPassShader.js": "./LuminosityHighPassShader.js",
     "three/addons/shaders/FXAAShader.js": "./FXAAShader.js",
@@ -1184,18 +1182,12 @@ try {
   console.warn('Postprocessing unavailable, falling back to plain renderer:', e.message);
 }
 
+// Runner GLB volutamente disattivato: con questi due simboli a null tutti i
+// percorsi GLB ripiegano sul runner procedurale, la stessa resa del deploy
+// live. Riattivabile reintroducendo l'import dinamico di GLTFLoader e
+// SkeletonUtils (vedi character-mockups/walk-rigged-glb.html).
 let RunnerGLTFLoader = null;
 let cloneRunnerSkeleton = null;
-try {
-  const [{ GLTFLoader }, { clone }] = await Promise.all([
-    import('three/addons/loaders/GLTFLoader.js'),
-    import('three/addons/utils/SkeletonUtils.js'),
-  ]);
-  RunnerGLTFLoader = GLTFLoader;
-  cloneRunnerSkeleton = clone;
-} catch (e) {
-  console.warn('Runner GLB support unavailable:', e.message);
-}
 
 // ---------- palette ----------
 const PAL = {
