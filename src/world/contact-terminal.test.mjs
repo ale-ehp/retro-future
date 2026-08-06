@@ -53,10 +53,10 @@ function createCanvasStub() {
   return { width: 0, height: 0, getContext: () => context };
 }
 
-function createRuntimeFixture() {
+function createRuntimeFixture({ reducedMotion = true, mobile = false, viewMotionOffset = 0 } = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(50, 2, 0.1, 2000);
-  camera.position.set(53.6, 11.975, 807.35);
+  camera.position.set(53.6, 11.975 + viewMotionOffset, 807.35);
   const canvasTarget = createElementStub();
   canvasTarget.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 500 });
   const actionButton = createElementStub();
@@ -66,6 +66,14 @@ function createRuntimeFixture() {
   liveRegion.textContent = '';
   const body = { classList: createClassList() };
   const activated = [];
+  const historyCalls = { pushes: 0, backs: 0 };
+  const history = {
+    pushState: () => { historyCalls.pushes += 1; },
+    back: () => { historyCalls.backs += 1; },
+  };
+  const eventTarget = new EventTarget();
+  let clock = 10;
+  let appliedViewMotion = viewMotionOffset;
   const records = [
     { civicNumberValue: 1, mesh: { position: { x: -80, z: 760 } } },
     {
@@ -104,23 +112,40 @@ function createRuntimeFixture() {
     setViewRoll: (value) => { roll = value; },
     applyCameraLook: () => {},
     clearMovement: () => {},
-    clearViewMotion: () => {},
+    clearViewMotion: () => {
+      camera.position.y -= appliedViewMotion;
+      appliedViewMotion = 0;
+    },
     stopMouseLook: () => {},
     resetMobileMovement: () => {},
     getPointerLocked: () => false,
-    prefersReducedMotion: () => true,
-    isMobile: () => false,
+    prefersReducedMotion: () => reducedMotion,
+    isMobile: () => mobile,
     createCanvas: createCanvasStub,
     actionButton,
     backButton,
     interactionSurface,
     liveRegion,
     body,
-    eventTarget: new EventTarget(),
+    eventTarget,
+    history,
+    locationHref: 'https://avstudio.ai/chi-siamo/retro-future/',
     activateUri: (uri) => activated.push(uri),
-    now: () => 10,
+    now: () => clock,
   });
-  return { runtime, camera, actionButton, backButton, interactionSurface, liveRegion, body, activated };
+  return {
+    runtime,
+    camera,
+    actionButton,
+    backButton,
+    interactionSurface,
+    liveRegion,
+    body,
+    activated,
+    eventTarget,
+    historyCalls,
+    setClock(value) { clock = value; },
+  };
 }
 
 test('contact terminal availability includes the exact distance and alignment thresholds', () => {
@@ -259,4 +284,73 @@ test('contact runtime builds civic 2, focuses, activates, and restores the camer
   runtime.update(1000);
   runtime.update(2000);
   assert.equal(runtime.inspect().textureUpdates, stableTextureUpdates);
+});
+
+test('contact runtime raycasts both rows for hover and direct pointer activation', () => {
+  const { runtime, activated } = createRuntimeFixture();
+  runtime.update(0);
+  runtime.handleKeyDown({ code: 'KeyE', repeat: false, preventDefault() {} });
+
+  assert.equal(runtime.handlePointerMove({ clientX: 500, clientY: 318 }), true);
+  assert.equal(runtime.inspect().selection, 1);
+  assert.equal(runtime.handlePointerClick({ clientX: 500, clientY: 318, pointerType: 'mouse', preventDefault() {} }), true);
+  assert.deepEqual(activated, ['tel:+393517436007']);
+  assert.equal(runtime.inspect().lastInputSource, 'pointer');
+
+  assert.equal(runtime.handlePointerMove({ clientX: 500, clientY: 220 }), true);
+  assert.equal(runtime.inspect().selection, 0);
+  assert.equal(runtime.handlePointerClick({ clientX: 500, clientY: 220, pointerType: 'touch', preventDefault() {} }), true);
+  assert.deepEqual(activated, ['tel:+393517436007', 'mailto:info@avstudio.ai']);
+  assert.equal(runtime.inspect().lastInputSource, 'touch');
+});
+
+test('mobile history back exits focus before page navigation', () => {
+  const fixture = createRuntimeFixture({ mobile: true });
+  const { runtime, eventTarget, historyCalls } = fixture;
+  runtime.update(0);
+  runtime.handleKeyDown({ code: 'KeyE', repeat: false, preventDefault() {} });
+
+  assert.equal(historyCalls.pushes, 1);
+  assert.equal(runtime.inspect().historyEntryActive, true);
+  eventTarget.dispatchEvent(new Event('popstate'));
+  assert.equal(runtime.inspect().state, CONTACT_TERMINAL_STATES.AVAILABLE);
+  assert.equal(runtime.inspect().historyEntryActive, false);
+  assert.equal(historyCalls.backs, 0);
+
+  runtime.handleKeyDown({ code: 'KeyE', repeat: false, preventDefault() {} });
+  runtime.beginReturn('back-button');
+  assert.equal(historyCalls.pushes, 2);
+  assert.equal(historyCalls.backs, 1);
+  assert.equal(runtime.inspect().state, CONTACT_TERMINAL_STATES.AVAILABLE);
+});
+
+test('contact runtime eases focus and return when reduced motion is off', () => {
+  const fixture = createRuntimeFixture({ reducedMotion: false });
+  const { runtime, camera, setClock } = fixture;
+  const initialZ = camera.position.z;
+  runtime.update(0);
+  runtime.handleKeyDown({ code: 'KeyE', repeat: false, preventDefault() {} });
+
+  setClock(350);
+  runtime.update(350);
+  assert.equal(runtime.inspect().state, CONTACT_TERMINAL_STATES.FOCUSING);
+  assert.ok(camera.position.z < initialZ && camera.position.z > 801.35);
+
+  setClock(700);
+  runtime.update(700);
+  assert.equal(runtime.inspect().state, CONTACT_TERMINAL_STATES.ACTIVE);
+  runtime.handleKeyDown({ code: 'Escape', repeat: false, preventDefault() {} });
+  setClock(1240);
+  runtime.update(1240);
+  assert.equal(runtime.inspect().state, CONTACT_TERMINAL_STATES.AVAILABLE);
+  assert.ok(Math.abs(camera.position.z - initialZ) < 1e-12);
+});
+
+test('contact runtime saves the camera after removing transient walk motion', () => {
+  const { runtime, camera } = createRuntimeFixture({ viewMotionOffset: 0.5 });
+  runtime.update(0);
+  runtime.handleKeyDown({ code: 'KeyE', repeat: false, preventDefault() {} });
+  runtime.handleKeyDown({ code: 'Escape', repeat: false, preventDefault() {} });
+
+  assert.ok(Math.abs(camera.position.y - 11.975) < 1e-12);
 });
