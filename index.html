@@ -832,7 +832,7 @@
       <label class="control-row"><span class="control-head"><span>Altezza aggancio ponti</span><output id="bridge-y-offset-val">0.00</output></span><input id="bridge-y-offset" type="range" min="-60" max="100" step="0.5" value="0" /></label>
       <label class="control-row"><span class="control-head"><span>Lunghezza ponti</span><output id="bridge-span-scale-val">1.00</output></span><input id="bridge-span-scale" type="range" min="0.35" max="2.4" step="0.01" value="1" /></label>
       <label class="control-row"><span class="control-head"><span>Altezza ponti</span><output id="bridge-height-scale-val">1.00</output></span><input id="bridge-height-scale" type="range" min="0.35" max="3" step="0.01" value="1" /></label>
-      <label class="control-row"><span class="control-head"><span>Profondita ponti</span><output id="bridge-depth-scale-val">1.00</output></span><input id="bridge-depth-scale" type="range" min="0.35" max="3" step="0.01" value="1" /></label>
+      <label class="control-row"><span class="control-head"><span>Profondità ponti</span><output id="bridge-depth-scale-val">1.00</output></span><input id="bridge-depth-scale" type="range" min="0.35" max="3" step="0.01" value="1" /></label>
       <button class="control-action save-tab-settings" type="button" data-save-tab="bridges">Salva scheda Ponti</button>
     </section>
 
@@ -937,7 +937,7 @@
       <div class="control-box">
         <div class="control-section">Bilanciamento self-lit</div>
         <label class="control-row"><span class="control-head"><span>Forza frontale</span><output id="runner-key-light-y-val">3.10</output></span><input id="runner-key-light-y" type="range" min="0" max="8" step="0.01" value="3.1" /></label>
-        <label class="control-row"><span class="control-head"><span>Profondita materiale</span><output id="runner-key-light-z-val">1.90</output></span><input id="runner-key-light-z" type="range" min="-4" max="6" step="0.01" value="1.9" /></label>
+        <label class="control-row"><span class="control-head"><span>Profondità materiale</span><output id="runner-key-light-z-val">1.90</output></span><input id="runner-key-light-z" type="range" min="-4" max="6" step="0.01" value="1.9" /></label>
         <label class="control-row"><span class="control-head"><span>Bordo figura</span><output id="runner-rim-light-x-val">1.90</output></span><input id="runner-rim-light-x" type="range" min="0.1" max="5" step="0.01" value="1.9" /></label>
         <label class="control-row"><span class="control-head"><span>Fill materiale</span><output id="runner-fill-light-y-val">0.90</output></span><input id="runner-fill-light-y" type="range" min="0" max="5" step="0.01" value="0.9" /></label>
       </div>
@@ -983,10 +983,10 @@
     <section class="control-panel" data-panel="buildings">
       <div class="control-section">Geometria e layout</div>
       <label class="control-row"><span class="control-head"><span>Larghezza X 12 palazzi</span><output id="side-building-width-scale-val">2.00</output></span><input id="side-building-width-scale" type="range" min="0.4" max="8" step="0.01" value="2" /></label>
-      <label class="control-row"><span class="control-head"><span>Profondita Z 12 palazzi</span><output id="side-building-depth-scale-val">1.00</output></span><input id="side-building-depth-scale" type="range" min="0.4" max="8" step="0.01" value="1" /></label>
+      <label class="control-row"><span class="control-head"><span>Profondità Z 12 palazzi</span><output id="side-building-depth-scale-val">1.00</output></span><input id="side-building-depth-scale" type="range" min="0.4" max="8" step="0.01" value="1" /></label>
       <label class="control-row"><span class="control-head"><span>Distanza 12 palazzi</span><output id="side-building-spacing-scale-val">1.00</output></span><input id="side-building-spacing-scale" type="range" min="1" max="8" step="0.05" value="1" /></label>
       <label class="control-row"><span class="control-head"><span>Larghezza X mio palazzo</span><output id="main-building-width-scale-val">2.00</output></span><input id="main-building-width-scale" type="range" min="0.4" max="8" step="0.01" value="2" /></label>
-      <label class="control-row"><span class="control-head"><span>Profondita Z mio palazzo</span><output id="main-building-depth-scale-val">1.00</output></span><input id="main-building-depth-scale" type="range" min="0.4" max="8" step="0.01" value="1" /></label>
+      <label class="control-row"><span class="control-head"><span>Profondità Z mio palazzo</span><output id="main-building-depth-scale-val">1.00</output></span><input id="main-building-depth-scale" type="range" min="0.4" max="8" step="0.01" value="1" /></label>
       <label class="control-row"><span class="control-head"><span>Posizione Z mio palazzo</span><output id="main-building-z-val">-301</output></span><input id="main-building-z" type="range" min="-1800" max="900" step="1" value="-301" /></label>
       <label class="control-row"><span class="control-head"><span>Posizione Y mio palazzo</span><output id="main-building-y-val">0</output></span><input id="main-building-y" type="range" min="-80" max="500" step="1" value="0" /></label>
 
@@ -1148,7 +1148,7 @@
       <h2 id="welcome-window-title">Benvenuto</h2>
       <p class="welcome-copy">Sei dentro il cervello di avstudio.ai
 qui puoi esplorare liberamente i reparti.
-ti auguriamo un esperienza illuminante.</p>
+ti auguriamo un'esperienza illuminante.</p>
       <div class="welcome-action"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></div>
     </div>
   </article>
@@ -7401,7 +7401,7 @@ const bridgeControlFields = [
   { key: 'yOffset', label: 'Altezza aggancio', min: -60, max: 100, step: 0.5, value: 0, digits: 1 },
   { key: 'spanScale', label: 'Lunghezza', min: 0.35, max: 2.4, step: 0.01, value: 1, digits: 2 },
   { key: 'heightScale', label: 'Altezza', min: 0.35, max: 3, step: 0.01, value: 1, digits: 2 },
-  { key: 'depthScale', label: 'Profondita', min: 0.35, max: 3, step: 0.01, value: 1, digits: 2 },
+  { key: 'depthScale', label: 'Profondità', min: 0.35, max: 3, step: 0.01, value: 1, digits: 2 },
   { key: 'lowLedOffset', label: 'Mov. LED bassi', min: -4, max: 4, step: 0.05, value: 0, digits: 2 },
   { key: 'highLedOffset', label: 'Mov. LED alti', min: -4, max: 4, step: 0.05, value: 0, digits: 2 },
 ];
