@@ -391,6 +391,7 @@ export function createContactTerminalRuntime(injected = {}) {
     clearMovement: () => {},
     clearViewMotion: () => {},
     stopMouseLook: () => {},
+    resumeMouseLook: () => {},
     resetMobileMovement: () => {},
     getPointerLocked: () => false,
     prefersReducedMotion: () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true,
@@ -583,6 +584,8 @@ export function createContactTerminalRuntime(injected = {}) {
   }
 
   function finishReturn() {
+    const resumeMouseLook = !deps.isMobile();
+    const requestPointerLock = Boolean(savedCameraPose?.pointerLocked);
     applyTransition(1);
     deps.setYaw(savedCameraPose?.yaw ?? deps.getYaw());
     deps.setPitch(savedCameraPose?.pitch ?? deps.getPitch());
@@ -595,6 +598,7 @@ export function createContactTerminalRuntime(injected = {}) {
     drawTexture();
     syncDomState();
     deps.renderer.domElement?.focus?.({ preventScroll: true });
+    if (resumeMouseLook) deps.resumeMouseLook({ requestPointerLock });
     announce('Ritorno alla demo');
   }
 

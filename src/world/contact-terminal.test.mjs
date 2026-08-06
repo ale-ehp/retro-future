@@ -53,7 +53,12 @@ function createCanvasStub() {
   return { width: 0, height: 0, getContext: () => context };
 }
 
-function createRuntimeFixture({ reducedMotion = true, mobile = false, viewMotionOffset = 0 } = {}) {
+function createRuntimeFixture({
+  reducedMotion = true,
+  mobile = false,
+  pointerLocked = false,
+  viewMotionOffset = 0,
+} = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(50, 2, 0.1, 2000);
   camera.position.set(53.6, 11.975 + viewMotionOffset, 807.35);
@@ -67,6 +72,7 @@ function createRuntimeFixture({ reducedMotion = true, mobile = false, viewMotion
   const body = { classList: createClassList() };
   const activated = [];
   const historyCalls = { pushes: 0, backs: 0 };
+  const resumeMouseLookCalls = [];
   const history = {
     pushState: () => { historyCalls.pushes += 1; },
     back: () => { historyCalls.backs += 1; },
@@ -117,8 +123,9 @@ function createRuntimeFixture({ reducedMotion = true, mobile = false, viewMotion
       appliedViewMotion = 0;
     },
     stopMouseLook: () => {},
+    resumeMouseLook: (options) => { resumeMouseLookCalls.push(options); },
     resetMobileMovement: () => {},
-    getPointerLocked: () => false,
+    getPointerLocked: () => pointerLocked,
     prefersReducedMotion: () => reducedMotion,
     isMobile: () => mobile,
     createCanvas: createCanvasStub,
@@ -144,6 +151,7 @@ function createRuntimeFixture({ reducedMotion = true, mobile = false, viewMotion
     activated,
     eventTarget,
     historyCalls,
+    resumeMouseLookCalls,
     setClock(value) { clock = value; },
   };
 }
@@ -353,4 +361,22 @@ test('contact runtime saves the camera after removing transient walk motion', ()
   runtime.handleKeyDown({ code: 'Escape', repeat: false, preventDefault() {} });
 
   assert.ok(Math.abs(camera.position.y - 11.975) < 1e-12);
+});
+
+test('desktop return re-engages mouse look without another canvas click', () => {
+  const { runtime, resumeMouseLookCalls } = createRuntimeFixture({ pointerLocked: true });
+  runtime.update(0);
+  runtime.handleKeyDown({ code: 'KeyE', repeat: false, preventDefault() {} });
+  runtime.handleKeyDown({ code: 'Escape', repeat: false, preventDefault() {} });
+
+  assert.deepEqual(resumeMouseLookCalls, [{ requestPointerLock: true }]);
+});
+
+test('mobile return keeps touch look gesture-driven', () => {
+  const { runtime, resumeMouseLookCalls } = createRuntimeFixture({ mobile: true, pointerLocked: true });
+  runtime.update(0);
+  runtime.handleKeyDown({ code: 'KeyE', repeat: false, preventDefault() {} });
+  runtime.handleKeyDown({ code: 'Escape', repeat: false, preventDefault() {} });
+
+  assert.deepEqual(resumeMouseLookCalls, []);
 });

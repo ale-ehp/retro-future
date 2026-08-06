@@ -635,6 +635,7 @@ import {
   getUnlockedMouseLookActive,
   initMouseLook,
   isMouseLookEnabled,
+  resumeMouseLookInput,
   stopMouseLookInput,
   updatePointerLockHint,
 } from './camera/mouse-look.js';
@@ -3212,6 +3213,7 @@ initContactTerminal({
     resetFootstepCadence();
   },
   stopMouseLook: stopMouseLookInput,
+  resumeMouseLook: resumeMouseLookInput,
   resetMobileMovement: resetMobileMovementInput,
   getPointerLocked,
   prefersReducedMotion: () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
