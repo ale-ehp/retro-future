@@ -560,6 +560,8 @@ export function createContactTerminalRuntime(injected = {}) {
 
   function beginFocus() {
     if (!board || !controller.beginFocus()) return false;
+    deps.clearMovement();
+    deps.clearViewMotion();
     savedCameraPose = {
       position: deps.camera.position.clone(),
       quaternion: deps.camera.quaternion.clone(),
@@ -568,8 +570,6 @@ export function createContactTerminalRuntime(injected = {}) {
       roll: deps.getViewRoll(),
       pointerLocked: Boolean(deps.getPointerLocked()),
     };
-    deps.clearMovement();
-    deps.clearViewMotion();
     deps.resetMobileMovement();
     deps.stopMouseLook();
     const target = focusPose();

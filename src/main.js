@@ -372,6 +372,13 @@ import {
   updateCityRoleBoard,
 } from './world/city-boards.js';
 import {
+  contactTerminalInspect,
+  contactTerminalOwnsCamera,
+  handleContactTerminalKeyDown,
+  initContactTerminal,
+  updateContactTerminal,
+} from './world/contact-terminal.js';
+import {
   SIDE_BUILDING_CIVIC_NUMBER_FIXED,
   buildSideBuildingCivicNumber,
   buildSideBuildingDoor,
@@ -644,6 +651,7 @@ import {
   isMobileMovementControlTarget,
   mobileTouchControlsInspect,
   mobileTouchControlsState,
+  resetMobileMovementInput,
   requestLandscapeFullscreen,
 } from './controls/mobile-movement.js';
 import {
@@ -932,6 +940,10 @@ const perfTriFxEl = document.getElementById('perf-tri-fx');
 const mobilePerformanceDiagnosticsEl = document.getElementById('mobile-performance-diagnostics');
 const mobileMovementPadEl = document.getElementById('mobile-movement-pad');
 const mobileMovementKnobEl = document.getElementById('mobile-movement-knob');
+const contactTerminalActionEl = document.getElementById('contact-terminal-action');
+const contactTerminalBackEl = document.getElementById('contact-terminal-back');
+const contactTerminalSurfaceEl = document.getElementById('contact-terminal-surface');
+const contactTerminalLiveEl = document.getElementById('contact-terminal-live');
 const controlEls = createControlEls();
 const CHARACTER_BUBBLE_BG_OPACITY_RANGE_MULTIPLIER = 3;
 
@@ -1587,6 +1599,7 @@ initMouseLook(ctx, {
   isMobileMovementControlTarget,
   getCityRevealComplete: () => cityRevealComplete,
   getMouseSensitivityScale: () => mouseSensitivityScale,
+  contactTerminalOwnsCamera: contactTerminalOwnsCamera,
 });
 
 initMobileMovement({
@@ -2562,6 +2575,7 @@ initKeyboard({
   resetCameraHeightToDefault,
   captureLivePlayerSpawn,
   getBackspaceIntroTriggered: () => backspaceIntroTriggered,
+  handleContactTerminalKeyDown: handleContactTerminalKeyDown,
 });
 
 // StreetEdges: same hex mesh system, but with muted blue-green Tron material.
@@ -3164,6 +3178,52 @@ initCityDepartmentBoards({
   getRevealStartedAt: tronRunnerRevealStartedAtTime,
   getRevealActive: tronRunnerRevealIsActive,
   getRevealProgress: tronRunnerRevealProgressValue,
+});
+
+initContactTerminal({
+  scene,
+  camera,
+  renderer,
+  reflectionEnvMap,
+  PAL,
+  elStrip,
+  sideBuildingRecords,
+  getBottomY: cityDepartmentBoardBottomY,
+  getPlayerSpawn: () => playerSpawn,
+  getRevealComplete: () => cityRevealComplete && tronRunnerRevealIsComplete(),
+  getRevealFactor: cityDepartmentBoardRevealFactor,
+  getEffectEnabled: () => fxEnabled('deptBoards'),
+  getOtherCameraActive: () => getDroneIntroActive() || isCityRevealCompositeActive(),
+  getYaw: () => yaw,
+  setYaw: (value) => { yaw = value; },
+  getPitch: () => pitch,
+  setPitch: (value) => { pitch = value; },
+  getViewRoll: () => viewRoll,
+  setViewRoll: (value) => { viewRoll = value; },
+  applyCameraLook,
+  clearMovement: clearMovementKeys,
+  clearViewMotion: () => {
+    removeViewMotionOffset();
+    setHeadBobOffset(0);
+    setSideSwayOffset(0);
+    setMovementHorizontalSpeed(0);
+    setMovementRunMix(0);
+    viewRoll = 0;
+    resetFootstepCadence();
+  },
+  stopMouseLook: stopMouseLookInput,
+  resetMobileMovement: resetMobileMovementInput,
+  getPointerLocked,
+  prefersReducedMotion: () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  isMobile: mobilePerformanceProfileActive,
+  actionButton: contactTerminalActionEl,
+  backButton: contactTerminalBackEl,
+  interactionSurface: contactTerminalSurfaceEl,
+  liveRegion: contactTerminalLiveEl,
+  body: document.body,
+  eventTarget: window,
+  history: window.history,
+  locationHref: window.location.href,
 });
 
 // ---------- City role boards: fixed sector boards beside civic doors (extracted -> city-boards.js) ----------
@@ -6591,6 +6651,7 @@ window.__tronInspect = () => ({
   equalizer: window.__labEqualizerInspect?.(),
   welcomePanelMotion: { ...welcomeWindowMotion.state },
   cityDepartmentBoards: cityDepartmentBoardInspect(),
+  contactTerminal: contactTerminalInspect(),
   cityRoleBoard: cityRoleBoardInspect(),
   backspaceIntroTriggered,
   cameraCollisionUnlockedByBackspace,
@@ -6907,7 +6968,9 @@ function tick(now) {
   }
   removeViewMotionOffset();
   const droneIntroWasActive = updateDroneIntroFlight(now);
-  if (!droneIntroWasActive) applyMovement(dt);
+  updateContactTerminal(now);
+  const contactTerminalCameraOwned = contactTerminalOwnsCamera();
+  if (!droneIntroWasActive && !contactTerminalCameraOwned) applyMovement(dt);
   syncHexRoadLodForFrame();
   const revealPerformanceCritical = isCityRevealPerformanceCritical();
   if (!revealPerformanceCritical) {
@@ -6920,7 +6983,7 @@ function tick(now) {
       updateBoundaryError(boundaryErrorAccumulatedDt);
       boundaryErrorAccumulatedDt = 0;
     }
-    updateWalkSimulation(dt);
+    if (!contactTerminalCameraOwned) updateWalkSimulation(dt);
     if (shouldUpdateTronRunnerSourceCharacter()) tronRunnerOrchestration.update(dt);
     if (postRevealPerfIsolationState.crowd) {
       tronRunnerCrowdRuntime.update(dt);
@@ -6937,7 +7000,7 @@ function tick(now) {
     updateStartPositionLiveLabel();
     startPositionLabelLast = now;
   }
-  applyViewMotionOffset();
+  if (!contactTerminalCameraOwned) applyViewMotionOffset();
   skyDome.update(now);
   // Sky background bake (mobile A/B, ?skyBake=1): only in steady state — post-
   // reveal with no reveal compositing active — so the reveal's own sky is untouched.

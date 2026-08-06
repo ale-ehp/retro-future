@@ -230,6 +230,19 @@
   <div id="mobile-movement-knob"></div>
 </div>
 
+<button id="contact-terminal-action" class="contact-terminal-action" type="button" hidden aria-label="Apri il terminale contatti">
+  <span class="contact-terminal-key" aria-hidden="true">[E]</span>
+  <span>INTERAGISCI</span>
+</button>
+<button id="contact-terminal-back" class="contact-terminal-back" aria-label="Torna alla demo" type="button" hidden>
+  <span aria-hidden="true">&larr;</span>
+</button>
+<div id="contact-terminal-surface" class="sr-only" tabindex="-1" role="group" aria-label="Contatti avstudio">
+  <a href="mailto:info@avstudio.ai">Email: info@avstudio.ai</a>
+  <a href="tel:+393517436007">Telefono: +39 351 7436 007</a>
+</div>
+<div id="contact-terminal-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
 <div id="rf-rotate-prompt" role="dialog" aria-live="assertive" aria-label="Ruota il dispositivo in orizzontale">
   <div class="rf-rotate-card">
     <svg class="rf-rotate-icon" viewBox="0 0 120 120" width="96" height="96" aria-hidden="true" fill="none">
@@ -1197,6 +1210,7 @@ const RETRO_MODULE_PRELOADS = [
   './src/sign-opacity.js',
   './src/world/atmosphere-particles.js',
   './src/world/base-pads.js',
+  './src/world/board-perimeter-pose.js',
   './src/world/boulevard-constants.js',
   './src/world/boundary-error.js',
   './src/world/bridges.js',
@@ -1204,6 +1218,7 @@ const RETRO_MODULE_PRELOADS = [
   './src/world/building-leds.js',
   './src/world/buildings.js',
   './src/world/city-boards.js',
+  './src/world/contact-terminal.js',
   './src/world/city-reveal-main-led.js',
   './src/world/city-reveal-render-runtime.js',
   './src/world/city-reveal-scan-glow.js',

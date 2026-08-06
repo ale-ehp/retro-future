@@ -1,6 +1,17 @@
   html,body { margin:0; padding:0; background:#000; color:#cdf6ff; height:100%;
               font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; overflow:hidden; }
   #app { position:fixed; inset:0; }
+  .sr-only {
+    position: fixed;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
   canvas {
     display:block;
     cursor: none;
@@ -198,6 +209,99 @@
   #tron-disc-cursor.is-hidden {
     opacity: 0 !important;
     visibility: hidden !important;
+  }
+  #contact-terminal-action,
+  #contact-terminal-back {
+    position: fixed;
+    z-index: 90;
+    box-sizing: border-box;
+    border: 1px solid oklch(84% 0.14 202 / 0.84);
+    border-radius: 6px;
+    background: oklch(12% 0.028 215 / 0.94);
+    color: oklch(94% 0.045 205);
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    font-weight: 800;
+    letter-spacing: 0;
+    box-shadow: 0 0 18px oklch(80% 0.14 202 / 0.24), inset 0 0 14px oklch(80% 0.14 202 / 0.08);
+    cursor: pointer;
+    transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1), border-color 150ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #contact-terminal-action[hidden],
+  #contact-terminal-back[hidden] {
+    display: none !important;
+  }
+  #contact-terminal-action {
+    left: 50%;
+    bottom: max(28px, env(safe-area-inset-bottom));
+    min-width: 188px;
+    min-height: 44px;
+    padding: 10px 16px;
+    transform: translateX(-50%);
+    font-size: 13px;
+  }
+  .contact-terminal-key {
+    margin-right: 8px;
+    color: oklch(82% 0.17 78);
+  }
+  #contact-terminal-back {
+    top: max(18px, env(safe-area-inset-top));
+    left: max(18px, env(safe-area-inset-left));
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    font-family: system-ui, sans-serif;
+    font-size: 25px;
+    line-height: 1;
+  }
+  #contact-terminal-action:hover,
+  #contact-terminal-back:hover {
+    border-color: oklch(84% 0.17 78);
+    background: oklch(19% 0.045 78 / 0.96);
+  }
+  #contact-terminal-action:focus-visible,
+  #contact-terminal-back:focus-visible {
+    outline: 3px solid oklch(82% 0.17 78);
+    outline-offset: 3px;
+  }
+  body.contact-terminal-focus #mobile-movement-pad,
+  body.contact-terminal-focus .splat-input-overlay,
+  body.contact-terminal-focus #hud-tl,
+  body.contact-terminal-focus #settings-toggle,
+  body.contact-terminal-focus #hud-controls,
+  body.contact-terminal-focus #tron-disc-cursor {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  body.contact-terminal-focus #app canvas {
+    cursor: pointer;
+  }
+  @media (hover: none), (pointer: coarse) {
+    #contact-terminal-action {
+      left: auto;
+      right: max(18px, env(safe-area-inset-right));
+      bottom: max(18px, env(safe-area-inset-bottom));
+      min-width: 154px;
+      min-height: 48px;
+      padding: 11px 15px;
+      transform: none;
+      font-size: 12px;
+    }
+    #contact-terminal-action .contact-terminal-key {
+      display: none;
+    }
+    #contact-terminal-back {
+      top: max(12px, env(safe-area-inset-top));
+      left: max(12px, env(safe-area-inset-left));
+      width: 48px;
+      height: 48px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #contact-terminal-action,
+    #contact-terminal-back {
+      transition: none;
+    }
   }
   @media (hover: none), (pointer: coarse) {
     #tron-disc-cursor { display: none; }
