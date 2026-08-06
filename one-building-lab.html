@@ -1181,10 +1181,11 @@ try {
   console.warn('Postprocessing unavailable, falling back to plain renderer:', e.message);
 }
 
-// Runner GLB volutamente disattivato: con questi due simboli a null tutti i
-// percorsi GLB ripiegano sul runner procedurale, la stessa resa del deploy
-// live. Riattivabile reintroducendo l'import dinamico di GLTFLoader e
-// SkeletonUtils (vedi character-mockups/walk-rigged-glb.html).
+// Runner GLB volutamente disattivato: senza loader la scena gira senza runner
+// né folla, la stessa resa del deploy live (dove i moduli utils di GLTFLoader
+// mancano da sempre). Riattivabile reintroducendo l'import dinamico di
+// GLTFLoader e SkeletonUtils da vendor/three/ (ora completi, vedi
+// character-mockups/walk-rigged-glb.html).
 let RunnerGLTFLoader = null;
 let cloneRunnerSkeleton = null;
 
@@ -14809,7 +14810,7 @@ async function persistSettingsToProject(scope, settings, extra = {}) {
   if (!['localhost', '127.0.0.1', ''].includes(location.hostname)) return null;
   try {
     const payload = {
-      demo: 'demo-5-boulevard-map',
+      demo: 'boulevard-map',
       source: location.pathname,
       savedAt: new Date().toISOString(),
       scope,

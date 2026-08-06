@@ -1,6 +1,6 @@
 # retro-future
 
-Demo interattiva three.js di [avstudio](https://avstudio.ai): un boulevard in stile Tron Legacy con folla animata, board civiche, equalizer audio reattivo e pannello di controlli live. Vanilla JavaScript, un solo modulo ES, nessuna build.
+Demo interattiva three.js di [avstudio](https://avstudio.ai): un boulevard in stile Tron Legacy con board civiche, equalizer audio reattivo e pannello di controlli live. Nel codice vive anche un sistema runner/folla con LOD e spatial hashing, oggi disattivato per parità con il deploy live. Vanilla JavaScript, un solo modulo ES, nessuna build.
 
 ![Il boulevard a scena piena](docs/screenshot-boulevard.webp)
 
