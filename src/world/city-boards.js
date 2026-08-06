@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { fxEnabled } from '../engine/fx-debug-toggles.js';
 import { retroFutureSignOpacity, retroFutureSignScale, retroFutureSignTextOpacity } from '../sign-opacity.js';
+import { boardPerimeterPoseSignature, resolveBoardPerimeterPose } from './board-perimeter-pose.js';
 
 export function cityDepartmentPageItems(page, config) {
   const start = page * config.rows;
@@ -259,53 +260,33 @@ export function cityDepartmentBoardBottomY() {
 
 function syncCityDepartmentBoardPerimeterPose(board) {
   const record = board.record;
-  const pad = record?.basePad;
-  const polygon = pad?.hitPolygon;
-  let x = record?.mesh?.position?.x ?? 0;
-  let z = record?.mesh?.position?.z ?? 0;
-  let yawValue = 0;
-  if (pad?.border?.position && polygon?.length) {
-    const isLeftBuilding = (record?.mesh?.position?.x ?? -1) < 0;
-    const minX = Math.min(...polygon.map((point) => point[0]));
-    const maxX = Math.max(...polygon.map((point) => point[0]));
-    const minZ = Math.min(...polygon.map((point) => point[1]));
-    const maxZ = Math.max(...polygon.map((point) => point[1]));
-    const playerSideSign = (deps.getPlayerSpawn()?.z ?? camera.position.z ?? record.mesh.position.z) >= record.mesh.position.z ? 1 : -1;
-    const centerX = (minX + maxX) * 0.5;
-    const roadSideX = isLeftBuilding ? maxX : minX;
-    x = pad.border.position.x + THREE.MathUtils.lerp(centerX, roadSideX, CITY_DEPARTMENT_BOARD_INNER_SLIDE);
-    z = pad.border.position.z + (playerSideSign > 0 ? maxZ : minZ) + playerSideSign * 0.35;
-    yawValue = playerSideSign > 0 ? 0 : Math.PI;
-    board.perimeterSynced = true;
-  }
-  board.boardPosition.set(x, cityDepartmentBoardBottomY() + board.boardHeight * 0.5, z);
-  board.yaw = yawValue;
+  const pose = resolveBoardPerimeterPose(record, {
+    bottomY: cityDepartmentBoardBottomY(),
+    boardHeight: board.boardHeight,
+    playerZ: deps.getPlayerSpawn()?.z ?? camera.position.z ?? record?.mesh?.position?.z,
+    innerSlide: CITY_DEPARTMENT_BOARD_INNER_SLIDE,
+  });
+  board.boardPosition.set(pose.x, pose.y, pose.z);
+  board.yaw = pose.yaw;
+  board.perimeterSide = pose.perimeterSide;
+  board.perimeterSynced = pose.perimeterSynced;
   board.group.position.copy(board.boardPosition);
   board.group.rotation.y = board.yaw;
 }
 
 function cityDepartmentBoardPoseSignature() {
-  const parts = [
-    cityDepartmentBoardBottomY().toFixed(3),
-    CITY_DEPARTMENT_BOARD_INNER_SLIDE.toFixed(4),
-    (deps.getPlayerSpawn()?.z ?? camera.position.z ?? 0).toFixed(3),
-  ];
+  const bottomY = cityDepartmentBoardBottomY();
+  const playerZ = deps.getPlayerSpawn()?.z ?? camera.position.z ?? 0;
+  const parts = [];
   for (const board of cityDepartmentBoards) {
-    const record = board.record;
-    const pad = record?.basePad;
-    const polygon = pad?.hitPolygon || [];
-    const xs = polygon.map((point) => point[0]);
-    const zs = polygon.map((point) => point[1]);
     parts.push(
       board.civicNumberValue,
-      (record?.mesh?.position?.x ?? 0).toFixed(3),
-      (record?.mesh?.position?.z ?? 0).toFixed(3),
-      (pad?.border?.position?.x ?? 0).toFixed(3),
-      (pad?.border?.position?.z ?? 0).toFixed(3),
-      (xs.length ? Math.min(...xs) : 0).toFixed(3),
-      (xs.length ? Math.max(...xs) : 0).toFixed(3),
-      (zs.length ? Math.min(...zs) : 0).toFixed(3),
-      (zs.length ? Math.max(...zs) : 0).toFixed(3),
+      boardPerimeterPoseSignature(board.record, {
+        bottomY,
+        boardHeight: board.boardHeight,
+        playerZ,
+        innerSlide: CITY_DEPARTMENT_BOARD_INNER_SLIDE,
+      }),
     );
   }
   return parts.join('|');
@@ -536,6 +517,7 @@ export function cityDepartmentBoardInspect() {
       visible: Boolean(board.group.visible),
       children: board.group.children.length,
       perimeterSynced: board.perimeterSynced,
+      perimeterSide: board.perimeterSide,
       yaw: board.yaw,
       boardWidth: board.boardWidth,
       boardHeight: board.boardHeight,
