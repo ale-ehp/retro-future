@@ -15373,18 +15373,11 @@ const CITY_REVEAL_ROAD_FADE_BANDS = 8;
 const CITY_REVEAL_ROAD_FADE_MAX_OPACITY = 0.42;
 const CITY_REVEAL_ROAD_GRID_BASE_OPACITY = 0.58;
 const CITY_REVEAL_ROAD_GRID_RENDER_ORDER = 2;
-const CITY_REVEAL_ROAD_SOLID_FADE_ENABLED = false;
 const CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS = 64;
-const CITY_REVEAL_ROAD_GRID_PROCEDURAL = true;
 const CITY_REVEAL_ROAD_GRID_FADE_BANDS = 10;
 const CITY_REVEAL_ROAD_PERIMETER_EPS = 0.05;
 const CITY_REVEAL_SIDEWALK_WIRE_ROAD_CLEARANCE = 0.08;
-const CITY_REVEAL_ROAD_SOLID_BACKING_ENABLED = false;
-const CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED = false;
-const CITY_REVEAL_MAIN_BUILDING_LED_WIREFRAME_ENABLED = false;
 const CITY_REVEAL_MAIN_BUILDING_SLOW_SPEED = 0.5;
-const cityRevealRoadFadeMaterials = [];
-const cityRevealRoadGridFadeMaterials = new Map();
 let cityRevealRoadGridAlphaFactor = 1;
 let cityRevealRoadGridSkippedPerimeterSegments = 0;
 const cityRevealSolidMat = new THREE.MeshBasicMaterial({
@@ -15548,22 +15541,6 @@ cityRevealRoadGridShaderMat.userData.cityRevealRoadGridMaterial = true;
 cityRevealRoadGridShaderMat.userData.cityRevealRoadGridShaderMaterial = true;
 cityRevealRoadGridShaderMat.depthTest = true;
 
-function cityRevealRoadGridMaterialForBand(band) {
-  const safeBand = THREE.MathUtils.clamp(Math.round(band), 1, CITY_REVEAL_ROAD_GRID_FADE_BANDS);
-  if (safeBand >= CITY_REVEAL_ROAD_GRID_FADE_BANDS) return cityRevealRoadGridMat;
-  if (!cityRevealRoadGridFadeMaterials.has(safeBand)) {
-    const opacityScale = safeBand / CITY_REVEAL_ROAD_GRID_FADE_BANDS;
-    const material = registerCityRevealWireMaterial(new THREE.LineBasicMaterial({
-      color: cityRevealWireColor,
-      blending: THREE.AdditiveBlending,
-    }), CITY_REVEAL_ROAD_GRID_BASE_OPACITY * opacityScale);
-    material.userData.cityRevealRoadGridMaterial = true;
-    material.depthTest = true;
-    cityRevealRoadGridFadeMaterials.set(safeBand, material);
-  }
-  return cityRevealRoadGridFadeMaterials.get(safeBand);
-}
-
 function pointsToWireGeometry(points) {
   const vertices = [];
   points.forEach((point) => vertices.push(point.x, point.y, point.z));
@@ -15667,16 +15644,6 @@ function addCityWireLineSegments(points, material = cityRevealWireMat) {
   return line;
 }
 
-function addCityRevealRoadGridLineSegments(points, material = cityRevealRoadGridMat) {
-  const line = new THREE.LineSegments(pointsToWireGeometry(points), material);
-  line.frustumCulled = false;
-  line.renderOrder = CITY_REVEAL_ROAD_GRID_RENDER_ORDER;
-  setCityRevealObjectBoundsFromPoints(line, points);
-  cityRevealRoadGridGroup.add(line);
-  cityRevealRoadGridObjects.push(line);
-  return line;
-}
-
 function addCityWireBox(width, height, depth, x, y, z, material = cityRevealWireMat) {
   const line = new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.BoxGeometry(width, height, depth)),
@@ -15701,35 +15668,6 @@ function addCityWireSolidBox(width, height, depth, x, y, z, role = 'solid') {
   setCityRevealObjectBoxBounds(mesh, height, depth, y, z);
   cityRevealWireGroup.add(mesh);
   cityRevealSolidObjects.push(mesh);
-  cityRevealWireCullObjects.push(mesh);
-  return mesh;
-}
-
-function cityRevealRoadFadeMaterial(index) {
-  if (!cityRevealRoadFadeMaterials[index]) {
-    const t = 1 - index / Math.max(1, CITY_REVEAL_ROAD_FADE_BANDS);
-    const material = new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      transparent: true,
-      opacity: CITY_REVEAL_ROAD_FADE_MAX_OPACITY * t * t,
-      depthWrite: true,
-      depthTest: true,
-      toneMapped: false,
-    });
-    cityRevealRoadFadeMaterials[index] = material;
-  }
-  return cityRevealRoadFadeMaterials[index];
-}
-
-function addCityWireRoadFadeBox(width, height, depth, x, y, z, bandIndex) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), cityRevealRoadFadeMaterial(bandIndex));
-  mesh.position.set(x, y, z);
-  mesh.frustumCulled = false;
-  mesh.userData.cityRevealCullKind = 'road-fade';
-  mesh.userData.cityRevealRole = 'road-fade';
-  setCityRevealObjectBoxBounds(mesh, height, depth, y, z);
-  cityRevealWireGroup.add(mesh);
-  cityRevealRoadFadeObjects.push(mesh);
   cityRevealWireCullObjects.push(mesh);
   return mesh;
 }
@@ -15807,34 +15745,6 @@ function addCityWireLoop(points, y, xOffset = 0, zOffset = 0, material = cityRev
   return addCityWireLineSegments(segments, material);
 }
 
-function addCityWireLoopDensity(points, y, xOffset = 0, zOffset = 0, material = cityRevealWireDimMat) {
-  if (cityRevealWireframeDensity < 2 || !points?.length) return null;
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minZ = Infinity;
-  let maxZ = -Infinity;
-  for (const point of points) {
-    minX = Math.min(minX, point[0]);
-    maxX = Math.max(maxX, point[0]);
-    minZ = Math.min(minZ, point[1]);
-    maxZ = Math.max(maxZ, point[1]);
-  }
-  if (![minX, maxX, minZ, maxZ].every(Number.isFinite)) return null;
-  const segments = [];
-  for (let index = 1; index < cityRevealWireframeDensity; index += 1) {
-    const x = minX + (maxX - minX) * (index / cityRevealWireframeDensity);
-    const z = minZ + (maxZ - minZ) * (index / cityRevealWireframeDensity);
-    segments.push(
-      new THREE.Vector3(xOffset + x, y, zOffset + minZ),
-      new THREE.Vector3(xOffset + x, y, zOffset + maxZ),
-      new THREE.Vector3(xOffset + minX, y, zOffset + z),
-      new THREE.Vector3(xOffset + maxX, y, zOffset + z)
-    );
-  }
-  const line = addCityWireLineSegments(segments, material);
-  return tagCityRevealWireObject(line, 'wire-density');
-}
-
 function cityRevealRoadGridExtraWidth() {
   return GRID_BLOCK * CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS;
 }
@@ -15857,68 +15767,6 @@ function cityRevealRoadGridBounds() {
     gridMaxZ: roadMaxZ + extra,
     fadeWidth: Math.max(0.001, extra),
   };
-}
-
-function cityRevealRoadGridFadeAt(x, z, bounds) {
-  const xOverflow = Math.max(0, Math.abs(x) - bounds.roadHalfW) / bounds.fadeWidth;
-  const zOverflow = Math.max(0, bounds.roadMinZ - z, z - bounds.roadMaxZ) / bounds.fadeWidth;
-  return THREE.MathUtils.clamp(1 - Math.max(xOverflow, zOverflow), 0, 1);
-}
-
-function cityRevealRoadGridSegmentTouchesRoadPerimeter(a, b, bounds) {
-  const midX = (a[0] + b[0]) * 0.5;
-  const midZ = (a[1] + b[1]) * 0.5;
-  const verticalRoadEdge = Math.abs(Math.abs(midX) - bounds.roadHalfW) <= CITY_REVEAL_ROAD_PERIMETER_EPS;
-  const horizontalRoadEdge = Math.abs(midZ - bounds.roadMinZ) <= CITY_REVEAL_ROAD_PERIMETER_EPS || Math.abs(midZ - bounds.roadMaxZ) <= CITY_REVEAL_ROAD_PERIMETER_EPS;
-  return verticalRoadEdge || horizontalRoadEdge;
-}
-
-function cityRevealRoadGridStops(min, max, spacing) {
-  const stops = [min];
-  const first = Math.ceil(min / spacing) * spacing;
-  for (let value = first; value < max - 0.001; value += spacing) {
-    if (value > min + 0.001) stops.push(value);
-  }
-  stops.push(max);
-  return stops;
-}
-
-function addCityRevealRoadGridSegment(buckets, a, b, y, bounds) {
-  if (cityRevealRoadGridSegmentTouchesRoadPerimeter(a, b, bounds)) {
-    cityRevealRoadGridSkippedPerimeterSegments += 1;
-    return;
-  }
-  const midX = (a[0] + b[0]) * 0.5;
-  const midZ = (a[1] + b[1]) * 0.5;
-  const fade = cityRevealRoadGridFadeAt(midX, midZ, bounds);
-  if (fade <= 0.02) return;
-  const band = THREE.MathUtils.clamp(Math.ceil(fade * CITY_REVEAL_ROAD_GRID_FADE_BANDS), 1, CITY_REVEAL_ROAD_GRID_FADE_BANDS);
-  if (!buckets.has(band)) buckets.set(band, []);
-  buckets.get(band).push(
-    new THREE.Vector3(a[0], y, a[1]),
-    new THREE.Vector3(b[0], y, b[1])
-  );
-}
-
-function addCityRevealRoadFade(y) {
-  if (!CITY_REVEAL_ROAD_SOLID_FADE_ENABLED) return;
-  if (cityRevealRoadGridExtraWidth() <= 0) return;
-  const bounds = cityRevealRoadGridBounds();
-  const fadeWidth = bounds.fadeWidth / CITY_REVEAL_ROAD_FADE_BANDS;
-  const fadeY = y - 0.055;
-  const fadeHeight = 0.08;
-
-  for (let index = 0; index < CITY_REVEAL_ROAD_FADE_BANDS; index += 1) {
-    const offset = fadeWidth * (index + 0.5);
-    const sideWidth = fadeWidth;
-    const sideDepth = dynamicRoadLength;
-    const endWidth = dynamicRoadSurfaceWidth + fadeWidth * 2 * (index + 1);
-    const endDepth = fadeWidth;
-    addCityWireRoadFadeBox(sideWidth, fadeHeight, sideDepth, -(bounds.roadHalfW + offset), fadeY, dynamicRoadCenter, index);
-    addCityWireRoadFadeBox(sideWidth, fadeHeight, sideDepth, bounds.roadHalfW + offset, fadeY, dynamicRoadCenter, index);
-    addCityWireRoadFadeBox(endWidth, fadeHeight, endDepth, 0, fadeY, bounds.roadMinZ - offset, index);
-    addCityWireRoadFadeBox(endWidth, fadeHeight, endDepth, 0, fadeY, bounds.roadMaxZ + offset, index);
-  }
 }
 
 function updateCityRevealRoadGridShaderUniforms(bounds) {
@@ -15954,38 +15802,7 @@ function addCityRevealRoadGridPlane(y) {
 }
 
 function addCityRevealRoadGrid(y) {
-  if (CITY_REVEAL_ROAD_GRID_PROCEDURAL) {
-    addCityRevealRoadGridPlane(y);
-    return;
-  }
-  const bounds = cityRevealRoadGridBounds();
-  const gridY = y + 0.06;
-  const density = Math.max(1, cityRevealWireframeDensity);
-  const xSpacing = (GRID_BLOCK * 1.5) / density;
-  const zSpacing = (GRID_BLOCK * 3) / density;
-  const buckets = new Map();
-  const xStops = cityRevealRoadGridStops(-bounds.gridHalfW, bounds.gridHalfW, xSpacing);
-  const zStops = cityRevealRoadGridStops(bounds.gridMinZ, bounds.gridMaxZ, zSpacing);
-
-  for (let xIndex = 1; xIndex < xStops.length - 1; xIndex += 1) {
-    const x = xStops[xIndex];
-    for (let zIndex = 0; zIndex < zStops.length - 1; zIndex += 1) {
-      addCityRevealRoadGridSegment(buckets, [x, zStops[zIndex]], [x, zStops[zIndex + 1]], gridY, bounds);
-    }
-  }
-
-  for (let zIndex = 1; zIndex < zStops.length - 1; zIndex += 1) {
-    const z = zStops[zIndex];
-    for (let xIndex = 0; xIndex < xStops.length - 1; xIndex += 1) {
-      addCityRevealRoadGridSegment(buckets, [xStops[xIndex], z], [xStops[xIndex + 1], z], gridY, bounds);
-    }
-  }
-
-  for (const [band, points] of buckets.entries()) {
-    const line = addCityRevealRoadGridLineSegments(points, cityRevealRoadGridMaterialForBand(band));
-    line.userData.cityRevealRoadGridFadeBand = band;
-    tagCityRevealWireObject(line, 'road-grid');
-  }
+  addCityRevealRoadGridPlane(y);
 }
 
 function clearCityRevealWire() {
@@ -16009,11 +15826,6 @@ function clearCityRevealWire() {
   cityRevealWireCullStats.solidVisible = 0;
   cityRevealWireCullStats.roadFadeVisible = 0;
   cityRevealRoadGridSkippedPerimeterSegments = 0;
-}
-
-function cityRevealRoadSolidTopY() {
-  const roadY = roadTileTopY() + 0.18;
-  return (roadY - 0.03) + 0.12 * 0.5;
 }
 
 function cityRevealSidewalkWireY(padTopY, roadY = roadTileTopY() + 0.18) {
@@ -16532,10 +16344,6 @@ function cityRevealProfileInspect() {
 function buildCityRevealWireframe() {
   clearCityRevealWire();
   const roadY = roadTileTopY() + 0.18;
-  if (CITY_REVEAL_ROAD_SOLID_BACKING_ENABLED) {
-    addCityWireSolidBox(dynamicRoadSurfaceWidth, 0.12, dynamicRoadLength, 0, roadY - 0.03, dynamicRoadCenter, 'road-solid');
-  }
-  addCityRevealRoadFade(roadY);
   addCityWireBox(dynamicRoadSurfaceWidth, 0.08, dynamicRoadLength, 0, roadY, dynamicRoadCenter, cityRevealWireDimMat);
   addCityRevealRoadGrid(roadY);
   for (const record of sideBuildingRecords) {
@@ -16551,14 +16359,6 @@ function buildCityRevealWireframe() {
     const padZ = pad?.border?.position?.z ?? record.collider.z;
     const padY = cityRevealSidewalkWireY(pad?.topY, roadY);
     addCityWireLoop(pad?.hitPolygon, padY, padX, padZ, cityRevealWireCoreMat);
-    if (CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED) {
-      addCityWireLoopDensity(pad?.hitPolygon, padY, padX, padZ, cityRevealWireDimMat);
-    }
-    if (CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED && pad?.innerHitPolygon?.length) {
-      const innerY = cityRevealSidewalkWireY(pad.innerTopY ?? pad.topY, roadY);
-      addCityWireLoop(pad.innerHitPolygon, innerY, pad.border.position.x, pad.border.position.z, cityRevealWireDimMat);
-      addCityWireLoopDensity(pad.innerHitPolygon, innerY, pad.border.position.x, pad.border.position.z, cityRevealWireDimMat);
-    }
   }
   for (const record of mainBuildingRecords) {
     const h = record.collider.h;
@@ -16573,14 +16373,6 @@ function buildCityRevealWireframe() {
     const padZ = pad?.border?.position?.z ?? record.collider.z;
     const padY = cityRevealSidewalkWireY(pad?.topY, roadY);
     addCityWireLoop(pad?.hitPolygon, padY, padX, padZ, cityRevealWireCoreMat);
-    if (CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED) {
-      addCityWireLoopDensity(pad?.hitPolygon, padY, padX, padZ, cityRevealWireDimMat);
-    }
-    if (CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED && pad?.innerHitPolygon?.length) {
-      const innerY = cityRevealSidewalkWireY(pad.innerTopY ?? pad.topY, roadY);
-      addCityWireLoop(pad.innerHitPolygon, innerY, pad.border.position.x, pad.border.position.z, cityRevealWireDimMat);
-      addCityWireLoopDensity(pad.innerHitPolygon, innerY, pad.border.position.x, pad.border.position.z, cityRevealWireDimMat);
-    }
   }
   for (const record of bridgeRecords) {
     if (!record.mesh.visible) continue;
@@ -16591,7 +16383,7 @@ function buildCityRevealWireframe() {
     addCityWireSolidBox(boxWidth, boxHeight, boxDepth, record.mesh.position.x, boxY, record.mesh.position.z, 'bridge-solid');
   }
   for (const spec of edgeStripSpecs) {
-    if (spec.edgeRole === 'main-building' && !CITY_REVEAL_MAIN_BUILDING_LED_WIREFRAME_ENABLED) {
+    if (spec.edgeRole === 'main-building') {
       continue;
     }
     if (spec.edgeRole === 'bridge') {
@@ -16599,7 +16391,7 @@ function buildCityRevealWireframe() {
       continue;
     }
     if (!spec.mesh?.visible || !spec.mesh.geometry) continue;
-    const edge = new THREE.LineSegments(new THREE.EdgesGeometry(spec.mesh.geometry), spec.edgeRole === 'main-building' ? cityRevealWireCoreMat : cityRevealWireDimMat);
+    const edge = new THREE.LineSegments(new THREE.EdgesGeometry(spec.mesh.geometry), cityRevealWireDimMat);
     spec.mesh.updateWorldMatrix(true, false);
     edge.matrix.copy(spec.mesh.matrixWorld);
     edge.matrixAutoUpdate = false;
@@ -16607,7 +16399,7 @@ function buildCityRevealWireframe() {
     cityRevealBoundsBox.setFromObject(spec.mesh);
     setCityRevealObjectBoundsFromBox(edge, cityRevealBoundsBox);
     edge.userData.cityRevealCullKind = 'wire';
-    edge.userData.cityRevealRole = spec.edgeRole === 'main-building' ? 'main-led-wire' : `${spec.edgeRole || 'edge'}-led-wire`;
+    edge.userData.cityRevealRole = `${spec.edgeRole || 'edge'}-led-wire`;
     cityRevealWireGroup.add(edge);
     cityRevealWireObjects.push(edge);
     cityRevealWireCullObjects.push(edge);
@@ -19857,7 +19649,7 @@ window.__tronInspect = () => ({
   cityRevealWireObjects: cityRevealWireObjects.length,
   cityRevealSolidObjects: cityRevealSolidObjects.length,
   cityRevealMainBuildingLedWireObjects: cityRevealWireObjects.filter((object) => object.userData.cityRevealRole === 'main-led-wire').length,
-  cityRevealMainBuildingLedWireEnabled: CITY_REVEAL_MAIN_BUILDING_LED_WIREFRAME_ENABLED,
+  cityRevealMainBuildingLedWireEnabled: false,
   cityRevealBridgeSolidObjects: cityRevealSolidObjects.filter((object) => object.userData.cityRevealRole === 'bridge-solid').length,
   cityRevealBridgeLedWireObjects: cityRevealWireObjects.filter((object) => object.userData.cityRevealRole === 'bridge-led-wire').length,
   cityRevealRoadSolidObjects: cityRevealSolidObjects.filter((object) => object.userData.cityRevealRole === 'road-solid').length,
@@ -19866,7 +19658,6 @@ window.__tronInspect = () => ({
       .map((record) => record.basePad)
       .filter((pad) => pad?.hitPolygon?.length);
     const roadTopY = roadTileTopY();
-    const roadSolidTopY = cityRevealRoadSolidTopY();
     const surfaceYs = pads.flatMap((pad) => [pad.topY, pad.innerTopY].filter(Number.isFinite));
     const wireYs = surfaceYs.map((topY) => cityRevealSidewalkWireY(topY));
     const minSurfaceY = surfaceYs.length ? Math.min(...surfaceYs) : null;
@@ -19888,13 +19679,10 @@ window.__tronInspect = () => ({
     return {
       pads: pads.length,
       roadTopY,
-      roadSolidTopY,
       minSurfaceY,
       minWireY,
       realSurfaceMarginOverRoad: Number.isFinite(minSurfaceY) ? minSurfaceY - roadTopY : null,
-      wireMarginOverRoadSolid: Number.isFinite(minWireY) ? minWireY - roadSolidTopY : null,
       realBelowRoadCount: surfaceYs.filter((topY) => topY <= roadTopY + 0.001).length,
-      wireHiddenByRoadSolidCount: wireYs.filter((wireY) => wireY <= roadSolidTopY + 0.001).length,
       sidewalkRenderableObjects: sidewalkObjects.length,
       sidewalkCullingDisabled: sidewalkCullingEnabledCount === 0,
       sidewalkCullingEnabledCount,
@@ -19913,7 +19701,7 @@ window.__tronInspect = () => ({
   cityRevealRoadFadeVisibleObjects: cityRevealRoadFadeObjects.filter((object) => cityRevealWireGroup.visible && object.visible !== false && object.material?.visible && object.material?.opacity > 0.002).length,
   cityRevealRoadFadeBands: CITY_REVEAL_ROAD_FADE_BANDS,
   cityRevealRoadFadeMaxOpacity: CITY_REVEAL_ROAD_FADE_MAX_OPACITY,
-  cityRevealRoadFadeOuterOpacity: cityRevealRoadFadeMaterials.at(-1)?.opacity ?? 0,
+  cityRevealRoadFadeOuterOpacity: 0,
   cityRevealRoadGridObjects: cityRevealRoadGridObjects.length,
   cityRevealRoadGridVisibleObjects: cityRevealRoadGridObjects.filter((object) => cityRevealRoadGridGroup.visible && object.visible !== false && object.material?.visible && object.material?.opacity > 0.002).length,
   cityRevealRoadGridSkippedPerimeterSegments,
@@ -19921,10 +19709,10 @@ window.__tronInspect = () => ({
   cityRevealRoadGridBaseOpacity: cityRevealRoadGridMat.userData.baseOpacity,
   cityRevealRoadGridRenderOrder: CITY_REVEAL_ROAD_GRID_RENDER_ORDER,
   cityRevealRoadGridLayerOrder: 'below-wire-buildings',
-  cityRevealRoadGridMode: CITY_REVEAL_ROAD_GRID_PROCEDURAL ? 'procedural-extended-wire-grid' : 'extended-wire-grid',
+  cityRevealRoadGridMode: 'procedural-extended-wire-grid',
   cityRevealRoadGridAlphaFactor,
-  cityRevealRoadSolidFadeEnabled: CITY_REVEAL_ROAD_SOLID_FADE_ENABLED,
-  cityRevealRoadGridProcedural: CITY_REVEAL_ROAD_GRID_PROCEDURAL,
+  cityRevealRoadSolidFadeEnabled: false,
+  cityRevealRoadGridProcedural: true,
   cityRevealRoadGridExtraBlocks: CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS,
   cityRevealRoadGridZExtraBlocks: CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS,
   cityRevealRoadGridFadeEnabled: CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS > 0,
@@ -19933,20 +19721,8 @@ window.__tronInspect = () => ({
   cityRevealRoadHalfWidth: dynamicRoadSurfaceWidth / 2,
   cityRevealRoadGridLineHalfWidth: dynamicRoadSurfaceWidth / 2,
   cityRevealRoadGridHalfWidth: cityRevealRoadGridHalfWidth(),
-  cityRevealRoadGridFadeSamples: (() => {
-    const bounds = cityRevealRoadGridBounds();
-    return {
-      center: cityRevealRoadGridFadeAt(0, dynamicRoadCenter, bounds),
-      left: cityRevealRoadGridFadeAt(-bounds.gridHalfW, dynamicRoadCenter, bounds),
-      right: cityRevealRoadGridFadeAt(bounds.gridHalfW, dynamicRoadCenter, bounds),
-      near: cityRevealRoadGridFadeAt(0, bounds.gridMinZ, bounds),
-      far: cityRevealRoadGridFadeAt(0, bounds.gridMaxZ, bounds),
-      halfLeft: cityRevealRoadGridFadeAt(-(bounds.roadHalfW + bounds.fadeWidth * 0.5), dynamicRoadCenter, bounds),
-      halfFar: cityRevealRoadGridFadeAt(0, bounds.roadMaxZ + bounds.fadeWidth * 0.5, bounds),
-    };
-  })(),
-  cityRevealRoadSolidBackingEnabled: CITY_REVEAL_ROAD_SOLID_BACKING_ENABLED,
-  cityRevealSidewalkInternalLinesEnabled: CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED,
+  cityRevealRoadSolidBackingEnabled: false,
+  cityRevealSidewalkInternalLinesEnabled: false,
   cityRevealDensityObjects: cityRevealWireObjects.filter((object) => object.userData.cityRevealRole === 'wire-density').length,
   fx: {
     performanceMode,
