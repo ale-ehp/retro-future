@@ -22,3 +22,13 @@ poi apri http://localhost:8000/
 ## Provenienza
 
 Estratta con la storia git dal branch `retro-future` del monorepo `osservatorio`. Servita in produzione su avstudio.ai/tecnologie/retro-future/.
+
+## Demo live
+
+La demo gira su [avstudio.ai/chi-siamo/retro-future](https://avstudio.ai/chi-siamo/retro-future/), la pagina Chi siamo di [avstudio](https://avstudio.ai), studio italiano di automazioni AI per aziende.
+
+## Licenza e crediti
+
+© Alessandro Veneziano · avstudio ([avstudio.ai](https://avstudio.ai)). Tutti i diritti riservati: codice, grafica e musica sono pubblicati come vetrina e non sono riutilizzabili senza permesso scritto.
+
+La demo usa [three.js](https://threejs.org) (licenza MIT, © three.js authors), inclusa nei file `three.core.js`, `three.module.min.js` e nei moduli di post-processing.
