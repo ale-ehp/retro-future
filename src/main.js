@@ -7103,4 +7103,10 @@ bootSceneWithFinalDefaults().then(() => {
     tick(now);
     loader.classList.add('hidden');
   });
+}).catch((error) => {
+  // Senza questo catch un boot che fallisce diventa una unhandled rejection:
+  // il loader resta appeso per sempre e in console non compare niente di
+  // riconducibile alla demo. Stesso tag di scheduleRetroFutureCityBoot in
+  // index.html, che gia' fa lo stesso per il fallimento dell'import.
+  console.error('[retro-future]', error);
 });

@@ -769,7 +769,6 @@
     }
   }
   #hud-tl { top:14px; left:14px; }
-  #hud-bl { bottom:14px; left:14px; }
   #mobile-performance-diagnostics {
     margin-top: 6px;
     max-width: min(320px, calc(100vw - 28px));
