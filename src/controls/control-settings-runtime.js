@@ -29,7 +29,17 @@ export function createControlSettingsRuntime(deps) {
   const CONTROLS_VISIBILITY_KEY = 'tron-boulevard-controls-hidden';
   const TAB_STORAGE_PREFIX = 'tron-boulevard-tab:';
   const DEFAULT_SETTINGS_KEY = 'tron-boulevard-default-settings';
-  const PROJECT_SETTINGS_ENDPOINT = `${location.protocol}//${location.hostname || '127.0.0.1'}:60093/save-settings`;
+  // Salvataggio dei preset su file: e' un attrezzo di authoring, serve solo mentre
+  // si lavora in locale con il server di appoggio in ascolto sulla 60093. In
+  // produzione quel server non esiste, ma il ramo era comunque raggiungibile con
+  // il tasto P (controls/keyboard.js -> captureLivePlayerSpawn), quindi un
+  // visitatore che lo premeva faceva partire una POST verso la porta 60093 del
+  // dominio pubblico, che falliva e lasciava un warning in console. Fuori da
+  // localhost non si prova nemmeno: resta il salvataggio in localStorage.
+  const LOCAL_AUTHORING_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1', '']);
+  const PROJECT_SETTINGS_ENDPOINT = LOCAL_AUTHORING_HOSTS.has(location.hostname)
+    ? `${location.protocol}//${location.hostname || '127.0.0.1'}:60093/save-settings`
+    : null;
   const PROJECT_CANONICAL_SETTINGS_URL = new URL('demo-5-boulevard-canonical-settings.json', location.href).href;
   const LOCKED_LED_POSITION_VALUES = Object.freeze({
     'main-led-vertical-distance-ui': 6.1,
@@ -89,6 +99,7 @@ export function createControlSettingsRuntime(deps) {
   }
 
   async function persistSettingsToProject(scope, settings, extra = {}) {
+    if (!PROJECT_SETTINGS_ENDPOINT) return null;
     try {
       const payload = {
         demo: 'demo-5-boulevard-map',
