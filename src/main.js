@@ -51,6 +51,8 @@ import {
   TRON_CINEMATIC_LOOK_SHADER,
   TRON_FSR_UPSCALE_SHADER,
   cinematicLookRequestedFromParams,
+  linearPipelineRequestedFromParams,
+  withOutputEncode,
 } from './engine/shaders.js';
 import {
   TemporalAaPass,
@@ -4237,21 +4239,50 @@ function rebuildComposer() {
   composer.addPass(bloomPass);
   fxaaPass = new FXAAPass();
   composer.addPass(fxaaPass);
-  fsrUpscalePass = new ShaderPass(TRON_FSR_UPSCALE_SHADER);
-  fsrUpscalePass.setSize = (width, height) => {
-    fsrUpscalePass.uniforms?.sourceResolution?.value?.set(Math.max(1, width), Math.max(1, height));
-  };
+  // Ordine della catena. Di default e' quello storico: FSR, look, TAA, con
+  // l'encode di output dentro il pass FSR. Non e' corretto dal punto di vista del
+  // colore, perche' look e TAA lavorano su valori gia' tonemappati e gia' in sRGB,
+  // ma e' la catena su cui il look e' stato tarato, quindi resta il default.
+  //
+  // ?pipeline=linear mette il TAA prima del grade, cosi' accumula su dati lineari
+  // e la grana per-frame non finisce dentro la history, e sposta l'encode
+  // sull'ultimo pass della catena, che e' l'unico che presenta a schermo.
+  const linearPipeline = linearPipelineRequestedFromParams(retroBenchmarkSearchParams);
+  const lastPassIsLook = linearPipeline && cinematicLookEnabled;
+
+  function createFsrUpscalePass(encodesOutput) {
+    const pass = new ShaderPass(withOutputEncode(TRON_FSR_UPSCALE_SHADER, encodesOutput));
+    pass.setSize = (width, height) => {
+      pass.uniforms?.sourceResolution?.value?.set(Math.max(1, width), Math.max(1, height));
+    };
+    return pass;
+  }
+
+  function createCinematicLookPass(encodesOutput) {
+    const pass = new ShaderPass(withOutputEncode(TRON_CINEMATIC_LOOK_SHADER, encodesOutput));
+    pass.setSize = (width, height) => {
+      pass.uniforms?.resolution?.value?.set(Math.max(1, width), Math.max(1, height));
+    };
+    return pass;
+  }
+
+  if (linearPipeline && temporalAaEnabled) {
+    temporalAaPass = new TemporalAaPass({ ...temporalAaSettings, hdrHistory: true });
+    temporalAaPass.enabled = false;
+    composer.addPass(temporalAaPass);
+  }
+
+  fsrUpscalePass = createFsrUpscalePass(!lastPassIsLook);
   syncFsrUpscalePass();
   composer.addPass(fsrUpscalePass);
+
   if (cinematicLookEnabled) {
-    cinematicLookPass = new ShaderPass(TRON_CINEMATIC_LOOK_SHADER);
-    cinematicLookPass.setSize = (width, height) => {
-      cinematicLookPass.uniforms?.resolution?.value?.set(Math.max(1, width), Math.max(1, height));
-    };
+    cinematicLookPass = createCinematicLookPass(lastPassIsLook);
     syncCinematicLookPass();
     composer.addPass(cinematicLookPass);
   }
-  if (temporalAaEnabled) {
+
+  if (!linearPipeline && temporalAaEnabled) {
     temporalAaPass = new TemporalAaPass(temporalAaSettings);
     temporalAaPass.enabled = false;
     composer.addPass(temporalAaPass);
