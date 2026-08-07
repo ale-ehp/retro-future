@@ -22,7 +22,7 @@ Requisiti: browser recente con WebGL2. L'audio parte dopo la prima interazione.
 
     npm test
 
-Suite `node --test`, 116 test su 22 file, nessuna dipendenza da installare. I moduli di scena importano `three` con lo specifier nudo: nel browser lo risolve la importmap di `index.html`, nei test un resolve hook di node (`test/resolve-three.mjs`) che punta agli stessi file di `vendor/`. `test/importmap.test.mjs` fallisce se le due tabelle divergono.
+Suite `node --test`, 133 test su 24 file, nessuna dipendenza da installare. I moduli di scena importano `three` con lo specifier nudo: nel browser lo risolve la importmap di `index.html`, nei test un resolve hook di node (`test/resolve-three.mjs`) che punta agli stessi file di `vendor/`. `test/importmap.test.mjs` fallisce se le due tabelle divergono.
 
 Serve node 22.15 o superiore, per `module.registerHooks`. La suite gira in CI su ogni push e pull request verso `main`.
 
