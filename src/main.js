@@ -2791,8 +2791,8 @@ const longitudinalRoadEdgeRecords = [];
   [-1, 1].forEach((sign) => addLongitudinalRoadEdgeSegments(sign, 'outer', outerRoadEdgeMat, 0.30, 0.15));
 }
 
-// Crosswalk/racetrack markings from demo-5 intentionally removed: this variant
-// keeps only the exact boulevard road network.
+// Crosswalk / racetrack markings intentionally removed: this variant keeps only
+// the exact boulevard road network.
 
 // soft fills (low — let env + emissives carry mood)
 const ambientLight = new THREE.HemisphereLight(0x182a32, 0x02050a, 0.10);
@@ -3985,7 +3985,7 @@ function tronRunnerDroneAnchor() {
   };
 }
 
-// ---------- Exact boulevard elevated links, rendered with demo-5 cubemap materials ----------
+// ---------- Exact boulevard elevated links, rendered with cubemap materials ----------
 bridges.buildLinks([-144, -48, 48, 144]);
 buildBridgeEdgeBatch(overlayGroup);
 
