@@ -1308,13 +1308,20 @@
     z-index: 40;
     color: var(--splat-control-ink);
     opacity: 0;
+    /* visibility, non solo opacity: con la sola opacity i cinque bottoni W A S D
+       e mouse restano nel tab order anche mentre l'overlay e' invisibile, e siccome
+       stanno prima della cover nel DOM diventano i primi cinque stop di Tab della
+       pagina. Un utente da tastiera doveva premere Tab sei volte per arrivare a
+       "Esplora i reparti". is-active viene aggiunta a reveal completato, cioe'
+       quando i tasti servono davvero. */
+    visibility: hidden;
     pointer-events: none;
     font-family: Sora, Avenir Next, Segoe UI, sans-serif;
-    transition: opacity .18s cubic-bezier(.16, 1, .3, 1);
+    transition: opacity .18s cubic-bezier(.16, 1, .3, 1), visibility .18s cubic-bezier(.16, 1, .3, 1);
     position: fixed;
     inset: 0;
   }
-  .splat-input-overlay.is-active { opacity: 1; }
+  .splat-input-overlay.is-active { opacity: 1; visibility: visible; }
   .splat-input-overlay, .splat-input-overlay * { box-sizing: border-box; }
   .splat-control-row {
     --splat-key-size: calc((var(--splat-control-unit) - (2 * var(--splat-key-gap))) / 3);
@@ -1382,9 +1389,14 @@
     color: var(--splat-control-hot);
     transform: translateY(3px);
   }
-  .splat-key-button:focus-visible, .splat-mouse-button:focus-visible { outline: 3px solid var(--splat-control-hot); outline-offset: 5px; }
+  .splat-key-button:focus-visible { outline: 3px solid var(--splat-control-hot); outline-offset: 5px; }
   .splat-mouse-button { width: var(--splat-control-unit); height: var(--splat-control-unit); padding: 0; }
+  /* Il bottone mouse e' un quadrato che contiene una sagoma di mouse molto piu'
+     piccola: un outline sul bottone starebbe lontanissimo dalla grafica. Prima
+     veniva annullato con `outline: 0` senza nessun sostituto, quindi da tastiera
+     non si vedeva dove si era. Il ring segue la sagoma. */
   .splat-mouse-button:focus-visible { outline: 0; }
+  .splat-mouse-button:focus-visible .splat-mouse-outline { outline: 3px solid var(--splat-control-hot); outline-offset: 5px; }
   .splat-mouse-outline {
     border: var(--splat-stroke) solid var(--splat-control-border);
     background: var(--splat-control-glass);

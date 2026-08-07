@@ -67,7 +67,7 @@ Gli altri (`skyQuality`, `skyCheap`, `floorLite`, `floorReflect`, `buildingRefle
   - `controls/` input, pannelli, equalizer, movimento mobile
   - `audio/` colonna sonora e passi
 - `test/` infrastruttura di test (resolver di `three`) e test che non appartengono a un singolo modulo. I test dei moduli stanno accanto al modulo, come `src/camera/mouse-look.test.mjs`
-- `vendor/` three.js r184 e i suoi moduli addons, vendorizzati e non modificati (EffectComposer, FXAA, UnrealBloom, GLTFLoader, ...)
+- `vendor/` three.js r184 e i suoi moduli addons (EffectComposer, FXAA, UnrealBloom, GLTFLoader, ...). Due file non sono identici a upstream, `vendor/README.md` dice quali e perché
 - `assets/`, `audio/`, `character-mockups/` asset di scena, colonna sonora e modelli dei personaggi
 - `demo-5-boulevard-canonical-settings.json` preset del pannello controlli, caricato al boot
 - `docs/` screenshot, [frasi della folla](docs/frasi-folla.md), [roadmap WebGPU e TAA](docs/roadmap-webgpu-taa.md)
@@ -86,4 +86,4 @@ La demo gira su [avstudio.ai/chi-siamo/retro-future](https://avstudio.ai/chi-sia
 
 © Alessandro Veneziano · avstudio ([avstudio.ai](https://avstudio.ai)). Tutti i diritti riservati: codice, grafica e musica sono pubblicati come vetrina e non sono riutilizzabili senza permesso scritto.
 
-La demo usa [three.js](https://threejs.org) (licenza MIT, © three.js authors), inclusa in `vendor/` (`three.core.js`, `three.module.min.js` e i moduli addons). Il modello `soldier.glb` dei character mockup proviene dagli esempi three.js (personaggio Mixamo "Vanguard").
+La demo usa [three.js](https://threejs.org) (licenza MIT, © three.js authors), inclusa in `vendor/` (`three.core.js`, `three.module.min.js` e i moduli addons). `UnrealBloomPass.js` è un fork locale e `GLTFLoader.js` ha i percorsi di import adattati: le modifiche sono elencate in [`vendor/README.md`](vendor/README.md). Il modello `soldier.glb` dei character mockup proviene dagli esempi three.js (personaggio Mixamo "Vanguard").
