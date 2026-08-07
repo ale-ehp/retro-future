@@ -61,7 +61,12 @@ const CITY_DEPARTMENT_BOARD_RAW_PANEL_BASE_OPACITY = 0.46;
 const CITY_DEPARTMENT_BOARD_RAW_TEXT_BASE_OPACITY = 0.96;
 export const CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY = retroFutureSignOpacity(CITY_DEPARTMENT_BOARD_RAW_PANEL_BASE_OPACITY);
 export const CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY = retroFutureSignTextOpacity(CITY_DEPARTMENT_BOARD_RAW_TEXT_BASE_OPACITY);
-window.__cityDepartmentBoardTextureUploadEnabled = new URLSearchParams(location.search).get('boardUpload') !== '0';
+// Leva di debug runtime (?boardUpload=0, o si spegne da console). Sta dietro un
+// guard perche' i test in node importano questo modulo senza DOM: senza il guard
+// l'import esplode prima ancora di arrivare alle asserzioni.
+if (typeof window !== 'undefined') {
+  window.__cityDepartmentBoardTextureUploadEnabled = new URLSearchParams(location.search).get('boardUpload') !== '0';
+}
 const CITY_DEPARTMENT_BOARD_SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 /&';
 const CITY_DEPARTMENTS = Object.freeze([
   'Tech Engineering',
@@ -548,7 +553,7 @@ export function cityDepartmentBoardInspect() {
     })),
   };
 }
-window.__cityDepartmentBoardInspect = cityDepartmentBoardInspect;
+if (typeof window !== 'undefined') window.__cityDepartmentBoardInspect = cityDepartmentBoardInspect;
 
 export function getCityDepartmentBoards() {
   return cityDepartmentBoards;
@@ -1122,7 +1127,7 @@ export function cityRoleBoardInspect() {
     }),
   };
 }
-window.__cityRoleBoardInspect = cityRoleBoardInspect;
+if (typeof window !== 'undefined') window.__cityRoleBoardInspect = cityRoleBoardInspect;
 
 export function getCityRoleBoards() {
   return cityRoleBoards;

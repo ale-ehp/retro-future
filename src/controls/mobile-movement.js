@@ -8,7 +8,8 @@
 
 const MOBILE_MOVEMENT_PAD_RADIUS = 58;
 const MOBILE_MOVEMENT_PAD_DEADZONE = 0.12;
-const mobileLandscapeQuery = window.matchMedia('(orientation: landscape)');
+// null fuori dal browser: i test in node importano questo modulo senza DOM.
+const mobileLandscapeQuery = typeof window !== 'undefined' ? window.matchMedia('(orientation: landscape)') : null;
 
 export const mobileTouchControlsState = {
   landscape: false,
@@ -40,7 +41,7 @@ let mobileMovementPadEl = null;
 let mobileMovementKnobEl = null;
 
 function isMobileLandscapeMode() {
-  return Boolean(mobilePerformanceProfileActive() && (mobileLandscapeQuery.matches || window.innerWidth > window.innerHeight));
+  return Boolean(mobilePerformanceProfileActive() && (mobileLandscapeQuery?.matches || window.innerWidth > window.innerHeight));
 }
 
 function currentFullscreenElement() {
