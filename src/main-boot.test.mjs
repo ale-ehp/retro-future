@@ -68,7 +68,7 @@ test('disc cursor shows three rotating wait notches during the reveal', () => {
   assert.match(discCursorSource, /revealWaiting:\s*false/);
   assert.match(discCursorSource, /export function setTronDiscCursorRevealWaiting\(waiting, anchorEvent = null\)/);
   assert.match(discCursorSource, /tronDiscCursor\?\.classList\.toggle\('is-reveal-waiting', next\)/);
-  assert.match(mainSource, /setTronDiscCursorRevealWaiting\(true, event\)/);
+  assert.match(mainSource, /setTronDiscCursorRevealWaiting\(true, event \|\| null\)/);
   assert.match(mainSource, /setTronDiscCursorRevealWaiting\(tronDiscRevealWaitingActive\)/);
 });
 
@@ -247,7 +247,11 @@ test('welcome cover page stays static while the button starts the reveal flow', 
   assert.match(mainSource, /triggerWelcomeButtonStart\(event\)/);
   assert.doesNotMatch(mainSource, /setupWelcomeWindowMotion\(welcomeWindowMotion, welcomeMotionDeps\)/);
   assert.match(mainSource, /const welcomeWindowMotionAllowed = false/);
-  assert.doesNotMatch(cssSource, /\.welcome-start-button:hover\s*\{[\s\S]*transform:\s*translateY/);
+  // [^}]* e non [\s\S]*: l'assenza di translateY va verificata DENTRO la regola
+  // :hover. Con il wildcard greedy il match scavalcava la graffa di chiusura e
+  // agganciava il primo translateY del file, 800 righe piu' avanti e in una
+  // regola scollegata, facendo fallire il test senza nessuna regressione reale.
+  assert.doesNotMatch(cssSource, /\.welcome-start-button:hover\s*\{[^}]*transform:\s*translateY/);
 });
 
 test('welcome cover hides HUD until dismissed', () => {

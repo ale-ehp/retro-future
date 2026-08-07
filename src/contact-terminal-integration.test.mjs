@@ -5,7 +5,6 @@ import test from 'node:test';
 const mainSource = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
 const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const cssSource = readFileSync(new URL('../retro-future.css', import.meta.url), 'utf8');
-const smokeSource = readFileSync(new URL('../../../../scripts/smoke-retro-future.mjs', import.meta.url), 'utf8');
 
 test('main composes contact terminal with camera and input ownership', () => {
   assert.match(mainSource, /from '\.\/world\/contact-terminal\.js'/);
@@ -45,11 +44,9 @@ test('contact controls provide stable desktop and mobile hit targets', () => {
   assert.match(cssSource, /@media \(prefers-reduced-motion: reduce\)[\s\S]*#contact-terminal-action/);
 });
 
-test('smoke gate validates civic 2 contact terminal diagnostics', () => {
-  assert.match(smokeSource, /__contactTerminalInspect/);
-  assert.match(smokeSource, /contactTerminal\.civicNumberValue === 2/);
-  assert.match(smokeSource, /contactTerminal\.perimeterSide === 'start-player'/);
-  assert.match(smokeSource, /contactTerminal\.hitTargetCount === 2/);
-  assert.match(smokeSource, /contactTerminal\.textureWidth === 1024/);
-  assert.match(smokeSource, /contactTerminal\.textureHeight === 512/);
-});
+// Qui c'era un quinto test che asseriva sul contenuto di
+// scripts/smoke-retro-future.mjs, letto con un path che risaliva quattro
+// livelli sopra la root del repository. Quello script vive nel monorepo di
+// origine e non fa parte di questa vetrina: il readFileSync in cima al file
+// falliva all'import e portava giu' anche i tre test qui sopra, che sono
+// validi. Il gate di smoke resta nel monorepo, dove lo script esiste.
