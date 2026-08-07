@@ -279,53 +279,11 @@ import {
   syncTronRunnerActionSetToDistance,
 } from './character/runner-animation.js';
 import {
-  TRON_SOUNDTRACK_CROSSFADE_SECONDS,
-  TRON_SOUNDTRACK_ENABLED,
-  TRON_SOUNDTRACK_FADE_IN_SECONDS,
-  TRON_SOUNDTRACK_INITIAL_START_SECONDS,
-  TRON_SOUNDTRACK_INTRO_FX_CURVE_SIZE,
-  TRON_SOUNDTRACK_INTRO_FX_DEFAULTS,
   TRON_SOUNDTRACK_BEAT_DROP_SECONDS,
   TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS,
-  TRON_SOUNDTRACK_INTRO_FX_MAX_NOISE_GAIN,
-  TRON_SOUNDTRACK_INTRO_FX_MAX_WOBBLE_DEPTH_HZ,
-  TRON_SOUNDTRACK_INTRO_FX_REVEAL_STOP_DELAY_MS,
-  TRON_SOUNDTRACK_INTRO_FX_WOBBLE_RATE_HZ,
-  TRON_SOUNDTRACK_LOOP_START_SECONDS,
-  TRON_SOUNDTRACK_STOP_FADE_SECONDS,
   TRON_SOUNDTRACK_URL,
-  TRON_SOUNDTRACK_VOLUME,
-  TRON_SYNTH_MUSIC_BPM,
-  TRON_SYNTH_MUSIC_ENABLED,
-  TRON_SYNTH_MUSIC_LOOKAHEAD_MS,
-  TRON_SYNTH_MUSIC_MASTER_GAIN,
-  TRON_SYNTH_MUSIC_PATTERN_STEPS,
-  TRON_SYNTH_MUSIC_SCHEDULE_AHEAD,
-  TRON_SYNTH_MUSIC_STEP_SEC,
-  applyTronSoundtrackIntroLofiMix as applyTronSoundtrackIntroLofiMixCore,
-  createTronIntroBitcrushCurve as createTronIntroBitcrushCurveCore,
-  createTronIntroDistortionCurve as createTronIntroDistortionCurveCore,
-  createTronIntroNoiseBuffer,
-  rampGain as rampGainCore,
-  scheduleTronSoundtrackIntroLofiStopForReveal as scheduleTronSoundtrackIntroLofiStopForRevealCore,
-  setAudioCurrentTime,
-  setAudioParamSmooth as setAudioParamSmoothCore,
-  setTronSoundtrackIntroLofi as setTronSoundtrackIntroLofiCore,
-  stopTronSoundtrackIntroLofiForReveal as stopTronSoundtrackIntroLofiForRevealCore,
-  syncTronIntroFxNodeSettings as syncTronIntroFxNodeSettingsCore,
-  tronIntroFxEffectiveFilters as tronIntroFxEffectiveFiltersCore,
-  createTronSoundtrackElement as createTronSoundtrackElementCore,
-  setupTronSoundtrackGraph as setupTronSoundtrackGraphCore,
-  tronSoundtrackLoopStart as tronSoundtrackLoopStartCore,
-  pauseTronSoundtrackElement as pauseTronSoundtrackElementCore,
-  startTronSoundtrackElement as startTronSoundtrackElementCore,
-  crossfadeTronSoundtrack as crossfadeTronSoundtrackCore,
-  monitorTronSoundtrackLoop as monitorTronSoundtrackLoopCore,
-  startTronFileSoundtrack as startTronFileSoundtrackCore,
-  primeTronSoundtrackForGesture as primeTronSoundtrackForGestureCore,
-  stopTronFileSoundtrack as stopTronFileSoundtrackCore,
-  setTronFileSoundtrackVolume as setTronFileSoundtrackVolumeCore,
 } from './audio/audio.js';
+import { createTronSoundtrackRuntime } from './audio/soundtrack-runtime.js';
 import {
   footstepInverseDistanceGain,
   pickFootstepSample as pickFootstepSampleCore,
@@ -1749,44 +1707,6 @@ function ensureFootstepAudioReady() {
   return footstepAudioReadyPromise;
 }
 
-const tronSoundtrack = {
-  playing: false,
-  ready: false,
-  activeIndex: 0,
-  crossfading: false,
-  startedAt: 0,
-  startSource: '',
-  duration: 0,
-  targetVolume: TRON_SOUNDTRACK_VOLUME,
-  timer: 0,
-  loopCount: 0,
-  lastLoopAt: 0,
-  lastStartAt: 0,
-  introLofiActive: false,
-  introLofiStoppedByReveal: false,
-  introLofiStartedAt: 0,
-  introLofiStoppedAt: 0,
-  introLofiRevealStopTimer: 0,
-  introFx: { ...TRON_SOUNDTRACK_INTRO_FX_DEFAULTS },
-  elements: [],
-  sources: [],
-  gains: [],
-  dryGains: [],
-  introLofiGains: [],
-  introHighpassFilters: [],
-  introLowpassFilters: [],
-  introLofiShapers: [],
-  introDistortionShapers: [],
-  introLofiLfos: [],
-  introLofiLfoGains: [],
-  introNoiseSource: null,
-  introNoiseGain: null,
-  introNoiseFilter: null,
-  introBitcrushCurveKey: '',
-  introDistortionCurveKey: '',
-  error: '',
-};
-
 function ensureTronAudioContext() {
   if (!footstepAudioContext) footstepAudioContext = createFootstepAudioContext();
   if (!footstepAudioContext) return null;
@@ -1794,107 +1714,34 @@ function ensureTronAudioContext() {
   return footstepAudioContext;
 }
 
-const tronSoundtrackDeps = {
-  soundtrack: tronSoundtrack,
-  getCtx: () => footstepAudioContext,
-  ensureCtx: ensureTronAudioContext,
-};
+const tronSoundtrackRuntime = createTronSoundtrackRuntime({
+  getAudioContext: () => footstepAudioContext,
+  ensureAudioContext: ensureTronAudioContext,
+});
 
-function createTronSoundtrackElement() {
-  return createTronSoundtrackElementCore(tronSoundtrack);
-}
-
-function createTronIntroBitcrushCurve(bitDepth, crusher) {
-  return createTronIntroBitcrushCurveCore(bitDepth, crusher, tronSoundtrack);
-}
-
-function createTronIntroDistortionCurve(amount) {
-  return createTronIntroDistortionCurveCore(amount, tronSoundtrack);
-}
-
-function setAudioParamSmooth(param, value, seconds = 0.04) {
-  setAudioParamSmoothCore(footstepAudioContext, param, value, seconds);
-}
-
-function tronIntroFxEffectiveFilters() {
-  return tronIntroFxEffectiveFiltersCore(tronSoundtrack);
-}
-
-function syncTronIntroFxNodeSettings(fadeSeconds = 0.04) {
-  return syncTronIntroFxNodeSettingsCore(tronSoundtrack, footstepAudioContext, fadeSeconds);
-}
-
-function applyTronSoundtrackIntroLofiMix(active, fadeSeconds = TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS) {
-  return applyTronSoundtrackIntroLofiMixCore(tronSoundtrack, footstepAudioContext, active, fadeSeconds);
-}
-
-function setTronSoundtrackIntroLofi(active, fadeSeconds = TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS, stoppedByReveal = false) {
-  return setTronSoundtrackIntroLofiCore(tronSoundtrack, footstepAudioContext, active, fadeSeconds, stoppedByReveal);
-}
-
-function scheduleTronSoundtrackIntroLofiStopForReveal(delayMs = TRON_SOUNDTRACK_INTRO_FX_REVEAL_STOP_DELAY_MS) {
-  return scheduleTronSoundtrackIntroLofiStopForRevealCore(tronSoundtrack, () => footstepAudioContext, delayMs);
-}
-
-function stopTronSoundtrackIntroLofiForReveal() {
-  return stopTronSoundtrackIntroLofiForRevealCore(tronSoundtrack, footstepAudioContext);
-}
-
-function setupTronSoundtrackGraph(ctx) {
-  return setupTronSoundtrackGraphCore(tronSoundtrackDeps, ctx);
-}
-
-function tronSoundtrackLoopStart() {
-  return tronSoundtrackLoopStartCore(tronSoundtrack);
-}
-
-function rampGain(gainNode, value, seconds, fromValue = null) {
-  rampGainCore(footstepAudioContext, gainNode, value, seconds, fromValue);
-}
-
-function pauseTronSoundtrackElement(index) {
-  return pauseTronSoundtrackElementCore(tronSoundtrack, index);
-}
-
-function startTronSoundtrackElement(index, startAt, fadeSeconds, volume = tronSoundtrack.targetVolume) {
-  return startTronSoundtrackElementCore(tronSoundtrackDeps, footstepAudioContext, index, startAt, fadeSeconds, volume);
-}
-
-function crossfadeTronSoundtrack() {
-  return crossfadeTronSoundtrackCore(tronSoundtrackDeps);
-}
-
-function monitorTronSoundtrackLoop() {
-  return monitorTronSoundtrackLoopCore(tronSoundtrackDeps);
-}
-
-function startTronFileSoundtrack(source = 'manual', options = {}) {
-  return startTronFileSoundtrackCore(tronSoundtrackDeps, source, options);
-}
-
-function primeTronSoundtrackForGesture() {
-  return primeTronSoundtrackForGestureCore(tronSoundtrackDeps);
-}
-
-function stopTronFileSoundtrack(fadeSeconds = TRON_SOUNDTRACK_STOP_FADE_SECONDS) {
-  return stopTronFileSoundtrackCore(tronSoundtrackDeps, fadeSeconds);
-}
-
-function setTronFileSoundtrackVolume(value = TRON_SOUNDTRACK_VOLUME) {
-  return setTronFileSoundtrackVolumeCore(tronSoundtrackDeps, value);
-}
-
-function startTronProceduralMusic(source = 'manual', options = {}) {
-  return startTronFileSoundtrack(source, options);
-}
-
-function stopTronProceduralMusic(fadeSeconds = 0.75) {
-  return stopTronFileSoundtrack(fadeSeconds);
-}
-
-function setTronProceduralMusicVolume(value = TRON_SOUNDTRACK_VOLUME) {
-  return setTronFileSoundtrackVolume(value);
-}
+// Lo stato e i venti wrapper vivono ora in audio/soundtrack-runtime.js. Qui
+// restano solo i nomi, destrutturati, cosi' i call site nel resto del file
+// non cambiano.
+const tronSoundtrack = tronSoundtrackRuntime.soundtrack;
+const {
+  applyTronSoundtrackIntroLofiMix,
+  crossfadeTronSoundtrack,
+  monitorTronSoundtrackLoop,
+  primeTronSoundtrackForGesture,
+  scheduleTronSoundtrackIntroLofiStopForReveal,
+  setTronFileSoundtrackVolume,
+  setTronProceduralMusicVolume,
+  setTronSoundtrackIntroLofi,
+  setupTronSoundtrackGraph,
+  startTronFileSoundtrack,
+  startTronProceduralMusic,
+  stopTronFileSoundtrack,
+  stopTronProceduralMusic,
+  stopTronSoundtrackIntroLofiForReveal,
+  syncTronIntroFxNodeSettings,
+  tronIntroFxEffectiveFilters,
+  tronSoundtrackLoopStart,
+} = tronSoundtrackRuntime;
 
 function pickFootstepSample(surfaceKind, side) {
   return pickFootstepSampleCore(footstepBuffers, footstepVariantCursor, surfaceKind, side);
@@ -2070,44 +1917,7 @@ window.__tronMusicStart = startTronProceduralMusic;
 window.__tronMusicStop = stopTronProceduralMusic;
 window.__tronMusicSetVolume = setTronProceduralMusicVolume;
 window.__tronMusicForceCrossfade = crossfadeTronSoundtrack;
-window.__tronMusicInspect = () => ({
-  enabled: TRON_SOUNDTRACK_ENABLED,
-  mode: 'file-crossfade',
-  url: TRON_SOUNDTRACK_URL,
-  contextState: footstepAudioContext?.state || 'not-created',
-  ready: tronSoundtrack.ready,
-  playing: tronSoundtrack.playing,
-  activeIndex: tronSoundtrack.activeIndex,
-  crossfading: tronSoundtrack.crossfading,
-  duration: Number((tronSoundtrack.duration || 0).toFixed(3)),
-  currentTime: Number((tronSoundtrack.elements[tronSoundtrack.activeIndex]?.currentTime || 0).toFixed(3)),
-  targetVolume: tronSoundtrack.targetVolume,
-  activeGain: Number((tronSoundtrack.gains[tronSoundtrack.activeIndex]?.gain?.value || 0).toFixed(4)),
-  introFx: {
-    ...tronSoundtrack.introFx,
-    active: tronSoundtrack.introLofiActive,
-    stoppedByReveal: tronSoundtrack.introLofiStoppedByReveal,
-    revealStopDelayMs: TRON_SOUNDTRACK_INTRO_FX_REVEAL_STOP_DELAY_MS,
-    revealStopPending: Boolean(tronSoundtrack.introLofiRevealStopTimer),
-    dryGain: Number((tronSoundtrack.dryGains[tronSoundtrack.activeIndex]?.gain?.value || 0).toFixed(4)),
-    wetGain: Number((tronSoundtrack.introLofiGains[tronSoundtrack.activeIndex]?.gain?.value || 0).toFixed(4)),
-    lfoGain: Number((tronSoundtrack.introLofiLfoGains[tronSoundtrack.activeIndex]?.gain?.value || 0).toFixed(2)),
-    noiseGain: Number((tronSoundtrack.introNoiseGain?.gain?.value || 0).toFixed(4)),
-    effectiveFilters: tronIntroFxEffectiveFilters(),
-    wobbleRateHz: TRON_SOUNDTRACK_INTRO_FX_WOBBLE_RATE_HZ,
-    maxWobbleDepthHz: TRON_SOUNDTRACK_INTRO_FX_MAX_WOBBLE_DEPTH_HZ,
-    fadeSeconds: TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS,
-  },
-  loopStartSeconds: tronSoundtrackLoopStart(),
-  initialStartSeconds: TRON_SOUNDTRACK_INITIAL_START_SECONDS,
-  requestedLoopStartSeconds: TRON_SOUNDTRACK_LOOP_START_SECONDS,
-  crossfadeSeconds: TRON_SOUNDTRACK_CROSSFADE_SECONDS,
-  loopCount: tronSoundtrack.loopCount,
-  timerActive: Boolean(tronSoundtrack.timer),
-  startSource: tronSoundtrack.startSource,
-  lastStartAt: Number(tronSoundtrack.lastStartAt.toFixed(3)),
-  error: tronSoundtrack.error,
-});
+window.__tronMusicInspect = () => tronSoundtrackRuntime.inspect();
 
 function removeViewMotionOffset() {
   if (appliedHeadMotion.lengthSq() <= 0) return;
