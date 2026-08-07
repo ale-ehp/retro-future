@@ -1,13 +1,19 @@
-// ctx.js — the world/context object (design §4).
-// Holds ONLY genuinely-shared infra (scene / camera / renderer / composer) plus state slices
-// that have a single clear owner. Subsystems read their own slice; a subsystem's private state
-// stays in that subsystem's module. Guard against this becoming the next controlEls god-object:
-// do NOT dump unrelated globals here. Slices and flag accessors are added by the phase that owns
-// each subsystem (A1..B), not all at once.
+// ctx.js: the world/context object passed to the subsystems in src/world, src/camera
+// and src/controls.
 //
-// scene / camera / renderer are created once (const) in main.js before createCtx() runs, so they
-// are held by value. composer is created later (deferred postprocessing setup) and is reassignable,
-// so it is exposed via a late-bound getter rather than captured null at creation time.
+// It holds ONLY genuinely-shared infrastructure (scene / camera / renderer / composer)
+// plus `state`, where a subsystem may park a field that another subsystem has to read.
+// A subsystem's private state stays in that subsystem's module. Guard against this
+// becoming the next controlEls god-object: do NOT dump unrelated globals here.
+//
+// scene / camera / renderer are created once (const) in main.js before createCtx() runs,
+// so they are held by value. composer is created later (deferred postprocessing setup)
+// and is reassignable, so it is exposed via a late-bound getter rather than captured
+// null at creation time.
+//
+// `state` starts empty on purpose: each slice is created by the subsystem that owns it,
+// the way world/boundary-error.js creates state.boundaryError for the noclip flag, which
+// today is the only genuinely cross-subsystem field.
 export function createCtx({ scene, camera, renderer, getComposer }) {
   return {
     scene,
@@ -16,11 +22,6 @@ export function createCtx({ scene, camera, renderer, getComposer }) {
     get composer() {
       return getComposer();
     },
-    state: {
-      reveal: {},
-      runner: {},
-      perf: {},
-    },
-    flags: {},
+    state: {},
   };
 }

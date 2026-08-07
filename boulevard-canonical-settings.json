@@ -1,7 +1,6 @@
 {
   "savedAt": "2026-06-10T06:02:17.784Z",
-  "source": "merged-all-defaults:/public/tecnologie/retro-future/",
-  "chromeSavedAt": "2026-06-07T13:53:22.234Z",
+  "source": "canonical defaults del pannello controlli",
   "spawn": {
     "x": 1021.9157138958009,
     "y": 591.0351224586902,
@@ -325,17 +324,6 @@
     "music-fx-wobble": 0,
     "music-fx-noise": 0
   },
-  "chromeTabs": {
-    "movementSavedAt": "2026-06-04T13:19:03.396Z",
-    "fxSavedAt": "2026-05-18T22:25:04.343Z",
-    "ledGlowFxSavedAt": "2026-06-01T13:00:24.597Z",
-    "atmosphereFxSavedAt": "2026-06-01T12:53:44.128Z",
-    "bloomFxSavedAt": "2026-06-06T10:58:44.093Z",
-    "performanceFxSavedAt": "2026-06-06T10:58:47.377Z",
-    "wireframeFxSavedAt": "2026-06-01T13:00:27.146Z",
-    "characterSavedAt": "2026-06-10T06:02:17.784Z",
-    "surfaceReflectionsSavedAt": "2026-06-07T13:53:22.234Z"
-  },
   "characterPreset": {
     "source": "/public/tecnologie/retro-future/",
     "chromeSavedAt": "2026-06-10T06:02:17.784Z",
@@ -392,27 +380,5 @@
       "runner-floor-reflection-scale": 3
     },
     "note": "Chrome-saved runner lighting and circular contact shadow preset."
-  },
-  "chromePresetTabs": [
-    {
-      "tab": "performance-fx",
-      "savedAt": "2026-06-06T10:58:47.377Z",
-      "settingsCount": 4
-    },
-    {
-      "tab": "surface-reflections",
-      "savedAt": "2026-06-06T07:44:13.823Z",
-      "settingsCount": 11
-    },
-    {
-      "tab": "bloom-fx",
-      "savedAt": "2026-06-06T10:58:44.093Z",
-      "settingsCount": 5
-    },
-    {
-      "tab": "character",
-      "savedAt": "2026-06-10T06:02:17.784Z",
-      "settingsCount": 31
-    }
-  ]
+  }
 }

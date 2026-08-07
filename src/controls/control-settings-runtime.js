@@ -30,7 +30,7 @@ export function createControlSettingsRuntime(deps) {
   const TAB_STORAGE_PREFIX = 'tron-boulevard-tab:';
   const DEFAULT_SETTINGS_KEY = 'tron-boulevard-default-settings';
   const PROJECT_SETTINGS_ENDPOINT = `${location.protocol}//${location.hostname || '127.0.0.1'}:60093/save-settings`;
-  const PROJECT_CANONICAL_SETTINGS_URL = new URL('demo-5-boulevard-canonical-settings.json', location.href).href;
+  const PROJECT_CANONICAL_SETTINGS_URL = new URL('boulevard-canonical-settings.json', location.href).href;
   const LOCKED_LED_POSITION_VALUES = Object.freeze({
     'main-led-vertical-distance-ui': 6.1,
     'main-led-thickness-ui': 2.28,
@@ -91,7 +91,7 @@ export function createControlSettingsRuntime(deps) {
   async function persistSettingsToProject(scope, settings, extra = {}) {
     try {
       const payload = {
-        demo: 'demo-5-boulevard-map',
+        demo: 'retro-future-boulevard',
         source: location.pathname,
         savedAt: new Date().toISOString(),
         scope,

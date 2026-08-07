@@ -69,7 +69,7 @@ Gli altri (`skyQuality`, `skyCheap`, `floorLite`, `floorReflect`, `buildingRefle
 - `test/` infrastruttura di test (resolver di `three`) e test che non appartengono a un singolo modulo. I test dei moduli stanno accanto al modulo, come `src/camera/mouse-look.test.mjs`
 - `vendor/` three.js r184 e i suoi moduli addons (EffectComposer, FXAA, UnrealBloom, GLTFLoader, ...). Due file non sono identici a upstream, `vendor/README.md` dice quali e perché
 - `assets/`, `audio/`, `character-mockups/` asset di scena, colonna sonora e modelli dei personaggi
-- `demo-5-boulevard-canonical-settings.json` preset del pannello controlli, caricato al boot
+- `boulevard-canonical-settings.json` preset del pannello controlli, caricato al boot
 - `docs/` screenshot, [frasi della folla](docs/frasi-folla.md), [roadmap WebGPU e TAA](docs/roadmap-webgpu-taa.md)
 
 ## Provenienza
