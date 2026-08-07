@@ -33,7 +33,7 @@ Requisiti: browser recente con WebGL2. L'audio parte dopo la prima interazione.
 - `src/camera/mouse-look.test.mjs` test unitari (`node --test src/camera/mouse-look.test.mjs`)
 - `assets/`, `audio/`, `character-mockups/` asset di scena, colonna sonora e mockup personaggi
 - `demo-5-boulevard-canonical-settings.json` preset del pannello controlli
-- three.js r184 + moduli addons vendorizzati in root (EffectComposer, FXAA, UnrealBloom, GLTFLoader, ...)
+- `vendor/` three.js r184 e i suoi moduli addons, vendorizzati e non modificati (EffectComposer, FXAA, UnrealBloom, GLTFLoader, ...)
 - `CROWD_LINES.md`, `WEBGPU_TAA_ROADMAP.md` appunti di lavorazione
 
 ## Provenienza
@@ -48,4 +48,4 @@ La demo gira su [avstudio.ai/chi-siamo/retro-future](https://avstudio.ai/chi-sia
 
 © Alessandro Veneziano · avstudio ([avstudio.ai](https://avstudio.ai)). Tutti i diritti riservati: codice, grafica e musica sono pubblicati come vetrina e non sono riutilizzabili senza permesso scritto.
 
-La demo usa [three.js](https://threejs.org) (licenza MIT, © three.js authors), inclusa nei file `three.core.js`, `three.module.min.js` e nei moduli addons vendorizzati. Il modello `soldier.glb` dei character mockup proviene dagli esempi three.js (personaggio Mixamo "Vanguard").
+La demo usa [three.js](https://threejs.org) (licenza MIT, © three.js authors), inclusa in `vendor/` (`three.core.js`, `three.module.min.js` e i moduli addons). Il modello `soldier.glb` dei character mockup proviene dagli esempi three.js (personaggio Mixamo "Vanguard").

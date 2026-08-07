@@ -5,7 +5,7 @@ import {
   Vector2,
   WebGLRenderTarget,
 } from 'three';
-import { FullScreenQuad, Pass } from '../../Pass.js';
+import { FullScreenQuad, Pass } from '../../vendor/Pass.js';
 
 const TRUEY = new Set(['1', 'true', 'on', 'yes']);
 const FALSEY = new Set(['0', 'false', 'off', 'no']);
