@@ -227,9 +227,6 @@ const hexTileInstancePosition = new THREE.Vector3();
 const hexTileInstanceQuaternion = new THREE.Quaternion();
 const hexTileInstanceScale = new THREE.Vector3();
 const hexTileInstanceColor = new THREE.Color();
-const basePadHexInstanceMatrix = new THREE.Matrix4();
-const basePadHexInstancePosition = new THREE.Vector3();
-const basePadHexInstanceScale = new THREE.Vector3();
 const dirtyHexTileBatches = new Map();
 export const hexRoadRuntimeStats = {
   lastCandidateCount: 0,
@@ -248,7 +245,6 @@ export const hexRoadRuntimeStats = {
 };
 
 const hexTileSyncDeps = {
-  getBasePadHexOverlay: () => null,
   refreshCullingBounds: () => {},
 };
 
@@ -278,7 +274,6 @@ export function setHexRoadLodProfile(profile = {}) {
 }
 
 export function initHexTileSync(deps) {
-  hexTileSyncDeps.getBasePadHexOverlay = deps.getBasePadHexOverlay;
   hexTileSyncDeps.refreshCullingBounds = deps.refreshCullingBounds;
 }
 
@@ -490,18 +485,6 @@ export function syncHexTileInstance(tile, color = null) {
   if (color && tile.batch.setColorAt) {
     tile.batch.setColorAt(tile.instanceId, color);
     addHexInstanceUpdateRange(tile.batch.instanceColor, tile.instanceId * 3, 3);
-  }
-  const basePadHexOverlay = hexTileSyncDeps.getBasePadHexOverlay();
-  if (tile.userData.basePadOverlayId >= 0 && basePadHexOverlay) {
-    const overlayVisible = visible && (tile.userData.basePadLight || 0) > 0;
-    const overlayScaleXZ = overlayVisible ? getHexTileScale() : 0.0001;
-    const overlayScaleY = overlayVisible ? getHexTileHeightScale() : 0.0001;
-    const overlayY = overlayVisible ? y + 0.12 : -10000;
-    basePadHexInstancePosition.set(tile.userData.x, overlayY, tile.userData.z);
-    basePadHexInstanceScale.set(overlayScaleXZ, overlayScaleY, overlayScaleXZ);
-    basePadHexInstanceMatrix.compose(basePadHexInstancePosition, hexTileInstanceQuaternion, basePadHexInstanceScale);
-    basePadHexOverlay.setMatrixAt(tile.userData.basePadOverlayId, basePadHexInstanceMatrix);
-    basePadHexOverlay.instanceMatrix.needsUpdate = true;
   }
   markHexTileBatchDirty(tile.batch, Boolean(color));
 }
@@ -746,7 +729,6 @@ export function addHexRoadTiles(width, length, centerX, centerZ, axis = "z", mat
         hitLight: 0,
         playerLight: 0,
         basePadLight: 0,
-        basePadOverlayId: -1,
         interactive,
         visible: true,
       });
@@ -868,7 +850,6 @@ export function ensureHexRoadTileCoverage(tiles, centerX, centerZ, width, length
         hitLight: 0,
         playerLight: 0,
         basePadLight: 0,
-        basePadOverlayId: -1,
         interactive,
         visible: true,
       });

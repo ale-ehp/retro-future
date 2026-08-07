@@ -124,9 +124,13 @@ function setStaticCityBridgeClusterVisible(record, visible) {
   for (const spec of deps.edgeStripSpecs) {
     if (spec.edgeRole === 'bridge' && spec.bridgeRecord === record) setStaticCityEdgeSpecVisible(spec, effectiveVisible);
   }
-  for (const spec of deps.horizontalBuildingLedRings) {
-    if (spec.edgeRole === 'bridge' && spec.bridgeRecord === record) setStaticCityEdgeSpecVisible(spec, effectiveVisible);
-  }
+  // Qui c'era un secondo loop identico su deps.horizontalBuildingLedRings che
+  // cercava spec.edgeRole === 'bridge' && spec.bridgeRecord === record. Non
+  // poteva mai trovare niente: quell'array e' popolato solo da
+  // addHorizontalBuildingLedRing (world/building-leds.js:275), chiamata solo
+  // dal ramo side-building/main-building di addBuildingEdges, e lo spec che
+  // costruisce non ha nemmeno un campo bridgeRecord. Girava a ogni frame per
+  // ogni ponte senza produrre un solo match.
 }
 
 function setStaticCityBoardVisible(board, baseVisible) {

@@ -546,7 +546,6 @@ import {
   basePadLedBatch,
   createBuildingBasePad,
   getBasePadCurbEnabled,
-  getBasePadHexOverlay,
   getBasePadMaterialResponse,
   initBasePads,
   pointInBasePadPolygon,
@@ -2367,7 +2366,6 @@ const hexTileDisplayBaseEmissive = new THREE.Color(0x061419);
 const hexTileDisplayHitEmissive = new THREE.Color(0x7df6ff);
 let hexTileBaseEmissiveIntensity = 0.18;
 initHexTileSync({
-  getBasePadHexOverlay,
   refreshCullingBounds,
 });
 initHexTileLayout(ctx);
