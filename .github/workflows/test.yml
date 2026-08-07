@@ -1,0 +1,19 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.15'
+      # Nessun install: il repo non ha dipendenze, three.js e' vendorizzato
+      # sotto vendor/ e i test lo risolvono con test/resolve-three.mjs.
+      - run: npm test
