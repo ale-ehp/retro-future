@@ -1112,10 +1112,12 @@ function labEqualizerInspect() {
     canvasColorProbeManual: 'window.__labEqualizerCanvasColorProbe()',
   };
 }
-window.__labEqualizerInspect = labEqualizerInspect;
-window.__labEqualizerStart = startLabEqualizerAudio;
-window.__labEqualizerToggle = toggleLabEqualizerAudio;
-window.__labEqualizerCanvasColorProbe = labEqualizerCanvasColorProbe;
+if (typeof window !== 'undefined') {
+  window.__labEqualizerInspect = labEqualizerInspect;
+  window.__labEqualizerStart = startLabEqualizerAudio;
+  window.__labEqualizerToggle = toggleLabEqualizerAudio;
+  window.__labEqualizerCanvasColorProbe = labEqualizerCanvasColorProbe;
+}
 
 export function initLabEqualizer(d) {
   deps = d;
