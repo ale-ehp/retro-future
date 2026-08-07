@@ -61,19 +61,6 @@ let basePadFlatShading = false;
 let basePadBorderOpacity = 0.64;
 let basePadBorderBrightness = 1;
 
-const basePadHexMat = new THREE.MeshBasicMaterial({
-  color: 0x6f8187,
-  transparent: false,
-  opacity: 1,
-  depthWrite: true,
-  depthTest: true,
-  polygonOffset: true,
-  polygonOffsetFactor: -8,
-  polygonOffsetUnits: -8,
-  toneMapped: false,
-});
-let basePadHexOverlay = null;
-let basePadHexOverlayCapacity = 0;
 const basePadHexClipMat = new THREE.MeshBasicMaterial({
   color: 0x6f8187,
   transparent: false,
@@ -155,10 +142,6 @@ export function getBasePadMaterialResponse() {
     roughness: basePadRoughness,
     metalness: basePadMetalness,
   };
-}
-
-export function getBasePadHexOverlay() {
-  return basePadHexOverlay;
 }
 
 export function applyBasePadRuntimeSettings(settings) {
@@ -254,19 +237,6 @@ export function basePadAtPoint(x, z) {
     }
   }
   return bestPad ? { pad: bestPad, topY: bestTopY } : null;
-}
-
-function ensureBasePadHexOverlayCapacity(count) {
-  const needed = Math.max(1, count);
-  if (basePadHexOverlay && basePadHexOverlayCapacity >= needed) return;
-  if (basePadHexOverlay) scene.remove(basePadHexOverlay);
-  basePadHexOverlayCapacity = needed;
-  basePadHexOverlay = new THREE.InstancedMesh(hexTileGeo, basePadHexMat, basePadHexOverlayCapacity);
-  basePadHexOverlay.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  basePadHexOverlay.count = 0;
-  basePadHexOverlay.frustumCulled = false;
-  basePadHexOverlay.renderOrder = 3;
-  scene.add(basePadHexOverlay);
 }
 
 function basePadPoints(width, depth, cornerCut) {
@@ -660,9 +630,8 @@ function appendClippedHexSurface(positions, tile, pad, clippedPolygon) {
 
 export function updateBasePadHexInfluence() {
   for (const tile of hexRoadTiles) {
-    if ((tile.userData.basePadLight || 0) > 0 || tile.userData.basePadOverlayId >= 0) {
+    if ((tile.userData.basePadLight || 0) > 0) {
       tile.userData.basePadLight = 0;
-      tile.userData.basePadOverlayId = -1;
       syncHexTileDisplayColor(
         tile,
         tile.userData.hitLight || 0,
@@ -670,11 +639,6 @@ export function updateBasePadHexInfluence() {
         0
       );
     }
-  }
-  if (basePadHexOverlay) {
-    basePadHexOverlay.count = 0;
-    basePadHexOverlay.visible = false;
-    basePadHexOverlay.instanceMatrix.needsUpdate = true;
   }
   basePadHexClipMesh.geometry.dispose();
   basePadHexClipMesh.geometry = new THREE.BufferGeometry();
