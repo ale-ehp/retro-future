@@ -1,6 +1,10 @@
 # macOS
 .DS_Store
 
+# node (il repo non ha dipendenze, ma npm test crea comunque questi)
+node_modules/
+npm-debug.log*
+
 # Python
 __pycache__/
 *.pyc

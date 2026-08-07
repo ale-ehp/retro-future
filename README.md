@@ -12,33 +12,71 @@ All'ingresso una schermata con le card dei reparti; da lì partono musica, revea
 
 Sono file statici (nessuna build). Vanno serviti via HTTP, non da `file://`, perché la demo importa moduli ES.
 
-    python3 -m http.server 8000
+    npm start          # equivale a python3 -m http.server 8000
 
 poi apri http://localhost:8000/
 
 Requisiti: browser recente con WebGL2. L'audio parte dopo la prima interazione.
 
+## Test
+
+    npm test
+
+Suite `node --test`, 116 test su 22 file, nessuna dipendenza da installare. I moduli di scena importano `three` con lo specifier nudo: nel browser lo risolve la importmap di `index.html`, nei test un resolve hook di node (`test/resolve-three.mjs`) che punta agli stessi file di `vendor/`. `test/importmap.test.mjs` fallisce se le due tabelle divergono.
+
+Serve node 22.15 o superiore, per `module.registerHooks`. La suite gira in CI su ogni push e pull request verso `main`.
+
 ## Controlli
 
 - `Spazio` (o il bottone a schermo) avvia la demo
 - `W A S D` / frecce · movimento (`Shift` sprint)
-- mouse · sguardo
+- mouse · sguardo, `Esc` lo rilascia
+- `H` · rimette la camera all'altezza di default
 - contact terminal: avvicinati al pannello contatti per interagire
+- su mobile in orizzontale compare un joystick virtuale al posto di `W A S D`
+
+## Flag URL
+
+La demo si pilota da query string, utile per confronti A/B e per il rollback di un effetto senza toccare il codice.
+
+| Flag | Effetto |
+| --- | --- |
+| `?benchmark=1` | avvia il benchmark e mostra il pannello con fps, frame peggiori e memoria |
+| `?benchmarkSeconds=N` | durata della registrazione |
+| `?taa=0` | spegne il temporal AA, che è acceso di default |
+| `?taa.profile=quality\|lite` | profilo del temporal AA |
+| `?aa=fxaa\|msaa\|taa\|none` | modalità di antialiasing |
+| `?look=classic` | disattiva il look cinematografico |
+| `?forceMobile=1` | attiva il profilo performance mobile su qualunque device |
+| `?techBreakdown=1` | overlay con pipeline, frame, scena, LOD e stato dei bake |
+| `?heroShot=1` | inquadratura di apertura alternativa, orbita sulla città |
+| `?pixelRatio=N` | forza la risoluzione di render |
+| `?skyBake=1` | bake del cielo nel background, prova A/B per mobile |
+
+Gli altri (`skyQuality`, `skyCheap`, `floorLite`, `floorReflect`, `buildingReflect`, `dirLight`, `boardUpload`, `aaSamples`, `benchmarkDownload`, `benchmarkSettleMs`) sono leve di misurazione: si leggono nelle funzioni `*FromParams` dei moduli che le usano.
 
 ## Struttura
 
-- `index.html` shell della pagina e markup UI
+- `index.html` shell della pagina, markup UI, importmap e boot differito
 - `retro-future.css` stili
-- `src/` codice della scena in moduli ES: `camera/`, `character/`, `world/`, `audio/`, `controls/`, con `main.js` come entry point
-- `src/camera/mouse-look.test.mjs` test unitari (`node --test src/camera/mouse-look.test.mjs`)
-- `assets/`, `audio/`, `character-mockups/` asset di scena, colonna sonora e mockup personaggi
-- `demo-5-boulevard-canonical-settings.json` preset del pannello controlli
+- `src/` codice della scena in moduli ES, con `main.js` come entry point
+  - `camera/` sguardo mouse, cursore disco, volo di intro
+  - `character/` runner giocante, folla, animazioni, fumetti, riflessi
+  - `world/` boulevard, edifici, ponti, board, cielo, contact terminal, reveal
+  - `engine/` postprocessing, temporal AA, shader, diagnostica, benchmark
+  - `controls/` input, pannelli, equalizer, movimento mobile
+  - `audio/` colonna sonora e passi
+- `test/` infrastruttura di test (resolver di `three`) e test che non appartengono a un singolo modulo. I test dei moduli stanno accanto al modulo, come `src/camera/mouse-look.test.mjs`
 - `vendor/` three.js r184 e i suoi moduli addons, vendorizzati e non modificati (EffectComposer, FXAA, UnrealBloom, GLTFLoader, ...)
-- `CROWD_LINES.md`, `WEBGPU_TAA_ROADMAP.md` appunti di lavorazione
+- `assets/`, `audio/`, `character-mockups/` asset di scena, colonna sonora e modelli dei personaggi
+- `demo-5-boulevard-canonical-settings.json` preset del pannello controlli, caricato al boot
+- `docs/` screenshot, [frasi della folla](docs/frasi-folla.md), [roadmap WebGPU e TAA](docs/roadmap-webgpu-taa.md)
 
 ## Provenienza
 
-Estratta con la storia git (367 commit) dal monorepo `osservatorio`, linea attiva della demo. Il branch `legacy-monolite` conserva la precedente vetrina a file singolo.
+Estratta con la storia git completa dal monorepo `osservatorio`, linea attiva della demo. Il branch `legacy-monolite` conserva la precedente vetrina a file singolo.
+
+I meta `canonical`, `og:url` e `og:image` di `index.html` puntano alla pagina di produzione: sono corretti lì e restano invariati qui perché questo repository serve la stessa build.
 
 ## Demo live
 

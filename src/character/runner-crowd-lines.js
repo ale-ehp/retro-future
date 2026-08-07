@@ -1,6 +1,7 @@
 // Ambient one-liners the crowd says when the player comes near. Mix of warm greetings,
 // slice-of-life, light avstudio worldbuilding and Tron flavour. No dashes, brand lowercase.
-// Mirror of public/tecnologie/retro-future/CROWD_LINES.md (edit there, then re-sync here).
+// This file is the single source: docs/frasi-folla.md documents the rules and the
+// behaviour, it does not hold a second copy of the pool.
 export const TRON_RUNNER_CROWD_LINES = [
   // Saluti caldi
   'Hei, un viso nuovo!',
