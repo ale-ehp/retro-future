@@ -4239,14 +4239,12 @@ function rebuildComposer() {
   composer.addPass(bloomPass);
   fxaaPass = new FXAAPass();
   composer.addPass(fxaaPass);
-  // Ordine della catena. Di default e' quello storico: FSR, look, TAA, con
-  // l'encode di output dentro il pass FSR. Non e' corretto dal punto di vista del
-  // colore, perche' look e TAA lavorano su valori gia' tonemappati e gia' in sRGB,
-  // ma e' la catena su cui il look e' stato tarato, quindi resta il default.
+  // Ordine della catena. Di default il TAA sta prima del grade, cosi' accumula su
+  // dati lineari e la grana per-frame non finisce dentro la history, e l'encode di
+  // output sta nell'ultimo pass, l'unico che presenta a schermo.
   //
-  // ?pipeline=linear mette il TAA prima del grade, cosi' accumula su dati lineari
-  // e la grana per-frame non finisce dentro la history, e sposta l'encode
-  // sull'ultimo pass della catena, che e' l'unico che presenta a schermo.
+  // ?pipeline=0 rimette la catena storica: encode dentro il pass FSR, con look e
+  // TAA che lavorano su valori gia' tonemappati e gia' in sRGB. Serve a confrontare.
   const linearPipeline = linearPipelineRequestedFromParams(retroBenchmarkSearchParams);
   const lastPassIsLook = linearPipeline && cinematicLookEnabled;
 

@@ -38,15 +38,20 @@ export function shaderEncodesOutput(shader) {
 }
 
 /**
- * ?pipeline=linear accende la catena corretta dal punto di vista del colore:
- * il TAA accumula prima del grade, su dati lineari e con history a 16 bit, e
- * l'encode passa all'ultimo pass. Di default resta spento, perche' il look
- * attuale e' stato tarato sulla catena esistente e correggerla cambia l'immagine.
+ * La catena colore corretta e' il default: il TAA accumula prima del grade, su
+ * dati lineari e con history a 16 bit, e l'encode di output sta nell'ultimo pass,
+ * l'unico che presenta a schermo.
+ *
+ * Rollback con ?pipeline=0 (o legacy, off, classic): rimette la catena storica,
+ * con l'encode dentro il pass FSR e grade, grana e TAA che lavorano su valori
+ * gia' tonemappati e gia' in sRGB. Serve per confrontare, non per l'uso normale.
  */
 export function linearPipelineRequestedFromParams(params) {
   const raw = params?.get?.('pipeline') ?? params?.get?.('fx.pipeline');
-  const value = String(raw || '').trim().toLowerCase();
-  return value === 'linear' || TRUEY.has(value);
+  if (raw == null) return true;
+  const value = String(raw).trim().toLowerCase();
+  if (value === 'legacy' || value === 'classic' || FALSEY.has(value)) return false;
+  return true;
 }
 
 export const TRON_CINEMATIC_LOOK_SHADER = {

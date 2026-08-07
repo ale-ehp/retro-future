@@ -145,8 +145,8 @@ test('cinematic look pass is default-on with URL rollback and inserted after FSR
   // Lo shader passa da withOutputEncode, che decide se quel pass porta o no
   // il tone mapping e la conversione a sRGB finali.
   assert.match(mainSource, /new ShaderPass\(withOutputEncode\(TRON_CINEMATIC_LOOK_SHADER, encodesOutput\)\)/);
-  // Di default l'encode resta nel pass FSR, come prima: la catena corretta e'
-  // opt-in con ?pipeline=linear.
+  // L'encode va all'ultimo pass della catena: il cinematic look quando e' acceso,
+  // altrimenti torna al pass FSR che ridiventa l'ultimo.
   assert.match(mainSource, /const lastPassIsLook = linearPipeline && cinematicLookEnabled;/);
   assert.match(mainSource, /createFsrUpscalePass\(!lastPassIsLook\)/);
   assert.match(mainSource, /composer\.addPass\(fsrUpscalePass\)[\s\S]*composer\.addPass\(cinematicLookPass\)/);
