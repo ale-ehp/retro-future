@@ -72,6 +72,7 @@ import {
   WIREFRAME_FAST_CONTROL_IDS,
   createControlEls,
 } from './controls/controls.js';
+import { mountFixedControlDefaults } from './controls/fixed-control-defaults.js';
 import {
   TRON_RUNNER_BEAT_PULSE_AUDIO_KICK_ENABLED,
   TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST,
@@ -902,6 +903,10 @@ const contactTerminalActionEl = document.getElementById('contact-terminal-action
 const contactTerminalBackEl = document.getElementById('contact-terminal-back');
 const contactTerminalSurfaceEl = document.getElementById('contact-terminal-surface');
 const contactTerminalLiveEl = document.getElementById('contact-terminal-live');
+// I valori fissi della scena (LED, ponti) tornano nel DOM prima che
+// createControlEls() li cerchi per id: vivono in controls/fixed-control-defaults.js,
+// non piu' come 8 KB di input nascosti dentro index.html.
+mountFixedControlDefaults();
 const controlEls = createControlEls();
 const CHARACTER_BUBBLE_BG_OPACITY_RANGE_MULTIPLIER = 3;
 
