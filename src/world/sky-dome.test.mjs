@@ -10,7 +10,7 @@ import {
 const htmlSource = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 const skyDomeSource = readFileSync(new URL('./sky-dome.js', import.meta.url), 'utf8');
 const canonicalSettings = JSON.parse(
-  readFileSync(new URL('../../demo-5-boulevard-canonical-settings.json', import.meta.url), 'utf8')
+  readFileSync(new URL('../../boulevard-canonical-settings.json', import.meta.url), 'utf8')
 );
 
 test('sky brightness default is raised by twenty percent end to end', () => {

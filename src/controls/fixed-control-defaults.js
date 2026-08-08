@@ -11,7 +11,7 @@
 // annidamento di #bridge-controls, che controls.js interroga.
 //
 // Cambiare un valore qui cambia la scena. I default degli slider del pannello
-// stanno invece in demo-5-boulevard-canonical-settings.json, applicato al boot.
+// stanno invece in boulevard-canonical-settings.json, applicato al boot.
 
 /** LED di edifici, facciate, base pad e offset comuni dei ponti. */
 export const FIXED_LED_DEFAULTS = Object.freeze({

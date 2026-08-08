@@ -3,7 +3,7 @@
 // La scena non nasce dal codice ma da tre sorgenti di dati che si sovrappongono:
 //   1. gli slider del pannello in index.html, col loro attributo value
 //   2. controls/fixed-control-defaults.js, i valori fissi di LED e ponti
-//   3. demo-5-boulevard-canonical-settings.json, applicato sopra al boot da
+//   3. boulevard-canonical-settings.json, applicato sopra al boot da
 //      loadProjectCanonicalDefaults
 //
 // Nessuna delle due e' verificata da niente, e la seconda vince sulla prima solo
@@ -21,7 +21,7 @@ import { BRIDGE_DEFAULTS, FIXED_LED_DEFAULTS } from './fixed-control-defaults.js
 
 const htmlSource = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 const canonicalSettings = JSON.parse(
-  readFileSync(new URL('../../demo-5-boulevard-canonical-settings.json', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../boulevard-canonical-settings.json', import.meta.url), 'utf8'),
 ).settings;
 
 /** Tutti gli input/select con un id, esclusi gli <output> di lettura. */
@@ -126,7 +126,7 @@ test('ogni output di lettura ha un controllo oppure e' + "' un display noto", ()
 });
 
 test('i valori che esistono solo fuori dal JSON canonico restano quelli noti', () => {
-  // Non sono coperti da demo-5-boulevard-canonical-settings.json: il loro unico
+  // Non sono coperti da boulevard-canonical-settings.json: il loro unico
   // default e' quello dichiarato nella sorgente che li crea.
   const soloDefault = [...controls.keys()].filter((id) => !(id in canonicalSettings)).sort();
   assert.equal(soloDefault.length, 52, `cambiati i controlli senza copertura nel JSON: ${soloDefault.length}`);

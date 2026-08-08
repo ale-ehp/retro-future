@@ -40,7 +40,7 @@ export function createControlSettingsRuntime(deps) {
   const PROJECT_SETTINGS_ENDPOINT = LOCAL_AUTHORING_HOSTS.has(location.hostname)
     ? `${location.protocol}//${location.hostname || '127.0.0.1'}:60093/save-settings`
     : null;
-  const PROJECT_CANONICAL_SETTINGS_URL = new URL('demo-5-boulevard-canonical-settings.json', location.href).href;
+  const PROJECT_CANONICAL_SETTINGS_URL = new URL('boulevard-canonical-settings.json', location.href).href;
   const LOCKED_LED_POSITION_VALUES = Object.freeze({
     'main-led-vertical-distance-ui': 6.1,
     'main-led-thickness-ui': 2.28,
@@ -102,7 +102,7 @@ export function createControlSettingsRuntime(deps) {
     if (!PROJECT_SETTINGS_ENDPOINT) return null;
     try {
       const payload = {
-        demo: 'demo-5-boulevard-map',
+        demo: 'retro-future-boulevard',
         source: location.pathname,
         savedAt: new Date().toISOString(),
         scope,

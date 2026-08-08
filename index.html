@@ -770,14 +770,14 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "./three.module.min.js",
-    "three/addons/postprocessing/EffectComposer.js": "./EffectComposer.js",
-    "three/addons/postprocessing/RenderPass.js": "./RenderPass.js",
-    "three/addons/postprocessing/UnrealBloomPass.js": "./UnrealBloomPass.js",
-    "three/addons/postprocessing/FXAAPass.js": "./FXAAPass.js",
-    "three/addons/postprocessing/ShaderPass.js": "./ShaderPass.js",
-    "three/addons/loaders/GLTFLoader.js": "./GLTFLoader.js",
-    "three/addons/utils/SkeletonUtils.js": "./SkeletonUtils.js"
+    "three": "./vendor/three.module.min.js",
+    "three/addons/postprocessing/EffectComposer.js": "./vendor/EffectComposer.js",
+    "three/addons/postprocessing/RenderPass.js": "./vendor/RenderPass.js",
+    "three/addons/postprocessing/UnrealBloomPass.js": "./vendor/UnrealBloomPass.js",
+    "three/addons/postprocessing/FXAAPass.js": "./vendor/FXAAPass.js",
+    "three/addons/postprocessing/ShaderPass.js": "./vendor/ShaderPass.js",
+    "three/addons/loaders/GLTFLoader.js": "./vendor/GLTFLoader.js",
+    "three/addons/utils/SkeletonUtils.js": "./vendor/SkeletonUtils.js"
   }
 }
 </script>
@@ -1138,21 +1138,21 @@ scheduleWelcomeDepartmentHeads();
 // welcome screen's own critical resources have started, so it never competes
 // with first paint.
 const RETRO_MODULE_PRELOADS = [
-  './three.core.js',
-  './three.module.min.js',
-  './EffectComposer.js',
-  './RenderPass.js',
-  './UnrealBloomPass.js',
-  './FXAAPass.js',
-  './ShaderPass.js',
-  './GLTFLoader.js',
-  './SkeletonUtils.js',
-  './Pass.js',
-  './MaskPass.js',
-  './CopyShader.js',
-  './FXAAShader.js',
-  './LuminosityHighPassShader.js',
-  './BufferGeometryUtils.js',
+  './vendor/three.core.js',
+  './vendor/three.module.min.js',
+  './vendor/EffectComposer.js',
+  './vendor/RenderPass.js',
+  './vendor/UnrealBloomPass.js',
+  './vendor/FXAAPass.js',
+  './vendor/ShaderPass.js',
+  './vendor/GLTFLoader.js',
+  './vendor/SkeletonUtils.js',
+  './vendor/Pass.js',
+  './vendor/MaskPass.js',
+  './vendor/CopyShader.js',
+  './vendor/FXAAShader.js',
+  './vendor/LuminosityHighPassShader.js',
+  './vendor/BufferGeometryUtils.js',
   './src/audio/audio.js',
   './src/audio/footstep-audio.js',
   './src/camera/disc-cursor.js',
