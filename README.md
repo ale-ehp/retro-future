@@ -22,7 +22,7 @@ Requisiti: browser recente con WebGL2. L'audio parte dopo la prima interazione.
 
     npm test
 
-Suite `node --test`, 133 test su 24 file, nessuna dipendenza da installare. I moduli di scena importano `three` con lo specifier nudo: nel browser lo risolve la importmap di `index.html`, nei test un resolve hook di node (`test/resolve-three.mjs`) che punta agli stessi file di `vendor/`. `test/importmap.test.mjs` fallisce se le due tabelle divergono.
+Suite `node --test`, 142 test su 25 file, nessuna dipendenza da installare. I moduli di scena importano `three` con lo specifier nudo: nel browser lo risolve la importmap di `index.html`, nei test un resolve hook di node (`test/resolve-three.mjs`) che punta agli stessi file di `vendor/`. `test/importmap.test.mjs` fallisce se le due tabelle divergono.
 
 Serve node 22.15 o superiore, per `module.registerHooks`. La suite gira in CI su ogni push e pull request verso `main`.
 
@@ -43,7 +43,8 @@ La demo si pilota da query string, utile per confronti A/B e per il rollback di 
 | --- | --- |
 | `?benchmark=1` | avvia il benchmark e mostra il pannello con fps, frame peggiori e memoria |
 | `?benchmarkSeconds=N` | durata della registrazione |
-| `?taa=0` | spegne il temporal AA, che è acceso di default |
+| `?pipeline=0` | rollback alla catena colore precedente, encode dentro il pass FSR |
+| `?taa=0` | spegne il temporal AA |
 | `?taa.profile=quality\|lite` | profilo del temporal AA |
 | `?aa=fxaa\|msaa\|taa\|none` | modalità di antialiasing |
 | `?look=classic` | disattiva il look cinematografico |
@@ -74,7 +75,7 @@ Gli altri (`skyQuality`, `skyCheap`, `floorLite`, `floorReflect`, `buildingRefle
 
 ## Provenienza
 
-Estratta con la storia git completa dal monorepo `osservatorio`, linea attiva della demo. Il branch `legacy-monolite` conserva la precedente vetrina a file singolo.
+Questo repository è la stessa cartella servita in produzione, rigenerata dal monorepo `osservatorio` dove la demo viene sviluppata e da cui viene deployata. Il codice della demo qui e quello live sono identici file per file: qui in più ci sono soltanto i file che servono a questo repository, cioè README, LICENSE, `package.json`, la CI e `docs/`.
 
 I meta `canonical`, `og:url` e `og:image` di `index.html` puntano alla pagina di produzione: sono corretti lì e restano invariati qui perché questo repository serve la stessa build.
 

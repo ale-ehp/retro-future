@@ -14,6 +14,46 @@ export function cinematicLookRequestedFromParams(params) {
   return true;
 }
 
+// L'encode di output, tone mapping piu' conversione a sRGB, deve stare nell'UNICO
+// pass che presenta a schermo: farlo prima significa far lavorare i pass successivi
+// su valori gia' non lineari. Ogni shader della catena porta un marcatore al posto
+// suo, e chi costruisce i pass decide a chi darlo.
+const OUTPUT_ENCODE_MARKER = '/*__TRON_OUTPUT_ENCODE__*/';
+const OUTPUT_ENCODE_GLSL = '#include <tonemapping_fragment>\n      #include <colorspace_fragment>';
+
+/** Copia dello shader con l'encode finale acceso o spento. */
+export function withOutputEncode(shader, enabled) {
+  return {
+    ...shader,
+    fragmentShader: shader.fragmentShader.replaceAll(
+      OUTPUT_ENCODE_MARKER,
+      enabled ? OUTPUT_ENCODE_GLSL : '',
+    ),
+  };
+}
+
+/** True se lo shader, cosi' com'e', scrive il colore gia' codificato. */
+export function shaderEncodesOutput(shader) {
+  return shader.fragmentShader.includes('<colorspace_fragment>');
+}
+
+/**
+ * La catena colore corretta e' il default: il TAA accumula prima del grade, su
+ * dati lineari e con history a 16 bit, e l'encode di output sta nell'ultimo pass,
+ * l'unico che presenta a schermo.
+ *
+ * Rollback con ?pipeline=0 (o legacy, off, classic): rimette la catena storica,
+ * con l'encode dentro il pass FSR e grade, grana e TAA che lavorano su valori
+ * gia' tonemappati e gia' in sRGB. Serve per confrontare, non per l'uso normale.
+ */
+export function linearPipelineRequestedFromParams(params) {
+  const raw = params?.get?.('pipeline') ?? params?.get?.('fx.pipeline');
+  if (raw == null) return true;
+  const value = String(raw).trim().toLowerCase();
+  if (value === 'legacy' || value === 'classic' || FALSEY.has(value)) return false;
+  return true;
+}
+
 export const TRON_CINEMATIC_LOOK_SHADER = {
   name: 'TronCinematicLook',
   uniforms: {
@@ -79,6 +119,7 @@ export const TRON_CINEMATIC_LOOK_SHADER = {
       color += (grain - 0.5) * grainStrength * intensity * grainMask;
 
       gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+      /*__TRON_OUTPUT_ENCODE__*/
     }
   `,
 };
@@ -170,8 +211,7 @@ export const TRON_FSR_UPSCALE_SHADER = {
         color = tronRcasLikeSharpen(reconstructed, north, south, east, west, rcasAmount);
       }
       gl_FragColor = vec4(clamp(color, 0.0, 1.0), center.a);
-      #include <tonemapping_fragment>
-      #include <colorspace_fragment>
+      /*__TRON_OUTPUT_ENCODE__*/
     }
   `,
 };

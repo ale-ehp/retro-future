@@ -3,6 +3,7 @@ import {
   NoBlending,
   ShaderMaterial,
   Vector2,
+  HalfFloatType,
   WebGLRenderTarget,
 } from 'three';
 import { FullScreenQuad, Pass } from '../../vendor/Pass.js';
@@ -168,11 +169,13 @@ export class TemporalAaPass extends Pass {
     stillHistoryBlend = 0.78,
     movingHistoryBlend = 0.42,
     clampStrength = 0.045,
+    hdrHistory = false,
   } = {}) {
     super();
     this.name = 'TemporalAaPass';
     this.needsSwap = true;
     this.profile = profile;
+    this.hdrHistory = hdrHistory;
     this.stillHistoryBlend = stillHistoryBlend;
     this.movingHistoryBlend = movingHistoryBlend;
     this.lastMotionAmount = 1;
@@ -220,6 +223,11 @@ export class TemporalAaPass extends Pass {
     this.historyTarget = new WebGLRenderTarget(nextWidth, nextHeight, {
       depthBuffer: false,
       stencilBuffer: false,
+      // Con la history a 8 bit ogni fusione quantizza a 1/255 e gli incrementi
+      // sotto quel gradino non si accumulano mai: il TAA smette di convergere
+      // invece di stabilizzarsi. A 16 bit accumula davvero, ma ha senso solo se
+      // il pass gira su dati lineari, cioe' con ?pipeline=linear.
+      ...(this.hdrHistory ? { type: HalfFloatType } : {}),
     });
     this.historyTarget.texture.name = 'tron-temporal-aa-history';
     this.historyTarget.texture.minFilter = LinearFilter;
@@ -281,6 +289,7 @@ export class TemporalAaPass extends Pass {
       frameIndex: this.frameIndex,
       validHistory: this.validHistory,
       profile: this.profile,
+      hdrHistory: this.hdrHistory,
       stillHistoryBlend: this.stillHistoryBlend,
       movingHistoryBlend: this.movingHistoryBlend,
       historyBlend: this.uniforms.historyBlend.value,
