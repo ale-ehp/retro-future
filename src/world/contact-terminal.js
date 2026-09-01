@@ -196,10 +196,7 @@ function addContactTerminalFrame(group, width, height, deps, z = 0.16) {
   const halfHeight = height * 0.5;
   const thickness = 0.18;
   const color = deps.PAL?.tealLight ?? 0x8ffcff;
-  group.add(deps.elStrip([-halfWidth, -halfHeight, z], [halfWidth, -halfHeight, z], color, thickness, { depthWrite: false }));
-  group.add(deps.elStrip([halfWidth, -halfHeight, z], [halfWidth, halfHeight, z], color, thickness, { depthWrite: false }));
-  group.add(deps.elStrip([halfWidth, halfHeight, z], [-halfWidth, halfHeight, z], color, thickness, { depthWrite: false }));
-  group.add(deps.elStrip([-halfWidth, halfHeight, z], [-halfWidth, -halfHeight, z], color, thickness, { depthWrite: false }));
+  deps.addElStripRectFrame(group, halfWidth, halfHeight, z, color, thickness, { depthWrite: false });
 }
 
 function drawContactTerminalTexture(board, selection, state) {

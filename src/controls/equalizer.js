@@ -63,6 +63,7 @@ let tronSoundtrack = null;
 let performanceLiveMetrics = null;
 let postRevealPerfIsolationState = null;
 let elStrip = null;
+let addElStripRectFrame = null;
 let ensureTronAudioContext = null;
 let setupTronSoundtrackGraph = null;
 let GRID_BLOCK = 0;
@@ -536,10 +537,7 @@ function labEqualizerTextureIntervalMs() {
 function addLabEqualizerFrame(group, width, height, z = 0.48) {
   const hw = width / 2;
   const hh = height / 2;
-  group.add(elStrip([-hw, -hh, z], [ hw, -hh, z], 0x123b36, 0.08, { depthWrite: false }));
-  group.add(elStrip([ hw, -hh, z], [ hw,  hh, z], 0x123b36, 0.08, { depthWrite: false }));
-  group.add(elStrip([ hw,  hh, z], [-hw,  hh, z], 0x123b36, 0.08, { depthWrite: false }));
-  group.add(elStrip([-hw,  hh, z], [-hw, -hh, z], 0x123b36, 0.08, { depthWrite: false }));
+  addElStripRectFrame(group, hw, hh, z, 0x123b36, 0.08, { depthWrite: false });
 }
 
 function labEqualizerMixHue(from, to, t) {
@@ -1168,6 +1166,7 @@ export function initLabEqualizer(d) {
     performanceLiveMetrics,
     postRevealPerfIsolationState,
     elStrip,
+    addElStripRectFrame,
     ensureTronAudioContext,
     setupTronSoundtrackGraph,
     GRID_BLOCK,

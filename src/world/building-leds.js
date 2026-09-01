@@ -89,7 +89,25 @@ export function initBuildingLeds(deps) {
   updateFacadeLedRibbons = deps.updateFacadeLedRibbons;
 }
 
+// getSpacedPoints() arc-length samples the whole rounded rectangle, and the ring
+// updates ask for the same shape over and over (a live-control drag re-runs them
+// once per frame). The result depends only on the arguments, so memoize it.
+const buildingEdgeLoopPointsCache = new Map();
+const BUILDING_EDGE_LOOP_POINTS_CACHE_MAX = 64;
+
 function buildingEdgeLoopPoints(w, d, chamfer = 1.5, outset = 0, samples = 72) {
+  const cacheKey = `${w}|${d}|${chamfer}|${outset}|${samples}`;
+  const cached = buildingEdgeLoopPointsCache.get(cacheKey);
+  if (cached) return cached;
+  const points = computeBuildingEdgeLoopPoints(w, d, chamfer, outset, samples);
+  if (buildingEdgeLoopPointsCache.size >= BUILDING_EDGE_LOOP_POINTS_CACHE_MAX) {
+    buildingEdgeLoopPointsCache.delete(buildingEdgeLoopPointsCache.keys().next().value);
+  }
+  buildingEdgeLoopPointsCache.set(cacheKey, points);
+  return points;
+}
+
+function computeBuildingEdgeLoopPoints(w, d, chamfer = 1.5, outset = 0, samples = 72) {
   const hw = w / 2 + outset;
   const hd = d / 2 + outset;
   const c = Math.min(chamfer + outset, hw * 0.8, hd * 0.8);
@@ -125,7 +143,9 @@ function makeHorizontalLedRingGeometry(w, d, chamfer, distance, stripWidth, radi
   const outerPoints = buildingEdgeLoopPoints(w, d, radius, distance + width * 0.5, 96);
   const innerLimit = -Math.min(w, d) * 0.48;
   const innerOutset = Math.max(innerLimit, distance - width * 0.5);
-  const innerPoints = buildingEdgeLoopPoints(w, d, radius, innerOutset, 96).reverse();
+  // slice() first: buildingEdgeLoopPoints hands back a memoized array now, so
+  // reversing it in place would corrupt the cached entry for every other caller.
+  const innerPoints = buildingEdgeLoopPoints(w, d, radius, innerOutset, 96).slice().reverse();
   const shape = new THREE.Shape();
   if (outerPoints.length) {
     shape.moveTo(outerPoints[0][0], outerPoints[0][1]);
@@ -167,16 +187,27 @@ function ensureHorizontalLedLoopSegments(spec, count) {
   spec.segmentGroup.add(mesh);
 }
 
+// Reused per segment: the ring is up to 128 segments and is rebuilt whenever the
+// controls move, so a pair of fresh 3-element arrays per segment added up.
+const horizontalLedLoopP1Scratch = [0, 0, 0];
+const horizontalLedLoopP2Scratch = [0, 0, 0];
+
 function updateHorizontalLedLoopSegments(spec, width, depth, chamfer, distance, stripWidth, radiusScale, centerX, centerY, centerZ, widthScale = 1, depthScale = 1) {
   const radius = Math.max(0.01, chamfer * radiusScale);
   const points = buildingEdgeLoopPoints(width, depth, radius, distance, 128);
   ensureHorizontalLedLoopSegments(spec, points.length);
   if (!points.length) return;
+  const p1 = horizontalLedLoopP1Scratch;
+  const p2 = horizontalLedLoopP2Scratch;
   for (let i = 0; i < points.length; i++) {
     const a = points[i];
     const b = points[(i + 1) % points.length];
-    const p1 = [centerX + a[0] * widthScale, centerY, centerZ + a[1] * depthScale];
-    const p2 = [centerX + b[0] * widthScale, centerY, centerZ + b[1] * depthScale];
+    p1[0] = centerX + a[0] * widthScale;
+    p1[1] = centerY;
+    p1[2] = centerZ + a[1] * depthScale;
+    p2[0] = centerX + b[0] * widthScale;
+    p2[1] = centerY;
+    p2[2] = centerZ + b[1] * depthScale;
     setStripInstanceTransform(spec.segmentMesh, i, p1, p2, stripWidth);
   }
   spec.segmentMesh.instanceMatrix.needsUpdate = true;
@@ -471,26 +502,107 @@ function scaledEdgePoint(spec, point, sideScale, mainScale, sideWidthScale, side
   return scaled;
 }
 
-function setStripTransform(mesh, p1, p2, thickness) {
-  const v1 = new THREE.Vector3(...p1);
-  const v2 = new THREE.Vector3(...p2);
-  const len = v1.distanceTo(v2);
-  mesh.geometry.dispose();
-  mesh.geometry = new THREE.BoxGeometry(thickness, thickness, len);
-  mesh.position.copy(v1).add(v2).multiplyScalar(0.5);
-  const dir = new THREE.Vector3().subVectors(v2, v1).normalize();
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+// Shared scratch for the strip transforms below: both run over every strip spec
+// (hundreds) on every applyLiveControls, which is once per frame while a slider
+// is held down.
+const STRIP_FORWARD_AXIS = new THREE.Vector3(0, 0, 1);
+const stripTransformStart = new THREE.Vector3();
+const stripTransformEnd = new THREE.Vector3();
+const stripTransformDir = new THREE.Vector3();
+const stripInstancePosition = new THREE.Vector3();
+const stripInstanceScale = new THREE.Vector3();
+const stripInstanceQuaternion = new THREE.Quaternion();
+const stripInstanceMatrix = new THREE.Matrix4();
+
+// A rectangular LED frame used to be four separate meshes, each with its own box
+// geometry AND its own identical material: four transparent draw calls, four
+// material binds and four entries in the transparent sort list, per board. The
+// city has 13 of them plus the contact terminal and the equalizer. The four sides
+// are static relative to each other, so bake them into one geometry with one
+// material: same pixels, a quarter of the submissions.
+function mergeStripGeometries(geometries) {
+  const merged = new THREE.BufferGeometry();
+  const parts = geometries.map((geometry) => (geometry.index ? geometry.toNonIndexed() : geometry));
+  for (const name of ['position', 'normal', 'uv']) {
+    if (!parts.every((part) => part.getAttribute(name))) continue;
+    const itemSize = parts[0].getAttribute(name).itemSize;
+    let total = 0;
+    for (const part of parts) total += part.getAttribute(name).array.length;
+    const array = new Float32Array(total);
+    let offset = 0;
+    for (const part of parts) {
+      const source = part.getAttribute(name).array;
+      array.set(source, offset);
+      offset += source.length;
+    }
+    merged.setAttribute(name, new THREE.BufferAttribute(array, itemSize));
+  }
+  for (let i = 0; i < parts.length; i += 1) {
+    if (parts[i] !== geometries[i]) parts[i].dispose();
+  }
+  return merged;
 }
 
-export function setStripInstanceTransform(mesh, index, p1, p2, thickness) {
-  const v1 = new THREE.Vector3(...p1);
-  const v2 = new THREE.Vector3(...p2);
+export function addElStripRectFrame(group, halfWidth, halfHeight, z, color, thickness, options = {}) {
+  const corners = [
+    [[-halfWidth, -halfHeight, z], [halfWidth, -halfHeight, z]],
+    [[halfWidth, -halfHeight, z], [halfWidth, halfHeight, z]],
+    [[halfWidth, halfHeight, z], [-halfWidth, halfHeight, z]],
+    [[-halfWidth, halfHeight, z], [-halfWidth, -halfHeight, z]],
+  ];
+  const sides = corners.map(([p1, p2]) => {
+    const v1 = stripTransformStart.set(p1[0], p1[1], p1[2]);
+    const v2 = stripTransformEnd.set(p2[0], p2[1], p2[2]);
+    const len = v1.distanceTo(v2);
+    const geometry = new THREE.BoxGeometry(thickness, thickness, len);
+    const position = stripInstancePosition.copy(v1).add(v2).multiplyScalar(0.5);
+    const dir = stripTransformDir.subVectors(v2, v1).normalize();
+    const quaternion = stripInstanceQuaternion.setFromUnitVectors(STRIP_FORWARD_AXIS, dir);
+    geometry.applyMatrix4(stripInstanceMatrix.compose(position, quaternion, stripInstanceScale.set(1, 1, 1)));
+    return geometry;
+  });
+  const geometry = mergeStripGeometries(sides);
+  for (const side of sides) side.dispose();
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: options.opacity !== undefined && options.opacity < 1,
+    opacity: options.opacity ?? 1,
+    toneMapped: options.toneMapped ?? false,
+    depthWrite: options.depthWrite ?? true,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  group.add(mesh);
+  return mesh;
+}
+
+function setStripTransform(mesh, p1, p2, thickness) {
+  const v1 = stripTransformStart.set(p1[0], p1[1], p1[2]);
+  const v2 = stripTransformEnd.set(p2[0], p2[1], p2[2]);
   const len = v1.distanceTo(v2);
-  const position = v1.clone().add(v2).multiplyScalar(0.5);
-  const dir = new THREE.Vector3().subVectors(v2, v1).normalize();
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
-  const scale = new THREE.Vector3(thickness, thickness, len);
-  const matrix = new THREE.Matrix4().compose(position, quaternion, scale);
+  // Disposing the box and building a new one means a new VBO upload: only worth
+  // it when its dimensions actually changed, which during a drag they rarely do.
+  if (mesh.userData.stripThickness !== thickness || mesh.userData.stripLength !== len) {
+    mesh.userData.stripThickness = thickness;
+    mesh.userData.stripLength = len;
+    mesh.geometry.dispose();
+    mesh.geometry = new THREE.BoxGeometry(thickness, thickness, len);
+  }
+  mesh.position.copy(v1).add(v2).multiplyScalar(0.5);
+  const dir = stripTransformDir.subVectors(v2, v1).normalize();
+  mesh.quaternion.setFromUnitVectors(STRIP_FORWARD_AXIS, dir);
+}
+
+// The returned matrix is shared scratch: the single caller that keeps it
+// (the bridge edge batch) copies it straight into its own Matrix4.
+export function setStripInstanceTransform(mesh, index, p1, p2, thickness) {
+  const v1 = stripTransformStart.set(p1[0], p1[1], p1[2]);
+  const v2 = stripTransformEnd.set(p2[0], p2[1], p2[2]);
+  const len = v1.distanceTo(v2);
+  const position = stripInstancePosition.copy(v1).add(v2).multiplyScalar(0.5);
+  const dir = stripTransformDir.subVectors(v2, v1).normalize();
+  const quaternion = stripInstanceQuaternion.setFromUnitVectors(STRIP_FORWARD_AXIS, dir);
+  const scale = stripInstanceScale.set(thickness, thickness, len);
+  const matrix = stripInstanceMatrix.compose(position, quaternion, scale);
   mesh.setMatrixAt(index, matrix);
   return matrix;
 }

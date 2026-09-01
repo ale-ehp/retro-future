@@ -35,6 +35,7 @@ let renderer = null;
 let reflectionEnvMap = null;
 let PAL = null;
 let elStrip = null;
+let addElStripRectFrame = null;
 let sideBuildingRecords = null;
 let DEFAULT_DRONE_LANDING_POSE = null;
 let TRON_RUNNER_REVEAL_ENABLED = false;
@@ -47,7 +48,10 @@ const CITY_DEPARTMENT_BOARD_CHAR_SLOTS = 28;
 const CITY_DEPARTMENT_BOARD_HOLD_MS = 2600;
 const CITY_DEPARTMENT_BOARD_SWITCH_MS = 1100;
 const CITY_DEPARTMENT_BOARD_SWITCH_STAGGER_MS = 0;
-const CITY_DEPARTMENT_BOARD_TEXTURE_FPS = 13;
+// The board redraws only while a page switch is running (~1.1s every ~3.7s), but
+// every redraw re-rasterizes the whole canvas and re-uploads it. 8Hz still reads
+// as a mechanical flip-board and cuts a third of that recurring work.
+const CITY_DEPARTMENT_BOARD_TEXTURE_FPS = 8;
 const CITY_DEPARTMENT_BOARD_TEXTURE_SCALE = 0.5;
 const CITY_DEPARTMENT_BOARD_TEXTURE_WIDTH = 2048;
 const CITY_DEPARTMENT_BOARD_TEXTURE_HEIGHT = 1024;
@@ -130,6 +134,59 @@ const cityDepartmentBoardTextConfig = {
   departments: CITY_DEPARTMENTS,
 };
 
+// Everything on the board that never changes between redraws — the header, the
+// section label, the row backgrounds and separators and the status line — is
+// rasterized once here and blitted back with a single drawImage per redraw. It
+// used to be re-drawn from scratch on every frame of every switch, shadowed
+// fillText passes included, which is the most expensive thing a 2D context does.
+function buildCityDepartmentBoardStaticLayer(board) {
+  const w = CITY_DEPARTMENT_BOARD_TEXTURE_WIDTH;
+  const h = CITY_DEPARTMENT_BOARD_TEXTURE_HEIGHT;
+  const layer = document.createElement('canvas');
+  layer.width = board.canvas.width;
+  layer.height = board.canvas.height;
+  const ctx = layer.getContext('2d');
+  ctx.setTransform(layer.width / w, 0, 0, layer.height / h, 0, 0);
+  ctx.font = '900 54px Menlo, Consolas, monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(98, 247, 255, 0.58)';
+  ctx.shadowBlur = 8;
+  ctx.fillStyle = 'rgba(210, 252, 255, 0.96)';
+  ctx.fillText('AVSTUDIO TERMINAL', 118, 122);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(238, 255, 255, 0.92)';
+  ctx.fillText('AVSTUDIO TERMINAL', 118, 122);
+  ctx.shadowBlur = 5;
+  ctx.font = '700 30px Menlo, Consolas, monospace';
+  ctx.fillStyle = 'rgba(98, 247, 255, 0.70)';
+  ctx.fillText('DEPARTMENTS BOARD', 118, 178);
+
+  const rowTop = 260;
+  const rowHeight = 104;
+  ctx.shadowBlur = 0;
+  for (let row = 0; row < CITY_DEPARTMENT_BOARD_ROWS; row++) {
+    const y = rowTop + row * rowHeight;
+    ctx.fillStyle = row % 2 === 0 ? 'rgba(0, 88, 106, 0.16)' : 'rgba(0, 38, 46, 0.16)';
+    ctx.fillRect(118, y - 46, w - 236, 76);
+    ctx.strokeStyle = 'rgba(98, 247, 255, 0.24)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(118, y + 42);
+    ctx.lineTo(w - 118, y + 42);
+    ctx.stroke();
+  }
+
+  ctx.shadowColor = 'rgba(98, 247, 255, 0.58)';
+  ctx.shadowBlur = 4;
+  ctx.font = '700 28px Menlo, Consolas, monospace';
+  ctx.fillStyle = 'rgba(98, 247, 255, 0.56)';
+  ctx.textAlign = 'left';
+  ctx.fillText('STATUS: ROUTING ACTIVE', 118, h - 106);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  return layer;
+}
+
 function drawCityDepartmentBoardTexture(board, now = performance.now()) {
   if (!board?.ctx || !board?.canvas || !board?.texture || !board?.state) return;
   const drawStartedAt = performance.now();
@@ -164,20 +221,19 @@ function drawCityDepartmentBoardTexture(board, now = performance.now()) {
   ctx.strokeRect(92, 104, w - 184, h - 164);
   ctx.restore();
 
-  ctx.font = '900 54px Menlo, Consolas, monospace';
-  ctx.textAlign = 'left';
+  // Static chrome (header, section label, row backgrounds and separators, status
+  // line) comes back as one blit, drawn here — right after the frame and before
+  // any row text, exactly where those pieces sat in the original draw order.
+  if (!board.staticLayer) board.staticLayer = buildCityDepartmentBoardStaticLayer(board);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(board.staticLayer, 0, 0);
+  ctx.setTransform(pixelW / w, 0, 0, pixelH / h, 0, 0);
+
+  ctx.font = '700 30px Menlo, Consolas, monospace';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = 'rgba(98, 247, 255, 0.58)';
-  ctx.shadowBlur = 8;
-  ctx.fillStyle = 'rgba(210, 252, 255, 0.96)';
-  ctx.fillText('AVSTUDIO TERMINAL', 118, 122);
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = 'rgba(238, 255, 255, 0.92)';
-  ctx.fillText('AVSTUDIO TERMINAL', 118, 122);
   ctx.shadowBlur = 5;
-  ctx.font = '700 30px Menlo, Consolas, monospace';
   ctx.fillStyle = 'rgba(98, 247, 255, 0.70)';
-  ctx.fillText('DEPARTMENTS BOARD', 118, 178);
   ctx.textAlign = 'right';
   ctx.fillText(`PAGE ${state.switching ? state.targetPage + 1 : state.page + 1}/2`, w - 118, 178);
 
@@ -200,15 +256,6 @@ function drawCityDepartmentBoardTexture(board, now = performance.now()) {
       ? Math.max(0, 1 - Math.abs(switchProgress * CITY_DEPARTMENT_BOARD_ROWS - row) * 0.8)
       : 0;
 
-    ctx.fillStyle = row % 2 === 0 ? 'rgba(0, 88, 106, 0.16)' : 'rgba(0, 38, 46, 0.16)';
-    ctx.fillRect(118, y - 46, w - 236, 76);
-    ctx.strokeStyle = 'rgba(98, 247, 255, 0.24)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(118, y + 42);
-    ctx.lineTo(w - 118, y + 42);
-    ctx.stroke();
-
     ctx.font = '900 44px Menlo, Consolas, monospace';
     ctx.shadowBlur = 5 + scan * 8;
     ctx.fillStyle = scan > 0.15 ? 'rgba(236, 255, 255, 0.98)' : 'rgba(143, 252, 255, 0.86)';
@@ -230,11 +277,6 @@ function drawCityDepartmentBoardTexture(board, now = performance.now()) {
     }
   }
 
-  ctx.shadowBlur = 4;
-  ctx.font = '700 28px Menlo, Consolas, monospace';
-  ctx.fillStyle = 'rgba(98, 247, 255, 0.56)';
-  ctx.textAlign = 'left';
-  ctx.fillText('STATUS: ROUTING ACTIVE', 118, h - 106);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   state.lastCanvasDrawMs = performance.now() - drawStartedAt;
@@ -253,10 +295,7 @@ export function addCityDepartmentFrame(group, width, height, z = 0.06) {
   const hh = height / 2;
   const thick = 0.18;
   const color = PAL.tealLight;
-  group.add(elStrip([-hw, -hh, z], [ hw, -hh, z], color, thick, { depthWrite: false }));
-  group.add(elStrip([ hw, -hh, z], [ hw,  hh, z], color, thick, { depthWrite: false }));
-  group.add(elStrip([ hw,  hh, z], [-hw,  hh, z], color, thick, { depthWrite: false }));
-  group.add(elStrip([-hw,  hh, z], [-hw, -hh, z], color, thick, { depthWrite: false }));
+  addElStripRectFrame(group, hw, hh, z, color, thick, { depthWrite: false });
 }
 
 export function cityDepartmentBoardBottomY() {
@@ -568,6 +607,7 @@ export function initCityDepartmentBoards(d) {
     reflectionEnvMap,
     PAL,
     elStrip,
+    addElStripRectFrame,
     sideBuildingRecords,
     DEFAULT_DRONE_LANDING_POSE,
     TRON_RUNNER_REVEAL_ENABLED,
