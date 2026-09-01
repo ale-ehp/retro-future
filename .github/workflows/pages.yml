@@ -1,0 +1,38 @@
+name: pages
+
+# Pubblica la demo statica su GitHub Pages per poterla provare da browser senza
+# clonare il repo. Non c'e' build: index.html + src/ + vendor/ + assets vanno
+# online cosi' come sono, esattamente come con `npm start`.
+on:
+  push:
+    branches: [claude/retro-future-performance-analysis-wgnid1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Una pubblicazione alla volta, senza annullare quella gia' in corso.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      # enablement: true accende Pages sul repo al primo giro, cosi' non serve
+      # toccare le impostazioni a mano.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+      - id: deployment
+        uses: actions/deploy-pages@v4
