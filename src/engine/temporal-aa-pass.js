@@ -182,6 +182,11 @@ export class TemporalAaPass extends Pass {
     this.frameIndex = 0;
     this.validHistory = false;
     this.historyTarget = null;
+    // Second history buffer, allocated only if this pass ever runs as the last
+    // one in the chain. See render(): presenting to screen then copying to the
+    // history costs two extra full-screen draws, and accumulating straight into
+    // the history is a texture feedback loop unless there are two of them.
+    this.historySpare = null;
     this.width = 1;
     this.height = 1;
     this.uniforms = {
@@ -220,7 +225,17 @@ export class TemporalAaPass extends Pass {
     this.width = nextWidth;
     this.height = nextHeight;
     this.historyTarget?.dispose?.();
-    this.historyTarget = new WebGLRenderTarget(nextWidth, nextHeight, {
+    this.historyTarget = this.createHistoryTarget(nextWidth, nextHeight);
+    if (this.historySpare) {
+      this.historySpare.dispose();
+      this.historySpare = this.createHistoryTarget(nextWidth, nextHeight);
+    }
+    this.uniforms.resolution.value.set(nextWidth, nextHeight);
+    this.reset();
+  }
+
+  createHistoryTarget(width, height) {
+    const target = new WebGLRenderTarget(width, height, {
       depthBuffer: false,
       stencilBuffer: false,
       // Con la history a 8 bit ogni fusione quantizza a 1/255 e gli incrementi
@@ -229,11 +244,10 @@ export class TemporalAaPass extends Pass {
       // il pass gira su dati lineari, cioe' con ?pipeline=linear.
       ...(this.hdrHistory ? { type: HalfFloatType } : {}),
     });
-    this.historyTarget.texture.name = 'tron-temporal-aa-history';
-    this.historyTarget.texture.minFilter = LinearFilter;
-    this.historyTarget.texture.magFilter = LinearFilter;
-    this.uniforms.resolution.value.set(nextWidth, nextHeight);
-    this.reset();
+    target.texture.name = 'tron-temporal-aa-history';
+    target.texture.minFilter = LinearFilter;
+    target.texture.magFilter = LinearFilter;
+    return target;
   }
 
   nextJitter() {
@@ -261,22 +275,41 @@ export class TemporalAaPass extends Pass {
 
   render(renderer, writeBuffer, readBuffer) {
     if (!this.historyTarget) this.setSize(readBuffer.width, readBuffer.height);
+    // As the last pass, accumulate straight into a second history buffer and
+    // present that: three full-screen draws (accumulate, present, store history)
+    // become two. Mid-chain the result has to land in writeBuffer for the next
+    // pass anyway, so that path keeps its accumulate + store-history pair and no
+    // second buffer is ever allocated. Either way historyTarget holds this
+    // frame's result on exit, so the pass can move between the two positions.
+    if (this.renderToScreen && !this.historySpare) {
+      this.historySpare = this.createHistoryTarget(this.width, this.height);
+    }
+    const pingPong = this.renderToScreen && Boolean(this.historySpare);
+    const accumulationTarget = pingPong ? this.historySpare : writeBuffer;
     this.uniforms.tDiffuse.value = readBuffer.texture;
     this.uniforms.tHistory.value = this.historyTarget.texture;
     this.uniforms.validHistory.value = this.validHistory ? 1 : 0;
     this.fsQuad.material = this.material;
-    renderer.setRenderTarget(writeBuffer);
+    renderer.setRenderTarget(accumulationTarget);
     if (this.clear) renderer.clear(renderer.autoClearColor, renderer.autoClearDepth, renderer.autoClearStencil);
     this.fsQuad.render(renderer);
 
-    this.copyUniforms.tDiffuse.value = writeBuffer.texture;
+    this.copyUniforms.tDiffuse.value = accumulationTarget.texture;
     this.fsQuad.material = this.copyMaterial;
-    if (this.renderToScreen) {
+    if (pingPong) {
       renderer.setRenderTarget(null);
       this.fsQuad.render(renderer);
+      const previousHistory = this.historyTarget;
+      this.historyTarget = this.historySpare;
+      this.historySpare = previousHistory;
+    } else {
+      if (this.renderToScreen) {
+        renderer.setRenderTarget(null);
+        this.fsQuad.render(renderer);
+      }
+      renderer.setRenderTarget(this.historyTarget);
+      this.fsQuad.render(renderer);
     }
-    renderer.setRenderTarget(this.historyTarget);
-    this.fsQuad.render(renderer);
     this.validHistory = true;
     this.uniforms.validHistory.value = 1;
   }
@@ -300,6 +333,7 @@ export class TemporalAaPass extends Pass {
 
   dispose() {
     this.historyTarget?.dispose?.();
+    this.historySpare?.dispose?.();
     this.material.dispose();
     this.copyMaterial.dispose();
     this.fsQuad.dispose();

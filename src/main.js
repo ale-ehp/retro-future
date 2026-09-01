@@ -6376,7 +6376,7 @@ function prewarmSkinnedMeshBoneTextures(root = scene) {
   return skinnedMeshPrewarmStats;
 }
 
-function prewarmHiddenSkinnedMeshRender(root = scene) {
+async function prewarmHiddenSkinnedMeshRender(root = scene) {
   const started = performance.now();
   hiddenSkinnedRenderPrewarmStats.attempted = 0;
   hiddenSkinnedRenderPrewarmStats.forcedVisible = 0;
@@ -6413,6 +6413,17 @@ function prewarmHiddenSkinnedMeshRender(root = scene) {
     });
 
     if (hiddenSkinnedRenderPrewarmStats.attempted > 0) {
+      // compileAsync lets the driver link the program set on its own threads
+      // (KHR_parallel_shader_compile) instead of blocking this task on every
+      // program in turn. Falls back to the synchronous compile the warm render
+      // below would trigger anyway when the renderer does not expose it.
+      if (typeof renderer.compileAsync === 'function') {
+        try {
+          await renderer.compileAsync(root, camera);
+        } catch {
+          hiddenSkinnedRenderPrewarmStats.errors += 1;
+        }
+      }
       const previousRenderTarget = renderer.getRenderTarget();
       const previousAutoClear = renderer.autoClear;
       const target = new THREE.WebGLRenderTarget(4, 4, {
@@ -6498,12 +6509,22 @@ async function bootSceneWithFinalDefaults() {
   applyPlayerSpawn(playerSpawn, false);
   await tronRunnerOrchestration.load();
   await tronRunnerCrowdRuntime.drainBuildQueue();
+  // Each of these is a heavy synchronous block (bone-texture uploads, a full
+  // scene compile + render, two composer renders, then a compile with the reveal
+  // clip planes). Chained without a break they form one long main-thread task —
+  // hundreds of ms on mobile with input and paint frozen throughout. Yield to the
+  // browser between them, and let the driver link programs in parallel where it
+  // can (compileAsync, KHR_parallel_shader_compile) before the warm render.
   prewarmSkinnedMeshBoneTextures(scene);
+  await waitForNextFrame();
   prewarmSceneTextureUploads(scene);
-  prewarmHiddenSkinnedMeshRender(scene);
+  await waitForNextFrame();
+  await prewarmHiddenSkinnedMeshRender(scene);
+  await waitForNextFrame();
   prewarmPostProcessingPasses();
+  await waitForNextFrame();
   await ensureFootstepAudioReady();
-  cityRevealRender.prewarmRealPass();
+  await cityRevealRender.prewarmRealPass();
   scheduleDroneIntroAutoFlight();
 }
 
