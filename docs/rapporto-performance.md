@@ -1,7 +1,11 @@
 # Rapporto di audit performance
 
-Audit statico del codice runtime (nessuna modifica applicata: solo diagnosi e
-soluzioni proposte). Data: 2026-09-01.
+Audit statico del codice runtime. Data: 2026-09-01.
+
+> **Stato: tutti i 35 finding sono stati risolti** nei commit successivi a questo
+> rapporto. Due sono stati chiusi con la variante alternativa che il rapporto
+> stesso propone, e sono segnati come tali nelle rispettive voci. Il testo qui
+> sotto resta la diagnosi originale; la sezione finale elenca cosa è cambiato.
 
 Metodo: 8 passate di analisi indipendenti sul codice (hot path del tick,
 engine/post-processing, world, crowd, allocazioni GC, pipeline GPU, DOM/UI/audio,
@@ -356,5 +360,30 @@ sparso, con la soluzione proposta per ciascuno.
 | 7 | Batch delle micro-allocazioni per-frame (spatial grid, hex LOD, snapshot, profiler, scan-glow) | Meno pressione GC → meno micro-jank periodico | Piccolo |
 | 8 | Equalizer: cache colori + layer statico del departures board | Meno jitter periodico nel steady state | Piccolo/Medio |
 
-Nessuna di queste modifiche è stata applicata: il branch contiene solo questo
-rapporto.
+## Cosa è stato applicato
+
+Tutti i 35 finding sono stati risolti. La suite (`npm test`, 141 test) resta
+verde e la scena è stata confrontata a video prima/dopo: stesse inquadrature,
+stessi fumetti, stesse board, con un pass di post-processing in meno nell'HUD
+(`Pass/Draw 4/1` → `3/1`), 184 → 143 geometrie in scena e un solo contesto WebGL
+al posto di quattro durante il boot.
+
+Due voci sono state chiuse con la variante alternativa già prevista dal rapporto,
+perché quella principale non era verificabile qui senza rischio di regressione
+visiva:
+
+- **Riflessi della folla** (`runner-crowd-runtime.js:468`): applicata la variante
+  minima, cioè non costruire più i rig quando l'effetto è spento (60 rig skinnati
+  che non potevano renderizzare). Il pool di 2 rig riagganciati al membro più
+  vicino, o il bind allo scheletro del corpo, sposterebbe la proprietà
+  dell'animazione e non è verificabile a video in questo ambiente: resta aperto
+  come lavoro successivo, ed è il residuo più grosso del rapporto.
+- **Glitch //error** (`boundary-error.js:249`): applicata la variante minima
+  (throttle 0.08 → 0.15 s e slice disegnate da un canvas sorgente immutabile
+  invece del self-copy) più i mipmap disattivati. Lo spostamento del glitch in
+  shader cambierebbe il look e non è stato fatto.
+
+Sul finding critico va segnalato il residuo già noto in fase di verifica: il
+composite finale di `UnrealBloomPass` scrive in place nel readBuffer, quindi
+quel singolo draw resta a sample rate MSAA anche dopo il fix. È inerente al
+design del pass vendorizzato.
