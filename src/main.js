@@ -306,7 +306,7 @@ import {
   mobilePerformanceProfileState as mobilePerformanceProfileStateCore,
 } from './engine/performance-mobile.js';
 import { fxEnabled, fxLevers, fxToggleInspect } from './engine/fx-debug-toggles.js';
-import { createCityRevealProfiler } from './engine/city-reveal-profiler.js';
+import { createCityRevealProfiler, revealProfileDetailRequestedFromParams } from './engine/city-reveal-profiler.js';
 import { createPerformanceDiagnostics } from './engine/performance-diagnostics.js';
 import {
   createTechBreakdownOverlay,
@@ -748,6 +748,9 @@ import {
 
 // Postprocessing (optional bloom + FXAA). Best-effort — fallback to plain renderer if any module fails.
 let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null, cinematicLookPass = null, temporalAaPass = null;
+// True when the FSR pass is the one carrying the output encode (?look=classic
+// or ?pipeline=0): then it has to stay enabled even with upscale and sharpen off.
+let fsrPassCarriesOutputEncode = true;
 let postEnabled = true;
 let usePost = false;
 const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
@@ -889,6 +892,9 @@ const app = document.getElementById('app');
 const loader = document.getElementById('loader');
 const fpsEl = document.getElementById('fps');
 const fovEl = document.getElementById('fov');
+// The HUD FOV never changes (FIXED_CAMERA_FOV is a constant), so write it once
+// here instead of re-assigning textContent — a DOM mutation — on every frame.
+if (fovEl) fovEl.textContent = FIXED_CAMERA_FOV.toFixed(0);
 const perfTheoreticalFpsEl = document.getElementById('perf-theoretical-fps');
 const perfHeadroomEl = document.getElementById('perf-headroom');
 const perfFrameMsEl = document.getElementById('perf-frame-ms');
@@ -1313,7 +1319,6 @@ function setFixedCameraFov() {
     camera.fov = FIXED_CAMERA_FOV;
     camera.updateProjectionMatrix();
   }
-  fovEl.textContent = FIXED_CAMERA_FOV.toFixed(0);
 }
 
 // ---------- free fly controls (WASD + mouse look pointer-lock + Q/E vertical + Shift sprint) ----------
@@ -3951,6 +3956,7 @@ function updateMainFacadeVerticalReveal() {
 
 
 const cityRevealProfiler = createCityRevealProfiler({
+  detailedProfile: revealProfileDetailRequestedFromParams(retroBenchmarkSearchParams),
   getCityRevealStartedAt: () => cityRevealStartedAt,
   getCityRevealArmedAt: () => cityRevealArmedAt,
   getCityRevealComplete: () => cityRevealComplete,
@@ -4010,7 +4016,10 @@ function isFsrUpscaleActive() {
 
 function syncFsrUpscalePass() {
   if (!fsrUpscalePass) return;
-  fsrUpscalePass.enabled = true;
+  // With upscale off, sharpness 0 and the cinematic look carrying the output
+  // encode, the shader collapses to `color = center.rgb`: a full-res copy that
+  // costs a whole pass of fill for nothing. Skip it unless it does real work.
+  fsrUpscalePass.enabled = fsrPassCarriesOutputEncode || isFsrUpscaleActive() || fsrSharpness > 0;
   const upscaleActive = isFsrUpscaleActive() ? 1 : 0;
   if (fsrUpscalePass.uniforms?.upscaleActive) {
     fsrUpscalePass.uniforms.upscaleActive.value = upscaleActive;
@@ -4214,6 +4223,7 @@ function rebuildComposer() {
     // single-sample target so the scene resolves ONCE and the post passes are 1x.
     try {
       const singleTarget = new THREE.WebGLRenderTarget(msaaTarget.width, msaaTarget.height);
+      singleTarget.texture.name = 'EffectComposer.rt2';
       composer.renderTarget2?.dispose?.();
       composer.renderTarget2 = singleTarget;
     } catch {}
@@ -4270,7 +4280,8 @@ function rebuildComposer() {
     composer.addPass(temporalAaPass);
   }
 
-  fsrUpscalePass = createFsrUpscalePass(!lastPassIsLook);
+  fsrPassCarriesOutputEncode = !lastPassIsLook;
+  fsrUpscalePass = createFsrUpscalePass(fsrPassCarriesOutputEncode);
   syncFsrUpscalePass();
   composer.addPass(fsrUpscalePass);
 
@@ -4290,6 +4301,21 @@ function rebuildComposer() {
   resizeFsrUpscaleTarget();
   resizeCinematicLookTarget();
   applyBloomEnabled(bloomEnabled);
+  syncComposerBufferRoles();
+}
+
+// EffectComposer captures readBuffer/writeBuffer in its constructor, so swapping
+// renderTarget2 for the single-sample target above leaves readBuffer pointing at
+// the discarded MSAA clone: the scene pass (which writes into readBuffer) would
+// render into a buffer that setSize/setPixelRatio never resize, so the adaptive
+// resolution scaler could not shrink the scene at all. Pin the roles instead:
+// readBuffer is the multisampled scene target, writeBuffer the 1x ping-pong one.
+// Re-asserted every frame because swapBuffers() flips them on each needsSwap pass
+// and an odd number of them would leave the scene rendering at 1 sample.
+function syncComposerBufferRoles() {
+  if (!composer || !composerMsaaActive) return;
+  composer.readBuffer = composer.renderTarget1;
+  composer.writeBuffer = composer.renderTarget2;
 }
 
 function applyAntialiasControls(mode = antialiasMode) {
@@ -6892,6 +6918,7 @@ function tick(now) {
   performanceDiagnostics.pollGpuTimerSamples();
   performanceDiagnostics.beginGpuTimerSample();
   const temporalAaJittered = applyTemporalAaJitterForRender();
+  syncComposerBufferRoles();
   try {
     cityRevealRender.renderCompositeFrame();
   } finally {

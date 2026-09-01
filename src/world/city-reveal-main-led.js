@@ -100,51 +100,81 @@ export function createCityRevealMainLed(deps) {
     }
   }
 
-  function cityRevealMainLedDepthSources() {
-    const sources = [];
-    for (const record of [...getSideBuildingRecords(), ...getMainBuildingRecords()]) {
+  // Rebuilt every frame the reveal overlay is up, so it writes into a reused pool
+  // of entries and walks the two record arrays directly: the previous version
+  // allocated a spread-concatenated array plus one object per building and bridge
+  // (~25-45 of them) on every frame of the reveal, the window with the least
+  // headroom for a GC pause. The values themselves are still recomputed each
+  // frame, so live edits (bridge scaling, building resize) still show up.
+  const cityRevealMainLedDepthSourcePool = [];
+  let cityRevealMainLedDepthSourceCount = 0;
+
+  function pushCityRevealMainLedDepthSource(visible, x, y, z, width, height, depth) {
+    let entry = cityRevealMainLedDepthSourcePool[cityRevealMainLedDepthSourceCount];
+    if (!entry) {
+      entry = { visible: false, x: 0, y: 0, z: 0, width: 0, height: 0, depth: 0 };
+      cityRevealMainLedDepthSourcePool[cityRevealMainLedDepthSourceCount] = entry;
+    }
+    entry.visible = visible;
+    entry.x = x;
+    entry.y = y;
+    entry.z = z;
+    entry.width = width;
+    entry.height = height;
+    entry.depth = depth;
+    cityRevealMainLedDepthSourceCount += 1;
+  }
+
+  function collectCityRevealMainLedBuildingDepthSources(records) {
+    for (const record of records) {
       const collider = record.collider;
       if (!record.mesh || !collider) continue;
       const width = Math.abs(collider.hw * 2);
       const height = Math.abs(collider.h);
       const depth = Math.abs(collider.hd * 2);
       if (![width, height, depth].every(Number.isFinite) || width <= 0.001 || height <= 0.001 || depth <= 0.001) continue;
-      sources.push({
-        visible: record.mesh.visible !== false,
-        x: Number.isFinite(collider.x) ? collider.x : record.mesh.position.x,
-        y: (Number.isFinite(collider.y) ? collider.y : record.mesh.position.y) + height * 0.5,
-        z: Number.isFinite(collider.z) ? collider.z : record.mesh.position.z,
+      pushCityRevealMainLedDepthSource(
+        record.mesh.visible !== false,
+        Number.isFinite(collider.x) ? collider.x : record.mesh.position.x,
+        (Number.isFinite(collider.y) ? collider.y : record.mesh.position.y) + height * 0.5,
+        Number.isFinite(collider.z) ? collider.z : record.mesh.position.z,
         width,
         height,
         depth,
-      });
+      );
     }
+  }
+
+  function cityRevealMainLedDepthSources() {
+    cityRevealMainLedDepthSourceCount = 0;
+    collectCityRevealMainLedBuildingDepthSources(getSideBuildingRecords());
+    collectCityRevealMainLedBuildingDepthSources(getMainBuildingRecords());
     for (const record of getBridgeRecords()) {
       if (!record.mesh) continue;
       const width = Math.abs(record.baseWidth * record.mesh.scale.x);
       const height = Math.abs(record.baseHeight * record.mesh.scale.y);
       const depth = Math.abs(record.baseDepth * record.mesh.scale.z);
       if (![width, height, depth].every(Number.isFinite) || width <= 0.001 || height <= 0.001 || depth <= 0.001) continue;
-      sources.push({
-        visible: record.mesh.visible !== false,
-        x: record.mesh.position.x,
-        y: record.mesh.position.y + height * 0.5,
-        z: record.mesh.position.z,
+      pushCityRevealMainLedDepthSource(
+        record.mesh.visible !== false,
+        record.mesh.position.x,
+        record.mesh.position.y + height * 0.5,
+        record.mesh.position.z,
         width,
         height,
         depth,
-      });
+      );
     }
-    return sources;
+    return cityRevealMainLedDepthSourceCount;
   }
 
   function syncCityRevealMainLedDepthProxies() {
-    const sources = cityRevealMainLedDepthSources();
-    ensureCityRevealMainLedDepthProxyCount(sources.length);
+    const sourceCount = cityRevealMainLedDepthSources();
+    ensureCityRevealMainLedDepthProxyCount(sourceCount);
     cityRevealMainLedDepthProxyVisibleCount = 0;
     for (let i = 0; i < cityRevealMainLedDepthProxyObjects.length; i++) {
       const proxy = cityRevealMainLedDepthProxyObjects[i];
-      const source = sources[i];
+      const source = i < sourceCount ? cityRevealMainLedDepthSourcePool[i] : null;
       if (!source || !source.visible) {
         proxy.visible = false;
         continue;

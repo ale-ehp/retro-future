@@ -209,7 +209,14 @@ export function createTronRunnerRevealRuntime({
       material.emissiveIntensity = revealComplete
         ? baseEmissive
         : baseEmissive * (0.2 + factor * 0.8) + activePulse * TRON_RUNNER_REVEAL_EMISSIVE_BOOST;
-      material.needsUpdate = true;
+      // Same gate as the crowd materials above: opacity/emissiveIntensity/depthWrite
+      // are uniforms and render state, so only a transparent flip needs the program
+      // refresh that bumping needsUpdate forces (getParameters + a fresh program
+      // cache key per material, every frame of the reveal).
+      if (material.userData.tronRunnerRevealTransparent !== material.transparent) {
+        material.userData.tronRunnerRevealTransparent = material.transparent;
+        material.needsUpdate = true;
+      }
     }
     applyCrowdRevealVisuals(factor, revealComplete, activePulse);
     applyIdleCharacterRevealVisuals(factor, revealComplete, activePulse);
@@ -219,7 +226,6 @@ export function createTronRunnerRevealRuntime({
       const baseOpacity = baseMaterialOpacity(groundShadow.material, groundShadow.material.opacity);
       groundShadow.visible = shouldRenderRunner && TRON_RUNNER_GROUND_SHADOW_ENABLED && baseOpacity * factor > 0.002;
       groundShadow.material.opacity = baseOpacity * factor;
-      groundShadow.material.needsUpdate = true;
     }
 
     const reflectionGroup = runnerParts.reflectionGroup;
@@ -228,7 +234,6 @@ export function createTronRunnerRevealRuntime({
     for (const material of runnerParts.reflectionMaterials || []) {
       const baseOpacity = baseMaterialOpacity(material, material.opacity);
       material.opacity = baseOpacity * reflectionFactor;
-      material.needsUpdate = true;
     }
     runnerState.dynamicReflectionOpacity *= reflectionFactor;
     runnerState.dynamicReflectionBodyOpacity *= reflectionFactor;
@@ -246,7 +251,6 @@ export function createTronRunnerRevealRuntime({
         object.material.opacity = scanPulse * (object.name.includes('core')
           ? TRON_RUNNER_REVEAL_SCAN_CORE_OPACITY
           : TRON_RUNNER_REVEAL_SCAN_OUTER_OPACITY);
-        object.material.needsUpdate = true;
       });
     }
 

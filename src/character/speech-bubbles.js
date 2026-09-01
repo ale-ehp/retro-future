@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { retroFutureSignOpacity, retroFutureSignScale } from '../sign-opacity.js';
+import { TRON_RUNNER_CROWD_LINES } from './runner-crowd-lines.js';
 
 // ---------- Speech-bubble rendering subsystem ----------
 // World-space billboarded sprites that float above characters. Two updaters share one texture
@@ -15,6 +16,7 @@ let deps = null;
 export function initSpeechBubbles(injected) {
   deps = injected;
   installSpeechBubbleRuntimeCommands();
+  scheduleCrowdBubbleTexturePrewarm();
 }
 
 // ---------- Greeter welcome speech bubble (3D world sprite, like the //error sign) ----------
@@ -315,20 +317,35 @@ function drawGreeterBubbleLogoLine(ctx, line, centerX, y, fontPx, nowMs = 0) {
   ctx.textAlign = 'center';
 }
 
-function drawGreeterBubbleCanvas(canvas, ctx, lines, nowMs = 0, panelFillStyle = CROWD_BUBBLE_PANEL_FILL_STYLE) {
-  const pad = 30;
-  const maxTextW = canvas.width - pad * 2 - 120;
-  let fontPx = 84;
+function drawGreeterBubbleCanvas(canvas, ctx, lines, nowMs = 0, panelFillStyle = CROWD_BUBBLE_PANEL_FILL_STYLE, metrics = null) {
+  // Every absolute size is expressed against the full-size canvas, so a smaller
+  // canvas (crowd bubbles) draws the exact same layout at a lower resolution.
+  const s = canvas.width / GREETER_BUBBLE_CANVAS_WIDTH;
+  const pad = 30 * s;
+  const maxTextW = canvas.width - pad * 2 - 120 * s;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const widest = () => {
-    return Math.max(...lines.map((line) => measureGreeterBubbleLine(ctx, line, fontPx)));
-  };
-  while (fontPx > 28 && widest() > maxTextW) fontPx -= 2;
+  // The font fit is a measureText loop (up to ~28 passes over every line) and the
+  // panel width another measure pass: both depend only on the text and the canvas,
+  // so solve them once per texture instead of on every animated redraw.
+  let fontPx = metrics?.fontPx || 0;
+  let textW = metrics?.textW || 0;
+  if (!fontPx) {
+    fontPx = 84 * s;
+    const widest = () => {
+      return Math.max(...lines.map((line) => measureGreeterBubbleLine(ctx, line, fontPx)));
+    };
+    while (fontPx > 28 * s && widest() > maxTextW) fontPx -= 2 * s;
+    textW = Math.max(...lines.map((line) => measureGreeterBubbleLine(ctx, line, fontPx)));
+    if (metrics) {
+      metrics.fontPx = fontPx;
+      metrics.textW = textW;
+    }
+  }
   const lineH = fontPx * 1.24;
   const blockH = lineH * lines.length;
-  const panelH = blockH + 70;
-  const panelW = Math.min(canvas.width - pad, Math.max(...lines.map((line) => measureGreeterBubbleLine(ctx, line, fontPx))) + 170);
+  const panelH = blockH + 70 * s;
+  const panelW = Math.min(canvas.width - pad, textW + 170 * s);
   const px = (canvas.width - panelW) / 2;
   const py = (canvas.height - panelH) / 2;
 
@@ -336,24 +353,24 @@ function drawGreeterBubbleCanvas(canvas, ctx, lines, nowMs = 0, panelFillStyle =
   // panel
   ctx.save();
   ctx.shadowColor = 'rgba(98,247,255,0.55)';
-  ctx.shadowBlur = 26;
+  ctx.shadowBlur = 26 * s;
   ctx.fillStyle = panelFillStyle;
   ctx.beginPath();
-  ctx.roundRect(px, py, panelW, panelH, 18);
+  ctx.roundRect(px, py, panelW, panelH, 18 * s);
   ctx.fill();
   ctx.restore();
   ctx.strokeStyle = 'rgba(143,252,255,0.9)';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 3 * s;
   ctx.shadowColor = 'rgba(98,247,255,0.8)';
-  ctx.shadowBlur = 14;
+  ctx.shadowBlur = 14 * s;
   ctx.beginPath();
-  ctx.roundRect(px, py, panelW, panelH, 18);
+  ctx.roundRect(px, py, panelW, panelH, 18 * s);
   ctx.stroke();
   ctx.shadowBlur = 0;
   // text
   ctx.fillStyle = CROWD_BUBBLE_TEXT_FILL_STYLE;
   ctx.shadowColor = CROWD_BUBBLE_TEXT_SHADOW_STYLE;
-  ctx.shadowBlur = 10;
+  ctx.shadowBlur = 10 * s;
   const cy = canvas.height / 2 - blockH / 2 + lineH / 2;
   lines.forEach((line, i) => {
     const y = cy + i * lineH;
@@ -366,50 +383,105 @@ function drawGreeterBubbleCanvas(canvas, ctx, lines, nowMs = 0, panelFillStyle =
   });
 }
 
+const GREETER_BUBBLE_CANVAS_WIDTH = 896;
+const GREETER_BUBBLE_CANVAS_HEIGHT = 360;
+// Crowd lines are short, logo-free and read from a few metres away: half the
+// canvas is indistinguishable there and cuts raster + upload to a quarter, which
+// is what makes a cache large enough to hold every line affordable (below).
+const CROWD_BUBBLE_CANVAS_SCALE = 0.5;
+// The logo line animates, so its texture is re-uploaded continuously: redrawing
+// it at the display refresh rate re-rasterized a 896x360 canvas with three
+// shadowBlur passes 60 times a second. 15Hz is plenty for a shimmer and a glitch.
+const GREETER_BUBBLE_ANIMATION_INTERVAL_MS = 1000 / 15;
+
 function makeGreeterBubbleTexture(html, options = {}) {
   const lines = String(html).split(/<br\s*\/?>/i).map((s) => s.trim());
-  const canvas = document.createElement('canvas');
-  canvas.width = 896;
-  canvas.height = 360;
-  const ctx = canvas.getContext('2d');
   const animated = lines.some(isGreeterBubbleLogoLine);
+  // The logo path draws with its own absolute offsets, so it always gets the
+  // full-size canvas; only plain text lines are rendered at the reduced scale.
+  const scale = animated || options.greeter ? 1 : CROWD_BUBBLE_CANVAS_SCALE;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(GREETER_BUBBLE_CANVAS_WIDTH * scale);
+  canvas.height = Math.round(GREETER_BUBBLE_CANVAS_HEIGHT * scale);
+  const ctx = canvas.getContext('2d');
   const panelFillStyle = characterBubblePanelFillStyle(options.greeter ? 'greeter' : 'crowd');
-  drawGreeterBubbleCanvas(canvas, ctx, lines, performance.now(), panelFillStyle);
+  const metrics = { fontPx: 0, textW: 0 };
+  drawGreeterBubbleCanvas(canvas, ctx, lines, performance.now(), panelFillStyle, metrics);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = Math.min(8, deps.getRenderer().capabilities.getMaxAnisotropy?.() || 1);
+  if (animated) {
+    // Re-uploaded on every redraw: regenerating the mip chain each time is pure
+    // driver work for a bubble that is only ever seen large and up close.
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+  }
   texture.__aspect = canvas.width / canvas.height;
   texture.__animated = animated;
+  texture.__lastDrawMs = -Infinity;
   texture.__draw = animated
-    ? (nowMs) => drawGreeterBubbleCanvas(canvas, ctx, lines, nowMs, panelFillStyle)
+    ? (nowMs) => drawGreeterBubbleCanvas(canvas, ctx, lines, nowMs, panelFillStyle, metrics)
     : null;
   return texture;
 }
 
 // LRU cap: visible bubbles re-fetch their texture every frame, so the (up to
-// ~6) on-screen entries are always most-recently-used and never evicted; an
-// evicted line is simply re-rasterized if it ever comes up again. Without the
-// cap the session converges toward one resident 896x360 texture per unique
-// crowd line (~40 lines, ~70MB GPU).
-const GREETER_BUBBLE_TEXTURE_CACHE_MAX = 12;
+// ~6) on-screen entries are always most-recently-used and never evicted. The cap
+// now sits above the whole crowd line pool: at the reduced crowd canvas a
+// resident texture is ~0.32MB, so holding every line costs a handful of MB and
+// no line is ever re-rasterized mid-session (a cap of 12 against ~40 lines meant
+// constant eviction, and each eviction bought back a synchronous raster+upload
+// in the frame the next talker started speaking).
+const GREETER_BUBBLE_TEXTURE_CACHE_MAX = 48;
+let greeterBubbleTextureCacheNewestKey = '';
 
 function getGreeterBubbleTexture(html, options = {}) {
   const cacheKey = `${options.greeter ? 'greeter' : 'crowd'}:${html}`;
   let tex = greeterBubbleTextureCache.get(cacheKey);
   if (tex) {
-    greeterBubbleTextureCache.delete(cacheKey);
-    greeterBubbleTextureCache.set(cacheKey, tex);
+    // Skip the delete/set re-insert when this entry is already the newest one:
+    // an on-screen bubble asks for the same texture on every single frame.
+    if (cacheKey !== greeterBubbleTextureCacheNewestKey) {
+      greeterBubbleTextureCache.delete(cacheKey);
+      greeterBubbleTextureCache.set(cacheKey, tex);
+      greeterBubbleTextureCacheNewestKey = cacheKey;
+    }
     return tex;
   }
   tex = makeGreeterBubbleTexture(html, options);
   greeterBubbleTextureCache.set(cacheKey, tex);
+  greeterBubbleTextureCacheNewestKey = cacheKey;
   while (greeterBubbleTextureCache.size > GREETER_BUBBLE_TEXTURE_CACHE_MAX) {
     const oldest = greeterBubbleTextureCache.entries().next().value;
     greeterBubbleTextureCache.delete(oldest[0]);
     oldest[1]?.dispose?.();
   }
   return tex;
+}
+
+// Rasterizing a line the first time a member says it lands a canvas draw plus a
+// texture upload inside that frame, and walking through the city several members
+// can trigger in the same frame. The pool is known up front, so build the
+// textures one per idle slot instead and let every first bubble be a cache hit.
+let crowdBubbleTexturePrewarmIndex = 0;
+function scheduleCrowdBubbleTexturePrewarm() {
+  if (typeof window === 'undefined') return;
+  const idle = window.requestIdleCallback
+    ? (fn) => window.requestIdleCallback(fn, { timeout: 2000 })
+    : (fn) => window.setTimeout(fn, 200);
+  const step = () => {
+    if (crowdBubbleTexturePrewarmIndex >= TRON_RUNNER_CROWD_LINES.length) return;
+    const line = TRON_RUNNER_CROWD_LINES[crowdBubbleTexturePrewarmIndex];
+    crowdBubbleTexturePrewarmIndex += 1;
+    try {
+      getGreeterBubbleTexture(line);
+    } catch {
+      // A prewarm is best effort: a failure here must never break the scene.
+    }
+    idle(step);
+  };
+  idle(step);
 }
 
 function ensureGreeterBubbleSprite() {
@@ -457,7 +529,8 @@ export function updateGreeterSpeechBubble() {
   sprite.material.opacity = op;
   if (op <= 0.001 || !greeter || !greeter.bubbleText) { sprite.visible = false; return; }
   const tex = getGreeterBubbleTexture(greeter.bubbleText, { greeter: true });
-  if (tex.__animated && tex.__draw) {
+  if (tex.__animated && tex.__draw && nowMs - tex.__lastDrawMs >= GREETER_BUBBLE_ANIMATION_INTERVAL_MS) {
+    tex.__lastDrawMs = nowMs;
     tex.__draw(nowMs);
     tex.needsUpdate = true;
   }

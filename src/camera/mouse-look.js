@@ -334,16 +334,25 @@ export function initMouseLook(ctx, injected) {
       stopMouseLookInput();
       return;
     }
-    const cameraTouches = getCameraTouchCandidates(e.touches);
-    if (cameraTouches.length > 1) {
+    // touchmove fires at (or above) the refresh rate for as long as a finger is
+    // dragging, so walk the live TouchList instead of materializing it through
+    // Array.from().filter() plus a find() closure on every single event.
+    const touches = e.touches;
+    let cameraTouchCount = 0;
+    let t = null;
+    for (let i = 0; i < touches.length; i += 1) {
+      const touch = touches[i];
+      if (isMobileMovementControlTarget(touch.target)) continue;
+      cameraTouchCount += 1;
+      if (touch.identifier === lookTouchIdentifier) t = touch;
+    }
+    if (cameraTouchCount > 1) {
       e.preventDefault();
       return;
     }
     if (!dragging || lookTouchIdentifier === null) return;
     e.preventDefault();
-    if (cameraTouches.length !== 1) return;
-    const t = cameraTouches.find((touch) => touch.identifier === lookTouchIdentifier);
-    if (!t) return;
+    if (cameraTouchCount !== 1 || !t) return;
     const dx = t.clientX - lastX, dy = t.clientY - lastY;
     lastX = t.clientX; lastY = t.clientY;
     setYaw(getYaw() - dx * 0.0035 * getMouseSensitivityScale());

@@ -159,15 +159,18 @@
 
   // Appear when the reveal completes: that is when WASD/mouse actually start
   // working, and it keeps the corner free for the "Attendi..." reveal label.
-  const activationPoll = window.setInterval(() => {
-    if (window.__tronInspect?.().cityRevealComplete !== true) return;
-    window.clearInterval(activationPoll);
-    // Gate both the desktop indicator and the mobile touch joystick on the
-    // reveal finishing (the joystick keys off body.rf-reveal-done in CSS).
+  // Gate both the desktop indicator and the mobile touch joystick on the reveal
+  // finishing (the joystick keys off body.rf-reveal-done in CSS). The scene
+  // fires 'tron-reveal-complete' and leaves __tronRevealComplete behind, so this
+  // costs nothing: polling __tronInspect() here rebuilt the entire diagnostic
+  // dump every 400ms for the whole boot + reveal window.
+  const activateInputOverlay = () => {
     document.body.classList.add('rf-reveal-done');
     overlay.classList.add('is-active');
     if (!hasLooked) overlay.classList.add('is-look-hint');
-  }, 400);
+  };
+  if (window.__tronRevealComplete === true) activateInputOverlay();
+  else window.addEventListener('tron-reveal-complete', activateInputOverlay, { once: true });
 })();
 </script>
 <div id="loader" aria-hidden="true"></div>

@@ -148,7 +148,11 @@ test('cinematic look pass is default-on with URL rollback and inserted after FSR
   // L'encode va all'ultimo pass della catena: il cinematic look quando e' acceso,
   // altrimenti torna al pass FSR che ridiventa l'ultimo.
   assert.match(mainSource, /const lastPassIsLook = linearPipeline && cinematicLookEnabled;/);
-  assert.match(mainSource, /createFsrUpscalePass\(!lastPassIsLook\)/);
+  assert.match(mainSource, /fsrPassCarriesOutputEncode = !lastPassIsLook;/);
+  assert.match(mainSource, /createFsrUpscalePass\(fsrPassCarriesOutputEncode\)/);
+  // Il pass FSR resta acceso solo se porta l'encode o fa upscale/sharpen: senza
+  // niente da fare il suo shader e' una copia full-screen, un pass di puro fill.
+  assert.match(mainSource, /fsrUpscalePass\.enabled = fsrPassCarriesOutputEncode \|\| isFsrUpscaleActive\(\) \|\| fsrSharpness > 0;/);
   assert.match(mainSource, /composer\.addPass\(fsrUpscalePass\)[\s\S]*composer\.addPass\(cinematicLookPass\)/);
   assert.match(mainSource, /cinematicLookPass\?\.enabled/);
   assert.match(mainSource, /cinematicLookPassEnabled:\s*Boolean\(cinematicLookPass\?\.enabled\)/);

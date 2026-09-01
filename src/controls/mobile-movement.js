@@ -131,12 +131,30 @@ export function resetMobileMovementInput() {
   resetMobileMovementPad();
 }
 
+// The pad does not move or resize while a finger is dragging on it (only the
+// knob does, via a transform on a child), so its geometry is measured once on
+// pointerdown instead of once per pointermove. Any layout change that could move
+// it — resize, orientation, fullscreen — clears the cache below.
+let mobileMovementPadGeometry = null;
+
+export function invalidateMobileMovementPadGeometry() {
+  mobileMovementPadGeometry = null;
+}
+
+function mobileMovementPadGeometryForDrag() {
+  if (mobileMovementPadGeometry) return mobileMovementPadGeometry;
+  const rect = mobileMovementPadEl.getBoundingClientRect();
+  mobileMovementPadGeometry = {
+    centerX: rect.left + rect.width * 0.5,
+    centerY: rect.top + rect.height * 0.5,
+    radius: Math.max(1, Math.min(rect.width, rect.height) * 0.5),
+  };
+  return mobileMovementPadGeometry;
+}
+
 function updateMobileMovementPadFromPoint(clientX, clientY) {
   if (!mobileMovementPadEl || !mobileMovementKnobEl) return;
-  const rect = mobileMovementPadEl.getBoundingClientRect();
-  const centerX = rect.left + rect.width * 0.5;
-  const centerY = rect.top + rect.height * 0.5;
-  const radius = Math.max(1, Math.min(rect.width, rect.height) * 0.5);
+  const { centerX, centerY, radius } = mobileMovementPadGeometryForDrag();
   const rawX = (clientX - centerX) / radius;
   const rawY = (clientY - centerY) / radius;
   const length = Math.min(1, Math.hypot(rawX, rawY));
@@ -205,6 +223,9 @@ export function initMobileMovement(injected) {
     mobileTouchControlsState.movement.active = true;
     mobileTouchControlsState.movement.pointerId = event.pointerId;
     mobileMovementPadEl.setPointerCapture?.(event.pointerId);
+    // Re-measure at the start of every drag: the pad can have been laid out
+    // differently since the last one (mobile-landscape class, fullscreen).
+    invalidateMobileMovementPadGeometry();
     updateMobileMovementPadFromPoint(event.clientX, event.clientY);
   }, { passive: false });
 
@@ -218,10 +239,22 @@ export function initMobileMovement(injected) {
   mobileMovementPadEl?.addEventListener('pointercancel', releaseMobileMovementPointer);
   window.addEventListener('blur', resetMobileMovementPad);
 
-  window.addEventListener('orientationchange', () => scheduleMobileLandscapeRefresh('orientationchange'));
-  window.addEventListener('resize', () => updateMobileTouchControlsState());
-  document.addEventListener('fullscreenchange', updateMobileTouchControlsState);
-  document.addEventListener('webkitfullscreenchange', updateMobileTouchControlsState);
+  window.addEventListener('orientationchange', () => {
+    invalidateMobileMovementPadGeometry();
+    scheduleMobileLandscapeRefresh('orientationchange');
+  });
+  window.addEventListener('resize', () => {
+    invalidateMobileMovementPadGeometry();
+    updateMobileTouchControlsState();
+  });
+  document.addEventListener('fullscreenchange', () => {
+    invalidateMobileMovementPadGeometry();
+    updateMobileTouchControlsState();
+  });
+  document.addEventListener('webkitfullscreenchange', () => {
+    invalidateMobileMovementPadGeometry();
+    updateMobileTouchControlsState();
+  });
   window.addEventListener('pointerdown', (event) => {
     if (isMobileMovementControlTarget(event.target)) return;
     if (isMobileLandscapeMode()) requestLandscapeFullscreen('page-pointerdown');
