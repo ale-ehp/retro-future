@@ -76,6 +76,7 @@ export function setFacadeLedRuntimeSettings(settings) {
   mainBuildingFacadeLedZ = settings.main.z;
   mainBuildingFacadeLedThickness = settings.main.thickness;
   applySegmentOffsets(mainBuildingFacadeLedSegmentOffsets, settings.main.segments);
+  invalidateMainFacadeVerticalRevealLedBounds();
 }
 
 export function facadeLedRuntimeInspect() {
@@ -426,7 +427,10 @@ function addFacadeStrip(parent, w, d, face, sign, p1, p2, stripWidth, depth, mat
     edgeRole,
   };
   facadeStripPositionSpecs.push(spec);
-  if (batchKind === 'led' && spec.mainFacadeVerticalReveal) mainFacadeVerticalRevealLedSpecs.push(spec);
+  if (batchKind === 'led' && spec.mainFacadeVerticalReveal) {
+    mainFacadeVerticalRevealLedSpecs.push(spec);
+    invalidateMainFacadeVerticalRevealLedBounds();
+  }
   facadeBatchState(parent)[batchKind].push(spec);
   if (batchKind === 'led') facadeLedSourceSegmentCount++;
   else facadeHousingSourceSegmentCount++;
@@ -444,6 +448,7 @@ function buildFacadeStripBatch(parent, kind, specs, material, renderOrder) {
   parent.add(mesh);
   specs.forEach((spec, index) => {
     spec.batchMesh = mesh;
+    if (spec.mainFacadeVerticalReveal) invalidateMainFacadeVerticalRevealLedBounds();
     spec.instanceId = index;
     setFacadeStripInstanceTransform(spec);
   });
@@ -586,9 +591,60 @@ export function addTronFacadeTreatment(buildingMesh, w, h, d, options = {}) {
 }
 
 
+// Bumped whenever anything the bounds below are derived from changes: a new
+// reveal spec, its batch mesh being attached, or a fresh set of facade settings.
+let facadeLedGeometryGeneration = 0;
+
+export function invalidateMainFacadeVerticalRevealLedBounds() {
+  facadeLedGeometryGeneration += 1;
+}
+
+// mainFacadeVerticalRevealLedBounds() runs once per frame for the whole
+// pre-reveal window and rebuilds the same numbers every time: a filtered array
+// plus, per spec, a transform (two spread arrays, a Quaternion, several Vector3)
+// and a cloned world position. Nothing it reads changes between frames unless the
+// specs change or a control moves, so the result is cached against exactly those
+// inputs — the four building scales and the generation counter above.
+let mainFacadeVerticalRevealBoundsResult = null;
+const mainFacadeVerticalRevealBoundsInputs = {
+  generation: -1,
+  specCount: -1,
+  sideWidthScale: NaN,
+  sideDepthScale: NaN,
+  mainWidthScale: NaN,
+  mainDepthScale: NaN,
+};
+const mainFacadeVerticalRevealBoundsSpecs = [];
+
 export function mainFacadeVerticalRevealLedBounds() {
-  const specs = mainFacadeVerticalRevealLedSpecs.filter((spec) => spec.batchMesh && spec.edgeRole === 'main-building');
-  if (!specs.length) return null;
+  const sideWidthScale = getSideBuildingWidthScale();
+  const sideDepthScale = getSideBuildingDepthScale();
+  const mainWidthScale = getMainBuildingWidthScale();
+  const mainDepthScale = getMainBuildingDepthScale();
+  const inputs = mainFacadeVerticalRevealBoundsInputs;
+  if (inputs.generation === facadeLedGeometryGeneration
+    && inputs.specCount === mainFacadeVerticalRevealLedSpecs.length
+    && inputs.sideWidthScale === sideWidthScale
+    && inputs.sideDepthScale === sideDepthScale
+    && inputs.mainWidthScale === mainWidthScale
+    && inputs.mainDepthScale === mainDepthScale) {
+    return mainFacadeVerticalRevealBoundsResult;
+  }
+  inputs.generation = facadeLedGeometryGeneration;
+  inputs.specCount = mainFacadeVerticalRevealLedSpecs.length;
+  inputs.sideWidthScale = sideWidthScale;
+  inputs.sideDepthScale = sideDepthScale;
+  inputs.mainWidthScale = mainWidthScale;
+  inputs.mainDepthScale = mainDepthScale;
+  const specs = mainFacadeVerticalRevealBoundsSpecs;
+  specs.length = 0;
+  for (const spec of mainFacadeVerticalRevealLedSpecs) {
+    if (spec.batchMesh && spec.edgeRole === 'main-building') specs.push(spec);
+  }
+  if (!specs.length) {
+    mainFacadeVerticalRevealBoundsResult = null;
+    return null;
+  }
   let minY = Infinity;
   let maxY = -Infinity;
   for (const spec of specs) {
@@ -616,8 +672,12 @@ export function mainFacadeVerticalRevealLedBounds() {
     minY = Math.min(minY, facadeRevealWorldPoint.y);
     maxY = Math.max(maxY, facadeRevealWorldPoint.y);
   }
-  if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY <= minY) return null;
-  return { minY, maxY, count: specs.length };
+  if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY <= minY) {
+    mainFacadeVerticalRevealBoundsResult = null;
+    return null;
+  }
+  mainFacadeVerticalRevealBoundsResult = { minY, maxY, count: specs.length };
+  return mainFacadeVerticalRevealBoundsResult;
 }
 
 

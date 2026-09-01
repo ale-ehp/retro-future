@@ -583,7 +583,45 @@ function labEqualizerPulsePowerForColumn(column) {
   return THREE.MathUtils.clamp(labEqualizerState.pulseMaster * groupPower, 0, 9);
 }
 
-function labEqualizerCrtBlockColor(column, row, rows, now, peakLevel, alphaScale = 1, beatPulse = 0) {
+// Every block color used to be rebuilt from scratch on every redraw: 16 columns x
+// up to 22 rows x 3 passes (plus the reflection and peak passes), each building an
+// hsla() template through four toFixed() calls that the canvas then re-parses as a
+// CSS color. Between two redraws (50ms apart at 20Hz) the animated inputs move far
+// less than the precision those strings keep, so the identical text came out again
+// and again. Memoize one string per block and pass, rebuilt only when the rounded
+// components actually change.
+const LAB_EQUALIZER_COLOR_VARIANTS = 5;
+const LAB_EQUALIZER_COLOR_CACHE_SIZE = LAB_EQUALIZER_BAR_COUNT * LAB_EQUALIZER_SEGMENT_ROWS * LAB_EQUALIZER_COLOR_VARIANTS;
+const labEqualizerColorCache = new Array(LAB_EQUALIZER_COLOR_CACHE_SIZE).fill('');
+const labEqualizerColorCacheKeys = new Int32Array(LAB_EQUALIZER_COLOR_CACHE_SIZE * 4).fill(-1);
+
+function labEqualizerColorSlot(column, row, variant) {
+  return (column * LAB_EQUALIZER_SEGMENT_ROWS + row) * LAB_EQUALIZER_COLOR_VARIANTS + variant;
+}
+
+function labEqualizerHslaString(slot, hue, saturation, light, alpha) {
+  const h = Math.round(hue * 10);
+  const s = Math.round(saturation * 10);
+  const l = Math.round(light * 10);
+  const a = Math.round(alpha * 1000);
+  if (slot < 0 || slot >= LAB_EQUALIZER_COLOR_CACHE_SIZE) {
+    return `hsla(${(h / 10).toFixed(1)}, ${(s / 10).toFixed(1)}%, ${(l / 10).toFixed(1)}%, ${(a / 1000).toFixed(3)})`;
+  }
+  const keyIndex = slot * 4;
+  const keys = labEqualizerColorCacheKeys;
+  if (keys[keyIndex] === h && keys[keyIndex + 1] === s && keys[keyIndex + 2] === l && keys[keyIndex + 3] === a) {
+    return labEqualizerColorCache[slot];
+  }
+  keys[keyIndex] = h;
+  keys[keyIndex + 1] = s;
+  keys[keyIndex + 2] = l;
+  keys[keyIndex + 3] = a;
+  const color = `hsla(${(h / 10).toFixed(1)}, ${(s / 10).toFixed(1)}%, ${(l / 10).toFixed(1)}%, ${(a / 1000).toFixed(3)})`;
+  labEqualizerColorCache[slot] = color;
+  return color;
+}
+
+function labEqualizerCrtBlockColor(column, row, rows, now, peakLevel, alphaScale = 1, beatPulse = 0, slot = -1) {
   const rowT = rows <= 1 ? 0 : row / (rows - 1);
   const centerBand = 0.47 + Math.sin(now * 0.0014 + column * 0.51) * 0.018;
   const bandMix = Math.exp(-Math.pow((rowT - centerBand) / 0.13, 2));
@@ -593,17 +631,17 @@ function labEqualizerCrtBlockColor(column, row, rows, now, peakLevel, alphaScale
   const saturation = THREE.MathUtils.clamp(100 - bandMix * 10 + cellPulse * 5, 88, 100);
   const light = THREE.MathUtils.clamp(38 + rowT * 15 + bandMix * 16 + edgeGlow * 4 + peakLevel * 5 + cellPulse * 10, 32, 82);
   const alpha = THREE.MathUtils.clamp((0.88 + bandMix * 0.06 + cellPulse * 0.05) * alphaScale, 0, 1);
-  return `hsla(${hue.toFixed(1)}, ${saturation.toFixed(1)}%, ${light.toFixed(1)}%, ${alpha.toFixed(3)})`;
+  return labEqualizerHslaString(slot, hue, saturation, light, alpha);
 }
 
-function labEqualizerPeakBlockColor(column, row, rows, now, beatPulse = 0) {
+function labEqualizerPeakBlockColor(column, row, rows, now, beatPulse = 0, slot = -1) {
   const rowT = rows <= 1 ? 0 : row / (rows - 1);
   const bandMix = Math.exp(-Math.pow((rowT - 0.52) / 0.16, 2));
   const cellPulse = beatPulse * labEqualizerPulsePowerForColumn(column);
   const hue = labEqualizerMixHue(labEqualizerColumnHue(column), 184, bandMix * 0.14);
   const saturation = THREE.MathUtils.clamp(98 + cellPulse * 2, 94, 100);
   const light = THREE.MathUtils.clamp(54 + rowT * 17 + bandMix * 8 + cellPulse * 12, 48, 82);
-  return `hsla(${hue.toFixed(1)}, ${saturation.toFixed(1)}%, ${light.toFixed(1)}%, 0.98)`;
+  return labEqualizerHslaString(slot, hue, saturation, light, 0.98);
 }
 
 function labEqualizerBeatPulse(bassEnergy, dt) {
@@ -798,12 +836,12 @@ function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
     const activeRows = THREE.MathUtils.clamp(Math.round(labEqualizerLevelToRows(level)), 0, LAB_EQUALIZER_SEGMENT_ROWS);
     for (let row = 0; row < activeRows; row += 1) {
       const y = bottomY - (row + 1) * rowH - row * rowGap;
-      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 1, beatPulse);
+      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 1, beatPulse, labEqualizerColorSlot(column, row, 0));
       ctx.fillRect(x, y, columnW, rowH);
-      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.78, beatPulse);
+      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.78, beatPulse, labEqualizerColorSlot(column, row, 1));
       ctx.fillRect(x + 0.4, y + 0.35, Math.max(1, columnW - 0.8), Math.max(1, rowH - 0.7));
       const leftLine = x + Math.sin(now * 0.003 + column) * 0.8;
-      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.14, beatPulse);
+      ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, 1, 0.14, beatPulse, labEqualizerColorSlot(column, row, 2));
       ctx.fillRect(leftLine, y + 0.35, Math.max(1, columnW * 0.035), Math.max(1, rowH - 0.7));
     }
   }
@@ -829,7 +867,7 @@ function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
         const reflectedY = reflectionTop + distance * 0.33;
         const fade = THREE.MathUtils.clamp(1 - ((reflectedY - reflectionTop) / reflectionH), 0, 1);
         ctx.globalAlpha = THREE.MathUtils.clamp(0.32 * reflectionStrength, 0, 0.95) * fade;
-        ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 0.88, beatPulse);
+        ctx.fillStyle = labEqualizerCrtBlockColor(column, row, LAB_EQUALIZER_SEGMENT_ROWS, now, peakLevel, 0.88, beatPulse, labEqualizerColorSlot(column, row, 3));
         ctx.fillRect(x, reflectedY, columnW, Math.max(1, rowH * 0.55));
       }
     }
@@ -850,7 +888,7 @@ function drawLabEqualizerCanvas(now, averageLevel, peakLevel, beatPulse = 0) {
     const peakRow = THREE.MathUtils.clamp(Math.ceil(peakRows) - 1, 0, LAB_EQUALIZER_SEGMENT_ROWS - 1);
     if (peakRows >= activeRowsFloat - 0.25 && peakRows > 1.2) {
       const y = bottomY - (peakRow + 1) * rowH - peakRow * rowGap;
-      ctx.fillStyle = labEqualizerPeakBlockColor(column, peakRow, LAB_EQUALIZER_SEGMENT_ROWS, now, beatPulse);
+      ctx.fillStyle = labEqualizerPeakBlockColor(column, peakRow, LAB_EQUALIZER_SEGMENT_ROWS, now, beatPulse, labEqualizerColorSlot(column, peakRow, 4));
       ctx.fillRect(x, y, columnW, rowH);
     }
   }

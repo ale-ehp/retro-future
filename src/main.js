@@ -408,6 +408,7 @@ import {
   facadeLedRuntimeInspect,
   hasMainFacadeVerticalRevealLedMaterials,
   initFacadeLedTreatment,
+  invalidateMainFacadeVerticalRevealLedBounds,
   mainFacadeVerticalRevealLedBounds,
   setFacadeLedRuntimeSettings,
   setMainFacadeVerticalRevealUniforms,
@@ -5532,6 +5533,27 @@ function applyBoundaryErrorControlsFromUI() {
   controlEls.boundaryErrorFloorLightSoftnessVal.textContent = visualSettings.boundaryErrorFloorLightSoftness.toFixed(2);
 }
 
+// Previous argument list of updateBuildingFootprints, compared field by field so
+// a re-run with identical inputs costs nothing. Starts empty, so the first call
+// through applyLiveControls always builds the footprints.
+const lastBuildingFootprintInputs = [];
+
+function buildingFootprintInputsChanged(...inputs) {
+  if (lastBuildingFootprintInputs.length !== inputs.length) {
+    lastBuildingFootprintInputs.length = 0;
+    lastBuildingFootprintInputs.push(...inputs);
+    return true;
+  }
+  let changed = false;
+  for (let i = 0; i < inputs.length; i += 1) {
+    if (lastBuildingFootprintInputs[i] !== inputs[i]) {
+      lastBuildingFootprintInputs[i] = inputs[i];
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function applyLiveControls() {
   const offset = Number(controlEls.hexOffset.value);
   const radius = Number(controlEls.hexRadius.value);
@@ -5950,21 +5972,39 @@ function applyLiveControls() {
   updateBuildingMaterials(sideBuildingMaterials, PAL.buildingSkin, sideBuildingBrightness, sideBuildingHue, sideBuildingMetalness, sideBuildingRoughness, sideBuildingReflect, sideBuildingEmissive, lightResponse);
   updateBuildingMaterials(bridgeMaterials, PAL.buildingSkin, sideBuildingBrightness, sideBuildingHue, sideBuildingMetalness, sideBuildingRoughness, sideBuildingReflect, sideBuildingEmissive, lightResponse);
   updateBuildingMaterials(mainBuildingMaterials, PAL.mainSkin, mainBuildingBrightness, mainBuildingHue, mainBuildingMetalness, mainBuildingRoughness, mainBuildingReflect, mainBuildingEmissive, lightResponse, nextMainBuildingSaturation);
-  updateBuildingFootprints(nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextMainBuildingZ, nextMainBuildingY, {
-    sideBuildingBasePadScale,
-    sideBuildingBasePadXScale,
-    sideBuildingBasePadY,
-    sideBuildingBasePadThickness,
-    sideBuildingBasePadCut,
-    sideBuildingBasePadRadius,
-    mainBuildingBasePadScale,
-    mainBuildingBasePadXScale,
-    mainBuildingBasePadZScale,
-    mainBuildingBasePadY,
-    mainBuildingBasePadThickness,
-    mainBuildingBasePadCut,
+  // updateBuildingFootprints rebuilds every base pad from scratch — a dispose +
+  // new ExtrudeGeometry (bevelled, with recomputed normals) per pad, up to five
+  // per building across 13 buildings. applyLiveControls re-runs once per animation
+  // frame for as long as ANY unscoped slider is held down, so without this guard a
+  // drag on, say, the ambient light rebuilt the whole city's base pad geometry 60
+  // times a second. Skip the rebuild unless one of its own inputs actually moved.
+  if (buildingFootprintInputsChanged(
+    nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale,
+    nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth,
+    nextMainBuildingZ, nextMainBuildingY,
+    sideBuildingBasePadScale, sideBuildingBasePadXScale, sideBuildingBasePadY,
+    sideBuildingBasePadThickness, sideBuildingBasePadCut, sideBuildingBasePadRadius,
+    mainBuildingBasePadScale, mainBuildingBasePadXScale, mainBuildingBasePadZScale,
+    mainBuildingBasePadY, mainBuildingBasePadThickness, mainBuildingBasePadCut,
     mainBuildingBasePadRadius,
-  });
+  )) {
+    updateBuildingFootprints(nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextMainBuildingZ, nextMainBuildingY, {
+      sideBuildingBasePadScale,
+      sideBuildingBasePadXScale,
+      sideBuildingBasePadY,
+      sideBuildingBasePadThickness,
+      sideBuildingBasePadCut,
+      sideBuildingBasePadRadius,
+      mainBuildingBasePadScale,
+      mainBuildingBasePadXScale,
+      mainBuildingBasePadZScale,
+      mainBuildingBasePadY,
+      mainBuildingBasePadThickness,
+      mainBuildingBasePadCut,
+      mainBuildingBasePadRadius,
+    });
+    invalidateMainFacadeVerticalRevealLedBounds();
+  }
   updateBasePadLedStrips(basePadLedBrightness, basePadLedThickness, basePadLedOffset, basePadLedHue);
   updateBuildingScale(sideBuildingMeshes, sideBuildingColliders, sideBuildingScale);
   updateBuildingScale(mainBuildingMeshes, mainBuildingColliders, mainBuildingScale);
