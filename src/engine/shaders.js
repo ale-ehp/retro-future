@@ -58,6 +58,13 @@ export const TRON_CINEMATIC_LOOK_SHADER = {
   name: 'TronCinematicLook',
   uniforms: {
     tDiffuse: { value: null },
+    // Bloom folded into this pass: when bloomMix is 1 the bloom pass has skipped
+    // its own full-screen additive draw (UnrealBloomPass.compositeToInput=false)
+    // and handed its texture over here instead. One less full-res pass per frame,
+    // and the one removed was rasterizing at the MSAA sample rate of the scene
+    // target. bloomMix 0 keeps the historical behaviour: bloom already added.
+    tBloom: { value: null },
+    bloomMix: { value: 0 },
     resolution: { value: new THREE.Vector2(1, 1) },
     time: { value: 0 },
     intensity: { value: 0.42 },
@@ -73,12 +80,28 @@ export const TRON_CINEMATIC_LOOK_SHADER = {
   `,
   fragmentShader: `
     uniform sampler2D tDiffuse;
+    uniform sampler2D tBloom;
+    uniform float bloomMix;
     uniform vec2 resolution;
     uniform float time;
     uniform float intensity;
     uniform float grainStrength;
     uniform float chromaticStrength;
     varying vec2 vUv;
+
+    // Scene + bloom, matching what UnrealBloomPass' blend material used to write
+    // back into the scene buffer: additive, premultiplied, opacity 1, i.e. a plain
+    // dst + bloom. Sampled at each of the three chromatic-aberration taps below,
+    // because the aberration used to read an already-bloomed buffer.
+    vec3 tronLookSource(vec2 uv) {
+      vec3 scene = texture2D(tDiffuse, uv).rgb;
+      if (bloomMix <= 0.0) return scene;
+      // Clamped on purpose. The bloom used to be blended into the scene render
+      // target, which is 8-bit, so the sum was already clipped to 1.0 before the
+      // grade ever saw it. Without this the highlights reach the shoulder curve
+      // above 1.0 and come out slightly darker — a real, if small, change of look.
+      return clamp(scene + texture2D(tBloom, uv).rgb * bloomMix, 0.0, 1.0);
+    }
 
     float tronFilmRandom(vec2 p) {
       return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453123);
@@ -107,10 +130,10 @@ export const TRON_CINEMATIC_LOOK_SHADER = {
       vec2 chromaDir = normalize(centered + vec2(0.0001, -0.0001));
       vec2 chromaOffset = chromaDir * texel * chromaticStrength * smoothstep(0.10, 0.92, radiusSq);
 
-      vec3 center = texture2D(tDiffuse, vUv).rgb;
+      vec3 center = tronLookSource(vUv);
       vec3 color = center;
-      color.r = texture2D(tDiffuse, vUv + chromaOffset).r;
-      color.b = texture2D(tDiffuse, vUv - chromaOffset).b;
+      color.r = tronLookSource(vUv + chromaOffset).r;
+      color.b = tronLookSource(vUv - chromaOffset).b;
       color = tronCinematicGrade(color, intensity);
       color *= mix(1.0, vignette, intensity * 0.45);
 

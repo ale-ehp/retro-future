@@ -4317,6 +4317,33 @@ function rebuildComposer() {
 // readBuffer is the multisampled scene target, writeBuffer the 1x ping-pong one.
 // Re-asserted every frame because swapBuffers() flips them on each needsSwap pass
 // and an odd number of them would leave the scene rendering at 1 sample.
+// The bloom pass normally ends by drawing itself additively back into the scene
+// buffer — a full-screen draw that, with MSAA on, rasterizes at the scene target's
+// sample rate for no antialiasing benefit. The cinematic look pass reads that same
+// buffer immediately afterwards, so when nothing sits between the two the addition
+// can happen inside the look shader instead: one full-res pass disappears.
+//
+// Only when the chain really is bloom -> look with nothing in between. FXAA, TAA
+// and FSR all process the combined image, so if any of them is enabled the bloom
+// has to be in the buffer before they run and the merge is off. Re-evaluated every
+// frame because those passes are toggled at runtime.
+function syncBloomLookMerge() {
+  if (!bloomPass) return;
+  const merged = Boolean(
+    cinematicLookPass?.enabled
+    && bloomPass.enabled
+    && !fxaaPass?.enabled
+    && !temporalAaPass?.enabled
+    && !fsrUpscalePass?.enabled
+  );
+  bloomPass.compositeToInput = !merged;
+  const uniforms = cinematicLookPass?.uniforms;
+  if (!uniforms) return;
+  uniforms.bloomMix.value = merged ? 1 : 0;
+  // Bound even when unused: the sampler must stay valid, the shader gates on the mix.
+  if (uniforms.tBloom) uniforms.tBloom.value = bloomPass.bloomTexture?.() || null;
+}
+
 function syncComposerBufferRoles() {
   if (!composer || !composerMsaaActive) return;
   composer.readBuffer = composer.renderTarget1;
@@ -6962,6 +6989,7 @@ function tick(now) {
   syncBloomTemporalBudget();
   syncCinematicLookPass(now);
   syncTemporalAaPass();
+  syncBloomLookMerge();
   if (!postRevealPerformanceCritical) {
     if (postRevealPerfIsolationState.equalizer) {
       updateLabEqualizer(now, dt);

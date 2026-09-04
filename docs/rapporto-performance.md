@@ -383,7 +383,23 @@ visiva:
   invece del self-copy) più i mipmap disattivati. Lo spostamento del glitch in
   shader cambierebbe il look e non è stato fatto.
 
-Sul finding critico va segnalato il residuo già noto in fase di verifica: il
-composite finale di `UnrealBloomPass` scrive in place nel readBuffer, quindi
-quel singolo draw resta a sample rate MSAA anche dopo il fix. È inerente al
-design del pass vendorizzato.
+### Residuo del finding critico: risolto in un secondo momento
+
+Il composite finale di `UnrealBloomPass` scriveva in place nel readBuffer, quindi
+quel draw full-res restava a sample rate MSAA anche dopo il fix. È stato chiuso
+fondendo la somma del bloom dentro il pass del cinematic look: il bloom non si
+ridisegna più nel buffer della scena, il look lo campiona da `bloomTexture()` e lo
+somma ai suoi tre tap di aberrazione cromatica. **Un pass full-res in meno per
+frame, e quello tolto era proprio il draw a sample rate MSAA.**
+
+Il merge si attiva solo quando la catena è davvero `bloom → look` senza nulla in
+mezzo: FXAA, TAA e FSR lavorano sull'immagine già combinata, quindi se uno di loro
+è acceso il bloom torna nel buffer come prima. La condizione è rivalutata a ogni
+frame (`syncBloomLookMerge`) e lo stato è leggibile in diagnostica come
+`bloomLookMerged`.
+
+Una nota sul colore: la somma `scena + bloom` finiva in un render target a 8 bit,
+quindi era già clampata a 1.0 prima del grade. Nello shader va clampata a mano,
+altrimenti le alte luci arrivano alla curva di shoulder sopra 1.0 e ne escono più
+scure — misurato, era un calo sistematico di circa l'1% sulla luminanza media.
+Con il clamp la differenza a pixel rientra nel rumore di fondo tra due run.

@@ -459,6 +459,9 @@ export function createPerformanceDiagnostics(deps) {
       fsrSharpness: Number(getFsrSharpness().toFixed(2)),
       fsrSharpenMode: 'rcas-like-adaptive',
       fsrUpscaleShaderEnabled: Boolean(getFsrUpscalePass()?.enabled),
+      // true when the bloom is being added inside the cinematic look pass instead
+      // of by its own full-screen additive draw (see syncBloomLookMerge in main.js).
+      bloomLookMerged: getBloomPass()?.compositeToInput === false,
     };
   }
 
@@ -510,6 +513,7 @@ export function createPerformanceDiagnostics(deps) {
       fsrSharpness: composerSummary.fsrSharpness,
       fsrSharpenMode: composerSummary.fsrSharpenMode,
       fsrUpscaleShaderEnabled: composerSummary.fsrUpscaleShaderEnabled,
+      bloomLookMerged: composerSummary.bloomLookMerged,
       fsrTarget,
       bloomEnabled: getBloomEnabled(),
       bloomPassEnabled: Boolean(getBloomPass()?.enabled),

@@ -187,6 +187,10 @@ class UnrealBloomPass extends Pass {
 
 		// blend material
 
+		// LOCAL CHANGE: when false, render() stops adding the bloom back into the
+		// input buffer and leaves it in bloomTexture() for a later pass to add.
+		this.compositeToInput = true;
+
 		this.copyUniforms = UniformsUtils.clone( CopyShader.uniforms );
 
 		this.blendMaterial = new ShaderMaterial( {
@@ -368,22 +372,34 @@ class UnrealBloomPass extends Pass {
 
 		}
 
-		// Blend it additively over the input texture
-
-		this._fsQuad.material = this.blendMaterial;
-		this.copyUniforms[ 'tDiffuse' ].value = this.renderTargetsHorizontal[ 0 ].texture;
+		// Blend it additively over the input texture.
+		//
+		// LOCAL CHANGE: with compositeToInput = false the caller takes the bloom
+		// texture (bloomTexture()) and adds it inside a later pass instead. That
+		// removes a full-screen additive draw per frame, which is doubly worth it
+		// here because readBuffer is the multisampled scene target: this draw
+		// rasterizes at the MSAA sample rate for no antialiasing benefit at all.
+		// Only honored when this pass is not the one presenting to the screen.
+		const skipBlend = this.compositeToInput === false && this.renderToScreen === false;
 
 		if ( maskActive ) renderer.state.buffers.stencil.setTest( true );
 
-		if ( this.renderToScreen ) {
+		if ( ! skipBlend ) {
 
-			renderer.setRenderTarget( null );
-			this._fsQuad.render( renderer );
+			this._fsQuad.material = this.blendMaterial;
+			this.copyUniforms[ 'tDiffuse' ].value = this.renderTargetsHorizontal[ 0 ].texture;
 
-		} else {
+			if ( this.renderToScreen ) {
 
-			renderer.setRenderTarget( readBuffer );
-			this._fsQuad.render( renderer );
+				renderer.setRenderTarget( null );
+				this._fsQuad.render( renderer );
+
+			} else {
+
+				renderer.setRenderTarget( readBuffer );
+				this._fsQuad.render( renderer );
+
+			}
 
 		}
 
@@ -391,6 +407,15 @@ class UnrealBloomPass extends Pass {
 
 		renderer.setClearColor( this._oldClearColor, this._oldClearAlpha );
 		renderer.autoClear = oldAutoClear;
+
+	}
+
+	// LOCAL ADDITION: the composited bloom, for callers that add it themselves
+	// (see compositeToInput). Valid from construction, and holds the last computed
+	// bloom on frames the updateStride skips.
+	bloomTexture() {
+
+		return this.renderTargetsHorizontal[ 0 ].texture;
 
 	}
 
