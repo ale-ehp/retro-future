@@ -475,7 +475,10 @@ function scheduleCrowdBubbleTexturePrewarm() {
     const line = TRON_RUNNER_CROWD_LINES[crowdBubbleTexturePrewarmIndex];
     crowdBubbleTexturePrewarmIndex += 1;
     try {
-      getGreeterBubbleTexture(line);
+      // Rasterizing the canvas is only half of it: the first frame that shows
+      // the bubble would still pay the GPU upload. initTexture does it now.
+      const texture = getGreeterBubbleTexture(line);
+      deps.getRenderer()?.initTexture?.(texture);
     } catch {
       // A prewarm is best effort: a failure here must never break the scene.
     }

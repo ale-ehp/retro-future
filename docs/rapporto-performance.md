@@ -272,7 +272,7 @@ sparso, con la soluzione proposta per ciascuno.
   oggetto `lastFrame` + 4 `toFixed` allocati a ogni frame del reveal (più lo
   spread `{ ...renderer.info.render }` nel tick). *Fix*: scratch object mutato in
   place; passare `renderer.info.render` direttamente (consumo sincrono, pattern
-  già usato per il benchmark).
+  già usato per il benchmark); arrotondare in `inspect()`, non per frame.
 - **`src/world/building-leds.js:339`** — cornici dei board: 4 mesh per cornice,
   ognuna con BoxGeometry e MeshBasicMaterial propri → ~60 draw call trasparenti
   depthWrite:false per frame. *Fix*: materiale condiviso per colore + merge dei 4
@@ -362,7 +362,7 @@ sparso, con la soluzione proposta per ciascuno.
 
 ## Cosa è stato applicato
 
-Tutti i 35 finding sono stati risolti. La suite (`npm test`, 141 test) resta
+Tutti i 35 finding sono stati risolti. La suite (`npm test`, 142 test) resta
 verde e la scena è stata confrontata a video prima/dopo: stesse inquadrature,
 stessi fumetti, stesse board, con un pass di post-processing in meno nell'HUD
 (`Pass/Draw 4/1` → `3/1`), 184 → 143 geometrie in scena e un solo contesto WebGL
@@ -403,3 +403,39 @@ quindi era già clampata a 1.0 prima del grade. Nello shader va clampata a mano,
 altrimenti le alte luci arrivano alla curva di shoulder sopra 1.0 e ne escono più
 scure — misurato, era un calo sistematico di circa l'1% sulla luminanza media.
 Con il clamp la differenza a pixel rientra nel rumore di fondo tra due run.
+Il clamp vale solo sul percorso MSAA (target a 8 bit): con `?aa=off` o `?aa=fxaa`
+il composer gira su un target HalfFloat, dove il vecchio blend non tagliava mai,
+e lì lo shader lascia passare la somma intera (`bloomClamp` = 0).
+
+### Ricontrollo finale
+
+Dopo l'applicazione dei fix il diff completo è stato passato a una revisione
+indipendente (8 rilievi, nessuno refutato) e tutto è stato chiuso:
+
+- **Memo dei base pad incompleta** (alto, introdotto dal fix di `main.js:5927`):
+  `updateBuildingFootprints` legge anche stato di modulo — larghezza boulevard
+  via `roadHalf()`, `globalY` e parametri del cordolo dei pad, altezza/scala dei
+  tile — che non entrava nel confronto, quindi un drag su quei controlli non
+  muoveva più i pad. Ora tutti e nove gli input entrano nella memo.
+- **`compileAsync` con il target sbagliato** (medio): compilava con il render
+  target di schermo bound (variante shader con output colour space + tone
+  mapping), mentre i frame veri disegnano la scena nel target del composer. Il
+  render caldo successivo ricompilava tutto in sincrono. Ora compile e render
+  girano entrambi con un target off-screen bound, senza lasciarlo bound durante
+  l'`await`.
+- **Bake del cielo con cuciture**: le 6 facce del cubo venivano renderizzate con
+  il `now` di frame diversi (una ogni 2 frame), quindi a stati diversi
+  dell'animazione. Il tempo è catturato alla faccia 0 e riusato per il ciclo.
+  Il cubo desktop passa da 256 a 512 px (una faccia ogni 2 frame resta
+  trascurabile) per non perdere il dettaglio del cielo procedurale.
+- **Clamp del bloom** reso condizionale al percorso MSAA (vedi sopra).
+- **Profiler del reveal**: rimossi lo spread di `renderer.info.render` nel tick e
+  i 4 `toFixed` per frame; l'arrotondamento avviene in `inspect()`.
+- **Prewarm delle bubble**: oltre a rasterizzare il canvas ora chiama anche
+  `renderer.initTexture`, così il primo frame che mostra la bubble non paga
+  l'upload GPU.
+- **Commento stantio** sul bake del cielo (diceva ancora "solo mobile A/B").
+- **Mipmap delle bubble** (finding 4): disattivati solo sulla texture animata
+  della welcome, che si ricarica a ogni redraw. Le bubble statiche della folla
+  tengono i mipmap di proposito: vengono viste anche a distanza e il costo è una
+  sola generazione all'upload, ora spostata nel prewarm idle.

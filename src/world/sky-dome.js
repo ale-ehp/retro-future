@@ -54,7 +54,7 @@ export function createSkyDome(deps) {
   const SKY_BAKE_MOBILE_DEFAULT = true;
   const SKY_BAKE_DESKTOP_DEFAULT = true;
   const SKY_BAKE_CUBE_SIZE_MOBILE = 128;
-  const SKY_BAKE_CUBE_SIZE_DESKTOP = 256;
+  const SKY_BAKE_CUBE_SIZE_DESKTOP = 512;
   const SKY_BAKE_STRIDE = 12;
   const SKY_BAKE_FACE_COUNT = 6;
   const SKY_BAKE_FACE_STRIDE = skyBakeFaceStride(SKY_BAKE_STRIDE, SKY_BAKE_FACE_COUNT);
@@ -553,6 +553,11 @@ export function createSkyDome(deps) {
     lastRenderedFace: -1,
     cycles: 0,
     spread: skyBakeSpreadEnabled,
+    // Animation time the current spread cycle is rendered at. Captured on face 0
+    // and reused for faces 1-5, so the six faces share one sky state instead of
+    // each being a couple of frames further along than the last, which showed as
+    // seams along the cube edges.
+    cycleNow: 0,
   };
   function skyBakeCubeSize() {
     return getMobileProfileActive() ? SKY_BAKE_CUBE_SIZE_MOBILE : SKY_BAKE_CUBE_SIZE_DESKTOP;
@@ -664,7 +669,10 @@ export function createSkyDome(deps) {
       skyBakeState.spread = skyBakeSpreadEnabled;
       if (skyBakeSpreadEnabled) {
         const shouldRenderFace = !skyBakeState.ready || skyBakeState.frames % SKY_BAKE_FACE_STRIDE === 0;
-        if (shouldRenderFace) renderSkyBakeFace(now, skyBakeState.nextFace);
+        if (shouldRenderFace) {
+          if (skyBakeState.nextFace === 0) skyBakeState.cycleNow = now;
+          renderSkyBakeFace(skyBakeState.cycleNow, skyBakeState.nextFace);
+        }
       } else if (skyBakeState.frames % SKY_BAKE_STRIDE === 0) {
         renderSkyBakeFull(now);
       }

@@ -168,8 +168,12 @@ test('bloom is folded into the cinematic look only when the two passes are adjac
   assert.match(bloomSource, /bloomTexture\(\) \{/);
   assert.match(shadersSource, /uniform sampler2D tBloom;/);
   assert.match(shadersSource, /vec3 tronLookSource\(vec2 uv\)/);
-  // Il clamp riproduce il target a 8 bit in cui la somma finiva prima del grade.
-  assert.match(shadersSource, /clamp\(scene \+ texture2D\(tBloom, uv\)\.rgb \* bloomMix, 0\.0, 1\.0\)/);
+  // Il clamp riproduce il target a 8 bit in cui la somma finiva prima del grade,
+  // ma solo sul percorso MSAA: senza MSAA il composer gira su HalfFloat, dove il
+  // vecchio blend non tagliava mai.
+  assert.match(shadersSource, /uniform float bloomClamp;/);
+  assert.match(shadersSource, /bloomClamp > 0\.5 \? clamp\(sum, 0\.0, 1\.0\) : sum;/);
+  assert.match(mainSource, /uniforms\.bloomClamp\.value = composerMsaaActive \? 1 : 0;/);
   // FXAA, TAA e FSR lavorano sull'immagine gia' combinata: se uno di loro e'
   // acceso il bloom deve tornare nel buffer prima che girino.
   assert.match(mainSource, /function syncBloomLookMerge\(\)/);

@@ -65,6 +65,9 @@ export const TRON_CINEMATIC_LOOK_SHADER = {
     // target. bloomMix 0 keeps the historical behaviour: bloom already added.
     tBloom: { value: null },
     bloomMix: { value: 0 },
+    // 1 when the scene target is 8-bit (MSAA path): the old in-place blend clipped
+    // the sum there. 0 on the HalfFloat path, where it never did.
+    bloomClamp: { value: 1 },
     resolution: { value: new THREE.Vector2(1, 1) },
     time: { value: 0 },
     intensity: { value: 0.42 },
@@ -82,6 +85,7 @@ export const TRON_CINEMATIC_LOOK_SHADER = {
     uniform sampler2D tDiffuse;
     uniform sampler2D tBloom;
     uniform float bloomMix;
+    uniform float bloomClamp;
     uniform vec2 resolution;
     uniform float time;
     uniform float intensity;
@@ -96,11 +100,13 @@ export const TRON_CINEMATIC_LOOK_SHADER = {
     vec3 tronLookSource(vec2 uv) {
       vec3 scene = texture2D(tDiffuse, uv).rgb;
       if (bloomMix <= 0.0) return scene;
-      // Clamped on purpose. The bloom used to be blended into the scene render
-      // target, which is 8-bit, so the sum was already clipped to 1.0 before the
-      // grade ever saw it. Without this the highlights reach the shoulder curve
-      // above 1.0 and come out slightly darker — a real, if small, change of look.
-      return clamp(scene + texture2D(tBloom, uv).rgb * bloomMix, 0.0, 1.0);
+      vec3 sum = scene + texture2D(tBloom, uv).rgb * bloomMix;
+      // Clamped on purpose when the scene target is 8-bit: the bloom used to be
+      // blended into that target, so the sum was already clipped to 1.0 before
+      // the grade ever saw it. Without this the highlights reach the shoulder
+      // curve above 1.0 and come out slightly darker — a real, if small, change
+      // of look. On a float target the old blend kept the range, so does this.
+      return bloomClamp > 0.5 ? clamp(sum, 0.0, 1.0) : sum;
     }
 
     float tronFilmRandom(vec2 p) {

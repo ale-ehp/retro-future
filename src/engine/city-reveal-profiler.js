@@ -298,10 +298,12 @@ export function createCityRevealProfiler(deps) {
     const lastFrame = cityRevealProfileState.lastFrame || (cityRevealProfileState.lastFrame = {
       now: 0, updateMs: 0, renderMs: 0, frameMs: 0, renderInfo: { calls: 0, triangles: 0, lines: 0, points: 0 },
     });
-    lastFrame.now = Number(now.toFixed(1));
-    lastFrame.updateMs = Number(updateMs.toFixed(3));
-    lastFrame.renderMs = Number(renderMs.toFixed(3));
-    lastFrame.frameMs = Number(frameMs.toFixed(3));
+    // Raw values here; inspect() rounds them. toFixed on the hot path built four
+    // strings a frame for numbers nobody reads until someone inspects.
+    lastFrame.now = now;
+    lastFrame.updateMs = updateMs;
+    lastFrame.renderMs = renderMs;
+    lastFrame.frameMs = frameMs;
     lastFrame.renderInfo.calls = calls;
     lastFrame.renderInfo.triangles = triangles;
     lastFrame.renderInfo.lines = renderInfo?.lines ?? 0;
@@ -324,7 +326,13 @@ export function createCityRevealProfiler(deps) {
       frameCount: cityRevealProfileState.frameCount,
       sampleCount: samples.length,
       lastFrame: cityRevealProfileState.lastFrame
-        ? { ...cityRevealProfileState.lastFrame, renderInfo: { ...cityRevealProfileState.lastFrame.renderInfo } }
+        ? {
+          now: Number(cityRevealProfileState.lastFrame.now.toFixed(1)),
+          updateMs: Number(cityRevealProfileState.lastFrame.updateMs.toFixed(3)),
+          renderMs: Number(cityRevealProfileState.lastFrame.renderMs.toFixed(3)),
+          frameMs: Number(cityRevealProfileState.lastFrame.frameMs.toFixed(3)),
+          renderInfo: { ...cityRevealProfileState.lastFrame.renderInfo },
+        }
         : null,
       latest: samples.at(-1) || cityRevealProfileSceneSnapshot(),
       slowestRender,
