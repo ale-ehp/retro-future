@@ -21,22 +21,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <link rel="icon" href="data:," />
 <link rel="stylesheet" href="./retro-future.css" />
-<!-- warm the soundtrack cache during boot (low priority, doesn't compete with three.js/GLB) so the
-     music is ready the instant the reveal starts and stays in sync even on a cold/incognito load.
-     Format-aware: Safari/iOS can't play Ogg/Opus, so it warms the AAC/M4A fallback instead. -->
-<script>
-(() => {
-  try {
-    const probe = document.createElement('audio');
-    const canOpus = probe.canPlayType && probe.canPlayType('audio/ogg; codecs="opus"');
-    const link = document.createElement('link');
-    link.rel = 'prefetch';
-    link.as = 'audio';
-    link.href = canOpus ? './audio/music/retro-future.opus' : './audio/music/retro-future.m4a';
-    document.head.appendChild(link);
-  } catch {}
-})();
-</script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -181,19 +165,19 @@
       <h1 id="welcome-window-title">Ti aspettavi una pagina con reparti e foto.</h1>
       <div class="welcome-departments" role="list" aria-label="Dipartimenti">
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-1" width="240" height="180" data-face-index="0" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#00d4ff" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-1" width="240" height="180" data-face-index="0" style="background-image:url(assets/welcome/kaonashi-1.webp);background-size:auto 100%;background-position:center;background-repeat:no-repeat;opacity:1" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#00d4ff" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 1</span>
         </div>
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-2" width="240" height="180" data-face-index="1" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#2fd37a" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-2" width="240" height="180" data-face-index="1" style="background-image:url(assets/welcome/kaonashi-2.webp);background-size:auto 100%;background-position:center;background-repeat:no-repeat;opacity:1" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#2fd37a" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 2</span>
         </div>
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-3" width="240" height="180" data-face-index="2" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#ff7a18" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-3" width="240" height="180" data-face-index="2" style="background-image:url(assets/welcome/kaonashi-3.webp);background-size:auto 100%;background-position:center;background-repeat:no-repeat;opacity:1" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#ff7a18" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 3</span>
         </div>
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-4" width="240" height="180" data-face-index="3" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#4d9bff" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-4" width="240" height="180" data-face-index="3" style="background-image:url(assets/welcome/kaonashi-4.webp);background-size:auto 100%;background-position:center;background-repeat:no-repeat;opacity:1" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#4d9bff" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 4</span>
         </div>
       </div>
@@ -788,6 +772,7 @@
 
 <script type="module">
 const canvases = Array.from(document.querySelectorAll('.welcome-department-face[data-head-model]'));
+let latestHeadPointer = null;
 const modelUrl = canvases[0]?.dataset.headModel || 'assets/models/kaonashi-no-face-clean.glb';
 const state = {
   colors: canvases.map((canvas) => canvas.dataset.headColor || '#00d4ff'),
@@ -831,7 +816,7 @@ window.__welcomeDepartmentHeadsInspect = () => ({
 async function initWelcomeDepartmentHeads() {
   if (!canvases.length) return;
   if (state.status === 'loading' || state.status === 'ready') return;
-  if (document.getElementById('welcome-window-overlay')?.classList.contains('is-dismissed')) {
+  if (document.body.classList.contains('retro-city-loading') || document.getElementById('welcome-window-overlay')?.classList.contains('is-dismissed')) {
     state.status = 'skipped';
     return;
   }
@@ -853,6 +838,10 @@ async function initWelcomeDepartmentHeads() {
     return;
   }
 
+  if (document.body.classList.contains('retro-city-loading')) {
+    state.disposed = true;
+    return;
+  }
   const yaws = [-0.34, -0.12, 0.12, 0.34];
 
   // Share one WebGL context across the four pointer-responsive previews.
@@ -1053,6 +1042,8 @@ async function initWelcomeDepartmentHeads() {
     state.ready = state.loadedCount === views.length;
     if (state.ready) {
       state.status = 'ready';
+      window.removeEventListener('pointermove', onWelcomePreviewIntent);
+      if (latestHeadPointer) onHeadPointerMove(latestHeadPointer);
       scheduleWelcomeHeadMotion();
     }
     state.fullHeadTintCount = views.reduce((count, view) => {
@@ -1092,6 +1083,7 @@ async function initWelcomeDepartmentHeads() {
     headMotionFrame = 0;
     cancelAnimationFrame(resizeFrame);
     window.removeEventListener('resize', onWelcomeHeadsResize);
+    window.removeEventListener('retro-city-requested', disposeWelcomeDepartmentHeads);
     window.removeEventListener('pointermove', onHeadPointerMove);
     document.removeEventListener('pointerleave', onHeadPointerLeave);
     window.removeEventListener('blur', onHeadPointerLeave);
@@ -1123,6 +1115,8 @@ async function initWelcomeDepartmentHeads() {
     textures.forEach((texture) => texture.dispose());
   }
 
+  window.addEventListener('retro-city-requested', disposeWelcomeDepartmentHeads, { once: true });
+  if (document.body.classList.contains('retro-city-loading')) disposeWelcomeDepartmentHeads();
   const overlay = document.getElementById('welcome-window-overlay');
   if (overlay) {
     if (overlay.classList.contains('is-dismissed')) {
@@ -1154,15 +1148,26 @@ function scheduleWelcomeDepartmentHeads() {
   });
 }
 
-scheduleWelcomeDepartmentHeads();
+function onWelcomePreviewIntent(event) {
+  if (event.pointerType !== 'mouse' || state.disposed || document.body.classList.contains('retro-city-loading') || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  latestHeadPointer = { pointerType: 'mouse', clientX: event.clientX, clientY: event.clientY };
+  if (state.scheduled) return;
+  const near = canvases.some(canvas => {
+    const r = canvas.getBoundingClientRect();
+    return Math.hypot(event.clientX - r.left - r.width / 2, event.clientY - r.top - r.height / 2) < Math.max(r.width, r.height) * 2;
+  });
+  if (near) scheduleWelcomeDepartmentHeads();
+}
+window.addEventListener('pointermove', onWelcomePreviewIntent, { passive: true });
+window.addEventListener('retro-city-requested', () => {
+  window.removeEventListener('pointermove', onWelcomePreviewIntent);
+  if (!state.ready) { state.disposed = true; state.status = 'disposed'; }
+}, { once: true });
 </script>
 
 <script type="module">
-// Flatten the module waterfall: the city's module graph is ~4 levels deep, so
-// discovery alone costs serial round-trips. Injecting modulepreload hints just
-// before the deferred import fetches the whole tree in parallel — after the
-// welcome screen's own critical resources have started, so it never competes
-// with first paint.
+import { createTronSoundtrackRuntime } from './src/audio/soundtrack-runtime.js';
+// Discover the scene modules together only after the visitor requests the demo.
 const RETRO_MODULE_PRELOADS = [
   './vendor/three.core.js',
   './vendor/three.module.min.js',
@@ -1268,18 +1273,83 @@ function injectRetroModulePreloads() {
   document.head.appendChild(fragment);
 }
 
+let cityBootPromise;
 function scheduleRetroFutureCityBoot() {
-  requestAnimationFrame(() => {
-    injectRetroModulePreloads();
-    window.setTimeout(() => {
-      import('./src/main.js').catch((error) => {
-        console.error('[retro-future]', error);
-      });
-    }, 0);
-  });
+  if (!cityBootPromise) {
+    cityBootPromise = new Promise((resolve, reject) => requestAnimationFrame(() => {
+      injectRetroModulePreloads();
+      import('./src/main.js').then(resolve, reject);
+    }));
+  }
+  return cityBootPromise;
 }
 
-scheduleRetroFutureCityBoot();
+const entryButton = document.getElementById('welcome-start-button');
+const entryOverlay = document.getElementById('welcome-window-overlay');
+let entryLoading = false;
+let entryFailed = false;
+const earlyAudio = { context: null, runtime: null };
+function ensureEntryAudioContext() {
+  if (!earlyAudio.context) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    try { if (AudioContext) earlyAudio.context = new AudioContext(); } catch { return null; }
+  }
+  if (earlyAudio.context?.state === 'suspended') earlyAudio.context.resume().catch(() => {});
+  return earlyAudio.context;
+}
+earlyAudio.runtime = createTronSoundtrackRuntime({
+  getAudioContext: () => earlyAudio.context,
+  ensureAudioContext: ensureEntryAudioContext,
+});
+window.__retroAudio = earlyAudio;
+
+async function requestDemo(event) {
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (entryLoading) return;
+  if (entryFailed) { window.location.reload(); return; }
+  entryLoading = true;
+  // Keep the audio unlock inside the original tap, before any asynchronous import.
+  try { earlyAudio.runtime.primeTronSoundtrackForGesture(); } catch { /* Optional audio must not prevent entry. */ }
+  if (window.matchMedia('(pointer: coarse)').matches) {
+    try {
+      const request = document.documentElement.requestFullscreen?.();
+      request?.catch?.(() => {});
+    } catch { /* Keep the regular viewport when fullscreen is unavailable. */ }
+  }
+  entryButton.textContent = 'Caricamento…';
+  entryButton.setAttribute('aria-busy', 'true');
+  entryButton.setAttribute('aria-disabled', 'true');
+  document.body.classList.add('retro-city-loading');
+  window.dispatchEvent(new Event('retro-city-requested'));
+  try {
+    const scene = await scheduleRetroFutureCityBoot();
+    await scene.retroSceneReady;
+    document.removeEventListener('keydown', onEntryKey, true);
+    entryOverlay.removeEventListener('click', onEntryClick, true);
+    entryButton.textContent = 'Esplora i reparti';
+    entryButton.removeAttribute('aria-busy');
+    entryButton.removeAttribute('aria-disabled');
+    scene.startRetroFuture(event);
+  } catch (error) {
+    entryLoading = false;
+    entryFailed = true;
+    entryButton.textContent = 'Ricarica la demo';
+    entryButton.removeAttribute('aria-busy');
+    entryButton.removeAttribute('aria-disabled');
+    console.error('[retro-entry]', error);
+  }
+}
+function onEntryClick(event) {
+  if (event.target.closest('a, input, select, textarea')) return;
+  if (event.target.closest('#welcome-start-button') || window.matchMedia('(pointer: coarse)').matches) requestDemo(event);
+}
+function onEntryKey(event) {
+  if (event.code !== 'Space' || event.repeat || event.target.closest('a, input, select, textarea')) return;
+  requestDemo(event);
+}
+entryOverlay.addEventListener('click', onEntryClick, true);
+document.addEventListener('keydown', onEntryKey, true);
 </script>
 </body>
 </html>
