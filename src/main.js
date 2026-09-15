@@ -1354,6 +1354,7 @@ let droneLandingPose = { ...DEFAULT_DRONE_LANDING_POSE };
 const PITCH_LIMIT = Math.PI * 0.49;
 const DEMO_START_KEY = 'Space';
 let backspaceIntroTriggered = false;
+let sceneBootComplete = false;
 let cameraCollisionUnlockedByBackspace = false;
 let mouseSensitivityScale = 1;
 let cameraMinHeight = 1.8;
@@ -1457,6 +1458,7 @@ function isDeviceInLandscape() {
 let awaitingLandscapeStart = false;
 function triggerWelcomeButtonStart(event) {
   event.preventDefault();
+  if (!sceneBootComplete) return;
   if (awaitingLandscapeStart) return;
   // Unlock audio inside THIS tap gesture, always. On mobile the real start can
   // be deferred to the post-rotation orientationchange handler, which carries
@@ -1528,6 +1530,7 @@ function lerpAngle(from, to, t) {
 }
 
 function triggerBackspaceDroneIntro(source = 'backspace') {
+  if (!sceneBootComplete) return;
   dismissWelcomeWindow();
   ensureFootstepAudioReady();
   // The soundtrack is the reveal's master clock: start it immediately, muffled
@@ -1634,7 +1637,7 @@ const footstepVariantCursor = {
 const footstepRequestedSampleCount = Object.values(TRON_FOOTSTEP_BANKS).reduce((sum, samples) => sum + samples.length, 0);
 const footstepAudioForward = new THREE.Vector3();
 const footstepAudioUp = new THREE.Vector3();
-let footstepAudioContext = null;
+let footstepAudioContext = window.__retroAudio?.context || null;
 let footstepAudioReadyPromise = null;
 let footstepAudioPreloadPromise = null;
 let footstepAudioError = '';
@@ -1649,7 +1652,7 @@ let lastFootstepSample = '';
 function createFootstepAudioContext() {
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextCtor) return null;
-  return new AudioContextCtor();
+  try { return new AudioContextCtor(); } catch { return null; }
 }
 
 function waitForNextFrame() {
@@ -1728,7 +1731,7 @@ function ensureTronAudioContext() {
   return footstepAudioContext;
 }
 
-const tronSoundtrackRuntime = createTronSoundtrackRuntime({
+const tronSoundtrackRuntime = window.__retroAudio?.runtime || createTronSoundtrackRuntime({
   getAudioContext: () => footstepAudioContext,
   ensureAudioContext: ensureTronAudioContext,
 });
@@ -7083,9 +7086,9 @@ function tick(now) {
   });
   techBreakdownOverlay?.update(now);
 }
-bootSceneWithFinalDefaults().then(() => {
+export const retroSceneReady = bootSceneWithFinalDefaults().then(() => {
   trimProductionControls();
-  requestAnimationFrame((now) => {
+  return new Promise((resolve) => requestAnimationFrame((now) => {
     last = now;
     fpsLast = now;
     fpsAccum = 0;
@@ -7094,11 +7097,16 @@ bootSceneWithFinalDefaults().then(() => {
     if (backspaceIntroTriggered) startCityRevealWireTimer();
     tick(now);
     loader.classList.add('hidden');
-  });
+    sceneBootComplete = true;
+    resolve();
+  }));
 }).catch((error) => {
   // Senza questo catch un boot che fallisce diventa una unhandled rejection:
   // il loader resta appeso per sempre e in console non compare niente di
   // riconducibile alla demo. Stesso tag di scheduleRetroFutureCityBoot in
   // index.html, che gia' fa lo stesso per il fallimento dell'import.
   console.error('[retro-future]', error);
+  throw error;
 });
+
+export { triggerWelcomeButtonStart as startRetroFuture };

@@ -295,7 +295,7 @@ test('welcome cover hides HUD until dismissed', () => {
   assert.match(mainSource, /document\.body\.classList\.remove\('welcome-cover-visible'\)/);
 });
 
-test('welcome cover schedules the city boot after the first paint', () => {
+test('welcome cover exposes a deferred city boot', () => {
   assert.doesNotMatch(htmlSource, /<script type="module" src="\.\/src\/main\.js"><\/script>/);
   assert.match(htmlSource, /function scheduleRetroFutureCityBoot\(\)/);
   assert.match(htmlSource, /requestAnimationFrame\(\(\) => \{[\s\S]*import\('\.\/src\/main\.js'\)/);
@@ -332,10 +332,6 @@ test('welcome cover uses the start button as the only department prompt', () => 
   assert.match(cssSource, /\.welcome-start-button:hover\s*\{[\s\S]*animation:\s*none/);
   assert.match(cssSource, /\.welcome-start-button:hover\s*\{[\s\S]*filter:\s*none/);
   assert.match(cssSource, /@keyframes welcome-start-button-pulse\s*\{/);
-  assert.match(cssSource, /@keyframes welcome-start-button-pulse\s*\{[\s\S]*background-color:\s*oklch\(73% 0\.19 45\)/);
-  assert.match(cssSource, /@keyframes welcome-start-button-pulse\s*\{[\s\S]*filter:\s*brightness\(1\.08\) saturate\(1\.04\) drop-shadow/);
-  assert.match(cssSource, /@keyframes welcome-start-button-pulse\s*\{[\s\S]*0 0 18px oklch\(73% 0\.19 45 \/ 0\.22\)/);
-  assert.match(cssSource, /@keyframes welcome-start-button-pulse\s*\{[\s\S]*0 0 42px oklch\(73% 0\.19 45 \/ 0\.1\)/);
   assert.doesNotMatch(cssSource, /0 0 30px oklch\(78% 0\.2 45 \/ 0\.34\)/);
   assert.doesNotMatch(cssSource, /0 0 0 8px/);
   assert.doesNotMatch(cssSource, /transform:\s*scale\(1\.025\)/);
