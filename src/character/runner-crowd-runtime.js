@@ -367,6 +367,18 @@ export function setGreeterBubbleRuntime(member, html, durationMs, now, sizeScale
   member.bubbleProximity = false;
 }
 
+const tronRunnerCrowdReflectionStateArgs = {
+  member: null,
+  group: null,
+  bodyMaterials: null,
+  ledMaterials: null,
+  visible: false,
+  bodyOpacity: 0,
+  ledOpacity: 0,
+  reflectionY: 0,
+  reflectionYScale: 1,
+};
+
 export function updateTronRunnerCrowdReflectionRuntime({
   getCrowdReflectionsIsolation,
   camera,
@@ -398,17 +410,17 @@ export function updateTronRunnerCrowdReflectionRuntime({
     budgetActive &&
     bodyOpacity > 0.005
   );
-  applyTronRunnerCrowdReflectionState({
-    member,
-    group,
-    bodyMaterials,
-    ledMaterials,
-    visible,
-    bodyOpacity,
-    ledOpacity,
-    reflectionY,
-    reflectionYScale,
-  });
+  const reflectionArgs = tronRunnerCrowdReflectionStateArgs;
+  reflectionArgs.member = member;
+  reflectionArgs.group = group;
+  reflectionArgs.bodyMaterials = bodyMaterials;
+  reflectionArgs.ledMaterials = ledMaterials;
+  reflectionArgs.visible = visible;
+  reflectionArgs.bodyOpacity = bodyOpacity;
+  reflectionArgs.ledOpacity = ledOpacity;
+  reflectionArgs.reflectionY = reflectionY;
+  reflectionArgs.reflectionYScale = reflectionYScale;
+  applyTronRunnerCrowdReflectionState(reflectionArgs);
 }
 
 export function buildTronRunnerCrowdMemberRuntime({
@@ -465,17 +477,23 @@ export function buildTronRunnerCrowdMemberRuntime({
     offset: globalIndex,
     effectiveAnimationSpeed: runnerState.effectiveAnimationSpeed,
   });
+  // The rig is two more skeleton clones and two more AnimationMixers per member.
+  // It is only ever parented below when the effect is on, and the toggle does not
+  // rebuild the crowd, so building it with the effect off produced ~60 skinned
+  // rigs that could never render — paid for in build-chunk time, scene-graph size
+  // and memory. Ask for it only when it can actually be used.
+  const crowdReflectionsVisible = fxEnabled('crowdReflections');
   const reflection = buildTronRunnerCrowdReflection({
     sourceModel: job.sourceModel,
     animations: job.animations,
     index: globalIndex,
     colorPreset,
-    dynamicReflectionEnabled,
+    dynamicReflectionEnabled: dynamicReflectionEnabled && crowdReflectionsVisible,
     cloneRunnerSkeleton,
     reflectionRig,
     effectiveAnimationSpeed: runnerState.effectiveAnimationSpeed,
   });
-  if (fxEnabled('crowdReflections') && reflection.group) group.add(reflection.group);
+  if (crowdReflectionsVisible && reflection.group) group.add(reflection.group);
   const route = routes.buildRoute(globalIndex);
   const fallback = routes.fallbackPlacement(globalIndex);
   const startInfo = routes.roadFacingStart(route, globalIndex, fallback);
@@ -1187,18 +1205,30 @@ export function tronRunnerCrowdLodStrideRuntime({
   return tronRunnerCrowdLodStrideCore(distance, nearDistance, midDistance);
 }
 
+// Reused argument objects: these wrappers run once (or more) per member per
+// crowd tick at 45Hz, so a fresh options literal per call was thousands of
+// short-lived objects a second in the nursery. Both cores read the object
+// synchronously and keep no reference to it.
+const tronRunnerCrowdDistanceArgs = {
+  member: null,
+  cameraPosition: null,
+  stats: null,
+  frame: 0,
+  distanceCacheEnabled: false,
+};
+
 export function tronRunnerCrowdDistanceToCameraRuntime({
   camera,
   stats,
   distanceCacheEnabled,
 }, member) {
-  return tronRunnerCrowdDistanceToCameraCore({
-    member,
-    cameraPosition: camera.position,
-    stats,
-    frame: stats.frame,
-    distanceCacheEnabled,
-  });
+  const args = tronRunnerCrowdDistanceArgs;
+  args.member = member;
+  args.cameraPosition = camera.position;
+  args.stats = stats;
+  args.frame = stats.frame;
+  args.distanceCacheEnabled = distanceCacheEnabled;
+  return tronRunnerCrowdDistanceToCameraCore(args);
 }
 
 export function setTronRunnerCrowdStateRuntime(member, state, now, durationMs = 0) {
@@ -1221,15 +1251,22 @@ export function normalizeTronRunnerCrowdStateRuntime({
   }
 }
 
+const tronRunnerCrowdPointInsideRouteArgs = {
+  member: null,
+  x: 0,
+  z: 0,
+  pointInPolygon: null,
+};
+
 export function tronRunnerCrowdPointInsideRouteRuntime({
   pointInPolygon,
 }, member, x, z) {
-  return tronRunnerCrowdPointInsideRouteCore({
-    member,
-    x,
-    z,
-    pointInPolygon,
-  });
+  const args = tronRunnerCrowdPointInsideRouteArgs;
+  args.member = member;
+  args.x = x;
+  args.z = z;
+  args.pointInPolygon = pointInPolygon;
+  return tronRunnerCrowdPointInsideRouteCore(args);
 }
 
 export function resolveTronRunnerCrowdCollisionRuntime({

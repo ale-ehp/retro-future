@@ -52,7 +52,8 @@ La demo si pilota da query string, utile per confronti A/B e per il rollback di 
 | `?techBreakdown=1` | overlay con pipeline, frame, scena, LOD e stato dei bake |
 | `?heroShot=1` | inquadratura di apertura alternativa, orbita sulla città |
 | `?pixelRatio=N` | forza la risoluzione di render |
-| `?skyBake=1` | bake del cielo nel background, prova A/B per mobile |
+| `?skyBake=0` | disattiva il bake del cielo nel background, attivo di default in steady state (`=1` lo forza) |
+| `?revealProfile=1` | aggiunge al profilo del reveal il conteggio dei renderable, che costa un traverse della scena per campione |
 
 Gli altri (`skyQuality`, `skyCheap`, `floorLite`, `floorReflect`, `buildingReflect`, `dirLight`, `boardUpload`, `aaSamples`, `benchmarkDownload`, `benchmarkSettleMs`) sono leve di misurazione: si leggono nelle funzioni `*FromParams` dei moduli che le usano.
 

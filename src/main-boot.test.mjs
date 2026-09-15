@@ -10,6 +10,7 @@ const discCursorSource = readFileSync(new URL('./camera/disc-cursor.js', import.
 const droneIntroSource = readFileSync(new URL('./camera/drone-intro.js', import.meta.url), 'utf8');
 const shadersSource = readFileSync(new URL('./engine/shaders.js', import.meta.url), 'utf8');
 const temporalAaSource = readFileSync(new URL('./engine/temporal-aa-pass.js', import.meta.url), 'utf8');
+const bloomSource = readFileSync(new URL('../vendor/UnrealBloomPass.js', import.meta.url), 'utf8');
 
 test('boot drains the runner crowd queue before prewarming textures', () => {
   const body = mainSource.match(/async function bootSceneWithFinalDefaults\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
@@ -148,10 +149,37 @@ test('cinematic look pass is default-on with URL rollback and inserted after FSR
   // L'encode va all'ultimo pass della catena: il cinematic look quando e' acceso,
   // altrimenti torna al pass FSR che ridiventa l'ultimo.
   assert.match(mainSource, /const lastPassIsLook = linearPipeline && cinematicLookEnabled;/);
-  assert.match(mainSource, /createFsrUpscalePass\(!lastPassIsLook\)/);
+  assert.match(mainSource, /fsrPassCarriesOutputEncode = !lastPassIsLook;/);
+  assert.match(mainSource, /createFsrUpscalePass\(fsrPassCarriesOutputEncode\)/);
+  // Il pass FSR resta acceso solo se porta l'encode o fa upscale/sharpen: senza
+  // niente da fare il suo shader e' una copia full-screen, un pass di puro fill.
+  assert.match(mainSource, /fsrUpscalePass\.enabled = fsrPassCarriesOutputEncode \|\| isFsrUpscaleActive\(\) \|\| fsrSharpness > 0;/);
   assert.match(mainSource, /composer\.addPass\(fsrUpscalePass\)[\s\S]*composer\.addPass\(cinematicLookPass\)/);
   assert.match(mainSource, /cinematicLookPass\?\.enabled/);
   assert.match(mainSource, /cinematicLookPassEnabled:\s*Boolean\(cinematicLookPass\?\.enabled\)/);
+});
+
+test('bloom is folded into the cinematic look only when the two passes are adjacent', () => {
+  // Il pass bloom chiude aggiungendosi da solo dentro il buffer della scena: un
+  // draw full-screen che con MSAA acceso rasterizza al sample rate del target.
+  // Quando subito dopo c'e' il look, quella somma si fa nello shader del look.
+  assert.match(bloomSource, /this\.compositeToInput = true;/);
+  assert.match(bloomSource, /const skipBlend = this\.compositeToInput === false && this\.renderToScreen === false;/);
+  assert.match(bloomSource, /bloomTexture\(\) \{/);
+  assert.match(shadersSource, /uniform sampler2D tBloom;/);
+  assert.match(shadersSource, /vec3 tronLookSource\(vec2 uv\)/);
+  // Il clamp riproduce il target a 8 bit in cui la somma finiva prima del grade,
+  // ma solo sul percorso MSAA: senza MSAA il composer gira su HalfFloat, dove il
+  // vecchio blend non tagliava mai.
+  assert.match(shadersSource, /uniform float bloomClamp;/);
+  assert.match(shadersSource, /bloomClamp > 0\.5 \? clamp\(sum, 0\.0, 1\.0\) : sum;/);
+  assert.match(mainSource, /uniforms\.bloomClamp\.value = composerMsaaActive \? 1 : 0;/);
+  // FXAA, TAA e FSR lavorano sull'immagine gia' combinata: se uno di loro e'
+  // acceso il bloom deve tornare nel buffer prima che girino.
+  assert.match(mainSource, /function syncBloomLookMerge\(\)/);
+  assert.match(mainSource, /!fxaaPass\?\.enabled[\s\S]*!temporalAaPass\?\.enabled[\s\S]*!fsrUpscalePass\?\.enabled/);
+  assert.match(mainSource, /bloomPass\.compositeToInput = !merged;/);
+  assert.match(mainSource, /syncTemporalAaPass\(\);\n  syncBloomLookMerge\(\);/);
 });
 
 test('temporal AA defaults on and runs after the cinematic look pass', () => {

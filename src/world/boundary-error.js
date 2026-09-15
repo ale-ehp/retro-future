@@ -195,9 +195,18 @@ function makeBoundaryErrorTexture() {
   ctx.globalAlpha = 1;
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  // The glitch re-uploads this texture several times a second while the player
+  // leans on the boundary, and a mipmapped upload makes the driver rebuild the
+  // whole mip chain each time. The panel is screen-facing and read from close
+  // up, so the chain buys nothing.
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
   return texture;
 }
 
+// Slices are copied from the pristine base canvas rather than from the canvas
+// being drawn into: a self-copy makes the browser snapshot the destination on
+// every drawImage, and it compounded brightness slice over slice under 'lighter'.
 function makeBoundaryErrorGlitchTexture(phase = 0, strength = 0.65) {
   const canvas = boundaryErrorGlitchCanvas;
   const ctx = canvas.getContext('2d');
@@ -214,7 +223,7 @@ function makeBoundaryErrorGlitchTexture(phase = 0, strength = 0.65) {
     const h = 3 + ((seed + i * 13) % 14) * amount;
     const shift = (((seed + i * 7) % 2) ? 1 : -1) * (4 + ((seed + i * 19) % 22)) * amount;
     ctx.globalAlpha = 0.22 + amount * 0.12;
-    ctx.drawImage(canvas, 130, y, 500, h, 130 + shift, y, 500, h);
+    ctx.drawImage(boundaryErrorBaseImage, 130, y, 500, h, 130 + shift, y, 500, h);
   }
   ctx.globalAlpha = Math.min(0.46, amount * 0.24);
   ctx.fillStyle = 'rgba(98,247,255,0.85)';
@@ -226,6 +235,11 @@ function makeBoundaryErrorGlitchTexture(phase = 0, strength = 0.65) {
   ctx.restore();
   return canvas;
 }
+
+// Each glitch step recomposes the 768x360 canvas and re-uploads ~1.1MB: 0.15s
+// between recompositions (about 7Hz) keeps the stutter reading as a glitch while
+// nearly halving the raster + upload work of a boundary bump.
+const BOUNDARY_ERROR_GLITCH_TEXTURE_MIN_INTERVAL_SEC = 0.15;
 
 function updateBoundaryErrorGlitchTexture(glitchSnap) {
   if (boundaryErrorGlitch <= 0.001) {
@@ -241,7 +255,7 @@ function updateBoundaryErrorGlitchTexture(glitchSnap) {
   const nextStrength = boundaryErrorGlitch * (0.45 + boundaryErrorPulse * 0.55);
   const textureAgeDelta = boundaryErrorAge - boundaryErrorTextureLastAge;
   if (
-    textureAgeDelta < 0.08 &&
+    textureAgeDelta < BOUNDARY_ERROR_GLITCH_TEXTURE_MIN_INTERVAL_SEC &&
     Math.abs(nextStrength - boundaryErrorTextureLastStrength) < 0.08
   ) {
     return;

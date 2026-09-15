@@ -83,7 +83,13 @@ export let cityRevealWaitingForVisibleFrame = false;
 export const cityRevealOverlayScene = new THREE.Scene();
 export const cityRevealOverlayCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
 cityRevealOverlayCamera.position.z = 1;
-export const cityRevealFadeDurationMs = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : cityRevealFadeMs;
+// Built once: matchMedia() parses the query and allocates a MediaQueryList on
+// every call, and this runs per frame during the sweep. The list stays live, so
+// a preference change mid-session is still picked up by reading .matches.
+const reducedMotionQuery = typeof window !== 'undefined' && window.matchMedia
+  ? window.matchMedia('(prefers-reduced-motion: reduce)')
+  : null;
+export const cityRevealFadeDurationMs = () => (reducedMotionQuery?.matches ? 1 : cityRevealFadeMs);
 export const cityRevealEffectiveDelayMs = () => cityRevealDelayMs + CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS;
 export const cityRevealBackplateMat = new THREE.MeshBasicMaterial({
   color: 0x000709,
@@ -1034,12 +1040,24 @@ export function isCityRevealBackplateActive() {
   return cityRevealBackplate.visible && cityRevealBackplateMat.opacity > 0.002;
 }
 
+// Cheap public signal of "the reveal is over" for the page chrome in index.html.
+// It used to poll __tronInspect() every 400ms just to read this one boolean,
+// rebuilding the whole diagnostic dump each time — inside the very window the
+// rest of the code protects by freezing the secondary effects.
+function publishCityRevealCompleteFlag(complete) {
+  if (typeof window === 'undefined') return;
+  window.__tronRevealComplete = complete;
+  if (complete) window.dispatchEvent(new CustomEvent('tron-reveal-complete'));
+}
+
 export function markCityRevealComplete(now = performance.now()) {
+  const wasComplete = cityRevealComplete;
   if (!cityRevealComplete || !cityRevealCompletedAt) {
     cityRevealCompletedAt = Number.isFinite(now) && now > 0 ? now : performance.now();
   }
   cityRevealComplete = true;
   runtime.syncCityRevealSkyMaterial();
+  if (!wasComplete) publishCityRevealCompleteFlag(true);
 }
 
 export function startCityRevealWireframe() {
@@ -1063,6 +1081,7 @@ export function startCityRevealWireframe() {
   cityRevealComplete = false;
   cityRevealCompletedAt = 0;
   cityRevealWaitingForVisibleFrame = false;
+  publishCityRevealCompleteFlag(false);
   setCityRevealWireAlpha(1);
   runtime.stopMouseLookInput();
 }
