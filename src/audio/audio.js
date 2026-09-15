@@ -1,4 +1,6 @@
-import * as THREE from 'three';
+// Audio priming must not import the 3D engine before the visitor starts the demo.
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const lerp = (a, b, t) => (1 - t) * a + t * b;
 
 export const TRON_SYNTH_MUSIC_ENABLED = true;
 export const TRON_SYNTH_MUSIC_BPM = 96;
@@ -65,8 +67,8 @@ export function createTronIntroNoiseBuffer(ctx) {
 }
 
 export function createTronIntroBitcrushCurve(bitDepth, crusher, soundtrack) {
-  const safeBits = THREE.MathUtils.clamp(Math.round(bitDepth), 2, 16);
-  const safeCrusher = THREE.MathUtils.clamp(Number(crusher) || 0, 0, 1);
+  const safeBits = clamp(Math.round(bitDepth), 2, 16);
+  const safeCrusher = clamp(Number(crusher) || 0, 0, 1);
   const key = `${safeBits}:${safeCrusher.toFixed(3)}`;
   if (soundtrack.introBitcrushCurveKey === key && soundtrack.introBitcrushCurve) return soundtrack.introBitcrushCurve;
   const levels = Math.max(2, 2 ** safeBits);
@@ -74,7 +76,7 @@ export function createTronIntroBitcrushCurve(bitDepth, crusher, soundtrack) {
   for (let i = 0; i < curve.length; i += 1) {
     const x = (i / (curve.length - 1)) * 2 - 1;
     const crushed = Math.round(x * levels) / levels;
-    curve[i] = THREE.MathUtils.lerp(x, crushed, safeCrusher);
+    curve[i] = lerp(x, crushed, safeCrusher);
   }
   soundtrack.introBitcrushCurve = curve;
   soundtrack.introBitcrushCurveKey = key;
@@ -82,7 +84,7 @@ export function createTronIntroBitcrushCurve(bitDepth, crusher, soundtrack) {
 }
 
 export function createTronIntroDistortionCurve(amount, soundtrack) {
-  const safeAmount = THREE.MathUtils.clamp(Number(amount) || 0, 0, 1);
+  const safeAmount = clamp(Number(amount) || 0, 0, 1);
   const key = safeAmount.toFixed(3);
   if (soundtrack.introDistortionCurveKey === key && soundtrack.introDistortionCurve) return soundtrack.introDistortionCurve;
   const drive = 1 + safeAmount * 44;
@@ -90,7 +92,7 @@ export function createTronIntroDistortionCurve(amount, soundtrack) {
   for (let i = 0; i < curve.length; i += 1) {
     const x = (i / (curve.length - 1)) * 2 - 1;
     const shaped = (Math.atan(x * drive) / Math.atan(drive));
-    curve[i] = THREE.MathUtils.lerp(x, shaped, safeAmount);
+    curve[i] = lerp(x, shaped, safeAmount);
   }
   soundtrack.introDistortionCurve = curve;
   soundtrack.introDistortionCurveKey = key;
@@ -125,9 +127,9 @@ export function rampGain(ctx, gainNode, value, seconds, fromValue = null) {
 
 export function tronIntroFxEffectiveFilters(soundtrack) {
   const fx = soundtrack.introFx;
-  const telephone = THREE.MathUtils.clamp(fx.telephone, 0, 1);
-  const telephoneHighpass = THREE.MathUtils.lerp(20, 520, telephone);
-  const telephoneLowpass = THREE.MathUtils.lerp(20000, 3300, telephone);
+  const telephone = clamp(fx.telephone, 0, 1);
+  const telephoneHighpass = lerp(20, 520, telephone);
+  const telephoneLowpass = lerp(20000, 3300, telephone);
   const highpassHz = Math.max(20, fx.highpassHz, telephoneHighpass);
   const lowpassHz = Math.max(highpassHz + 100, Math.min(20000, fx.lowpassHz, telephoneLowpass));
   return {
@@ -162,7 +164,7 @@ export function syncTronIntroFxNodeSettings(soundtrack, ctx, fadeSeconds = 0.04)
 export function applyTronSoundtrackIntroLofiMix(soundtrack, ctx, active, fadeSeconds = TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS) {
   const fx = soundtrack.introFx;
   const fxActive = Boolean(active && fx.enabled);
-  const mix = fxActive ? THREE.MathUtils.clamp(fx.mix, 0, 1) : 0;
+  const mix = fxActive ? clamp(fx.mix, 0, 1) : 0;
   const dry = 1 - mix;
   const wet = mix;
   const lfoDepth = fxActive ? fx.wobble * TRON_SOUNDTRACK_INTRO_FX_MAX_WOBBLE_DEPTH_HZ : 0.0001;
@@ -459,7 +461,7 @@ export function stopTronFileSoundtrack(deps, fadeSeconds = TRON_SOUNDTRACK_STOP_
 export function setTronFileSoundtrackVolume(deps, value = TRON_SOUNDTRACK_VOLUME) {
   const { soundtrack, getCtx } = deps;
   const ctx = getCtx();
-  const next = THREE.MathUtils.clamp(Number(value), 0, 1.2);
+  const next = clamp(Number(value), 0, 1.2);
   if (!Number.isFinite(next)) return false;
   soundtrack.targetVolume = next;
   if (!soundtrack.playing) return true;

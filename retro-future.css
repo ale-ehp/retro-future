@@ -564,9 +564,9 @@
     line-height: 1;
     letter-spacing: 0;
     filter: brightness(1);
-    animation: welcome-start-button-pulse 1s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    isolation: isolate;
     transition: none;
-    will-change: background-color, filter, box-shadow;
+
   }
   .welcome-start-button:hover {
     animation: none;
@@ -579,19 +579,24 @@
     outline: 3px solid oklch(42% 0.16 255);
     outline-offset: 5px;
   }
+  .welcome-start-button::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    box-shadow: 0 0 18px oklch(73% 0.19 45 / 0.22), 0 0 42px oklch(73% 0.19 45 / 0.1);
+    animation: welcome-start-button-pulse 1s ease-in-out infinite;
+  }
   @keyframes welcome-start-button-pulse {
-    0%, 100% {
-      background-color: oklch(68% 0.19 45);
-      filter: brightness(1) saturate(1) drop-shadow(0 0 0 oklch(73% 0.19 45 / 0)) drop-shadow(0 0 0 oklch(73% 0.19 45 / 0));
-      box-shadow: 0 0 0 0 oklch(68% 0.19 45 / 0);
-    }
-    50% {
-      background-color: oklch(73% 0.19 45);
-      filter: brightness(1.08) saturate(1.04) drop-shadow(0 0 10px oklch(73% 0.19 45 / 0.26)) drop-shadow(0 0 28px oklch(73% 0.19 45 / 0.12));
-      box-shadow:
-        0 0 18px oklch(73% 0.19 45 / 0.22),
-        0 0 42px oklch(73% 0.19 45 / 0.1);
-    }
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+  }
+  .welcome-start-button[aria-busy="true"] { font-size: clamp(22px, 3vw, 36px); cursor: progress; }
+  .welcome-start-button:hover::before,
+  .welcome-start-button[aria-busy="true"]::before { animation: none; opacity: 0; }
+  @media (prefers-reduced-motion: reduce) {
+    .welcome-start-button::before { animation: none; opacity: 0; }
   }
   .welcome-home-link {
     position: relative;
