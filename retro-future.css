@@ -720,7 +720,7 @@
     .welcome-departments {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 18px;
-      width: min(448px, 92vw);
+      width: min(448px, 100%);
     }
     .welcome-department-card {
       min-height: 179px;
@@ -728,7 +728,7 @@
     }
     .welcome-department-face {
       height: 112px;
-      width: min(200px, 108%);
+      width: min(200px, 100%);
     }
   }
   @media (max-width: 560px) {
@@ -739,7 +739,9 @@
       gap: 0;
     }
     .welcome-start-button {
-      min-width: min(430px, 88vw);
+      box-sizing: border-box;
+      min-width: 0;
+      width: min(430px, 100%);
       min-height: 96px;
       margin-block: 30px 34px;
       padding-inline: 22px;
@@ -754,7 +756,7 @@
     }
     .welcome-department-face {
       height: 96px;
-      width: min(174px, 108%);
+      width: min(174px, 100%);
     }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -1532,3 +1534,6 @@
   @media (prefers-reduced-motion: reduce) {
     .rf-rotate-icon { animation: none; transform: rotate(-45deg); }
   }
+
+.welcome-model-credit { display: block; margin-top: 8px; color: #9aa5ad; font-size: 10px; line-height: 1.5; }
+.welcome-model-credit a { color: inherit; text-decoration: underline; }

@@ -181,19 +181,19 @@
       <h1 id="welcome-window-title">Ti aspettavi una pagina con reparti e foto.</h1>
       <div class="welcome-departments" role="list" aria-label="Dipartimenti">
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-1" width="240" height="180" data-face-index="0" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#00d4ff" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-1" width="240" height="180" data-face-index="0" data-head-model="assets/models/kaonashi-no-face.glb" data-head-color="#00d4ff" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 1</span>
         </div>
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-2" width="240" height="180" data-face-index="1" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#2fd37a" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-2" width="240" height="180" data-face-index="1" data-head-model="assets/models/kaonashi-no-face.glb" data-head-color="#2fd37a" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 2</span>
         </div>
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-3" width="240" height="180" data-face-index="2" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#ff7a18" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-3" width="240" height="180" data-face-index="2" data-head-model="assets/models/kaonashi-no-face.glb" data-head-color="#ff7a18" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 3</span>
         </div>
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-4" width="240" height="180" data-face-index="3" data-head-model="assets/models/anime-head-practice.glb" data-head-color="#4d9bff" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-4" width="240" height="180" data-face-index="3" data-head-model="assets/models/kaonashi-no-face.glb" data-head-color="#4d9bff" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 4</span>
         </div>
       </div>
@@ -201,6 +201,7 @@
         Esplora i reparti
       </button>
       <a class="welcome-home-link" href="/">torna alla home</a>
+      <small class="welcome-model-credit">Kaonashi (No-Face) · <a href="https://sketchfab.com/3d-models/kaonashi-no-face-bc0b122ee31a4909b3b2cee99c824ad0" target="_blank" rel="noopener noreferrer">Riccardo Mazzi</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small>
       <p class="welcome-action" aria-hidden="true"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></p>
     </div>
   </article>
@@ -787,7 +788,7 @@
 
 <script type="module">
 const canvases = Array.from(document.querySelectorAll('.welcome-department-face[data-head-model]'));
-const modelUrl = canvases[0]?.dataset.headModel || 'assets/models/anime-head-practice.glb';
+const modelUrl = canvases[0]?.dataset.headModel || 'assets/models/kaonashi-no-face.glb';
 const state = {
   colors: canvases.map((canvas) => canvas.dataset.headColor || '#00d4ff'),
   disposed: false,
@@ -795,7 +796,7 @@ const state = {
   fullHeadTintCount: 0,
   hoverActiveCount: 0,
   loadedCount: 0,
-  mode: 'anime-head-glb',
+  mode: 'kaonashi-glb',
   originalMaterialCount: 0,
   ready: false,
   scheduled: false,
@@ -854,15 +855,8 @@ async function initWelcomeDepartmentHeads() {
 
   const yaws = [-0.34, -0.12, 0.12, 0.34];
 
-  // One WebGL context for all four heads instead of one per card. Creating a GL
-  // context costs tens of ms in the driver and pins a whole antialiased
-  // backbuffer, and these four were being created right while the city was
-  // importing its modules, compiling shaders and uploading textures on the same
-  // thread and GPU. The heads are near-static (they re-render only on hover), so
-  // rendering them one at a time into a shared offscreen canvas and blitting the
-  // result into each card's 2D canvas is visually identical — and the 2D canvas
-  // keeps the last frame on its own, so preserveDrawingBuffer is no longer part
-  // of the per-card cost.
+  // Share one WebGL context across the four automatically rotating previews.
+  // Card dimensions are cached on resize; animation does not read layout.
   const sharedHeadCanvas = document.createElement('canvas');
   const sharedHeadRenderer = new THREE.WebGLRenderer({
     alpha: false,
@@ -876,17 +870,20 @@ async function initWelcomeDepartmentHeads() {
   state.sharedRenderer = true;
 
   function resizeView(view) {
-    const rect = view.canvas.getBoundingClientRect();
-    const width = Math.max(1, Math.round(rect.width || 176));
-    const height = Math.max(1, Math.round(rect.height || 118));
+    const { width, height } = view.size;
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-    sharedHeadRenderer.setPixelRatio(pixelRatio);
-    sharedHeadRenderer.setSize(width, height, false);
+    if (sharedHeadRenderer.getPixelRatio() !== pixelRatio) sharedHeadRenderer.setPixelRatio(pixelRatio);
+    if (sharedHeadCanvas.width !== Math.floor(width * pixelRatio) || sharedHeadCanvas.height !== Math.floor(height * pixelRatio)) {
+      sharedHeadRenderer.setSize(width, height, false);
+    }
     const bufferWidth = sharedHeadCanvas.width;
     const bufferHeight = sharedHeadCanvas.height;
     if (view.canvas.width !== bufferWidth) view.canvas.width = bufferWidth;
     if (view.canvas.height !== bufferHeight) view.canvas.height = bufferHeight;
     view.camera.aspect = width / height;
+    const halfFov = THREE.MathUtils.degToRad(view.camera.fov / 2);
+    const limitingFov = Math.min(halfFov, Math.atan(Math.tan(halfFov) * view.camera.aspect));
+    view.camera.position.set(0, 0, 1.12 / Math.sin(limitingFov));
     view.camera.updateProjectionMatrix();
   }
 
@@ -905,6 +902,7 @@ async function initWelcomeDepartmentHeads() {
     camera.position.set(0, 0.08, 4.5);
 
     const context = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
 
     const ambient = new THREE.HemisphereLight(0xcffaff, 0x031013, 1.25);
     const key = new THREE.DirectionalLight(0xe9feff, 2.05);
@@ -915,8 +913,9 @@ async function initWelcomeDepartmentHeads() {
     scene.add(ambient, key, rim);
 
     return {
-      basePitch: -0.02,
-      baseYaw: yaws[index] || 0,
+      size: { width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) },
+      basePitch: 0,
+      baseYaw: Math.PI + (yaws[index] || 0),
       camera,
       canvas,
       context,
@@ -932,54 +931,21 @@ async function initWelcomeDepartmentHeads() {
     };
   }
 
-  function materialName(material) {
-    if (Array.isArray(material)) return material.map((item) => item?.name || '').join(' ');
-    return material?.name || '';
-  }
-
-  function isHeadTintTarget(node) {
-    const text = `${node.name || ''} ${materialName(node.material)}`.toLowerCase();
-    return /\beye\b|eyes|sombracelha|brow|eyebrow/.test(text);
-  }
-
-  function cloneTintMaterial(material, color) {
-    const next = material.clone();
-    if (next.color) next.color.copy(color);
-    if (next.emissive) next.emissive.copy(color).multiplyScalar(0.12);
-    next.needsUpdate = true;
-    return next;
-  }
-
-  function applyHeadFeatureTint(root, colorValue) {
-    const color = new THREE.Color(colorValue);
-    root.traverse((node) => {
-      if (!node.isMesh) return;
-      node.frustumCulled = false;
-      if (!isHeadTintTarget(node)) {
-        node.userData.welcomeHeadOriginalMaterial = true;
-        state.originalMaterialCount += 1;
-        if (/head|skin|ears/i.test(`${node.name || ''} ${materialName(node.material)}`)) {
-          node.userData.welcomeHeadFullTinted = false;
-        }
-        return;
-      }
-      node.material = Array.isArray(node.material)
-        ? node.material.map((material) => cloneTintMaterial(material, color))
-        : cloneTintMaterial(node.material, color);
-      node.userData.welcomeHeadFeatureTinted = true;
-      state.tintedFeatureCount += 1;
-    });
-  }
-
-  function fitHead(root, index) {
+  function fitHead(root) {
+    root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(root);
-    const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z, 0.001);
-    const scale = 2.28 / maxDim;
-    root.scale.setScalar(scale);
-    root.position.set(-center.x * scale, -center.y * scale - 0.08, -center.z * scale);
-    root.rotation.set(-0.02, yaws[index] || 0, 0);
+    const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 0.001);
+    const centered = new THREE.Group();
+    centered.add(root);
+    root.position.sub(center);
+    centered.scale.setScalar(1 / radius);
+    const pivot = new THREE.Group();
+    pivot.add(centered);
+    root.traverse((node) => {
+      if (node.isMesh) state.originalMaterialCount += 1;
+    });
+    return pivot;
   }
 
   const views = canvases.map(makeView);
@@ -987,76 +953,47 @@ async function initWelcomeDepartmentHeads() {
 
   let headMotionFrame = 0;
   let lastHeadMotionTime = 0;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const overlayVisible = () => !document.getElementById('welcome-window-overlay')?.classList.contains('is-dismissed');
 
   function scheduleWelcomeHeadMotion() {
-    if (state.disposed || headMotionFrame) return;
+    if (state.disposed || headMotionFrame || document.hidden || reducedMotion.matches || !overlayVisible()) return;
     headMotionFrame = requestAnimationFrame(animateWelcomeHeadMotion);
   }
 
   function animateWelcomeHeadMotion(now) {
     headMotionFrame = 0;
-    const dt = lastHeadMotionTime ? Math.min(0.05, Math.max(0.001, (now - lastHeadMotionTime) / 1000)) : 0.016;
-    lastHeadMotionTime = now;
-    const headEase = 1 - Math.exp(-dt * 10);
-    let needsNextFrame = false;
-    views.forEach((view) => {
-      if (!view.head) return;
-      const yawDelta = view.targetYaw - view.currentYaw;
-      view.currentYaw += yawDelta * headEase;
-      view.currentPitch = 0;
-      const moving = Math.abs(yawDelta) > 0.001;
-      if (moving) needsNextFrame = true;
-      view.head.rotation.y = view.baseYaw + view.currentYaw;
-      view.head.rotation.x = view.basePitch;
-      // only re-render the view that is actually moving; idle heads keep their last frame
-      // (canvases use preserveDrawingBuffer) instead of 4 full WebGL renders every hover frame
-      if (moving) renderView(view);
-    });
-    if (needsNextFrame) {
-      scheduleWelcomeHeadMotion();
-    } else {
+    if (state.disposed || document.hidden || reducedMotion.matches || !overlayVisible()) {
       lastHeadMotionTime = 0;
+      return;
     }
-  }
-
-  function updateHoverState() {
-    state.hoverActiveCount = views.filter((view) => view.hoverActive).length;
-  }
-
-  function setHeadRotationFromPointer(view, event) {
-    const rect = view.canvas.getBoundingClientRect();
-    const nx = THREE.MathUtils.clamp(((event.clientX - rect.left) / Math.max(1, rect.width) - 0.5) * 2, -1, 1);
-    view.targetYaw = nx * 0.34;
-    view.targetPitch = 0;
+    const elapsed = lastHeadMotionTime ? now - lastHeadMotionTime : 1000 / 30;
+    if (elapsed >= 1000 / 30) {
+      const dt = Math.min(0.1, elapsed / 1000);
+      lastHeadMotionTime = now;
+      views.forEach((view) => {
+        if (!view.head) return;
+        view.currentYaw += dt * 0.35;
+        view.head.rotation.y = view.baseYaw + view.currentYaw;
+        renderView(view);
+      });
+    }
     scheduleWelcomeHeadMotion();
   }
 
-  views.forEach((view) => {
-    view.hitTarget.addEventListener('pointerenter', (event) => {
-      view.hoverActive = true;
-      updateHoverState();
-      setHeadRotationFromPointer(view, event);
-    }, { passive: true });
-    view.hitTarget.addEventListener('pointermove', (event) => {
-      if (!view.hoverActive) return;
-      setHeadRotationFromPointer(view, event);
-    }, { passive: true });
-    view.hitTarget.addEventListener('pointerleave', () => {
-      view.hoverActive = false;
-      view.targetYaw = 0;
-      view.targetPitch = 0;
-      scheduleWelcomeHeadMotion();
-      updateHoverState();
-    }, { passive: true });
-  });
+  const resumeMotion = () => {
+    lastHeadMotionTime = 0;
+    scheduleWelcomeHeadMotion();
+  };
+  document.addEventListener('visibilitychange', resumeMotion);
+  reducedMotion.addEventListener('change', resumeMotion);
 
   const loader = new GLTFLoader();
   loader.load(modelUrl, (gltf) => {
     if (state.disposed) return;
     views.forEach((view, index) => {
-      const head = gltf.scene.clone(true);
-      applyHeadFeatureTint(head, state.colors[index]);
-      fitHead(head, index);
+      const head = fitHead(gltf.scene.clone(true));
+      head.rotation.y = view.baseYaw;
       view.head = head;
       view.currentYaw = 0;
       view.currentPitch = 0;
@@ -1068,7 +1005,10 @@ async function initWelcomeDepartmentHeads() {
       state.loadedCount += 1;
     });
     state.ready = state.loadedCount === views.length;
-    if (state.ready) state.status = 'ready';
+    if (state.ready) {
+      state.status = 'ready';
+      scheduleWelcomeHeadMotion();
+    }
     state.fullHeadTintCount = views.reduce((count, view) => {
       let tinted = count;
       view.head?.traverse((node) => {
@@ -1085,7 +1025,14 @@ async function initWelcomeDepartmentHeads() {
   let resizeFrame = 0;
   const onWelcomeHeadsResize = () => {
     cancelAnimationFrame(resizeFrame);
-    resizeFrame = requestAnimationFrame(() => views.forEach(renderView));
+    resizeFrame = requestAnimationFrame(() => {
+      if (state.disposed) return;
+      views.forEach((view) => {
+        const rect = view.canvas.getBoundingClientRect();
+        view.size = { width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) };
+      });
+      views.forEach(renderView);
+    });
   };
   window.addEventListener('resize', onWelcomeHeadsResize, { passive: true });
 
@@ -1099,6 +1046,8 @@ async function initWelcomeDepartmentHeads() {
     headMotionFrame = 0;
     cancelAnimationFrame(resizeFrame);
     window.removeEventListener('resize', onWelcomeHeadsResize);
+    document.removeEventListener('visibilitychange', resumeMotion);
+    reducedMotion.removeEventListener('change', resumeMotion);
     const geometries = new Set();
     const materials = new Set();
     views.forEach((view) => {
@@ -1117,7 +1066,12 @@ async function initWelcomeDepartmentHeads() {
     sharedHeadRenderer.dispose();
     sharedHeadRenderer.forceContextLoss();
     geometries.forEach((geometry) => geometry.dispose());
-    materials.forEach((material) => material.dispose());
+    const textures = new Set();
+    materials.forEach((material) => {
+      Object.values(material).forEach((value) => { if (value?.isTexture) textures.add(value); });
+      material.dispose();
+    });
+    textures.forEach((texture) => texture.dispose());
   }
 
   const overlay = document.getElementById('welcome-window-overlay');

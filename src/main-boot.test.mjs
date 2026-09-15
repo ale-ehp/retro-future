@@ -366,19 +366,7 @@ test('welcome department tiles fit all four columns without clipping the last ca
   assert.match(cssSource, /\.welcome-department-face\s*\{[\s\S]*height:\s*145px/);
 });
 
-test('welcome department heads move only on the horizontal axis with smoothed easing', () => {
-  assert.match(htmlSource, /function animateWelcomeHeadMotion\(now\)/);
-  assert.match(htmlSource, /requestAnimationFrame\(animateWelcomeHeadMotion\)/);
-  assert.match(htmlSource, /const headEase = 1 - Math\.exp\(-dt \* 10\)/);
-  assert.match(htmlSource, /const nx =/);
-  assert.match(htmlSource, /view\.targetPitch = 0/);
-  assert.doesNotMatch(htmlSource, /view\.currentPitch = view\.targetPitch/);
-  assert.doesNotMatch(htmlSource, /view\.currentYaw = view\.targetYaw/);
-  assert.match(htmlSource, /view\.head\.rotation\.y = view\.baseYaw \+ view\.currentYaw/);
-  assert.match(htmlSource, /view\.head\.rotation\.x = view\.basePitch/);
-});
-
-test('welcome cover shows four colored anime GLB department heads above the start button', () => {
+test('welcome cover shows four Kaonashi GLB department models above the start button', () => {
   assert.ok(
     htmlSource.indexOf('class="welcome-departments"') < htmlSource.indexOf('id="welcome-start-button"'),
     'department tiles should render above the start button',
@@ -393,7 +381,7 @@ test('welcome cover shows four colored anime GLB department heads above the star
   assert.doesNotMatch(htmlSource, /welcome-wireframe-profile/);
   assert.doesNotMatch(htmlSource, /welcome-department-wireframe/);
   assert.equal((htmlSource.match(/class="welcome-department-face/g) || []).length, 4);
-  assert.equal((htmlSource.match(/data-head-model="assets\/models\/anime-head-practice\.glb"/g) || []).length, 4);
+  assert.equal((htmlSource.match(/data-head-model="assets\/models\/kaonashi-no-face\.glb"/g) || []).length, 4);
   assert.equal((htmlSource.match(/data-head-color="/g) || []).length, 4);
   assert.equal((htmlSource.match(/style="--welcome-head-accent:/g) || []).length, 0);
   assert.doesNotMatch(htmlSource, /--welcome-head-accent/);
@@ -418,21 +406,15 @@ test('welcome cover shows four colored anime GLB department heads above the star
   assert.match(htmlSource, /state\.status = 'scheduled'/);
   assert.match(htmlSource, /state\.status = 'loading'/);
   assert.match(htmlSource, /state\.status = 'ready'/);
-  assert.match(htmlSource, /mode:\s*'anime-head-glb'/);
-  assert.match(htmlSource, /function isHeadTintTarget\(node\)/);
-  assert.match(htmlSource, /function applyHeadFeatureTint\(root, colorValue\)/);
-  assert.match(htmlSource, /node\.userData\.welcomeHeadFeatureTinted = true/);
+  assert.match(htmlSource, /mode:\s*'kaonashi-glb'/);
   assert.doesNotMatch(htmlSource, /function colorizeHead\(root, colorValue\)/);
   assert.doesNotMatch(htmlSource, /node\.material = new THREE\.MeshStandardMaterial/);
   assert.match(htmlSource, /hitTarget:\s*canvas\.closest\('\.welcome-department-card'\) \|\| canvas/);
-  assert.match(htmlSource, /view\.hitTarget\.addEventListener\('pointerenter'/);
-  assert.match(htmlSource, /view\.hitTarget\.addEventListener\('pointermove'/);
-  assert.match(htmlSource, /view\.hitTarget\.addEventListener\('pointerleave'/);
   assert.match(htmlSource, /hoverActive:\s*false/);
   assert.match(htmlSource, /targetYaw/);
-  const headModelUrl = new URL('../assets/models/anime-head-practice.glb', import.meta.url);
-  assert.ok(existsSync(headModelUrl), 'anime head GLB asset should be copied into retro-future assets');
-  assert.ok(statSync(headModelUrl).size > 100_000, 'anime head GLB asset should not be empty');
+  const headModelUrl = new URL('../assets/models/kaonashi-no-face.glb', import.meta.url);
+  assert.ok(existsSync(headModelUrl), 'Kaonashi GLB asset should be copied into retro-future assets');
+  assert.ok(statSync(headModelUrl).size > 100_000, 'Kaonashi GLB asset should not be empty');
   assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*position:\s*relative[\s\S]*z-index:\s*3/);
   assert.match(cssSource, /\.welcome-departments\s*\{[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(cssSource, /\.welcome-departments\s*\{[^}]*pointer-events:\s*auto/);
