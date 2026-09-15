@@ -181,19 +181,19 @@
       <h1 id="welcome-window-title">Ti aspettavi una pagina con reparti e foto.</h1>
       <div class="welcome-departments" role="list" aria-label="Dipartimenti">
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-1" width="240" height="180" data-face-index="0" data-head-model="assets/models/kaonashi-no-face.glb" data-head-color="#00d4ff" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-1" width="240" height="180" data-face-index="0" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#00d4ff" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 1</span>
         </div>
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-2" width="240" height="180" data-face-index="1" data-head-model="assets/models/kaonashi-no-face.glb" data-head-color="#2fd37a" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-2" width="240" height="180" data-face-index="1" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#2fd37a" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 2</span>
         </div>
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-3" width="240" height="180" data-face-index="2" data-head-model="assets/models/kaonashi-no-face.glb" data-head-color="#ff7a18" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-3" width="240" height="180" data-face-index="2" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#ff7a18" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 3</span>
         </div>
         <div class="welcome-department-card" role="listitem">
-          <canvas class="welcome-department-face face-angle-4" width="240" height="180" data-face-index="3" data-head-model="assets/models/kaonashi-no-face.glb" data-head-color="#4d9bff" aria-hidden="true"></canvas>
+          <canvas class="welcome-department-face face-angle-4" width="240" height="180" data-face-index="3" data-head-model="assets/models/kaonashi-no-face-clean.glb" data-head-color="#4d9bff" aria-hidden="true"></canvas>
           <span class="welcome-department-label">Dipartimento 4</span>
         </div>
       </div>
@@ -201,7 +201,7 @@
         Esplora i reparti
       </button>
       <a class="welcome-home-link" href="/">torna alla home</a>
-      <small class="welcome-model-credit">Kaonashi (No-Face) · <a href="https://sketchfab.com/3d-models/kaonashi-no-face-bc0b122ee31a4909b3b2cee99c824ad0" target="_blank" rel="noopener noreferrer">Riccardo Mazzi</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small>
+      <small class="welcome-model-credit">Kaonashi (No-Face), adattato · <a href="https://sketchfab.com/3d-models/kaonashi-no-face-bc0b122ee31a4909b3b2cee99c824ad0" target="_blank" rel="noopener noreferrer">Riccardo Mazzi</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small>
       <p class="welcome-action" aria-hidden="true"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></p>
     </div>
   </article>
@@ -788,7 +788,7 @@
 
 <script type="module">
 const canvases = Array.from(document.querySelectorAll('.welcome-department-face[data-head-model]'));
-const modelUrl = canvases[0]?.dataset.headModel || 'assets/models/kaonashi-no-face.glb';
+const modelUrl = canvases[0]?.dataset.headModel || 'assets/models/kaonashi-no-face-clean.glb';
 const state = {
   colors: canvases.map((canvas) => canvas.dataset.headColor || '#00d4ff'),
   disposed: false,

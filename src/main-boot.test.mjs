@@ -381,7 +381,7 @@ test('welcome cover shows four Kaonashi GLB department models above the start bu
   assert.doesNotMatch(htmlSource, /welcome-wireframe-profile/);
   assert.doesNotMatch(htmlSource, /welcome-department-wireframe/);
   assert.equal((htmlSource.match(/class="welcome-department-face/g) || []).length, 4);
-  assert.equal((htmlSource.match(/data-head-model="assets\/models\/kaonashi-no-face\.glb"/g) || []).length, 4);
+  assert.equal((htmlSource.match(/data-head-model="assets\/models\/kaonashi-no-face-clean\.glb"/g) || []).length, 4);
   assert.equal((htmlSource.match(/data-head-color="/g) || []).length, 4);
   assert.equal((htmlSource.match(/style="--welcome-head-accent:/g) || []).length, 0);
   assert.doesNotMatch(htmlSource, /--welcome-head-accent/);
@@ -412,7 +412,7 @@ test('welcome cover shows four Kaonashi GLB department models above the start bu
   assert.match(htmlSource, /hitTarget:\s*canvas\.closest\('\.welcome-department-card'\) \|\| canvas/);
   assert.match(htmlSource, /hoverActive:\s*false/);
   assert.match(htmlSource, /targetYaw/);
-  const headModelUrl = new URL('../assets/models/kaonashi-no-face.glb', import.meta.url);
+  const headModelUrl = new URL('../assets/models/kaonashi-no-face-clean.glb', import.meta.url);
   assert.ok(existsSync(headModelUrl), 'Kaonashi GLB asset should be copied into retro-future assets');
   assert.ok(statSync(headModelUrl).size > 100_000, 'Kaonashi GLB asset should not be empty');
   assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*position:\s*relative[\s\S]*z-index:\s*3/);
