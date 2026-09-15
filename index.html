@@ -855,7 +855,7 @@ async function initWelcomeDepartmentHeads() {
 
   const yaws = [-0.34, -0.12, 0.12, 0.34];
 
-  // Share one WebGL context across the four automatically rotating previews.
+  // Share one WebGL context across the four pointer-responsive previews.
   // Card dimensions are cached on resize; animation does not read layout.
   const sharedHeadCanvas = document.createElement('canvas');
   const sharedHeadRenderer = new THREE.WebGLRenderer({
@@ -970,24 +970,67 @@ async function initWelcomeDepartmentHeads() {
       lastHeadMotionTime = 0;
       return;
     }
-    const elapsed = lastHeadMotionTime ? now - lastHeadMotionTime : 1000 / 30;
-    if (elapsed >= 1000 / 30) {
-      const dt = Math.min(0.1, elapsed / 1000);
-      lastHeadMotionTime = now;
-      views.forEach((view) => {
-        if (!view.head) return;
-        view.currentYaw += dt * 0.35;
-        view.head.rotation.y = view.baseYaw + view.currentYaw;
+    const dt = lastHeadMotionTime ? Math.min(0.05, (now - lastHeadMotionTime) / 1000) : 1 / 60;
+    lastHeadMotionTime = now;
+    const ease = 1 - Math.exp(-dt * 9);
+    let moving = false;
+    views.forEach((view) => {
+      if (!view.head) return;
+      const oldYaw = view.currentYaw;
+      const oldPitch = view.currentPitch;
+      view.currentYaw += (view.targetYaw - view.currentYaw) * ease;
+      view.currentPitch += (view.targetPitch - view.currentPitch) * ease;
+      if (Math.abs(view.targetYaw - view.currentYaw) < 0.0005) view.currentYaw = view.targetYaw;
+      if (Math.abs(view.targetPitch - view.currentPitch) < 0.0005) view.currentPitch = view.targetPitch;
+      moving ||= view.currentYaw !== view.targetYaw || view.currentPitch !== view.targetPitch;
+      view.head.rotation.set(view.basePitch + view.currentPitch, view.baseYaw + view.currentYaw, 0);
+      if (oldYaw !== view.currentYaw || oldPitch !== view.currentPitch) renderView(view);
+    });
+    if (moving) scheduleWelcomeHeadMotion();
+    else lastHeadMotionTime = 0;
+  }
+
+  function resetPointerMotion(immediate = false) {
+    views.forEach((view) => {
+      view.targetYaw = 0;
+      view.targetPitch = 0;
+      if (immediate && view.head) {
+        view.currentYaw = 0;
+        view.currentPitch = 0;
+        view.head.rotation.set(view.basePitch, view.baseYaw, 0);
         renderView(view);
-      });
-    }
+      }
+    });
     scheduleWelcomeHeadMotion();
   }
 
-  const resumeMotion = () => {
-    lastHeadMotionTime = 0;
+  function onHeadPointerMove(event) {
+    if (event.pointerType !== 'mouse' || state.disposed || !state.ready || reducedMotion.matches || document.hidden || !overlayVisible()) return;
+    // Batch layout reads before scheduling renders; never read layout in the animation loop.
+    const rects = views.map(view => view.canvas.getBoundingClientRect());
+    views.forEach((view, index) => {
+      const rect = rects[index];
+      const dx = event.clientX - (rect.left + rect.width / 2);
+      const dy = event.clientY - (rect.top + rect.height / 2);
+      const reach = Math.max(rect.width, rect.height) * 2;
+      const proximity = Math.max(0, 1 - Math.hypot(dx, dy) / reach);
+      const strength = proximity * proximity;
+      view.targetYaw = Math.tanh(dx / (rect.width * 0.22)) * 0.55 * strength;
+      view.targetPitch = Math.tanh(dy / (rect.height * 0.3)) * 0.22 * strength;
+    });
     scheduleWelcomeHeadMotion();
+  }
+
+  const onHeadPointerLeave = () => resetPointerMotion();
+  const resumeMotion = () => {
+    cancelAnimationFrame(headMotionFrame);
+    headMotionFrame = 0;
+    lastHeadMotionTime = 0;
+    if (!state.disposed) resetPointerMotion(true);
   };
+  window.addEventListener('pointermove', onHeadPointerMove, { passive: true });
+  document.addEventListener('pointerleave', onHeadPointerLeave);
+  window.addEventListener('blur', onHeadPointerLeave);
   document.addEventListener('visibilitychange', resumeMotion);
   reducedMotion.addEventListener('change', resumeMotion);
 
@@ -1049,6 +1092,9 @@ async function initWelcomeDepartmentHeads() {
     headMotionFrame = 0;
     cancelAnimationFrame(resizeFrame);
     window.removeEventListener('resize', onWelcomeHeadsResize);
+    window.removeEventListener('pointermove', onHeadPointerMove);
+    document.removeEventListener('pointerleave', onHeadPointerLeave);
+    window.removeEventListener('blur', onHeadPointerLeave);
     document.removeEventListener('visibilitychange', resumeMotion);
     reducedMotion.removeEventListener('change', resumeMotion);
     const geometries = new Set();
