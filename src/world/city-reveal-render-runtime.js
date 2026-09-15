@@ -108,7 +108,7 @@ export function createCityRevealRenderRuntime(deps) {
     renderer.clippingPlanes = previousClippingPlanes;
   }
 
-  function prewarmRealPass() {
+  async function prewarmRealPass() {
     if (cityRevealRealPrewarmStatus === 'done' || cityRevealRealPrewarmStatus === 'running') return;
     cityRevealRealPrewarmStatus = 'running';
     cityRevealRealPrewarmError = '';
@@ -136,7 +136,12 @@ export function createCityRevealRenderRuntime(deps) {
       scene.background = null;
       domeMesh.visible = false;
       camera.layers.set(0);
-      renderer.compile(scene, camera);
+      // Compiled with the reveal clip plane already installed, so the clipped
+      // variants are the ones being linked. compileAsync hands the linking to the
+      // driver's own threads (KHR_parallel_shader_compile) instead of blocking
+      // the boot task on every program in turn.
+      if (typeof renderer.compileAsync === 'function') await renderer.compileAsync(scene, camera);
+      else renderer.compile(scene, camera);
       renderer.render(scene, camera);
       cityRevealRealPrewarmStatus = 'done';
     } catch (error) {

@@ -22,7 +22,18 @@ export function syncTronRunnerWalkCycleToDistance({
   if (!mixer || !action || !Number.isFinite(duration) || duration <= 0.001) return false;
   const safeCycleDistance = Math.max(0.001, cycleDistance);
   const phase = ((distance / safeCycleDistance + phaseOffset) % 1 + 1) % 1;
-  action.time = phase * duration;
+  const time = phase * duration;
+  // mixer.update(0) resamples every interpolant of the clip and rewrites all the
+  // bone transforms. Members that are paused (or simply have not covered enough
+  // ground since the last tick) land on the exact same pose, so skip the resample
+  // instead of paying full skeletal sampling for an identical result. The memo
+  // lives on the mixer and records which action produced the pose, so switching
+  // action (walk <-> run) always resamples even at an identical clip time.
+  if (mixer.__walkCycleSyncedAction === action
+    && Math.abs(mixer.__walkCycleSyncedTime - time) < 1e-4) return true;
+  mixer.__walkCycleSyncedAction = action;
+  mixer.__walkCycleSyncedTime = time;
+  action.time = time;
   action.setEffectiveTimeScale(1);
   mixer.update(0);
   return true;

@@ -118,7 +118,11 @@ export function updateTronRunnerCrowdCullingState({
 }
 
 export function prepareTronRunnerCrowdSpatialGrid(spatialGrid, crowd, stats, cullingEnabled, lodNearDistance, gridCoord, gridKey) {
-  spatialGrid.clear();
+  // Recycle the bucket arrays instead of clear()ing the map: clear() threw away
+  // every bucket and the loop below then allocated a fresh array per occupied
+  // cell, on every crowd tick. Emptied cells keep their array for reuse and are
+  // pruned below once the map has drifted well past what the crowd occupies.
+  for (const bucket of spatialGrid.values()) bucket.length = 0;
   for (const member of crowd) {
     if (cullingEnabled && member.cullingVisible === false && member.cullingDistance > lodNearDistance) {
       continue;
@@ -133,7 +137,16 @@ export function prepareTronRunnerCrowdSpatialGrid(spatialGrid, crowd, stats, cul
     }
     bucket.push(member);
   }
-  stats.gridCells = spatialGrid.size;
+  let occupiedCells = 0;
+  for (const bucket of spatialGrid.values()) {
+    if (bucket.length) occupiedCells += 1;
+  }
+  stats.gridCells = occupiedCells;
+  if (spatialGrid.size > occupiedCells * 4 + 32) {
+    for (const [key, bucket] of spatialGrid) {
+      if (!bucket.length) spatialGrid.delete(key);
+    }
+  }
 }
 
 const nearbyTronRunnerCrowdMembersScratch = [];

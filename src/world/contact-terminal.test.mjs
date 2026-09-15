@@ -104,6 +104,11 @@ function createRuntimeFixture({
     sideBuildingRecords: records,
     PAL: { tealLight: 0x8ffcff },
     elStrip: () => new THREE.Object3D(),
+    addElStripRectFrame: (group) => {
+      const frame = new THREE.Object3D();
+      group.add(frame);
+      return frame;
+    },
     getBottomY: () => 4.1,
     getPlayerSpawn: () => ({ z: 800 }),
     getRevealComplete: () => true,

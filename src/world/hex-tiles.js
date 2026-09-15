@@ -265,12 +265,19 @@ export function hexRoadLodSettingsForProfile({ mobile = false } = {}) {
 }
 
 export function setHexRoadLodProfile(profile = {}) {
+  // Called once per frame with the live mobile flag, which changes only when the
+  // device profile flips: bail out before allocating the settings object and the
+  // returned copy (the per-frame caller ignores it anyway).
+  const mobile = Boolean(profile.mobile);
+  if (hexRoadLodSettings.enabled === HEX_ROAD_LOD_ENABLED && hexRoadLodSettings.mobile === mobile) {
+    return hexRoadLodSettings;
+  }
   const next = hexRoadLodSettingsForProfile(profile);
   hexRoadLodSettings.enabled = next.enabled;
   hexRoadLodSettings.nearDistance = next.nearDistance;
   hexRoadLodSettings.hysteresis = next.hysteresis;
   hexRoadLodSettings.mobile = next.mobile;
-  return { ...hexRoadLodSettings };
+  return hexRoadLodSettings;
 }
 
 export function initHexTileSync(deps) {
@@ -355,6 +362,17 @@ export function resolveHexRoadBatchLodVisible(
   return distance <= threshold * threshold;
 }
 
+const hexRoadBatchLodStatsScratch = {
+  enabled: false,
+  nearDistance: 0,
+  hysteresis: 0,
+  visibleBatches: 0,
+  hiddenBatches: 0,
+  visibleInstances: 0,
+  hiddenInstances: 0,
+  savedTriangles: 0,
+};
+
 export function applyHexRoadBatchLodVisibility(batchRecords, {
   x,
   z,
@@ -363,16 +381,17 @@ export function applyHexRoadBatchLodVisibility(batchRecords, {
   hysteresis = hexRoadLodSettings.hysteresis,
   trianglesPerInstance = HEX_ROAD_TRIANGLES_PER_INSTANCE,
 } = {}) {
-  const stats = {
-    enabled,
-    nearDistance,
-    hysteresis,
-    visibleBatches: 0,
-    hiddenBatches: 0,
-    visibleInstances: 0,
-    hiddenInstances: 0,
-    savedTriangles: 0,
-  };
+  // Reused across frames: the values are copied into hexRoadRuntimeStats by the
+  // caller, so a fresh object per frame was pure garbage in the render loop.
+  const stats = hexRoadBatchLodStatsScratch;
+  stats.enabled = enabled;
+  stats.nearDistance = nearDistance;
+  stats.hysteresis = hysteresis;
+  stats.visibleBatches = 0;
+  stats.hiddenBatches = 0;
+  stats.visibleInstances = 0;
+  stats.hiddenInstances = 0;
+  stats.savedTriangles = 0;
   for (const record of batchRecords) {
     const count = record.mesh?.count ?? 0;
     if (!enabled) {

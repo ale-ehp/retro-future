@@ -15,6 +15,18 @@ const cityRevealProfileState = {
   lastFrame: null,
 };
 
+const REVEAL_PROFILE_TRUEY = new Set(['1', 'true', 'on', 'yes']);
+
+// The per-sample scene snapshot traverses the whole scene graph (thousands of
+// Object3D once the crowd is built) plus a few sub-groups, twice a second, right
+// inside the reveal — the window the app protects by freezing everything else.
+// The numbers are only ever read from window.__tronRevealProfile, so the traverse
+// half of the sample is opt-in; the cheap per-frame accumulators always run.
+export function revealProfileDetailRequestedFromParams(params) {
+  const raw = params?.get?.('revealProfile');
+  return REVEAL_PROFILE_TRUEY.has(String(raw || '').trim().toLowerCase());
+}
+
 export function createCityRevealProfiler(deps) {
   const {
     getCityRevealStartedAt,
@@ -55,6 +67,7 @@ export function createCityRevealProfiler(deps) {
     isCityRevealMainLedRevealOverlayActive,
     cityRevealEstimatedVisibleObjects,
     shouldUseComposer,
+    detailedProfile = false,
   } = deps;
 
   function createCityRevealProfileBucket() {
@@ -140,15 +153,32 @@ export function createCityRevealProfiler(deps) {
     };
   }
 
+  const emptyRenderableCounts = Object.freeze({ total: 0, visible: 0, hidden: 0, mesh: 0, line: 0, points: 0, instanced: 0 });
+
+  function cityRevealProfileRenderables() {
+    // Skipped unless ?revealProfile=1: four scene-graph traversals per sample.
+    if (!detailedProfile) {
+      return {
+        detailed: false,
+        scene: emptyRenderableCounts,
+        wire: cityRevealWireRenderablesSnapshot(),
+        roadGrid: emptyRenderableCounts,
+        mainLedDepth: emptyRenderableCounts,
+      };
+    }
+    return {
+      detailed: true,
+      scene: countVisibleRenderables(getScene()),
+      wire: cityRevealWireRenderablesSnapshot(),
+      roadGrid: countVisibleRenderables(getCityRevealRoadGridGroup()),
+      mainLedDepth: countVisibleRenderables(getCityRevealMainLedDepthGroup()),
+    };
+  }
+
   function cityRevealProfileSceneSnapshot() {
     return {
       pipeline: composerPassProfile(),
-      renderables: {
-        scene: countVisibleRenderables(getScene()),
-        wire: cityRevealWireRenderablesSnapshot(),
-        roadGrid: countVisibleRenderables(getCityRevealRoadGridGroup()),
-        mainLedDepth: countVisibleRenderables(getCityRevealMainLedDepthGroup()),
-      },
+      renderables: cityRevealProfileRenderables(),
       reveal: {
         started: getCityRevealStartedAt() > 0,
         armed: getCityRevealArmedAt() > 0,
@@ -262,13 +292,22 @@ export function createCityRevealProfiler(deps) {
     bucket.linesSum += renderInfo?.lines ?? 0;
     bucket.pointsSum += renderInfo?.points ?? 0;
     cityRevealProfileState.frameCount++;
-    cityRevealProfileState.lastFrame = {
-      now: Number(now.toFixed(1)),
-      updateMs: Number(updateMs.toFixed(3)),
-      renderMs: Number(renderMs.toFixed(3)),
-      frameMs: Number(frameMs.toFixed(3)),
-      renderInfo: { ...renderInfo },
-    };
+    // Mutated in place: this runs on every frame of the reveal, and rebuilding the
+    // object plus spreading renderInfo allocated four objects and four strings a
+    // frame. inspect() already hands out a copy, so nobody holds a reference.
+    const lastFrame = cityRevealProfileState.lastFrame || (cityRevealProfileState.lastFrame = {
+      now: 0, updateMs: 0, renderMs: 0, frameMs: 0, renderInfo: { calls: 0, triangles: 0, lines: 0, points: 0 },
+    });
+    // Raw values here; inspect() rounds them. toFixed on the hot path built four
+    // strings a frame for numbers nobody reads until someone inspects.
+    lastFrame.now = now;
+    lastFrame.updateMs = updateMs;
+    lastFrame.renderMs = renderMs;
+    lastFrame.frameMs = frameMs;
+    lastFrame.renderInfo.calls = calls;
+    lastFrame.renderInfo.triangles = triangles;
+    lastFrame.renderInfo.lines = renderInfo?.lines ?? 0;
+    lastFrame.renderInfo.points = renderInfo?.points ?? 0;
     pushCityRevealProfileSample(profileNow, getCityRevealComplete());
   }
 
@@ -286,7 +325,15 @@ export function createCityRevealProfiler(deps) {
       sampleMs: CITY_REVEAL_PROFILE_SAMPLE_MS,
       frameCount: cityRevealProfileState.frameCount,
       sampleCount: samples.length,
-      lastFrame: cityRevealProfileState.lastFrame ? { ...cityRevealProfileState.lastFrame } : null,
+      lastFrame: cityRevealProfileState.lastFrame
+        ? {
+          now: Number(cityRevealProfileState.lastFrame.now.toFixed(1)),
+          updateMs: Number(cityRevealProfileState.lastFrame.updateMs.toFixed(3)),
+          renderMs: Number(cityRevealProfileState.lastFrame.renderMs.toFixed(3)),
+          frameMs: Number(cityRevealProfileState.lastFrame.frameMs.toFixed(3)),
+          renderInfo: { ...cityRevealProfileState.lastFrame.renderInfo },
+        }
+        : null,
       latest: samples.at(-1) || cityRevealProfileSceneSnapshot(),
       slowestRender,
       slowestFrame,

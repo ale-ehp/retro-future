@@ -43,11 +43,18 @@ export function createSkyDome(deps) {
   // pixel every frame, bake the sky into a low-res cube every few frames and
   // reuse it as scene.background (a cheap cube sample). The sky is a smooth
   // backdrop at infinity, so the cube stays valid across camera moves; only slow
-  // drift/lightning re-steps on re-bake. Mobile + steady-state only. ?skyBake=1|0
-  // overrides; SKY_BAKE_MOBILE_DEFAULT is the shipped default (kept OFF until a
-  // device A/B validates the fill win vs the periodic bake spike).
+  // drift/lightning re-steps on re-bake. Steady-state only (the reveal keeps its
+  // own procedural sky). ?skyBake=1|0 overrides.
+  //
+  // Now on by default on desktop too: the 'full' sky branch is the shipped
+  // desktop default and evaluates ~11 multi-octave 3D noise fields per sky pixel,
+  // which is roughly half the frame at street level, every frame, forever. The
+  // desktop bake uses a larger cube so the extra resolution keeps the detail the
+  // procedural branch is there for.
   const SKY_BAKE_MOBILE_DEFAULT = true;
-  const SKY_BAKE_CUBE_SIZE = 128;
+  const SKY_BAKE_DESKTOP_DEFAULT = true;
+  const SKY_BAKE_CUBE_SIZE_MOBILE = 128;
+  const SKY_BAKE_CUBE_SIZE_DESKTOP = 512;
   const SKY_BAKE_STRIDE = 12;
   const SKY_BAKE_FACE_COUNT = 6;
   const SKY_BAKE_FACE_STRIDE = skyBakeFaceStride(SKY_BAKE_STRIDE, SKY_BAKE_FACE_COUNT);
@@ -546,15 +553,33 @@ export function createSkyDome(deps) {
     lastRenderedFace: -1,
     cycles: 0,
     spread: skyBakeSpreadEnabled,
+    // Animation time the current spread cycle is rendered at. Captured on face 0
+    // and reused for faces 1-5, so the six faces share one sky state instead of
+    // each being a couple of frames further along than the last, which showed as
+    // seams along the cube edges.
+    cycleNow: 0,
   };
+  function skyBakeCubeSize() {
+    return getMobileProfileActive() ? SKY_BAKE_CUBE_SIZE_MOBILE : SKY_BAKE_CUBE_SIZE_DESKTOP;
+  }
   function skyBakeRequested() {
-    return skyBakeRequestedOverride != null
-      ? skyBakeRequestedOverride
-      : (SKY_BAKE_MOBILE_DEFAULT && getMobileProfileActive());
+    if (skyBakeRequestedOverride != null) return skyBakeRequestedOverride;
+    return getMobileProfileActive() ? SKY_BAKE_MOBILE_DEFAULT : SKY_BAKE_DESKTOP_DEFAULT;
   }
   function ensureSkyBakeTarget() {
+    const size = skyBakeCubeSize();
+    // The device profile can flip mid-session (a resize into the mobile profile),
+    // and the two profiles bake at different resolutions: rebuild on a mismatch.
+    if (skyBakeState.cubeRT && skyBakeState.cubeRT.width !== size) {
+      skyBakeState.cubeRT.dispose();
+      skyBakeState.cubeRT = null;
+      skyBakeState.cubeCam = null;
+      skyBakeState.ready = false;
+      skyBakeState.nextFace = 0;
+      skyBakeState.lastRenderedFace = -1;
+    }
     if (skyBakeState.cubeRT && skyBakeState.cubeCam) return;
-    skyBakeState.cubeRT = new THREE.WebGLCubeRenderTarget(SKY_BAKE_CUBE_SIZE);
+    skyBakeState.cubeRT = new THREE.WebGLCubeRenderTarget(size);
     skyBakeState.cubeCam = new THREE.CubeCamera(1, 20000, skyBakeState.cubeRT);
   }
   function withSkyBakeScene(now, render) {
@@ -644,7 +669,10 @@ export function createSkyDome(deps) {
       skyBakeState.spread = skyBakeSpreadEnabled;
       if (skyBakeSpreadEnabled) {
         const shouldRenderFace = !skyBakeState.ready || skyBakeState.frames % SKY_BAKE_FACE_STRIDE === 0;
-        if (shouldRenderFace) renderSkyBakeFace(now, skyBakeState.nextFace);
+        if (shouldRenderFace) {
+          if (skyBakeState.nextFace === 0) skyBakeState.cycleNow = now;
+          renderSkyBakeFace(skyBakeState.cycleNow, skyBakeState.nextFace);
+        }
       } else if (skyBakeState.frames % SKY_BAKE_STRIDE === 0) {
         renderSkyBakeFull(now);
       }
@@ -666,7 +694,7 @@ export function createSkyDome(deps) {
       active: skyBakeState.active,
       ready: skyBakeState.ready,
       spread: skyBakeState.spread,
-      cubeSize: SKY_BAKE_CUBE_SIZE,
+      cubeSize: skyBakeState.cubeRT?.width ?? skyBakeCubeSize(),
       frameStride: SKY_BAKE_STRIDE,
       faceStride: SKY_BAKE_FACE_STRIDE,
       nextFace: skyBakeState.nextFace,

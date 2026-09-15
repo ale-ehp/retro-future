@@ -158,6 +158,18 @@ export function createContactTerminalStateController() {
       lastRequestedAction = uri;
       lastInputSource = source;
     },
+    // Cheap accessors for the per-frame paths: update(), syncDomState() and
+    // isCameraOwned() only ever need one field, and snapshot() allocates a
+    // six-field object every time it is asked for it.
+    getState() {
+      return state;
+    },
+    getAvailable() {
+      return available;
+    },
+    getSelection() {
+      return selection;
+    },
     snapshot() {
       return {
         state,
@@ -184,10 +196,7 @@ function addContactTerminalFrame(group, width, height, deps, z = 0.16) {
   const halfHeight = height * 0.5;
   const thickness = 0.18;
   const color = deps.PAL?.tealLight ?? 0x8ffcff;
-  group.add(deps.elStrip([-halfWidth, -halfHeight, z], [halfWidth, -halfHeight, z], color, thickness, { depthWrite: false }));
-  group.add(deps.elStrip([halfWidth, -halfHeight, z], [halfWidth, halfHeight, z], color, thickness, { depthWrite: false }));
-  group.add(deps.elStrip([halfWidth, halfHeight, z], [-halfWidth, halfHeight, z], color, thickness, { depthWrite: false }));
-  group.add(deps.elStrip([-halfWidth, halfHeight, z], [-halfWidth, -halfHeight, z], color, thickness, { depthWrite: false }));
+  deps.addElStripRectFrame(group, halfWidth, halfHeight, z, color, thickness, { depthWrite: false });
 }
 
 function drawContactTerminalTexture(board, selection, state) {
@@ -368,6 +377,13 @@ function createContactBoard(deps, record) {
   };
 }
 
+// Built once instead of per frame: prefersReducedMotion() is read every frame
+// while the camera transition runs, and matchMedia() allocates a fresh
+// MediaQueryList on each call. The list is live, so .matches stays current.
+const defaultReducedMotionQuery = globalThis.matchMedia
+  ? globalThis.matchMedia('(prefers-reduced-motion: reduce)')
+  : null;
+
 function defaultActivateUri(uri) {
   if (typeof window !== 'undefined') window.location.href = uri;
 }
@@ -394,7 +410,7 @@ export function createContactTerminalRuntime(injected = {}) {
     resumeMouseLook: () => {},
     resetMobileMovement: () => {},
     getPointerLocked: () => false,
-    prefersReducedMotion: () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true,
+    prefersReducedMotion: () => defaultReducedMotionQuery?.matches === true,
     isMobile: () => false,
     activateUri: defaultActivateUri,
     eventTarget: globalThis.window,
@@ -472,28 +488,28 @@ export function createContactTerminalRuntime(injected = {}) {
   }
 
   function isCameraOwned() {
-    const state = controller.snapshot().state;
+    const state = controller.getState();
     return state === CONTACT_TERMINAL_STATES.FOCUSING
       || state === CONTACT_TERMINAL_STATES.ACTIVE
       || state === CONTACT_TERMINAL_STATES.RETURNING;
   }
 
   function syncDomState() {
-    const snapshot = controller.snapshot();
-    setElementHidden(deps.actionButton, snapshot.state !== CONTACT_TERMINAL_STATES.AVAILABLE);
-    setElementHidden(deps.backButton, !isCameraOwned());
-    deps.body?.classList?.toggle('contact-terminal-focus', isCameraOwned());
-    deps.body?.classList?.toggle('contact-terminal-available', snapshot.state === CONTACT_TERMINAL_STATES.AVAILABLE);
+    const state = controller.getState();
+    const cameraOwned = isCameraOwned();
+    setElementHidden(deps.actionButton, state !== CONTACT_TERMINAL_STATES.AVAILABLE);
+    setElementHidden(deps.backButton, !cameraOwned);
+    deps.body?.classList?.toggle('contact-terminal-focus', cameraOwned);
+    deps.body?.classList?.toggle('contact-terminal-available', state === CONTACT_TERMINAL_STATES.AVAILABLE);
   }
 
   function drawTexture() {
     if (!board) return;
-    const snapshot = controller.snapshot();
-    drawContactTerminalTexture(board, snapshot.selection, snapshot.state);
+    drawContactTerminalTexture(board, controller.getSelection(), controller.getState());
   }
 
   function refreshAvailability() {
-    if (!board || isCameraOwned()) return controller.snapshot().available;
+    if (!board || isCameraOwned()) return controller.getAvailable();
     deps.camera.getWorldDirection(scratchForward);
     const metrics = horizontalContactMetrics(deps.camera.position, scratchForward, board.position);
     lastDistance = metrics.distance;
@@ -650,9 +666,22 @@ export function createContactTerminalRuntime(injected = {}) {
     return true;
   }
 
+  // The canvas fills the viewport and only changes with it, so its rect is read
+  // once and kept until a resize instead of on every pointer event.
+  let cachedCanvasRect = null;
+  function canvasRect() {
+    if (!cachedCanvasRect || !cachedCanvasRect.width || !cachedCanvasRect.height) {
+      cachedCanvasRect = deps.renderer.domElement.getBoundingClientRect();
+    }
+    return cachedCanvasRect;
+  }
+  function invalidateCanvasRect() {
+    cachedCanvasRect = null;
+  }
+
   function hitIndexForPointer(event) {
-    if (!board || controller.snapshot().state !== CONTACT_TERMINAL_STATES.ACTIVE) return null;
-    const rect = deps.renderer.domElement.getBoundingClientRect();
+    if (!board || controller.getState() !== CONTACT_TERMINAL_STATES.ACTIVE) return null;
+    const rect = canvasRect();
     if (!rect.width || !rect.height) return null;
     pointerNdc.set(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -674,6 +703,26 @@ export function createContactTerminalRuntime(injected = {}) {
     return true;
   }
 
+  // A hit-test costs a layout read, a recursive world-matrix update on the board,
+  // a camera matrix update and a raycast. pointermove is not guaranteed to be
+  // coalesced to one event per frame (high polling-rate mice deliver several), so
+  // the listener only records the last position and update() runs a single
+  // hit-test per frame with it.
+  let pendingPointerMove = false;
+  const pendingPointerMoveEvent = { clientX: 0, clientY: 0 };
+
+  function queuePointerMove(event) {
+    pendingPointerMoveEvent.clientX = event.clientX;
+    pendingPointerMoveEvent.clientY = event.clientY;
+    pendingPointerMove = true;
+  }
+
+  function flushPendingPointerMove() {
+    if (!pendingPointerMove) return;
+    pendingPointerMove = false;
+    handlePointerMove(pendingPointerMoveEvent);
+  }
+
   function handlePointerClick(event) {
     const index = hitIndexForPointer(event);
     if (index === null) return false;
@@ -688,6 +737,7 @@ export function createContactTerminalRuntime(injected = {}) {
       syncDomState();
       return;
     }
+    flushPendingPointerMove();
     syncReveal();
     if (!isCameraOwned() && now - lastPoseCheckAt >= CONTACT_TERMINAL_POSE_CHECK_MS) {
       lastPoseCheckAt = now;
@@ -699,7 +749,7 @@ export function createContactTerminalRuntime(injected = {}) {
       });
       if (signature !== lastPoseSignature) syncBoardPose();
     }
-    const state = controller.snapshot().state;
+    const state = controller.getState();
     if (state === CONTACT_TERMINAL_STATES.FOCUSING || state === CONTACT_TERMINAL_STATES.RETURNING) {
       if (deps.prefersReducedMotion()) return;
       const progress = THREE.MathUtils.clamp((now - transitionStartedAt) / Math.max(1, transitionDurationMs), 0, 1);
@@ -749,7 +799,8 @@ export function createContactTerminalRuntime(injected = {}) {
   syncDomState();
   deps.actionButton?.addEventListener?.('click', beginFocus);
   deps.backButton?.addEventListener?.('click', () => beginReturn('back-button'));
-  deps.renderer?.domElement?.addEventListener?.('pointermove', handlePointerMove);
+  deps.renderer?.domElement?.addEventListener?.('pointermove', queuePointerMove);
+  deps.eventTarget?.addEventListener?.('resize', invalidateCanvasRect);
   deps.renderer?.domElement?.addEventListener?.('click', handlePointerClick);
   deps.eventTarget?.addEventListener?.('popstate', () => {
     if (!historyEntryActive || !isCameraOwned()) return;

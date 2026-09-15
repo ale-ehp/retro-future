@@ -73,19 +73,35 @@ export function createCityRevealScanGlow(deps) {
   cityRevealScanGlowMesh.visible = false;
   cityRevealScanGlowMesh.renderOrder = CITY_REVEAL_SCAN_GLOW_RENDER_ORDER;
   wireScene.add(cityRevealScanGlowMesh);
-  function dimensions() {
-    let minX = -getDynamicRoadSurfaceWidth() * 0.5;
-    let maxX = getDynamicRoadSurfaceWidth() * 0.5;
-    let maxY = 230;
-    const records = [...getSideBuildingRecords(), ...getMainBuildingRecords()];
+  // Reused across frames: dimensions() runs once per frame for the whole sweep,
+  // which is the window the app already treats as performance-critical.
+  const scanGlowDimensionsScratch = { width: 0, height: 0, centerX: 0, baseY: 0 };
+  let scanGlowBoundsMinX = 0;
+  let scanGlowBoundsMaxX = 0;
+  let scanGlowBoundsMaxY = 0;
+
+  function accumulateScanGlowBuildingBounds(records) {
     for (const record of records) {
       const collider = record?.collider;
       if (!collider) continue;
       const halfWidth = Math.abs(Number.isFinite(collider.hw) ? collider.hw : record.baseW * 0.5 || 0);
-      minX = Math.min(minX, collider.x - halfWidth);
-      maxX = Math.max(maxX, collider.x + halfWidth);
-      maxY = Math.max(maxY, (Number.isFinite(collider.y) ? collider.y : 0) + (Number.isFinite(collider.h) ? collider.h : 0));
+      scanGlowBoundsMinX = Math.min(scanGlowBoundsMinX, collider.x - halfWidth);
+      scanGlowBoundsMaxX = Math.max(scanGlowBoundsMaxX, collider.x + halfWidth);
+      scanGlowBoundsMaxY = Math.max(scanGlowBoundsMaxY, (Number.isFinite(collider.y) ? collider.y : 0) + (Number.isFinite(collider.h) ? collider.h : 0));
     }
+  }
+
+  function dimensions() {
+    // Walk the two record arrays in place: spreading them into one temporary
+    // array allocated a fresh copy of every building record every frame.
+    scanGlowBoundsMinX = -getDynamicRoadSurfaceWidth() * 0.5;
+    scanGlowBoundsMaxX = getDynamicRoadSurfaceWidth() * 0.5;
+    scanGlowBoundsMaxY = 230;
+    accumulateScanGlowBuildingBounds(getSideBuildingRecords());
+    accumulateScanGlowBuildingBounds(getMainBuildingRecords());
+    let minX = scanGlowBoundsMinX;
+    let maxX = scanGlowBoundsMaxX;
+    let maxY = scanGlowBoundsMaxY;
     for (const bridge of getBridgeRecords()) {
       if (!bridge?.mesh?.visible) continue;
       const halfWidth = Math.abs((bridge.baseWidth || 0) * bridge.mesh.scale.x) * 0.5;
@@ -93,14 +109,11 @@ export function createCityRevealScanGlow(deps) {
       maxX = Math.max(maxX, bridge.mesh.position.x + halfWidth);
       maxY = Math.max(maxY, bridge.mesh.position.y + Math.abs((bridge.baseHeight || 0) * bridge.mesh.scale.y) * 0.5);
     }
-    const width = Math.max(getDynamicRoadSurfaceWidth() + CITY_REVEAL_SCAN_GLOW_EDGE_PADDING * 2, (maxX - minX) + CITY_REVEAL_SCAN_GLOW_EDGE_PADDING * 2);
-    const height = Math.max(gridBlock * 8, maxY + CITY_REVEAL_SCAN_GLOW_HEIGHT_PADDING);
-    return {
-      width,
-      height,
-      centerX: (minX + maxX) * 0.5,
-      baseY: getRoadTopY() + 0.22,
-    };
+    scanGlowDimensionsScratch.width = Math.max(getDynamicRoadSurfaceWidth() + CITY_REVEAL_SCAN_GLOW_EDGE_PADDING * 2, (maxX - minX) + CITY_REVEAL_SCAN_GLOW_EDGE_PADDING * 2);
+    scanGlowDimensionsScratch.height = Math.max(gridBlock * 8, maxY + CITY_REVEAL_SCAN_GLOW_HEIGHT_PADDING);
+    scanGlowDimensionsScratch.centerX = (minX + maxX) * 0.5;
+    scanGlowDimensionsScratch.baseY = getRoadTopY() + 0.22;
+    return scanGlowDimensionsScratch;
   }
 
   function update(now = performance.now()) {

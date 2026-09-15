@@ -306,7 +306,7 @@ import {
   mobilePerformanceProfileState as mobilePerformanceProfileStateCore,
 } from './engine/performance-mobile.js';
 import { fxEnabled, fxLevers, fxToggleInspect } from './engine/fx-debug-toggles.js';
-import { createCityRevealProfiler } from './engine/city-reveal-profiler.js';
+import { createCityRevealProfiler, revealProfileDetailRequestedFromParams } from './engine/city-reveal-profiler.js';
 import { createPerformanceDiagnostics } from './engine/performance-diagnostics.js';
 import {
   createTechBreakdownOverlay,
@@ -365,6 +365,7 @@ import {
   buildBridgeEdgeBatch,
   buildSideBuildingEdgeBatch,
   buildSideHorizontalLedRingBatches,
+  addElStripRectFrame,
   edgeStripSpecs,
   elStrip,
   horizontalBuildingLedRings,
@@ -408,6 +409,7 @@ import {
   facadeLedRuntimeInspect,
   hasMainFacadeVerticalRevealLedMaterials,
   initFacadeLedTreatment,
+  invalidateMainFacadeVerticalRevealLedBounds,
   mainFacadeVerticalRevealLedBounds,
   setFacadeLedRuntimeSettings,
   setMainFacadeVerticalRevealUniforms,
@@ -748,6 +750,9 @@ import {
 
 // Postprocessing (optional bloom + FXAA). Best-effort — fallback to plain renderer if any module fails.
 let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null, cinematicLookPass = null, temporalAaPass = null;
+// True when the FSR pass is the one carrying the output encode (?look=classic
+// or ?pipeline=0): then it has to stay enabled even with upscale and sharpen off.
+let fsrPassCarriesOutputEncode = true;
 let postEnabled = true;
 let usePost = false;
 const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
@@ -889,6 +894,9 @@ const app = document.getElementById('app');
 const loader = document.getElementById('loader');
 const fpsEl = document.getElementById('fps');
 const fovEl = document.getElementById('fov');
+// The HUD FOV never changes (FIXED_CAMERA_FOV is a constant), so write it once
+// here instead of re-assigning textContent — a DOM mutation — on every frame.
+if (fovEl) fovEl.textContent = FIXED_CAMERA_FOV.toFixed(0);
 const perfTheoreticalFpsEl = document.getElementById('perf-theoretical-fps');
 const perfHeadroomEl = document.getElementById('perf-headroom');
 const perfFrameMsEl = document.getElementById('perf-frame-ms');
@@ -1313,7 +1321,6 @@ function setFixedCameraFov() {
     camera.fov = FIXED_CAMERA_FOV;
     camera.updateProjectionMatrix();
   }
-  fovEl.textContent = FIXED_CAMERA_FOV.toFixed(0);
 }
 
 // ---------- free fly controls (WASD + mouse look pointer-lock + Q/E vertical + Shift sprint) ----------
@@ -2983,6 +2990,7 @@ initCityDepartmentBoards({
   reflectionEnvMap,
   PAL,
   elStrip,
+  addElStripRectFrame,
   sideBuildingRecords,
   DEFAULT_DRONE_LANDING_POSE,
   TRON_RUNNER_REVEAL_ENABLED,
@@ -3003,6 +3011,7 @@ initContactTerminal({
   reflectionEnvMap,
   PAL,
   elStrip,
+  addElStripRectFrame,
   sideBuildingRecords,
   getBottomY: cityDepartmentBoardBottomY,
   getPlayerSpawn: () => playerSpawn,
@@ -3066,6 +3075,7 @@ initLabEqualizer({
   performanceLiveMetrics: performanceDiagnostics.liveMetrics,
   postRevealPerfIsolationState,
   elStrip,
+  addElStripRectFrame,
   ensureTronAudioContext,
   setupTronSoundtrackGraph,
   GRID_BLOCK,
@@ -3951,6 +3961,7 @@ function updateMainFacadeVerticalReveal() {
 
 
 const cityRevealProfiler = createCityRevealProfiler({
+  detailedProfile: revealProfileDetailRequestedFromParams(retroBenchmarkSearchParams),
   getCityRevealStartedAt: () => cityRevealStartedAt,
   getCityRevealArmedAt: () => cityRevealArmedAt,
   getCityRevealComplete: () => cityRevealComplete,
@@ -4010,7 +4021,10 @@ function isFsrUpscaleActive() {
 
 function syncFsrUpscalePass() {
   if (!fsrUpscalePass) return;
-  fsrUpscalePass.enabled = true;
+  // With upscale off, sharpness 0 and the cinematic look carrying the output
+  // encode, the shader collapses to `color = center.rgb`: a full-res copy that
+  // costs a whole pass of fill for nothing. Skip it unless it does real work.
+  fsrUpscalePass.enabled = fsrPassCarriesOutputEncode || isFsrUpscaleActive() || fsrSharpness > 0;
   const upscaleActive = isFsrUpscaleActive() ? 1 : 0;
   if (fsrUpscalePass.uniforms?.upscaleActive) {
     fsrUpscalePass.uniforms.upscaleActive.value = upscaleActive;
@@ -4214,6 +4228,7 @@ function rebuildComposer() {
     // single-sample target so the scene resolves ONCE and the post passes are 1x.
     try {
       const singleTarget = new THREE.WebGLRenderTarget(msaaTarget.width, msaaTarget.height);
+      singleTarget.texture.name = 'EffectComposer.rt2';
       composer.renderTarget2?.dispose?.();
       composer.renderTarget2 = singleTarget;
     } catch {}
@@ -4270,7 +4285,8 @@ function rebuildComposer() {
     composer.addPass(temporalAaPass);
   }
 
-  fsrUpscalePass = createFsrUpscalePass(!lastPassIsLook);
+  fsrPassCarriesOutputEncode = !lastPassIsLook;
+  fsrUpscalePass = createFsrUpscalePass(fsrPassCarriesOutputEncode);
   syncFsrUpscalePass();
   composer.addPass(fsrUpscalePass);
 
@@ -4290,6 +4306,52 @@ function rebuildComposer() {
   resizeFsrUpscaleTarget();
   resizeCinematicLookTarget();
   applyBloomEnabled(bloomEnabled);
+  syncComposerBufferRoles();
+}
+
+// EffectComposer captures readBuffer/writeBuffer in its constructor, so swapping
+// renderTarget2 for the single-sample target above leaves readBuffer pointing at
+// the discarded MSAA clone: the scene pass (which writes into readBuffer) would
+// render into a buffer that setSize/setPixelRatio never resize, so the adaptive
+// resolution scaler could not shrink the scene at all. Pin the roles instead:
+// readBuffer is the multisampled scene target, writeBuffer the 1x ping-pong one.
+// Re-asserted every frame because swapBuffers() flips them on each needsSwap pass
+// and an odd number of them would leave the scene rendering at 1 sample.
+// The bloom pass normally ends by drawing itself additively back into the scene
+// buffer — a full-screen draw that, with MSAA on, rasterizes at the scene target's
+// sample rate for no antialiasing benefit. The cinematic look pass reads that same
+// buffer immediately afterwards, so when nothing sits between the two the addition
+// can happen inside the look shader instead: one full-res pass disappears.
+//
+// Only when the chain really is bloom -> look with nothing in between. FXAA, TAA
+// and FSR all process the combined image, so if any of them is enabled the bloom
+// has to be in the buffer before they run and the merge is off. Re-evaluated every
+// frame because those passes are toggled at runtime.
+function syncBloomLookMerge() {
+  if (!bloomPass) return;
+  const merged = Boolean(
+    cinematicLookPass?.enabled
+    && bloomPass.enabled
+    && !fxaaPass?.enabled
+    && !temporalAaPass?.enabled
+    && !fsrUpscalePass?.enabled
+  );
+  bloomPass.compositeToInput = !merged;
+  const uniforms = cinematicLookPass?.uniforms;
+  if (!uniforms) return;
+  uniforms.bloomMix.value = merged ? 1 : 0;
+  // The clamp reproduces the clipping the old in-place blend got for free from an
+  // 8-bit scene target. With MSAA off the composer runs on a HalfFloat target,
+  // where the old blend never clipped — clamping there would change the look.
+  if (uniforms.bloomClamp) uniforms.bloomClamp.value = composerMsaaActive ? 1 : 0;
+  // Bound even when unused: the sampler must stay valid, the shader gates on the mix.
+  if (uniforms.tBloom) uniforms.tBloom.value = bloomPass.bloomTexture?.() || null;
+}
+
+function syncComposerBufferRoles() {
+  if (!composer || !composerMsaaActive) return;
+  composer.readBuffer = composer.renderTarget1;
+  composer.writeBuffer = composer.renderTarget2;
 }
 
 function applyAntialiasControls(mode = antialiasMode) {
@@ -5506,6 +5568,27 @@ function applyBoundaryErrorControlsFromUI() {
   controlEls.boundaryErrorFloorLightSoftnessVal.textContent = visualSettings.boundaryErrorFloorLightSoftness.toFixed(2);
 }
 
+// Previous argument list of updateBuildingFootprints, compared field by field so
+// a re-run with identical inputs costs nothing. Starts empty, so the first call
+// through applyLiveControls always builds the footprints.
+const lastBuildingFootprintInputs = [];
+
+function buildingFootprintInputsChanged(...inputs) {
+  if (lastBuildingFootprintInputs.length !== inputs.length) {
+    lastBuildingFootprintInputs.length = 0;
+    lastBuildingFootprintInputs.push(...inputs);
+    return true;
+  }
+  let changed = false;
+  for (let i = 0; i < inputs.length; i += 1) {
+    if (lastBuildingFootprintInputs[i] !== inputs[i]) {
+      lastBuildingFootprintInputs[i] = inputs[i];
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function applyLiveControls() {
   const offset = Number(controlEls.hexOffset.value);
   const radius = Number(controlEls.hexRadius.value);
@@ -5924,21 +6007,48 @@ function applyLiveControls() {
   updateBuildingMaterials(sideBuildingMaterials, PAL.buildingSkin, sideBuildingBrightness, sideBuildingHue, sideBuildingMetalness, sideBuildingRoughness, sideBuildingReflect, sideBuildingEmissive, lightResponse);
   updateBuildingMaterials(bridgeMaterials, PAL.buildingSkin, sideBuildingBrightness, sideBuildingHue, sideBuildingMetalness, sideBuildingRoughness, sideBuildingReflect, sideBuildingEmissive, lightResponse);
   updateBuildingMaterials(mainBuildingMaterials, PAL.mainSkin, mainBuildingBrightness, mainBuildingHue, mainBuildingMetalness, mainBuildingRoughness, mainBuildingReflect, mainBuildingEmissive, lightResponse, nextMainBuildingSaturation);
-  updateBuildingFootprints(nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextMainBuildingZ, nextMainBuildingY, {
-    sideBuildingBasePadScale,
-    sideBuildingBasePadXScale,
-    sideBuildingBasePadY,
-    sideBuildingBasePadThickness,
-    sideBuildingBasePadCut,
-    sideBuildingBasePadRadius,
-    mainBuildingBasePadScale,
-    mainBuildingBasePadXScale,
-    mainBuildingBasePadZScale,
-    mainBuildingBasePadY,
-    mainBuildingBasePadThickness,
-    mainBuildingBasePadCut,
+  // updateBuildingFootprints rebuilds every base pad from scratch — a dispose +
+  // new ExtrudeGeometry (bevelled, with recomputed normals) per pad, up to five
+  // per building across 13 buildings. applyLiveControls re-runs once per animation
+  // frame for as long as ANY unscoped slider is held down, so without this guard a
+  // drag on, say, the ambient light rebuilt the whole city's base pad geometry 60
+  // times a second. Skip the rebuild unless one of its own inputs actually moved.
+  // Besides its arguments the rebuild also reads module state set earlier in this
+  // function: roadHalf() (boulevard width), the base pad runtime settings (global
+  // Y and the curb parameters) and the hex tile height/scale (road top Y, hit
+  // half-size). Those go into the comparison too, or a drag on one of them
+  // would leave the pads where they were.
+  if (buildingFootprintInputsChanged(
+    nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale,
+    nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth,
+    nextMainBuildingZ, nextMainBuildingY,
+    sideBuildingBasePadScale, sideBuildingBasePadXScale, sideBuildingBasePadY,
+    sideBuildingBasePadThickness, sideBuildingBasePadCut, sideBuildingBasePadRadius,
+    mainBuildingBasePadScale, mainBuildingBasePadXScale, mainBuildingBasePadZScale,
+    mainBuildingBasePadY, mainBuildingBasePadThickness, mainBuildingBasePadCut,
     mainBuildingBasePadRadius,
-  });
+    nextBoulevardWidthScale,
+    nextBasePadGlobalY, nextBasePadCurbEnabled, nextBasePadCurbWidth,
+    nextBasePadInnerRaise, nextBasePadCurbSlope, nextBasePadCurbRadius,
+    tileHeight, tileScale,
+  )) {
+    updateBuildingFootprints(nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextMainBuildingZ, nextMainBuildingY, {
+      sideBuildingBasePadScale,
+      sideBuildingBasePadXScale,
+      sideBuildingBasePadY,
+      sideBuildingBasePadThickness,
+      sideBuildingBasePadCut,
+      sideBuildingBasePadRadius,
+      mainBuildingBasePadScale,
+      mainBuildingBasePadXScale,
+      mainBuildingBasePadZScale,
+      mainBuildingBasePadY,
+      mainBuildingBasePadThickness,
+      mainBuildingBasePadCut,
+      mainBuildingBasePadRadius,
+    });
+    invalidateMainFacadeVerticalRevealLedBounds();
+  }
   updateBasePadLedStrips(basePadLedBrightness, basePadLedThickness, basePadLedOffset, basePadLedHue);
   updateBuildingScale(sideBuildingMeshes, sideBuildingColliders, sideBuildingScale);
   updateBuildingScale(mainBuildingMeshes, mainBuildingColliders, mainBuildingScale);
@@ -6306,7 +6416,7 @@ function prewarmSkinnedMeshBoneTextures(root = scene) {
   return skinnedMeshPrewarmStats;
 }
 
-function prewarmHiddenSkinnedMeshRender(root = scene) {
+async function prewarmHiddenSkinnedMeshRender(root = scene) {
   const started = performance.now();
   hiddenSkinnedRenderPrewarmStats.attempted = 0;
   hiddenSkinnedRenderPrewarmStats.forcedVisible = 0;
@@ -6343,22 +6453,47 @@ function prewarmHiddenSkinnedMeshRender(root = scene) {
     });
 
     if (hiddenSkinnedRenderPrewarmStats.attempted > 0) {
-      const previousRenderTarget = renderer.getRenderTarget();
-      const previousAutoClear = renderer.autoClear;
       const target = new THREE.WebGLRenderTarget(4, 4, {
         depthBuffer: true,
         stencilBuffer: false,
       });
-      try {
+      // The program variant depends on the bound render target (output colour
+      // space and tone mapping are only applied when drawing to the screen), and
+      // the real frames draw the scene into the composer's target, never to the
+      // screen. So both the compile and the warm render below run with an
+      // off-screen target bound, or the compile would link the on-screen variants
+      // and the render would compile the whole set again, synchronously.
+      const withPrewarmTarget = (run) => {
+        const previousRenderTarget = renderer.getRenderTarget();
+        const previousAutoClear = renderer.autoClear;
         renderer.setRenderTarget(target);
         renderer.autoClear = true;
-        renderer.clear();
-        renderer.compile?.(root, camera);
-        renderer.render(root, camera);
+        try {
+          return run();
+        } finally {
+          renderer.setRenderTarget(previousRenderTarget);
+          renderer.autoClear = previousAutoClear;
+        }
+      };
+      try {
+        // compileAsync lets the driver link the program set on its own threads
+        // (KHR_parallel_shader_compile) instead of blocking this task on every
+        // program in turn. Its program creation is synchronous — only the link
+        // wait is deferred — so the target is bound just for the call, not
+        // across the await, where a frame could otherwise render into it.
+        if (typeof renderer.compileAsync === 'function') {
+          try {
+            await withPrewarmTarget(() => renderer.compileAsync(root, camera));
+          } catch {
+            hiddenSkinnedRenderPrewarmStats.errors += 1;
+          }
+        }
+        withPrewarmTarget(() => {
+          renderer.clear();
+          renderer.render(root, camera);
+        });
         hiddenSkinnedRenderPrewarmStats.rendered = true;
       } finally {
-        renderer.setRenderTarget(previousRenderTarget);
-        renderer.autoClear = previousAutoClear;
         target.dispose();
       }
     }
@@ -6428,12 +6563,22 @@ async function bootSceneWithFinalDefaults() {
   applyPlayerSpawn(playerSpawn, false);
   await tronRunnerOrchestration.load();
   await tronRunnerCrowdRuntime.drainBuildQueue();
+  // Each of these is a heavy synchronous block (bone-texture uploads, a full
+  // scene compile + render, two composer renders, then a compile with the reveal
+  // clip planes). Chained without a break they form one long main-thread task —
+  // hundreds of ms on mobile with input and paint frozen throughout. Yield to the
+  // browser between them, and let the driver link programs in parallel where it
+  // can (compileAsync, KHR_parallel_shader_compile) before the warm render.
   prewarmSkinnedMeshBoneTextures(scene);
+  await waitForNextFrame();
   prewarmSceneTextureUploads(scene);
-  prewarmHiddenSkinnedMeshRender(scene);
+  await waitForNextFrame();
+  await prewarmHiddenSkinnedMeshRender(scene);
+  await waitForNextFrame();
   prewarmPostProcessingPasses();
+  await waitForNextFrame();
   await ensureFootstepAudioReady();
-  cityRevealRender.prewarmRealPass();
+  await cityRevealRender.prewarmRealPass();
   scheduleDroneIntroAutoFlight();
 }
 
@@ -6846,8 +6991,9 @@ function tick(now) {
   }
   if (!contactTerminalCameraOwned) applyViewMotionOffset();
   skyDome.update(now);
-  // Sky background bake (mobile A/B, ?skyBake=1): only in steady state — post-
-  // reveal with no reveal compositing active — so the reveal's own sky is untouched.
+  // Sky background bake (on by default, desktop and mobile; ?skyBake=0 turns it
+  // off, ?skyBake=1 forces it): only in steady state — post-reveal with no reveal
+  // compositing active — so the reveal's own sky is untouched.
   skyDome.syncSkyBackgroundBake(now, cityRevealComplete && !isCityRevealCompositeActive());
   if (!revealPerformanceCritical) {
     updateCityDepartmentBoards(now);
@@ -6871,6 +7017,7 @@ function tick(now) {
   syncBloomTemporalBudget();
   syncCinematicLookPass(now);
   syncTemporalAaPass();
+  syncBloomLookMerge();
   if (!postRevealPerformanceCritical) {
     if (postRevealPerfIsolationState.equalizer) {
       updateLabEqualizer(now, dt);
@@ -6892,13 +7039,16 @@ function tick(now) {
   performanceDiagnostics.pollGpuTimerSamples();
   performanceDiagnostics.beginGpuTimerSample();
   const temporalAaJittered = applyTemporalAaJitterForRender();
+  syncComposerBufferRoles();
   try {
     cityRevealRender.renderCompositeFrame();
   } finally {
     clearTemporalAaJitterForRender(temporalAaJittered);
     performanceDiagnostics.endGpuTimerSample();
   }
-  const frameRenderInfo = captureRevealRenderInfo ? { ...renderer.info.render } : null;
+  // Handed over by reference: the profiler copies the four counters it needs on
+  // the spot, and info.render is only reset by the next render call.
+  const frameRenderInfo = captureRevealRenderInfo ? renderer.info.render : null;
   if (captureRevealRenderInfo) renderer.info.autoReset = previousRendererInfoAutoReset;
   const frameEndedAt = performance.now();
   performanceDiagnostics.timing.updateMs = renderStartedAt - frameStartedAt;

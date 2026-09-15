@@ -159,15 +159,18 @@
 
   // Appear when the reveal completes: that is when WASD/mouse actually start
   // working, and it keeps the corner free for the "Attendi..." reveal label.
-  const activationPoll = window.setInterval(() => {
-    if (window.__tronInspect?.().cityRevealComplete !== true) return;
-    window.clearInterval(activationPoll);
-    // Gate both the desktop indicator and the mobile touch joystick on the
-    // reveal finishing (the joystick keys off body.rf-reveal-done in CSS).
+  // Gate both the desktop indicator and the mobile touch joystick on the reveal
+  // finishing (the joystick keys off body.rf-reveal-done in CSS). The scene
+  // fires 'tron-reveal-complete' and leaves __tronRevealComplete behind, so this
+  // costs nothing: polling __tronInspect() here rebuilt the entire diagnostic
+  // dump every 400ms for the whole boot + reveal window.
+  const activateInputOverlay = () => {
     document.body.classList.add('rf-reveal-done');
     overlay.classList.add('is-active');
     if (!hasLooked) overlay.classList.add('is-look-hint');
-  }, 400);
+  };
+  if (window.__tronRevealComplete === true) activateInputOverlay();
+  else window.addEventListener('tron-reveal-complete', activateInputOverlay, { once: true });
 })();
 </script>
 <div id="loader" aria-hidden="true"></div>
@@ -851,19 +854,47 @@ async function initWelcomeDepartmentHeads() {
 
   const yaws = [-0.34, -0.12, 0.12, 0.34];
 
+  // One WebGL context for all four heads instead of one per card. Creating a GL
+  // context costs tens of ms in the driver and pins a whole antialiased
+  // backbuffer, and these four were being created right while the city was
+  // importing its modules, compiling shaders and uploading textures on the same
+  // thread and GPU. The heads are near-static (they re-render only on hover), so
+  // rendering them one at a time into a shared offscreen canvas and blitting the
+  // result into each card's 2D canvas is visually identical — and the 2D canvas
+  // keeps the last frame on its own, so preserveDrawingBuffer is no longer part
+  // of the per-card cost.
+  const sharedHeadCanvas = document.createElement('canvas');
+  const sharedHeadRenderer = new THREE.WebGLRenderer({
+    alpha: false,
+    antialias: true,
+    canvas: sharedHeadCanvas,
+    powerPreference: 'low-power',
+    preserveDrawingBuffer: true,
+  });
+  sharedHeadRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  sharedHeadRenderer.setClearColor(0x000000, 1);
+  state.sharedRenderer = true;
+
   function resizeView(view) {
     const rect = view.canvas.getBoundingClientRect();
     const width = Math.max(1, Math.round(rect.width || 176));
     const height = Math.max(1, Math.round(rect.height || 118));
-    view.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    view.renderer.setSize(width, height, false);
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    sharedHeadRenderer.setPixelRatio(pixelRatio);
+    sharedHeadRenderer.setSize(width, height, false);
+    const bufferWidth = sharedHeadCanvas.width;
+    const bufferHeight = sharedHeadCanvas.height;
+    if (view.canvas.width !== bufferWidth) view.canvas.width = bufferWidth;
+    if (view.canvas.height !== bufferHeight) view.canvas.height = bufferHeight;
     view.camera.aspect = width / height;
     view.camera.updateProjectionMatrix();
   }
 
   function renderView(view) {
+    if (!view.scene || !view.context) return;
     resizeView(view);
-    view.renderer.render(view.scene, view.camera);
+    sharedHeadRenderer.render(view.scene, view.camera);
+    view.context.drawImage(sharedHeadCanvas, 0, 0);
   }
 
   function makeView(canvas, index) {
@@ -873,15 +904,7 @@ async function initWelcomeDepartmentHeads() {
     const camera = new THREE.PerspectiveCamera(27, 1, 0.1, 100);
     camera.position.set(0, 0.08, 4.5);
 
-    const renderer = new THREE.WebGLRenderer({
-      alpha: false,
-      antialias: true,
-      canvas,
-      powerPreference: 'low-power',
-      preserveDrawingBuffer: true,
-    });
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.setClearColor(0x000000, 1);
+    const context = canvas.getContext('2d');
 
     const ambient = new THREE.HemisphereLight(0xcffaff, 0x031013, 1.25);
     const key = new THREE.DirectionalLight(0xe9feff, 2.05);
@@ -896,13 +919,13 @@ async function initWelcomeDepartmentHeads() {
       baseYaw: yaws[index] || 0,
       camera,
       canvas,
+      context,
       currentPitch: 0,
       currentYaw: 0,
       head: null,
       hoverActive: false,
       hitTarget: canvas.closest('.welcome-department-card') || canvas,
       index,
-      renderer,
       scene,
       targetPitch: 0,
       targetYaw: 0,
@@ -1087,12 +1110,12 @@ async function initWelcomeDepartmentHeads() {
       });
       view.scene?.clear();
       view.head = null;
-      view.renderer?.dispose();
-      view.renderer?.forceContextLoss();
-      view.renderer = null;
+      view.context = null;
       view.scene = null;
       view.camera = null;
     });
+    sharedHeadRenderer.dispose();
+    sharedHeadRenderer.forceContextLoss();
     geometries.forEach((geometry) => geometry.dispose());
     materials.forEach((material) => material.dispose());
   }

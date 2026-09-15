@@ -27,6 +27,9 @@ export const tronDiscCursorState = {
 };
 
 // ---------- injected deps (assigned in initDiscCursor) ----------
+// False until the DOM has been written at least once, so the first call always
+// applies the classes/styles even though the state already reads as hidden.
+let tronDiscCursorVisibilityApplied = false;
 let tronDiscCursor = null;
 let lockEl = null;
 let getPointerLocked = null;
@@ -37,11 +40,27 @@ function writeTronDiscCursorTransform() {
   tronDiscCursor.style.transform = `translate3d(${tronDiscCursorState.x}px, ${tronDiscCursorState.y}px, 0) translate(-50%, -50%) rotate(${tronDiscCursorState.rotationDeg.toFixed(2)}deg)`;
 }
 
+// lockEl is the full-viewport canvas: its rect only moves with the viewport, so
+// it is measured once and re-read on resize instead of on every mousemove (a
+// layout read per event, right after the render loop has written to the DOM).
+let cachedLockRect = null;
+
+export function invalidateTronDiscCursorSurfaceRect() {
+  cachedLockRect = null;
+}
+
+function tronDiscCursorSurfaceRect() {
+  if (!cachedLockRect || !cachedLockRect.width || !cachedLockRect.height) {
+    cachedLockRect = lockEl.getBoundingClientRect();
+  }
+  return cachedLockRect;
+}
+
 function isTronDiscCursorSurfaceEvent(event) {
   if (!tronDiscCursor || !event || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
   const target = event.target;
   if (target?.closest?.('#hud-controls, #settings-toggle')) return false;
-  const rect = lockEl.getBoundingClientRect();
+  const rect = tronDiscCursorSurfaceRect();
   return event.clientX >= rect.left
     && event.clientX <= rect.right
     && event.clientY >= rect.top
@@ -50,6 +69,11 @@ function isTronDiscCursorSurfaceEvent(event) {
 
 export function setTronDiscCursorVisible(visible) {
   const shouldShow = Boolean(visible && !getPointerLocked() && !getUnlockedMouseLookActive());
+  // Called from the mousemove handler on every event: without this guard the four
+  // DOM writes below ran continuously while the pointer moved, even though they
+  // only ever matter on a visibility transition.
+  if (shouldShow === tronDiscCursorState.visible && tronDiscCursorVisibilityApplied) return;
+  tronDiscCursorVisibilityApplied = true;
   tronDiscCursorState.visible = shouldShow;
   document.body.classList.toggle('tron-disc-cursor-visible', shouldShow);
   tronDiscCursor?.classList.toggle('is-hidden', !shouldShow);
@@ -139,4 +163,9 @@ export function updateTronDiscCursor(dt) {
 // ---------- init: wire DOM refs + mouse-look gating getters ----------
 export function initDiscCursor(injected) {
   ({ tronDiscCursor, lockEl, getPointerLocked, getUnlockedMouseLookActive } = injected);
+  tronDiscCursorVisibilityApplied = false;
+  invalidateTronDiscCursorSurfaceRect();
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', invalidateTronDiscCursorSurfaceRect);
+  }
 }

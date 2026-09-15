@@ -9,7 +9,7 @@ import * as THREE from 'three';
 
 let renderer = null;
 let reflectionEnvMap = null;
-let roadReflectionEnvTargets = null;
+let roadReflectionEnvTargets = null; // Map<level, WebGLRenderTarget>, filled lazily
 const ROAD_BUILDING_REFLECTION_LEVELS = [0, 0.2, 0.35, 0.5, 0.7, 1];
 let roadBuildingReflection = 0.35;
 
@@ -55,42 +55,54 @@ function bakeTronReflectionMap(width = 512, height = 256, buildingReflection = 1
   return tex;
 }
 
-export function initReflectionEnv(ctx) {
-  renderer = ctx.renderer;
+// One PMREM prefilter per level used to run at boot for all six road variants,
+// even though only one is bound at a time (the level comes from a control that
+// defaults to 0.35). That is six canvas rasterizations plus six GPU prefilter
+// chains added to the boot path, and six cube maps resident for the session.
+// Bake on demand instead and keep what has been asked for: switching level costs
+// a few ms once, on a slider move, instead of every start-up paying for all six.
+function makeReflectionEnvTarget(width, height, buildingReflection) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   pmrem.compileEquirectangularShader();
+  const reflectionTex = bakeTronReflectionMap(width, height, buildingReflection);
+  const target = pmrem.fromEquirectangular(reflectionTex);
+  reflectionTex.dispose();
+  pmrem.dispose();
+  return target;
+}
 
-  const makeReflectionEnvTarget = (width, height, buildingReflection) => {
-    const reflectionTex = bakeTronReflectionMap(width, height, buildingReflection);
-    const target = pmrem.fromEquirectangular(reflectionTex);
-    reflectionTex.dispose();
-    return target;
-  };
-
+export function initReflectionEnv(ctx) {
+  renderer = ctx.renderer;
   const envTarget = makeReflectionEnvTarget(512, 256, 1);
   reflectionEnvMap = envTarget.texture;
-  roadReflectionEnvTargets = ROAD_BUILDING_REFLECTION_LEVELS.map((level) => ({
-    level,
-    target: makeReflectionEnvTarget(256, 128, level),
-  }));
-  pmrem.dispose();
+  roadReflectionEnvTargets = new Map();
 }
 
 export function getReflectionEnvMap() {
   return reflectionEnvMap;
 }
 
-function getRoadReflectionEnvEntry(buildingReflection = roadBuildingReflection) {
-  let closest = roadReflectionEnvTargets[0];
-  let closestDistance = Math.abs(buildingReflection - closest.level);
-  for (const entry of roadReflectionEnvTargets) {
-    const distance = Math.abs(buildingReflection - entry.level);
+function closestRoadReflectionLevel(buildingReflection) {
+  let closest = ROAD_BUILDING_REFLECTION_LEVELS[0];
+  let closestDistance = Math.abs(buildingReflection - closest);
+  for (const level of ROAD_BUILDING_REFLECTION_LEVELS) {
+    const distance = Math.abs(buildingReflection - level);
     if (distance < closestDistance) {
-      closest = entry;
+      closest = level;
       closestDistance = distance;
     }
   }
   return closest;
+}
+
+function getRoadReflectionEnvEntry(buildingReflection = roadBuildingReflection) {
+  const level = closestRoadReflectionLevel(buildingReflection);
+  let target = roadReflectionEnvTargets.get(level);
+  if (!target) {
+    target = makeReflectionEnvTarget(256, 128, level);
+    roadReflectionEnvTargets.set(level, target);
+  }
+  return { level, target };
 }
 
 export function getRoadReflectionEnvMap(buildingReflection = roadBuildingReflection) {
