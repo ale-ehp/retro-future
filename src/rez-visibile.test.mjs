@@ -40,3 +40,19 @@ test('la materializzazione dura piu\' dell\'attesa, altrimenti si vedrebbe a met
     `il gruppo aspetta ${ritardoGruppo}ms su un rez di ${durataRez}ms: se ne mangia l'inizio`
   );
 });
+
+test('ogni personaggio ha il suo anello, non quello del sorgente invisibile', () => {
+  // L'anello di makeScan() e' appeso a runnerWalker, cioe' al personaggio sorgente, che e'
+  // invisibile per scelta (TRON_RUNNER_SOURCE_CHARACTER_VISIBLE = false): nessuno l'ha mai
+  // visto, e la folla non ne aveva affatto. Gli anelli veri sono un InstancedMesh a parte.
+  assert.match(rivelazione, /tron-runner-rez-rings/);
+  assert.match(rivelazione, /new THREE\.InstancedMesh\(/);
+  // e stanno appesi alla scena, non al sorgente
+  assert.match(rivelazione, /radiceScena\(\)\?\.add\(anelliRez\)/);
+  const personaggi = readFileSync(new URL('./character/characters.js', import.meta.url), 'utf8');
+  assert.match(personaggi, /TRON_RUNNER_SOURCE_CHARACTER_VISIBLE = false/);
+});
+
+test('gli anelli si accendono solo mentre la materializzazione e\' in corso', () => {
+  assert.match(rivelazione, /if \(!attivo \|\| pulsazione <= 0\.02\)/);
+});

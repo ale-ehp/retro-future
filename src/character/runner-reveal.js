@@ -68,6 +68,79 @@ export function createTronRunnerRevealRuntime({
   let complete = !TRON_RUNNER_REVEAL_ENABLED;
   const visualCache = createTronRunnerRevealVisualCache();
 
+  // ----- Anelli di materializzazione, uno per personaggio -----
+  //
+  // L'anello di scansione costruito da makeScan() sta appeso a runnerWalker, cioe' al
+  // personaggio sorgente, che e' invisibile (TRON_RUNNER_SOURCE_CHARACTER_VISIBLE = false):
+  // nessuno l'ha mai visto. La folla non ne aveva affatto, e il rez si vedeva senza la luce
+  // che lo produce (2026-09-18). Qui ce n'e' uno per ciascuno, in un solo InstancedMesh:
+  // sono decine di personaggi e altrettante draw call sarebbero uno spreco per un lampo di
+  // un secondo e mezzo.
+  let anelliRez = null;
+
+  function radiceScena() {
+    let nodo = runnerWalker;
+    while (nodo?.parent) nodo = nodo.parent;
+    return nodo;
+  }
+
+  function assicuraAnelliRez(quanti) {
+    if (anelliRez && anelliRez.instanceMatrix.count >= quanti) return anelliRez;
+    if (anelliRez) { anelliRez.parent?.remove(anelliRez); anelliRez.geometry.dispose(); anelliRez.material.dispose(); }
+    // il toro nasce in piedi: lo si corica una volta sola nella geometria, cosi' ogni
+    // istanza deve portarsi dietro solo posizione e scala
+    const geometria = new THREE.TorusGeometry(TRON_RUNNER_REVEAL_SCAN_RADIUS, TRON_RUNNER_REVEAL_SCAN_TUBE, 8, 64);
+    geometria.rotateX(Math.PI / 2);
+    const materiale = new THREE.MeshBasicMaterial({
+      color: 0x62f7ff,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      transparent: true,
+      opacity: 0,
+      toneMapped: false,
+    });
+    anelliRez = new THREE.InstancedMesh(geometria, materiale, Math.max(quanti, 1));
+    anelliRez.name = 'tron-runner-rez-rings';
+    anelliRez.frustumCulled = false;
+    anelliRez.visible = false;
+    anelliRez.renderOrder = 30;
+    radiceScena()?.add(anelliRez);
+    return anelliRez;
+  }
+
+  const posizioneAnello = new THREE.Vector3();
+  const matriceAnello = new THREE.Matrix4();
+  const scalaAnello = new THREE.Vector3();
+  const nessunaRotazione = new THREE.Quaternion();
+
+  /** Mette un anello alla quota del taglio sotto ogni personaggio che si sta formando. */
+  function aggiornaAnelliRez(sogliaY, pulsazione, attivo) {
+    if (!attivo || pulsazione <= 0.02) {
+      if (anelliRez) anelliRez.visible = false;
+      return;
+    }
+    const soggetti = [];
+    for (const member of crowd) {
+      if (member?.group?.visible) soggetti.push(member.group);
+    }
+    if (idleCharacterGroup?.visible) soggetti.push(idleCharacterGroup);
+    if (!soggetti.length) { if (anelliRez) anelliRez.visible = false; return; }
+
+    const anelli = assicuraAnelliRez(soggetti.length);
+    for (let i = 0; i < soggetti.length; i += 1) {
+      soggetti[i].getWorldPosition(posizioneAnello);
+      posizioneAnello.y += sogliaY;
+      const s = soggetti[i].scale.y || 1;
+      scalaAnello.set(s, s, s);
+      matriceAnello.compose(posizioneAnello, nessunaRotazione, scalaAnello);
+      anelli.setMatrixAt(i, matriceAnello);
+    }
+    anelli.count = soggetti.length;
+    anelli.instanceMatrix.needsUpdate = true;
+    anelli.material.opacity = pulsazione * TRON_RUNNER_REVEAL_SCAN_OUTER_OPACITY;
+    anelli.visible = true;
+  }
+
   function makeScan() {
     const scanMaterial = new THREE.MeshBasicMaterial({
       color: 0x62f7ff,
@@ -253,6 +326,12 @@ export function createTronRunnerRevealRuntime({
     }
     applyCrowdRevealVisuals(factor, revealComplete, activePulse);
     applyIdleCharacterRevealVisuals(factor, revealComplete, activePulse);
+    // La luce che produce la materializzazione, alla stessa quota del taglio.
+    aggiornaAnelliRez(
+      TRON_RUNNER_TARGET_HEIGHT * THREE.MathUtils.lerp(0.06, 0.98, factor),
+      activePulse,
+      active && !revealComplete
+    );
 
     const groundShadow = runnerParts.groundShadow;
     if (groundShadow?.material) {
