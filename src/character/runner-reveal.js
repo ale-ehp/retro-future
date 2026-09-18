@@ -22,6 +22,25 @@ function baseMaterialOpacity(material, fallback = 1) {
     : fallback;
 }
 
+// Il rez alla Tron: i personaggi non sfumano, si formano dal basso mentre l'anello di
+// scansione sale (2026-09-18, prima era una dissolvenza di opacita' su tutto il corpo e
+// si leggeva come un popup). Un piano di taglio in coordinate mondo tiene visibile solo
+// la parte sotto l'anello; il corpo resta pieno, non trasparente, cosi' quello che c'e'
+// gia' sembra materia e non un fantasma.
+//
+// Il piano guarda in giu' (normale 0,-1,0): tiene i punti con y <= constant. Il renderer
+// ha gia' localClippingEnabled acceso (main.js).
+const PIANO_REZ = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+const TAGLIO_REZ = [PIANO_REZ];
+
+/** Attacca o stacca il taglio, ricompilando il materiale solo quando cambia davvero. */
+function applicaTaglioRez(material, taglia) {
+  const voluto = taglia ? TAGLIO_REZ : null;
+  if (material.clippingPlanes === voluto) return;
+  material.clippingPlanes = voluto;
+  material.needsUpdate = true;
+}
+
 function revealEase(t) {
   const clamped = THREE.MathUtils.clamp(t, 0, 1);
   return clamped * clamped * (3 - 2 * clamped);
@@ -121,9 +140,11 @@ export function createTronRunnerRevealRuntime({
         const baseEmissive = Number.isFinite(material.userData?.tronRunnerBaseEmissiveIntensity)
           ? material.userData.tronRunnerBaseEmissiveIntensity
           : material.emissiveIntensity;
-        material.transparent = !revealComplete;
-        material.opacity = baseOpacity * revealOpacity;
-        material.depthWrite = revealComplete;
+        // Corpo pieno da subito: a decidere cosa si vede e' il taglio che sale, non l'opacita'.
+        applicaTaglioRez(material, !revealComplete);
+        material.transparent = false;
+        material.opacity = baseOpacity;
+        material.depthWrite = true;
         if (Number.isFinite(material.emissiveIntensity)) {
           material.emissiveIntensity = revealComplete
             ? baseEmissive
@@ -149,9 +170,10 @@ export function createTronRunnerRevealRuntime({
       const baseEmissive = Number.isFinite(material.userData?.tronRunnerBaseEmissiveIntensity)
         ? material.userData.tronRunnerBaseEmissiveIntensity
         : material.emissiveIntensity;
-      material.transparent = !revealComplete;
-      material.opacity = baseOpacity * revealOpacity;
-      material.depthWrite = revealComplete;
+      applicaTaglioRez(material, !revealComplete);
+      material.transparent = false;
+      material.opacity = baseOpacity;
+      material.depthWrite = true;
       if (Number.isFinite(material.emissiveIntensity)) {
         material.emissiveIntensity = revealComplete
           ? baseEmissive
@@ -169,6 +191,12 @@ export function createTronRunnerRevealRuntime({
     const factor = visibleFactor();
     const revealComplete = factor >= 0.995 || !TRON_RUNNER_REVEAL_ENABLED;
     const activePulse = active ? Math.sin(Math.PI * rawProgress) : 0;
+    // La soglia del rez sale come l'anello di scansione, appena sopra di lui: il corpo si
+    // forma dietro il passaggio della luce. Sta qui e non nel blocco dell'anello perche'
+    // quello puo' mancare, e senza soglia aggiornata i personaggi resterebbero tagliati via.
+    PIANO_REZ.constant = revealComplete
+      ? Number.POSITIVE_INFINITY
+      : TRON_RUNNER_TARGET_HEIGHT * (THREE.MathUtils.lerp(0.06, 0.98, factor) + 0.04);
     const cacheProgress = Number(factor.toFixed(4));
     const cacheRawProgress = Number(rawProgress.toFixed(4));
     if (
