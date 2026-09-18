@@ -1287,6 +1287,13 @@ const entryButton = document.getElementById('welcome-start-button');
 const entryOverlay = document.getElementById('welcome-window-overlay');
 let entryLoading = false;
 let entryFailed = false;
+// La lingua della pagina decide le etichette del bottone d'ingresso (2026-09-18):
+// la versione EN e' servita con lang="en" e l'HTML arriva gia' tradotto, quindi
+// l'etichetta di partenza si recupera dal markup invece di riscriverla a mano.
+const ETICHETTA_INGRESSO = entryButton?.textContent ?? '';
+const ETICHETTE_INGRESSO = /^en/i.test(document.documentElement.lang)
+  ? { caricamento: 'Loading…', ricarica: 'Reload the demo' }
+  : { caricamento: 'Caricamento…', ricarica: 'Ricarica la demo' };
 const earlyAudio = { context: null, runtime: null };
 function ensureEntryAudioContext() {
   if (!earlyAudio.context) {
@@ -1316,7 +1323,7 @@ async function requestDemo(event) {
       request?.catch?.(() => {});
     } catch { /* Keep the regular viewport when fullscreen is unavailable. */ }
   }
-  entryButton.textContent = 'Caricamento…';
+  entryButton.textContent = ETICHETTE_INGRESSO.caricamento;
   entryButton.setAttribute('aria-busy', 'true');
   entryButton.setAttribute('aria-disabled', 'true');
   document.body.classList.add('retro-city-loading');
@@ -1326,14 +1333,14 @@ async function requestDemo(event) {
     await scene.retroSceneReady;
     document.removeEventListener('keydown', onEntryKey, true);
     entryOverlay.removeEventListener('click', onEntryClick, true);
-    entryButton.textContent = 'Esplora i reparti';
+    entryButton.textContent = ETICHETTA_INGRESSO;
     entryButton.removeAttribute('aria-busy');
     entryButton.removeAttribute('aria-disabled');
     scene.startRetroFuture(event);
   } catch (error) {
     entryLoading = false;
     entryFailed = true;
-    entryButton.textContent = 'Ricarica la demo';
+    entryButton.textContent = ETICHETTE_INGRESSO.ricarica;
     entryButton.removeAttribute('aria-busy');
     entryButton.removeAttribute('aria-disabled');
     console.error('[retro-entry]', error);
