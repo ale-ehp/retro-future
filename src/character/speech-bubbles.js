@@ -23,7 +23,11 @@ export function initSpeechBubbles(injected) {
 const greeterBubbleWorldScratch = new THREE.Vector3();
 const GREETER_BUBBLE_HEAD_GAP = 1.1;       // world units above the head
 export const GREETER_BUBBLE_WORLD_HEIGHT = retroFutureSignScale(1.5); // sprite height in world units at sizeScale 1
-const GREETER_BUBBLE_FADE_SEC = 0.5;       // dissolve in/out time
+const GREETER_BUBBLE_FADE_SEC = 0.5;       // quanto ci mette a sparire
+// Comparire e' un'altra cosa: il cartello si monta dal basso (montaCartello) e deve diventare
+// pieno mentre si apre, non insieme all'apertura. Con la stessa lentezza della sparizione
+// l'effetto tornava a leggersi come dissolvenza (2026-09-18).
+const GREETER_BUBBLE_ACCENSIONE_SEC = 0.12;
 // Opachi per scelta (2026-09-18): il moltiplicatore globale di sign-opacity.js taglia al 70%
 // e li faceva sembrare adesivi appiccicati sulla scena. Quello resta per i cartelloni della
 // citta', le porte e l'avviso di confine: qui, sui cartelli dei personaggi, si legge e basta.
@@ -505,7 +509,12 @@ function ensureGreeterBubbleSprite() {
       transparent: true,
       opacity: 0,
       depthWrite: false,
-      depthTest: false,
+      // depthTest acceso di proposito (2026-09-18): chi parla deve stare DAVANTI al proprio
+      // cartello. I personaggi sono opachi e scrivono nel depth buffer, quindi lo coprono;
+      // i pannelli della citta' hanno depthWrite: false, non lasciano profondita' e percio'
+      // continuano a non poterlo nascondere. Con depthTest: false il cartello passava sopra
+      // anche al personaggio.
+      depthTest: true,
       toneMapped: false,
       side: THREE.DoubleSide,
     })
@@ -530,8 +539,9 @@ export function updateGreeterSpeechBubble() {
     show = greeter.bubbleProximity ? Boolean(greeter.bubbleInRange) : (greeter.bubbleUntil && nowMs < greeter.bubbleUntil);
   }
   const target = show ? GREETER_BUBBLE_MAX_OPACITY : 0;
+  const durata = target > 0 ? GREETER_BUBBLE_ACCENSIONE_SEC : GREETER_BUBBLE_FADE_SEC;
   const stepOp = fadeDt > 0
-    ? (fadeDt / GREETER_BUBBLE_FADE_SEC) * GREETER_BUBBLE_MAX_OPACITY
+    ? (fadeDt / durata) * GREETER_BUBBLE_MAX_OPACITY
     : target;
   let op = sprite.material.opacity ?? 0;
   if (op < target) op = Math.min(target, op + stepOp);
@@ -555,8 +565,36 @@ export function updateGreeterSpeechBubble() {
   sprite.rotation.set(0, Math.atan2(deps.getCamera().position.x - sprite.position.x, deps.getCamera().position.z - sprite.position.z), 0);
   const h = GREETER_BUBBLE_WORLD_HEIGHT * (greeter.bubbleSizeScale || 1);
   const aspect = tex.__aspect || 2;
-  sprite.scale.set(h * aspect, h, 1);
+  // L'apertura va a orologio, non al passo della dissolvenza: un frame lungo (la prima
+  // generazione della texture ne fa uno) la faceva finire in 30ms, cioe' invisibile.
+  if (!sprite.visible) sprite.userData.apertaDa = nowMs;
+  montaCartello(sprite, greeterBubbleWorldScratch.y, h * aspect, h, puntoApertura(nowMs, sprite.userData.apertaDa), op);
   sprite.visible = true;
+}
+
+// I cartelli non compaiono: si aprono dal basso verso l'alto, come un pannello che si monta
+// (chiesto il 2026-09-18, prima era un popup). Il bordo inferiore resta fermo e l'altezza
+// cresce fino alla misura piena; l'opacita' arriva al massimo molto prima della fine, cosi'
+// si legge "costruzione" e non "dissolvenza".
+const APPARIZIONE_MS = 420;                // quanto dura l'apertura, a orologio
+const APPARIZIONE_ESPONENTE = 3;           // quanto l'apertura rallenta in chiusura
+const APPARIZIONE_OPACITA_ANTICIPO = 2.4;  // il pieno di opacita' a ~40% dell'apertura
+
+/** A che punto sta l'apertura, in base a quanto tempo e' passato da quando e' partita. */
+export function puntoApertura(nowMs, inizioMs) {
+  if (!Number.isFinite(inizioMs)) return 1;
+  return THREE.MathUtils.clamp((nowMs - inizioMs) / APPARIZIONE_MS, 0, 1);
+}
+
+/** Il cartello montato all'altezza giusta per il punto `t` (0..1) della sua apparizione. */
+export function montaCartello(sprite, baseY, larghezza, altezza, t, opacitaPiena) {
+  const avanzamento = THREE.MathUtils.clamp(t, 0, 1);
+  const aperto = 1 - (1 - avanzamento) ** APPARIZIONE_ESPONENTE;   // parte svelto, si posa
+  const altezzaOra = Math.max(altezza * aperto, 0.0001);
+  sprite.scale.set(larghezza, altezzaOra, 1);
+  // il bordo di sotto non si muove: cresce solo verso l'alto
+  sprite.position.y = baseY - altezza / 2 + altezzaOra / 2;
+  sprite.material.opacity = Math.min(1, avanzamento * APPARIZIONE_OPACITA_ANTICIPO) * opacitaPiena;
 }
 
 // ---------- Crowd ambient speech bubbles (pool of world sprites, like the greeter's) ----------
@@ -591,7 +629,7 @@ function ensureCrowdBubbleSprites() {
   for (let i = 0; i < CROWD_BUBBLE_POOL_SIZE; i += 1) {
     const sprite = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, depthTest: false, toneMapped: false, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, depthTest: true, toneMapped: false, side: THREE.DoubleSide })
     );
     sprite.visible = false;
     sprite.renderOrder = CHARACTER_BUBBLE_RENDER_ORDER;
@@ -637,7 +675,7 @@ export function updateTronRunnerCrowdSpeechBubbles() {
     if (!entry) { sprite.visible = false; sprite.material.opacity = 0; continue; }
     const member = entry.member;
     // Time-based fade: in over 0.3s, out over 0.4s before talkUntil.
-    const fadeIn = (nowMs - member.talkStart) / 300;
+    const fadeIn = (nowMs - member.talkStart) / 120;   // pieno mentre si apre, vedi montaCartello
     const fadeOut = (member.talkUntil - nowMs) / 400;
     const opacity = THREE.MathUtils.clamp(Math.min(fadeIn, fadeOut, 1), 0, 1) * CROWD_BUBBLE_MAX_OPACITY;
     if (opacity <= 0.001) { sprite.visible = false; sprite.material.opacity = 0; continue; }
@@ -649,8 +687,7 @@ export function updateTronRunnerCrowdSpeechBubbles() {
     sprite.rotation.set(0, Math.atan2(deps.getCamera().position.x - sprite.position.x, deps.getCamera().position.z - sprite.position.z), 0);
     const aspect = tex.__aspect || 2;
     const h = GREETER_BUBBLE_WORLD_HEIGHT * CROWD_BUBBLE_SIZE_SCALE;
-    sprite.scale.set(h * aspect, h, 1);
-    sprite.material.opacity = opacity;
+    montaCartello(sprite, crowdBubbleWorldScratch.y, h * aspect, h, puntoApertura(nowMs, member.talkStart), opacity);
     sprite.visible = true;
   }
 }

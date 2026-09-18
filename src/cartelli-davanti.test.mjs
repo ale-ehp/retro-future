@@ -47,11 +47,24 @@ test('nessuno sta davanti ai cartelli dei personaggi', () => {
   );
 });
 
-test('i cartelli ignorano la profondita\', altrimenti la geometria li taglia', () => {
+test('i cartelli rispettano la profondita\', cosi\' chi parla ci sta davanti', () => {
+  // depthTest acceso (2026-09-18): i personaggi sono opachi e scrivono nel depth buffer,
+  // quindi coprono il cartello di chi lo tiene. I pannelli della citta' hanno depthWrite
+  // false, non lasciano profondita', e percio' continuano a non poterlo nascondere: e' il
+  // groupOrder a tenerli dietro. Spegnere depthTest rimetterebbe il cartello davanti al
+  // personaggio, che e' proprio quello che non si vuole.
   const sorgente = readFileSync(new URL('./character/speech-bubbles.js', import.meta.url), 'utf8');
-  const occorrenze = [...sorgente.matchAll(/depthTest:\s*(\w+)/g)].map((m) => m[1]);
+  // via i commenti: qui sotto se ne parla a parole, e senza questo il test leggerebbe se stesso
+  const codice = sorgente.replace(/\/\/[^\n]*/g, '');
+  const occorrenze = [...codice.matchAll(/depthTest:\s*(\w+)/g)].map((m) => m[1]);
   assert.ok(occorrenze.length >= 2, 'materiali dei cartelli non trovati');
-  for (const valore of occorrenze) assert.equal(valore, 'false');
+  for (const valore of occorrenze) assert.equal(valore, 'true');
+
+  // e i pannelli devono continuare a non scrivere profondita', altrimenti tornano a coprirlo
+  for (const file of ['./world/city-boards.js', './world/contact-terminal.js']) {
+    const testo = readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert.match(testo, /depthWrite:\s*false/, file);
+  }
 });
 
 test('i cartelli stanno in un Group loro, ed e\' il gruppo a portare il renderOrder', () => {
