@@ -550,7 +550,7 @@
     z-index: 3;
     min-width: min(520px, 88vw);
     min-height: 123px;
-    margin-block: clamp(36px, 5.4vh, 58px) clamp(18px, 2.8vh, 28px);
+    margin-block: clamp(58px, 8.4vh, 92px) clamp(32px, 4.6vh, 48px);
     padding: 0 28px;
     border: 2px solid oklch(68% 0.19 45);
     border-radius: 0;
@@ -748,7 +748,7 @@
       min-width: 0;
       width: min(430px, 100%);
       min-height: 96px;
-      margin-block: 30px 34px;
+      margin-block: 48px 44px;
       padding-inline: 22px;
       font-size: clamp(28px, 9vw, 40px);
     }
