@@ -57,6 +57,11 @@ export function createTronRunnerRevealRuntime({
   getCityRevealComplete,
 }) {
   let startedAt = 0;
+  // Quanto si aspetta, dopo la citta', prima di far materializzare i personaggi. Prima
+  // questa attesa stava sul gruppo della folla e mangiava i primi mille millisecondi del
+  // rez; qui invece ritarda l'inizio, cosi' la materializzazione si vede tutta (2026-09-18).
+  const ATTESA_PRIMA_DEL_REZ_MS = 1000;
+  let prontoDa = 0;
   let progress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
   let rawProgress = TRON_RUNNER_REVEAL_ENABLED ? 0 : 1;
   let active = false;
@@ -288,6 +293,7 @@ export function createTronRunnerRevealRuntime({
 
   function reset() {
     startedAt = 0;
+    prontoDa = 0;
     const revealComplete = !TRON_RUNNER_REVEAL_ENABLED;
     setState(
       revealComplete ? 1 : 0,
@@ -326,6 +332,8 @@ export function createTronRunnerRevealRuntime({
       return;
     }
     if (!startedAt && !complete) {
+      if (!prontoDa) prontoDa = now;
+      if (now - prontoDa < ATTESA_PRIMA_DEL_REZ_MS) { applyVisuals(); return; }
       start(now);
       return;
     }

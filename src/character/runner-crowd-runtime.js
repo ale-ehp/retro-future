@@ -1107,7 +1107,12 @@ export function inspectTronRunnerCrowdRuntime(state) {
   };
 }
 
-const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 1000;
+// Era 1000: la folla restava nascosta un secondo dopo la fine della rivelazione della
+// citta'. Ma il rez dei personaggi parte proprio li', dura 1400ms, e cosi' i primi mille
+// erano invisibili: comparivano gia' formati per tre quarti, cioe' un popup (2026-09-18).
+// L'attesa non e' sparita, si e' spostata in runner-reveal.js: il gruppo si accende quando
+// il rez comincia, non un secondo dopo.
+const TRON_RUNNER_CROWD_APPEAR_DELAY_MS = 0;
 
 export function syncTronRunnerCrowdVisibilityState({
   crowd,
