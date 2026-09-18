@@ -13,7 +13,9 @@ test('character settings expose speech bubble background opacity control', () =>
   );
   assert.match(
     html,
-    /id="character-bubble-bg-opacity"[^>]*max="3"[^>]*value="2\.88"/
+    // 2026-09-18: portato a fondo scala. 2.88 su 3 faceva 0.96, cioe' cartelli semitrasparenti,
+    // e quel valore vinceva sulle costanti di speech-bubbles.js. Vedi src/cartelli-opachi.test.mjs.
+    /id="character-bubble-bg-opacity"[^>]*max="3"[^>]*value="3"/
   );
   assert.match(html, /id="character-bubble-bg-opacity-val"/);
   assert.match(
