@@ -30,12 +30,17 @@ function baseMaterialOpacity(material, fallback = 1) {
 //
 // Il piano guarda in giu' (normale 0,-1,0): tiene i punti con y <= constant. Il renderer
 // ha gia' localClippingEnabled acceso (main.js).
-const PIANO_REZ = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
-const TAGLIO_REZ = [PIANO_REZ];
+/** Il taglio di un singolo personaggio: ognuno si materializza sulla propria altezza. */
+function tagliaPersonaggio(gruppo) {
+  if (!gruppo.userData.pianoRez) {
+    gruppo.userData.pianoRez = [new THREE.Plane(new THREE.Vector3(0, -1, 0), 0)];
+  }
+  return gruppo.userData.pianoRez;
+}
 
 /** Attacca o stacca il taglio, ricompilando il materiale solo quando cambia davvero. */
-function applicaTaglioRez(material, taglia) {
-  const voluto = taglia ? TAGLIO_REZ : null;
+function applicaTaglioRez(material, taglia, piani) {
+  const voluto = taglia ? piani : null;
   if (material.clippingPlanes === voluto) return;
   material.clippingPlanes = voluto;
   material.needsUpdate = true;
@@ -67,6 +72,30 @@ export function createTronRunnerRevealRuntime({
   let active = false;
   let complete = !TRON_RUNNER_REVEAL_ENABLED;
   const visualCache = createTronRunnerRevealVisualCache();
+
+  // L'altezza vera di ciascuno, misurata una volta e tenuta da parte.
+  //
+  // Prima la quota del rez veniva da TRON_RUNNER_TARGET_HEIGHT, che e' l'altezza del
+  // personaggio giocante (~8.66): la folla e' piu' bassa (~4.8), quindi l'anello saliva fino
+  // a 8.11 mentre le teste stavano a 5.2-5.9, e continuava a salire nel vuoto sopra di loro
+  // (2026-09-18). Ora ognuno si materializza sulla propria misura.
+  const scatolaMisura = new THREE.Box3();
+  function altezzaPersonaggio(gruppo) {
+    if (Number.isFinite(gruppo.userData.altezzaRez)) return gruppo.userData.altezzaRez;
+    scatolaMisura.setFromObject(gruppo);
+    const h = scatolaMisura.max.y - scatolaMisura.min.y;
+    const buona = Number.isFinite(h) && h > 0.1 ? h : TRON_RUNNER_TARGET_HEIGHT;
+    gruppo.userData.altezzaRez = buona;
+    gruppo.userData.piediRez = scatolaMisura.min.y;
+    return buona;
+  }
+
+  /** La quota a cui sta il taglio per questo personaggio, dai piedi alla testa e non oltre. */
+  function quotaRez(gruppo, fattore) {
+    const h = altezzaPersonaggio(gruppo);
+    const piedi = Number.isFinite(gruppo.userData.piediRez) ? gruppo.userData.piediRez : 0;
+    return piedi + h * THREE.MathUtils.clamp(THREE.MathUtils.lerp(0.06, 1, fattore), 0, 1);
+  }
 
   // ----- Anelli di materializzazione, uno per personaggio -----
   //
@@ -114,7 +143,7 @@ export function createTronRunnerRevealRuntime({
   const nessunaRotazione = new THREE.Quaternion();
 
   /** Mette un anello alla quota del taglio sotto ogni personaggio che si sta formando. */
-  function aggiornaAnelliRez(sogliaY, pulsazione, attivo) {
+  function aggiornaAnelliRez(fattore, pulsazione, attivo) {
     if (!attivo || pulsazione <= 0.02) {
       if (anelliRez) anelliRez.visible = false;
       return;
@@ -129,7 +158,8 @@ export function createTronRunnerRevealRuntime({
     const anelli = assicuraAnelliRez(soggetti.length);
     for (let i = 0; i < soggetti.length; i += 1) {
       soggetti[i].getWorldPosition(posizioneAnello);
-      posizioneAnello.y += sogliaY;
+      // la quota e' quella di QUESTO personaggio: si ferma alla sua testa
+      posizioneAnello.y = quotaRez(soggetti[i], fattore);
       const s = soggetti[i].scale.y || 1;
       scalaAnello.set(s, s, s);
       matriceAnello.compose(posizioneAnello, nessunaRotazione, scalaAnello);
@@ -210,16 +240,22 @@ export function createTronRunnerRevealRuntime({
     idleCharacter.visible = visible;
   }
 
-  function applyCrowdRevealVisuals(factor, revealComplete, activePulse) {
+  function applyCrowdRevealVisuals(factorTaglio, revealComplete, activePulse) {
+    const factor = factorTaglio;
     const revealOpacity = revealComplete ? 1 : factor;
     for (const member of crowd) {
+      const piani = tagliaPersonaggio(member.group);
+      // appena sopra l'anello, cosi' il corpo si forma dietro la luce e finisce con lei
+      piani[0].constant = revealComplete
+        ? Number.POSITIVE_INFINITY
+        : quotaRez(member.group, factorTaglio) + altezzaPersonaggio(member.group) * 0.04;
       for (const material of member.materials || []) {
         const baseOpacity = baseMaterialOpacity(material, material.opacity);
         const baseEmissive = Number.isFinite(material.userData?.tronRunnerBaseEmissiveIntensity)
           ? material.userData.tronRunnerBaseEmissiveIntensity
           : material.emissiveIntensity;
         // Corpo pieno da subito: a decidere cosa si vede e' il taglio che sale, non l'opacita'.
-        applicaTaglioRez(material, !revealComplete);
+        applicaTaglioRez(material, !revealComplete, piani);
         material.transparent = false;
         material.opacity = baseOpacity;
         material.depthWrite = true;
@@ -239,16 +275,21 @@ export function createTronRunnerRevealRuntime({
     runnerState.crowdRevealMaterialOpacity = revealOpacity;
   }
 
-  function applyIdleCharacterRevealVisuals(factor, revealComplete, activePulse) {
+  function applyIdleCharacterRevealVisuals(factorTaglio, revealComplete, activePulse) {
+    const factor = factorTaglio;
     syncIdleVisibility(factor);
     if (!idleCharacter.built) return;
     const revealOpacity = revealComplete ? 1 : factor;
+    const pianiIdle = tagliaPersonaggio(idleCharacterGroup);
+    pianiIdle[0].constant = revealComplete
+      ? Number.POSITIVE_INFINITY
+      : quotaRez(idleCharacterGroup, factorTaglio) + altezzaPersonaggio(idleCharacterGroup) * 0.04;
     for (const material of idleCharacter.materials || []) {
       const baseOpacity = baseMaterialOpacity(material, material.opacity);
       const baseEmissive = Number.isFinite(material.userData?.tronRunnerBaseEmissiveIntensity)
         ? material.userData.tronRunnerBaseEmissiveIntensity
         : material.emissiveIntensity;
-      applicaTaglioRez(material, !revealComplete);
+      applicaTaglioRez(material, !revealComplete, pianiIdle);
       material.transparent = false;
       material.opacity = baseOpacity;
       material.depthWrite = true;
@@ -269,12 +310,6 @@ export function createTronRunnerRevealRuntime({
     const factor = visibleFactor();
     const revealComplete = factor >= 0.995 || !TRON_RUNNER_REVEAL_ENABLED;
     const activePulse = active ? Math.sin(Math.PI * rawProgress) : 0;
-    // La soglia del rez sale come l'anello di scansione, appena sopra di lui: il corpo si
-    // forma dietro il passaggio della luce. Sta qui e non nel blocco dell'anello perche'
-    // quello puo' mancare, e senza soglia aggiornata i personaggi resterebbero tagliati via.
-    PIANO_REZ.constant = revealComplete
-      ? Number.POSITIVE_INFINITY
-      : TRON_RUNNER_TARGET_HEIGHT * (THREE.MathUtils.lerp(0.06, 0.98, factor) + 0.04);
     const cacheProgress = Number(factor.toFixed(4));
     const cacheRawProgress = Number(rawProgress.toFixed(4));
     if (
@@ -327,11 +362,7 @@ export function createTronRunnerRevealRuntime({
     applyCrowdRevealVisuals(factor, revealComplete, activePulse);
     applyIdleCharacterRevealVisuals(factor, revealComplete, activePulse);
     // La luce che produce la materializzazione, alla stessa quota del taglio.
-    aggiornaAnelliRez(
-      TRON_RUNNER_TARGET_HEIGHT * THREE.MathUtils.lerp(0.06, 0.98, factor),
-      activePulse,
-      active && !revealComplete
-    );
+    aggiornaAnelliRez(factor, activePulse, active && !revealComplete);
 
     const groundShadow = runnerParts.groundShadow;
     if (groundShadow?.material) {

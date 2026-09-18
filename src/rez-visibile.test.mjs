@@ -56,3 +56,20 @@ test('ogni personaggio ha il suo anello, non quello del sorgente invisibile', ()
 test('gli anelli si accendono solo mentre la materializzazione e\' in corso', () => {
   assert.match(rivelazione, /if \(!attivo \|\| pulsazione <= 0\.02\)/);
 });
+
+test('l\'anello sale sull\'altezza di chi si materializza, non su quella del giocante', () => {
+  // TRON_RUNNER_TARGET_HEIGHT e' l'altezza del personaggio giocante (~8.66). Usarla per
+  // tutti faceva salire l'anello fino a 8.11 mentre le teste della folla stanno a 5.2-5.9:
+  // superava la testa e continuava nel vuoto (2026-09-18). Ora ognuno ha la sua misura.
+  assert.match(rivelazione, /function altezzaPersonaggio\(/);
+  assert.match(rivelazione, /function quotaRez\(/);
+  assert.match(rivelazione, /posizioneAnello\.y = quotaRez\(/);
+  // e la quota non puo' andare oltre la testa: il fattore e' limitato a 1
+  const corpo = rivelazione.slice(rivelazione.indexOf('function quotaRez('));
+  assert.match(corpo.slice(0, 400), /clamp\(/);
+});
+
+test('anche il taglio del corpo segue l\'altezza del singolo', () => {
+  assert.match(rivelazione, /tagliaPersonaggio\(member\.group\)/);
+  assert.match(rivelazione, /quotaRez\(member\.group, factorTaglio\)/);
+});
