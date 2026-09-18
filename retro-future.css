@@ -538,7 +538,9 @@
     margin: 0;
     color: oklch(96% 0.018 220);
     font-family: Sora, Avenir Next, Segoe UI, sans-serif;
-    font-size: clamp(22px, 3.5vw, 48px);
+    /* 2026-09-18: era clamp(22px, 3.5vw, 48px) e la frase occupava due righe alte quanto le
+       foto dei reparti, rubando la scena a quello che sta sotto. */
+    font-size: clamp(18px, 2.3vw, 30px);
     font-weight: 800;
     line-height: 1.24;
     letter-spacing: 0;
@@ -548,10 +550,13 @@
   .welcome-start-button {
     position: relative;
     z-index: 3;
-    min-width: min(520px, 88vw);
-    min-height: 123px;
-    margin-block: clamp(36px, 5.4vh, 58px) clamp(18px, 2.8vh, 28px);
-    padding: 0 28px;
+    /* 2026-09-18: il bottone era 520x123 con testo a 48px, piu' largo delle quattro foto messe
+       insieme. Rimpicciolito, e lo stacco dalle foto cresce invece di calare: sotto le foto ci
+       vuole aria, altrimenti sembra attaccato all'ultima riga della griglia. */
+    min-width: min(320px, 76vw);
+    min-height: 62px;
+    margin-block: clamp(52px, 7.5vh, 84px) clamp(18px, 2.8vh, 28px);
+    padding: 0 26px;
     border: 2px solid oklch(68% 0.19 45);
     border-radius: 0;
     background: oklch(68% 0.19 45);
@@ -559,7 +564,7 @@
     box-shadow: none;
     cursor: pointer;
     font-family: Sora, Avenir Next, Segoe UI, sans-serif;
-    font-size: clamp(32px, 4.4vw, 48px);
+    font-size: clamp(17px, 1.9vw, 24px);
     font-weight: 800;
     line-height: 1;
     letter-spacing: 0;
@@ -592,7 +597,7 @@
     0%, 100% { opacity: 0; }
     50% { opacity: 1; }
   }
-  .welcome-start-button[aria-busy="true"] { font-size: clamp(22px, 3vw, 36px); cursor: progress; }
+  .welcome-start-button[aria-busy="true"] { font-size: clamp(15px, 1.7vw, 21px); cursor: progress; }
   .welcome-start-button:hover::before,
   .welcome-start-button[aria-busy="true"]::before { animation: none; opacity: 0; }
   @media (prefers-reduced-motion: reduce) {
@@ -746,11 +751,13 @@
     .welcome-start-button {
       box-sizing: border-box;
       min-width: 0;
-      width: min(430px, 100%);
-      min-height: 96px;
-      margin-block: 30px 34px;
-      padding-inline: 22px;
-      font-size: clamp(28px, 9vw, 40px);
+      /* Stessa cura della versione da scrivania (2026-09-18): bottone piu' piccolo e piu'
+         staccato dalle foto dei reparti, che qui gli stanno subito sopra. */
+      width: min(300px, 100%);
+      min-height: 56px;
+      margin-block: 40px 28px;
+      padding-inline: 20px;
+      font-size: clamp(17px, 5vw, 22px);
     }
     .welcome-departments {
       gap: 14px;
