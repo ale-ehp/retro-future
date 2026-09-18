@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { retroFutureSignOpacity } from '../sign-opacity.js';
 
 import {
   CROWD_BUBBLE_MAX_OPACITY,
@@ -54,9 +55,12 @@ test('greeter bubble uses animated tron orange logo treatment', () => {
   assert.equal(greeterBubbleLogoAnimationState(600).aiMainOpacity, 1);
 });
 
-test('speech bubble signs use the shared 30 percent opacity reduction', () => {
-  assert.equal(GREETER_BUBBLE_MAX_OPACITY, 0.7);
-  assert.equal(CROWD_BUBBLE_MAX_OPACITY, 0.7);
+test('i cartelli dei personaggi restano fuori dallo sconto del 30 percento', () => {
+  // Scelta del 2026-09-18: opachi. Il moltiplicatore di sign-opacity.js vale ancora per i
+  // cartelloni della citta', le porte e l'avviso di confine, non per chi parla.
+  assert.equal(GREETER_BUBBLE_MAX_OPACITY, 1);
+  assert.equal(CROWD_BUBBLE_MAX_OPACITY, 1);
+  assert.equal(retroFutureSignOpacity(1), 0.7);
 });
 
 test('speech bubble signs are 50 percent larger in world space', () => {
@@ -65,8 +69,8 @@ test('speech bubble signs are 50 percent larger in world space', () => {
 
 test('character bubble backgrounds are visibly dark and opaque', () => {
   resetCharacterBubbleBackgroundOpacity();
-  assert.equal(CROWD_BUBBLE_PANEL_FILL_STYLE, 'rgba(0,3,4,0.94)');
-  assert.equal(GREETER_BUBBLE_PANEL_FILL_STYLE, 'rgba(0,3,4,0.96)');
+  assert.equal(CROWD_BUBBLE_PANEL_FILL_STYLE, 'rgba(0,3,4,1)');
+  assert.equal(GREETER_BUBBLE_PANEL_FILL_STYLE, 'rgba(0,3,4,1)');
   assert.equal(characterBubblePanelFillStyle('crowd'), CROWD_BUBBLE_PANEL_FILL_STYLE);
   assert.equal(characterBubblePanelFillStyle('greeter'), GREETER_BUBBLE_PANEL_FILL_STYLE);
 });

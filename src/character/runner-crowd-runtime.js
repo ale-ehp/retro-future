@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { fxEnabled } from '../engine/fx-debug-toggles.js';
+import { inLingua } from '../lingua.js';
 
 import {
   createTronRunnerCrowdMemberRecord,
@@ -52,6 +53,15 @@ import {
 import {
   pickTronRunnerCrowdLines,
 } from './runner-crowd-lines.js';
+
+// Quello che dice chi ti accoglie quando ti porta davanti al tabellone. Il <br> e' la riga
+// in cui spezzare il cartello, non decorazione: senza, il testo esce dal pannello.
+export const GREETER_FOLLOW_BUBBLE_TEXT = { it: 'Seguimi', en: 'Follow me' };
+
+export const GREETER_BOARD_BUBBLE_TEXT = {
+  it: 'Qui puoi vedere<br>i nostri reparti',
+  en: 'Here you can see<br>our departments',
+};
 
 export function clearTronRunnerCrowdState({
   crowd,
@@ -123,7 +133,12 @@ export function cityRevealPostRevealElapsedMsRuntime({
 export const TRON_RUNNER_GREETER_START_SIDE_OFFSET = 2.8;
 export const TRON_RUNNER_GREETER_START_BACK_OFFSET = 16;
 export const TRON_RUNNER_GREETER_GREET_DISTANCE = 7.4;
-export const TRON_RUNNER_WELCOME_BUBBLE_HTML = 'Benvenuto in<br>avstudio.ai';
+// La seconda riga resta 'avstudio.ai' in entrambe le lingue: e' quella che
+// speech-bubbles.js riconosce per disegnarci il logo al posto del testo.
+export const TRON_RUNNER_WELCOME_BUBBLE_TEXT = {
+  it: 'Benvenuto in<br>avstudio.ai',
+  en: 'Welcome to<br>avstudio.ai',
+};
 export const TRON_RUNNER_WELCOME_BUBBLE_DURATION_MS = 3600;
 export const TRON_RUNNER_WELCOME_BUBBLE_SIZE_SCALE = 1.55;
 export const TRON_RUNNER_FOLLOW_PROMPT_DELAY_MS = 1500;
@@ -578,7 +593,7 @@ export function advanceTronRunnerCrowdMemberRuntime({
       && member.greetAt && (now - member.greetAt) > greeterBubbleDurationMs) {
     member.greetStage = 'followPrompt';
     member.followPromptAt = now;
-    crowdRuntime.setGreeterBubble(member, 'Seguimi', 8000, now);
+    crowdRuntime.setGreeterBubble(member, inLingua(GREETER_FOLLOW_BUBBLE_TEXT), 8000, now);
   }
   // ...then 1s later set off for the departures board (retry until the anchor resolves).
   if (isGreeter && member.greetStage === 'followPrompt'
@@ -639,7 +654,7 @@ export function advanceTronRunnerCrowdMemberRuntime({
       bodyYaw = yawToPlayer + Math.sign(rel || 1) * Math.min(stance, Math.abs(rel));
       // Proximity-gated bubble: the renderer eases opacity in/out over 0.5s as bubbleInRange flips.
       const distToPlayer = Math.hypot(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
-      member.bubbleText = 'Qui vedi i<br>nostri reparti';
+      member.bubbleText = inLingua(GREETER_BOARD_BUBBLE_TEXT);
       member.bubbleSizeScale = 2;
       member.bubbleProximity = true;
       member.bubbleInRange = distToPlayer <= greeterBoardBubbleRange;
@@ -682,7 +697,7 @@ export function advanceTronRunnerCrowdMemberRuntime({
       member.greetAt = now;
       crowdRuntime.setGreeterBubble(
         member,
-        TRON_RUNNER_WELCOME_BUBBLE_HTML,
+        inLingua(TRON_RUNNER_WELCOME_BUBBLE_TEXT),
         greeterBubbleDurationMs,
         now,
         TRON_RUNNER_WELCOME_BUBBLE_SIZE_SCALE

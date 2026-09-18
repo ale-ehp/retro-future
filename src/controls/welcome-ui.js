@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { inLingua } from '../lingua.js';
 
 function applyWelcomeWindowMotion(motion, deps) {
   motion.frame = 0;
@@ -59,7 +60,9 @@ export function applyWelcomeWindowInputMode(deps) {
   if (!deps.keyLabel) return;
   const useTouchPrompt = welcomeWindowUsesTouchPrompt(deps);
   deps.action?.classList.toggle('is-touch-prompt', useTouchPrompt);
-  if (deps.actionPrefix) deps.actionPrefix.textContent = useTouchPrompt ? '' : 'Premi ';
+  // Le etichette del tasto arrivano gia' tradotte dal markup (data-*), ma questo prefisso
+  // era scritto a mano e rimetteva l'italiano sulla pagina inglese (2026-09-18).
+  if (deps.actionPrefix) deps.actionPrefix.textContent = useTouchPrompt ? '' : inLingua({ it: 'Premi ', en: 'Press ' });
   deps.keyLabel.textContent = useTouchPrompt
     ? (deps.keyLabel.dataset.touchLabel || 'Clicca')
     : (deps.keyLabel.dataset.desktopLabel || '[Spazio]');

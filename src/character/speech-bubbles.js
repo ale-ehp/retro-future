@@ -24,12 +24,15 @@ const greeterBubbleWorldScratch = new THREE.Vector3();
 const GREETER_BUBBLE_HEAD_GAP = 1.1;       // world units above the head
 export const GREETER_BUBBLE_WORLD_HEIGHT = retroFutureSignScale(1.5); // sprite height in world units at sizeScale 1
 const GREETER_BUBBLE_FADE_SEC = 0.5;       // dissolve in/out time
-export const GREETER_BUBBLE_MAX_OPACITY = retroFutureSignOpacity(1);
-export const CROWD_BUBBLE_MAX_OPACITY = retroFutureSignOpacity(1);
-export const CROWD_BUBBLE_PANEL_FILL_STYLE = 'rgba(0,3,4,0.94)';
+// Opachi per scelta (2026-09-18): il moltiplicatore globale di sign-opacity.js taglia al 70%
+// e li faceva sembrare adesivi appiccicati sulla scena. Quello resta per i cartelloni della
+// citta', le porte e l'avviso di confine: qui, sui cartelli dei personaggi, si legge e basta.
+export const GREETER_BUBBLE_MAX_OPACITY = 1;
+export const CROWD_BUBBLE_MAX_OPACITY = 1;
+export const CROWD_BUBBLE_PANEL_FILL_STYLE = 'rgba(0,3,4,1)';
 export const CROWD_BUBBLE_TEXT_FILL_STYLE = 'rgba(255,255,255,1)';
 const CROWD_BUBBLE_TEXT_SHADOW_STYLE = 'rgba(123,255,255,0.88)';
-export const GREETER_BUBBLE_PANEL_FILL_STYLE = 'rgba(0,3,4,0.96)';
+export const GREETER_BUBBLE_PANEL_FILL_STYLE = 'rgba(0,3,4,1)';
 const CHARACTER_BUBBLE_PANEL_RGB = Object.freeze([0, 3, 4]);
 let greeterBubbleSprite = null;
 let greeterBubbleLastMs = 0;
@@ -350,22 +353,21 @@ function drawGreeterBubbleCanvas(canvas, ctx, lines, nowMs = 0, panelFillStyle =
   const py = (canvas.height - panelH) / 2;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  // panel
+  // Pannello in stile terminale, sul modello dei cartelloni che delimitano il boulevard
+  // (src/world/city-boards.js): angoli squadrati e doppio bordo netto invece di un
+  // rettangolo stondato con l'alone largo, che faceva fumetto da cartone (2026-09-18).
   ctx.save();
-  ctx.shadowColor = 'rgba(98,247,255,0.55)';
-  ctx.shadowBlur = 26 * s;
+  ctx.shadowColor = 'rgba(98,247,255,0.35)';
+  ctx.shadowBlur = 10 * s;
   ctx.fillStyle = panelFillStyle;
-  ctx.beginPath();
-  ctx.roundRect(px, py, panelW, panelH, 18 * s);
-  ctx.fill();
+  ctx.fillRect(px, py, panelW, panelH);
   ctx.restore();
-  ctx.strokeStyle = 'rgba(143,252,255,0.9)';
-  ctx.lineWidth = 3 * s;
-  ctx.shadowColor = 'rgba(98,247,255,0.8)';
-  ctx.shadowBlur = 14 * s;
-  ctx.beginPath();
-  ctx.roundRect(px, py, panelW, panelH, 18 * s);
-  ctx.stroke();
+  ctx.strokeStyle = 'rgba(143,252,255,0.92)';
+  ctx.lineWidth = 4 * s;
+  ctx.strokeRect(px, py, panelW, panelH);
+  ctx.strokeStyle = 'rgba(98,247,255,0.34)';
+  ctx.lineWidth = 2 * s;
+  ctx.strokeRect(px + 7 * s, py + 7 * s, panelW - 14 * s, panelH - 14 * s);
   ctx.shadowBlur = 0;
   // text
   ctx.fillStyle = CROWD_BUBBLE_TEXT_FILL_STYLE;

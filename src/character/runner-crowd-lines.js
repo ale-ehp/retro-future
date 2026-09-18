@@ -1,9 +1,8 @@
 // Ambient one-liners the crowd says when the player comes near. Mix of warm greetings,
 // slice-of-life, light avstudio worldbuilding and Tron flavour. No dashes, brand lowercase.
 // This file is the single source for the crowd lines: no markdown mirror to keep in sync.
-// La lingua della pagina decide la lingua della folla (2026-09-18): index.en.html ha lang="en".
-// Nei test di node non c'e' `document`: italiano.
-const LINGUA = (typeof document !== 'undefined' && /^en/i.test(document.documentElement.lang)) ? 'en' : 'it';
+// La lingua della pagina decide la lingua della folla (2026-09-18): vedi src/lingua.js.
+import { linguaPagina } from '../lingua.js';
 
 export const TRON_RUNNER_CROWD_LINES_EN = [
   // Warm greetings
@@ -101,7 +100,7 @@ export const TRON_RUNNER_CROWD_LINES_IT = [
   'Sei dentro il sistema adesso.',
 ];
 
-export const TRON_RUNNER_CROWD_LINES = LINGUA === 'en' ? TRON_RUNNER_CROWD_LINES_EN : TRON_RUNNER_CROWD_LINES_IT;
+export const TRON_RUNNER_CROWD_LINES = linguaPagina() === 'en' ? TRON_RUNNER_CROWD_LINES_EN : TRON_RUNNER_CROWD_LINES_IT;
 
 export const TRON_RUNNER_CROWD_TALK_RANGE = 15;     // say something within this distance
 export const TRON_RUNNER_CROWD_TALK_REARM_RANGE = 18; // re-arm once you step past this (hysteresis)

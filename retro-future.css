@@ -307,6 +307,12 @@
     #tron-disc-cursor { display: none; }
     canvas { cursor: auto; }
   }
+  /* Il pannello dei valori di performance e' uno strumento di lavoro, non parte della
+     demo: resta spento salvo che l'URL abbia ?osd (2026-09-18). La classe la mette lo
+     script in index.html prima del primo frame, cosi' non lampeggia all'apertura. */
+  #hud-tl { display: none; }
+  body.osd-on #hud-tl { display: block; }
+
   .hud {
     position:fixed; pointer-events:none;
     background: rgba(2,9,11,0.55);

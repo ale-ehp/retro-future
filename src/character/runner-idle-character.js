@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { fxEnabled } from '../engine/fx-debug-toggles.js';
+import { inLingua } from '../lingua.js';
 import {
   TRON_RUNNER_CROWD_COLOR_PRESETS,
 } from './character-colors.js';
@@ -50,7 +51,7 @@ export function createTronRunnerIdleCharacterRuntime({
   const idleCharacter = createTronRunnerIdleCharacter({ group });
   const idleTalk = {
     group,
-    talkLines: ['Mi godo la pausa'],
+    talkLines: [inLingua({ it: 'Mi godo la pausa', en: 'Enjoying the break' })],
     talkCycle: 0,
     talkArmed: true,
     talkUntil: 0,

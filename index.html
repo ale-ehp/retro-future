@@ -197,6 +197,12 @@
   </div>
 </div>
 
+<script>
+  // ?osd accende il pannello dei valori di performance, spento per tutti gli altri
+  // (2026-09-18). Sta qui e non in src/main.js perche' il pannello e' nel markup e
+  // main.js arriva dopo: senza, si vedrebbe comparire e sparire.
+  if (new URLSearchParams(location.search).has('osd')) document.body.classList.add('osd-on');
+</script>
 <div id="hud-tl" class="hud">
   <div id="perf-live-overlay" class="perf-live-overlay" aria-label="Performance live">
     <div class="perf-live-row perf-live-primary"><span>FPS</span><strong id="fps">--</strong></div>
@@ -1282,6 +1288,19 @@ function scheduleRetroFutureCityBoot() {
   }
   return cityBootPromise;
 }
+
+// La citta' si costruisce in sottofondo appena la copertina ha finito di caricare, cosi'
+// il click su "Esplora i reparti" trova la scena gia' pronta e parte subito (2026-09-18).
+// Il costo e' che three.js e la scena si scaricano anche per chi non entra: scelta presa
+// apposta, l'attesa al click contava di piu'. scheduleRetroFutureCityBoot() tiene una sola
+// promessa, quindi il click piu' tardi si aggancia a questa senza far partire un secondo boot.
+function precaricaCitta() {
+  const avvia = () => { scheduleRetroFutureCityBoot().catch(() => { /* il click rifara' il boot e mostrera' l'errore */ }); };
+  if ('requestIdleCallback' in window) window.requestIdleCallback(avvia, { timeout: 1500 });
+  else window.setTimeout(avvia, 300);
+}
+if (document.readyState === 'complete') precaricaCitta();
+else window.addEventListener('load', precaricaCitta, { once: true });
 
 const entryButton = document.getElementById('welcome-start-button');
 const entryOverlay = document.getElementById('welcome-window-overlay');
