@@ -320,12 +320,12 @@ test('welcome cover uses the start button as the only department prompt', () => 
   assert.doesNotMatch(htmlSource, /class="welcome-copy"/);
   assert.doesNotMatch(htmlSource, /Esplora tutti i reparti/);
   assert.doesNotMatch(htmlSource, /Puoi esplorare qui tutti i reparti:/);
-  assert.match(cssSource, /\.welcome-body h1\s*\{[\s\S]*font-size:\s*clamp\(22px, 3\.5vw, 48px\)/);
+  assert.match(cssSource, /\.welcome-body h1\s*\{[\s\S]*font-size:\s*clamp\(18px, 2\.3vw, 30px\)/);
   assert.match(cssSource, /\.welcome-body h1\s*\{[\s\S]*line-height:\s*1\.24/);
-  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*min-width:\s*min\(520px, 88vw\)/);
-  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*min-height:\s*123px/);
-  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*margin-block:\s*clamp\(36px, 5\.4vh, 58px\) clamp\(34px, 4\.8vh, 50px\)/);
-  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*padding:\s*0 28px/);
+  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*min-width:\s*min\(320px, 76vw\)/);
+  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*min-height:\s*62px/);
+  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*margin-block:\s*clamp\(52px, 7\.5vh, 84px\) clamp\(34px, 4\.8vh, 50px\)/);
+  assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*padding:\s*0 26px/);
   assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*transition:\s*none/);
   assert.match(cssSource, /\.welcome-start-button\s*\{[\s\S]*animation:\s*welcome-start-button-pulse 1s/);
   assert.match(cssSource, /\.welcome-start-button:hover\s*\{[\s\S]*background:\s*oklch\(96% 0\.012 95\)/);
