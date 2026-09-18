@@ -49,7 +49,12 @@ export const GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_STYLE = 'rgba(0,16,20,0.82)';
 export const GREETER_BUBBLE_LOGO_WORDMARK_OUTLINE_WIDTH_RATIO = 0.052;
 export const GREETER_BUBBLE_LOGO_AI_IDLE_OFFSET_PX = 1.3;
 export const GREETER_BUBBLE_LOGO_AI_GLITCH_SLICE_OPACITY = 1;
-export const CHARACTER_BUBBLE_RENDER_ORDER = 40;
+// Sopra qualunque altra cosa della scena, come uno z-index alto: chi parla si legge sempre,
+// anche quando passa davanti al terminale contatti o ai cartelloni dei dipartimenti
+// (2026-09-18). Deve restare piu' alto di OGNI altro renderOrder del progetto, cupola del
+// cielo compresa (1000): src/cartelli-davanti.test.mjs li conta e fallisce se qualcuno
+// aggiunge un pannello piu' in alto.
+export const CHARACTER_BUBBLE_RENDER_ORDER = 2000;
 
 export function isGreeterBubbleLogoLine(line) {
   return String(line ?? '').trim().toLowerCase().replace('/', '') === 'avstudio.ai';
