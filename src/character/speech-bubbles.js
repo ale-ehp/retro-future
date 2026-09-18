@@ -513,7 +513,7 @@ function ensureGreeterBubbleSprite() {
   greeterBubbleSprite.visible = false;
   greeterBubbleSprite.renderOrder = CHARACTER_BUBBLE_RENDER_ORDER;
   greeterBubbleSprite.frustumCulled = false;
-  deps.getScene().add(greeterBubbleSprite);
+  cartelliDavantiATutto().add(greeterBubbleSprite);
   return greeterBubbleSprite;
 }
 
@@ -565,6 +565,26 @@ const CROWD_BUBBLE_SIZE_SCALE = 1.5; // crowd bubbles 50% larger than the base b
 const crowdBubbleWorldScratch = new THREE.Vector3();
 let crowdBubbleSprites = null;
 const crowdBubbleTalkers = [];
+// I cartelli vanno dentro un Group loro, e il renderOrder va messo SUL GRUPPO.
+//
+// three.js ordina prima per gruppo e poi per oggetto (in projectObject il renderOrder di un
+// Group diventa il groupOrder di tutti i suoi figli, e painterSortStable confronta groupOrder
+// per primo). I cartelloni dei dipartimenti e il terminale contatti vivono dentro Group con
+// renderOrder 30 e 34; i cartelli stavano appesi alla scena, cioe' gruppo 0, e finivano
+// disegnati prima: il loro renderOrder altissimo non veniva nemmeno messo a confronto, e i
+// pannelli ci passavano sopra (2026-09-18, segnalato con due fotografie).
+let contenitoreCartelli = null;
+function cartelliDavantiATutto() {
+  if (!contenitoreCartelli) {
+    contenitoreCartelli = new THREE.Group();
+    contenitoreCartelli.name = 'character-bubbles';
+    contenitoreCartelli.renderOrder = CHARACTER_BUBBLE_RENDER_ORDER;
+    contenitoreCartelli.frustumCulled = false;
+    deps.getScene().add(contenitoreCartelli);
+  }
+  return contenitoreCartelli;
+}
+
 function ensureCrowdBubbleSprites() {
   if (crowdBubbleSprites) return crowdBubbleSprites;
   crowdBubbleSprites = [];
@@ -576,7 +596,7 @@ function ensureCrowdBubbleSprites() {
     sprite.visible = false;
     sprite.renderOrder = CHARACTER_BUBBLE_RENDER_ORDER;
     sprite.frustumCulled = false;
-    deps.getScene().add(sprite);
+    cartelliDavantiATutto().add(sprite);
     crowdBubbleSprites.push(sprite);
   }
   return crowdBubbleSprites;

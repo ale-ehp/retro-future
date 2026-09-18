@@ -53,3 +53,15 @@ test('i cartelli ignorano la profondita\', altrimenti la geometria li taglia', (
   assert.ok(occorrenze.length >= 2, 'materiali dei cartelli non trovati');
   for (const valore of occorrenze) assert.equal(valore, 'false');
 });
+
+test('i cartelli stanno in un Group loro, ed e\' il gruppo a portare il renderOrder', () => {
+  // Il punto vero: three.js confronta prima il groupOrder (il renderOrder del Group che
+  // contiene l'oggetto) e solo dopo quello dell'oggetto. Con i cartelli appesi alla scena
+  // il loro numero non veniva mai messo a confronto e i pannelli, che stanno dentro Group
+  // con renderOrder 30 e 34, ci passavano sopra.
+  const sorgente = readFileSync(new URL('./character/speech-bubbles.js', import.meta.url), 'utf8');
+  assert.match(sorgente, /new THREE\.Group\(\)/);
+  assert.match(sorgente, /\.renderOrder = CHARACTER_BUBBLE_RENDER_ORDER/);
+  // e nessuno li attacca piu' direttamente alla scena
+  assert.doesNotMatch(sorgente, /getScene\(\)\.add\((?:greeterBubbleSprite|sprite)\)/);
+});
