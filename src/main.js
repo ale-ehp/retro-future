@@ -1637,7 +1637,12 @@ const footstepVariantCursor = {
 const footstepRequestedSampleCount = Object.values(TRON_FOOTSTEP_BANKS).reduce((sum, samples) => sum + samples.length, 0);
 const footstepAudioForward = new THREE.Vector3();
 const footstepAudioUp = new THREE.Vector3();
-let footstepAudioContext = window.__retroAudio?.context || null;
+// NON fotografare qui il contesto della pagina: quando main.js viene importato prima del
+// click (precaricamento) window.__retroAudio.context e' ancora nullo, main.js se ne
+// fabbricava uno suo e al gesto ne nasceva un secondo. Collegare nodi di contesti diversi
+// alza InvalidAccessError a ogni frame e porta giu' la scena (2026-09-18). Si risolve al
+// momento dell'uso, e chi arriva primo pubblica il suo per l'altro.
+let footstepAudioContext = null;
 let footstepAudioReadyPromise = null;
 let footstepAudioPreloadPromise = null;
 let footstepAudioError = '';
@@ -1650,9 +1655,16 @@ let lastFootstepSurface = 'road';
 let lastFootstepSample = '';
 
 function createFootstepAudioContext() {
+  // Uno solo per pagina, chiunque lo crei per primo.
+  const gianoto = window.__retroAudio?.context;
+  if (gianoto) return gianoto;
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextCtor) return null;
-  try { return new AudioContextCtor(); } catch { return null; }
+  try {
+    const nuovo = new AudioContextCtor();
+    if (window.__retroAudio) window.__retroAudio.context = nuovo;
+    return nuovo;
+  } catch { return null; }
 }
 
 function waitForNextFrame() {

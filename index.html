@@ -1299,13 +1299,13 @@ function precaricaCitta() {
   if ('requestIdleCallback' in window) window.requestIdleCallback(avvia, { timeout: 1500 });
   else window.setTimeout(avvia, 300);
 }
-// DISATTIVATO 2026-09-18, subito dopo il deploy: precaricare main.js prima del click
-// crea due AudioContext diversi (main.js fotografa window.__retroAudio.context al momento
-// dell'import, quando e' ancora null, e se ne fabbrica uno suo; quello della pagina nasce
-// dopo, sul gesto). I nodi dei due contesti non si collegano e ogni frame alza
-// InvalidAccessError: scena senza personaggi ne' cartelli e comandi morti.
-// Riattivare solo dopo aver reso l'audio indipendente dall'ordine di import.
-const PRECARICA_CITTA = false;
+// Spento e riacceso il 2026-09-18: precaricare main.js prima del click faceva nascere due
+// AudioContext (main.js fotografava window.__retroAudio.context all'import, quando e'
+// ancora nullo, e se ne fabbricava uno suo; quello della pagina nasce dopo, sul gesto), e
+// collegare nodi di contesti diversi alzava InvalidAccessError a ogni frame: scena senza
+// personaggi ne' cartelli e comandi morti. Ora main.js risolve il contesto al momento
+// dell'uso e chi arriva primo pubblica il suo, quindi resta uno solo per pagina.
+const PRECARICA_CITTA = true;
 if (PRECARICA_CITTA) {
   if (document.readyState === 'complete') precaricaCitta();
   else window.addEventListener('load', precaricaCitta, { once: true });
