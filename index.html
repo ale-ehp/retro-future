@@ -1299,8 +1299,17 @@ function precaricaCitta() {
   if ('requestIdleCallback' in window) window.requestIdleCallback(avvia, { timeout: 1500 });
   else window.setTimeout(avvia, 300);
 }
-if (document.readyState === 'complete') precaricaCitta();
-else window.addEventListener('load', precaricaCitta, { once: true });
+// DISATTIVATO 2026-09-18, subito dopo il deploy: precaricare main.js prima del click
+// crea due AudioContext diversi (main.js fotografa window.__retroAudio.context al momento
+// dell'import, quando e' ancora null, e se ne fabbrica uno suo; quello della pagina nasce
+// dopo, sul gesto). I nodi dei due contesti non si collegano e ogni frame alza
+// InvalidAccessError: scena senza personaggi ne' cartelli e comandi morti.
+// Riattivare solo dopo aver reso l'audio indipendente dall'ordine di import.
+const PRECARICA_CITTA = false;
+if (PRECARICA_CITTA) {
+  if (document.readyState === 'complete') precaricaCitta();
+  else window.addEventListener('load', precaricaCitta, { once: true });
+}
 
 const entryButton = document.getElementById('welcome-start-button');
 const entryOverlay = document.getElementById('welcome-window-overlay');
