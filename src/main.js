@@ -31,7 +31,6 @@ import {
   FIXED_CAMERA_FOV,
   HEX_ROAD_UPDATE_FRAME_STRIDE,
   MAX_HEX_ROAD_ACCUMULATED_DT,
-  SECONDARY_EFFECT_UPDATE_STRIDE,
 } from './world/config.js';
 import {
   createControlEls,
@@ -111,45 +110,26 @@ import {
   post,
   initPostPipeline,
   effectiveComposerPixelRatio,
-  syncCinematicLookPass,
-  syncTemporalAaPass,
-  applyTemporalAaJitterForRender,
-  clearTemporalAaJitterForRender,
-  syncBloomLookMerge,
-  syncComposerBufferRoles,
   isBloomPassActive,
   shouldBypassBloomForRevealPerformance,
   isBloomRevealBypassed,
-  syncBloomTemporalBudget,
   mobilePerformanceProfileActive,
   mobilePerformanceProfileInspect,
   effectiveRenderScaleForDevice,
   effectivePixelRatioForDevice,
-  syncCityRevealPerformanceProfile,
-  applyRenderResolution,
-  tunePerformanceBudget,
   setupPost,
 } from './engine/post-pipeline.js';
 import { createPerformanceDiagnostics } from './engine/performance-diagnostics.js';
 import {
-  createTechBreakdownOverlay,
-  techBreakdownRequestedFromParams,
-} from './engine/tech-breakdown-overlay.js';
-import {
   retroBenchmarkSearchParams,
-  retroBenchmarkRuntime,
-  maybeStartRetroBenchmarkAuto,
   initRetroBenchmarkRuntime,
 } from './engine/retro-benchmark-runtime.js';
 import {
   addCityDepartmentFrame,
-  updateCityDepartmentBoards,
-  updateCityRoleBoard,
 } from './world/city-boards.js';
 import {
   contactTerminalOwnsCamera,
   handleContactTerminalKeyDown,
-  updateContactTerminal,
 } from './world/contact-terminal.js';
 import {
   setStripInstanceTransform,
@@ -159,6 +139,7 @@ import {
   sideBuildingRecords,
 } from './world/buildings.js';
 import { createSkyDome } from './world/sky-dome.js';
+import { frame, initFrameLoop, tick, applyViewportResize } from './engine/frame-loop.js';
 import {
   initCityWiring,
   bridges,
@@ -167,8 +148,6 @@ import {
   cityRevealProfiler,
   mainFacadeVerticalRevealState,
   buildingLedBatchInspect,
-  updateMainFacadeVerticalReveal,
-  shouldUpdateTronRunnerSourceCharacter,
 } from './world/city-wiring.js';
 import { initInspectHooks } from './engine/inspect-hooks.js';
 import {
@@ -204,18 +183,13 @@ import {
   applyCameraLook,
   lerpAngle,
   removeViewMotionOffset,
-  applyViewMotionOffset,
   cameraGroundHeightAt,
   resolveCameraWalkSurface,
 } from './camera/player-state.js';
 import {
-  tronRunnerBeatPulse,
   tronRunnerCrowd,
   tronRunnerCrowdGroup,
-  tronRunnerCrowdRuntime,
   tronRunnerCrowdRuntimeStats,
-  tronRunnerOrchestration,
-  tronRunnerReveal,
 } from './character/runner-wiring.js';
 import {
   boulevard,
@@ -232,7 +206,6 @@ import {
   cityRevealWaitingForVisibleFrame,
   cityRevealWireAlpha,
   cityRevealWireframeEnabled,
-  isCityRevealCompositeActive,
   isCityRevealPerformanceCritical,
   markCityRevealComplete,
   renderCityRevealWireframe,
@@ -243,7 +216,6 @@ import {
 } from './world/city-reveal-wireframe.js';
 import {
   staticCityCullStats,
-  updateStaticCityCulling,
 } from './engine/static-city-culling.js';
 import {
   applyWelcomeWindowInputMode as applyWelcomeWindowInputModeCore,
@@ -255,16 +227,10 @@ import {
   welcomeWindowVisible as welcomeWindowVisibleCore,
 } from './controls/welcome-ui.js';
 import {
-  updateGreeterSpeechBubble,
-  updateTronRunnerCrowdSpeechBubbles,
-} from './character/speech-bubbles.js';
-import {
   initAtmosphereParticles,
-  updateAtmosphereParticles,
 } from './world/atmosphere-particles.js';
 import {
   applyEdgePulseShader,
-  updateEdgePulse,
 } from './world/energy-pulse.js';
 import {
   initMaterialTextures,
@@ -278,19 +244,15 @@ import {
 } from './world/ground-geometry.js';
 import {
   boundaryErrorInspect,
-  boundaryErrorNeedsUpdate,
   getRoadBoundaryHexStats,
   initBoundaryError,
   setTronNoclip,
-  updateBoundaryError,
-  updateRoadBoundaryPulse,
 } from './world/boundary-error.js';
 import {
   droneIntroHeroShotRequestedFromParams,
   droneIntroInspect,
   initDroneIntro,
   startDroneIntroFlight,
-  updateDroneIntroFlight,
 } from './camera/drone-intro.js';
 import {
   getPointerLocked,
@@ -304,7 +266,6 @@ import {
   setTronDiscCursorRevealWaiting,
   setTronDiscCursorVisible,
   tronDiscCursorState,
-  updateTronDiscCursor,
 } from './camera/disc-cursor.js';
 import {
   initMobileMovement,
@@ -312,7 +273,6 @@ import {
   requestLandscapeFullscreen,
 } from './controls/mobile-movement.js';
 import {
-  applyMovement,
   clearMovementKeys,
   clearVerticalMovementState,
   initMovement,
@@ -326,7 +286,6 @@ import {
   setMovementRunMix,
   setSideSwayOffset,
   stepPhase,
-  updateWalkSimulation,
 } from './controls/movement.js';
 import { initKeyboard, keys } from './controls/keyboard.js';
 import {
@@ -334,7 +293,6 @@ import {
   HEX_ROAD_UPLOAD_BATCH_LIMIT,
   addHexRoadTiles,
   ensureHexRoadTileCoverage,
-  flushHexTileBatchUploads,
   getDirtyHexTileBatchCount,
   getHexTileHeightScale,
   getHexTileScale,
@@ -351,7 +309,6 @@ import {
   initHexTileSync,
   recoveringHexTiles,
   setHexRoadLodProfile,
-  stepHexRoadTiles,
   streetEdgeHexTileBatches,
   streetEdgeHexTiles,
   updateHexRoadBatchLod,
@@ -406,7 +363,6 @@ import {
   LAB_EQUALIZER_WORLD_HEIGHT,
   LAB_EQUALIZER_WORLD_WIDTH,
   labEqualizerGroup,
-  updateLabEqualizer,
   labEqualizerState,
 } from './controls/equalizer.js';
 import {
@@ -424,8 +380,6 @@ import {
 
 const droneIntroHeroShotEnabled = droneIntroHeroShotRequestedFromParams(new URLSearchParams(window.location.search));
 const cinematicGroundingSettings = cinematicGroundingSettingsFromParams(new URLSearchParams(window.location.search));
-let secondaryEffectFrame = 0;
-let boundaryErrorAccumulatedDt = 0;
 // Kick off both module groups before awaiting either, so their network
 // fetches overlap instead of serializing across the two top-level awaits.
 const postModulesPromise = Promise.all([
@@ -566,7 +520,7 @@ const performanceDiagnostics = createPerformanceDiagnostics({
     desktopText: () => performanceDiagnosticsEl,
     mobileText: mobilePerformanceDiagnosticsEl,
   },
-  getLatestMeasuredFps: () => latestMeasuredFps,
+  getLatestMeasuredFps: () => frame.latestMeasuredFps,
   getActivePixelRatio: () => post.activePixelRatio,
   getRequestedPixelRatio: () => post.requestedPixelRatio,
   getManualRenderScale: () => post.manualRenderScale,
@@ -618,7 +572,7 @@ initRetroBenchmarkRuntime({
   getBuildingReflectLite: () => buildingReflectLite,
   getDirLightActive: () => dirLightActive,
   getCityRevealMainLedReveal: () => cityRevealMainLedReveal,
-  getLatestMeasuredFps: () => latestMeasuredFps,
+  getLatestMeasuredFps: () => frame.latestMeasuredFps,
 });
 
 const scene = new THREE.Scene();
@@ -1149,7 +1103,7 @@ initDroneIntro(ctx, {
   setSideSwayOffset,
   setMovementHorizontalSpeed,
   setMovementRunMix,
-  getLast: () => last,
+  getLast: () => frame.last,
   getDroneLandingPose: () => player.droneLandingPose,
   getDefaultDroneLandingPose: () => DEFAULT_DRONE_LANDING_POSE,
   getSideBuildingRecords: () => sideBuildingRecords,
@@ -1346,7 +1300,7 @@ initCityWiring({
   refreshCullingBoundsWithMargin,
   roadHexBoundaryLimits,
   getDynamicRoadSurfaceWidth: () => dynamicRoadSurfaceWidth,
-  getLatestMeasuredFps: () => latestMeasuredFps,
+  getLatestMeasuredFps: () => frame.latestMeasuredFps,
 });
 
 // ---------- post (bloom): il dominio sta in engine/post-pipeline.js ----------
@@ -1398,7 +1352,7 @@ initControlPanel({
   syncTronIntroFxNodeSettings,
   tronSoundtrack,
   setFixedCameraFov,
-  getLatestMeasuredFps: () => latestMeasuredFps,
+  getLatestMeasuredFps: () => frame.latestMeasuredFps,
   scheduleLiveControls,
 });
 
@@ -1427,199 +1381,33 @@ initInspectHooks({
   getDynamicRoadSurfaceWidth: () => dynamicRoadSurfaceWidth,
 });
 
-let viewportResizeFrame = 0;
-function applyViewportResize() {
-  viewportResizeFrame = 0;
-  const w = window.innerWidth, h = window.innerHeight;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  renderer.setSize(w, h);
-  if (post.composer) post.composer.setSize(w, h);
-  applyRenderResolution(Number(controlEls.pixelRatio.value));
-}
-window.addEventListener('resize', () => {
-  if (viewportResizeFrame) return;
-  viewportResizeFrame = requestAnimationFrame(applyViewportResize);
+// ---------- il ciclo dei frame sta in engine/frame-loop.js ----------
+initFrameLoop({
+  scene,
+  camera,
+  renderer,
+  controlEls,
+  fpsEl,
+  PAL,
+  performanceDiagnostics,
+  postRevealPerfIsolationState,
+  skyDome,
+  hexRoadInspect,
+  syncHexRoadLodForFrame,
+  syncTronDiscRevealWaiting,
 });
-
-let last = performance.now();
-let fpsAccum = 0, fpsFrames = 0, fpsLast = last;
-let startPositionLabelLast = 0;
-let latestMeasuredFps = 0;
-
-function collectTechBreakdownStats() {
-  const fxInspect = fxToggleInspect();
-  const fxDisabled = Object.entries(fxInspect.toggles || {})
-    .filter(([, entry]) => entry.applied === false)
-    .map(([name]) => name);
-  return {
-    ...performanceDiagnostics.summary(latestMeasuredFps),
-    skyBake: skyDome.inspectSkyBake(),
-    temporalAa: post.temporalAaPass?.inspect() || { enabled: false, profile: post.temporalAaSettings.profile },
-    webgpu: { roadmap: 'compute TAA + motion vectors' },
-    hexRoad: hexRoadInspect(),
-    fxDisabled,
-  };
-}
-
-const techBreakdownOverlay = techBreakdownRequestedFromParams(retroBenchmarkSearchParams)
-  ? createTechBreakdownOverlay({ getStats: collectTechBreakdownStats })
-  : null;
 
 
 // ---------- Atmospheric particles (extracted -> atmosphere-particles.js) ----------
 initAtmosphereParticles({ getScene: () => scene, cyan: PAL.cyan });
 
-function tick(now) {
-  requestAnimationFrame(tick);
-  const frameStartedAt = performance.now();
-  const rawRafDtMs = Math.max(0, now - last);
-  const dt = Math.min(0.05, rawRafDtMs / 1000); last = now;
-  updateTronDiscCursor(dt);
-  fpsAccum += dt; fpsFrames++;
-  if (now - fpsLast > 500) {
-    const measuredFps = fpsFrames / fpsAccum;
-    latestMeasuredFps = measuredFps;
-    fpsEl.textContent = measuredFps.toFixed(0);
-    performanceDiagnostics.update(measuredFps);
-    tunePerformanceBudget(measuredFps);
-    fpsAccum = 0; fpsFrames = 0; fpsLast = now;
-  }
-  removeViewMotionOffset();
-  const droneIntroWasActive = updateDroneIntroFlight(now);
-  updateContactTerminal(now);
-  const contactTerminalCameraOwned = contactTerminalOwnsCamera();
-  if (!droneIntroWasActive && !contactTerminalCameraOwned) applyMovement(dt);
-  syncHexRoadLodForFrame();
-  const revealPerformanceCritical = isCityRevealPerformanceCritical();
-  if (!revealPerformanceCritical) {
-    stepHexRoadTiles(dt);
-    updateRoadBoundaryPulse(dt);
-    secondaryEffectFrame++;
-    const updateSecondaryEffects = secondaryEffectFrame % SECONDARY_EFFECT_UPDATE_STRIDE === 0;
-    boundaryErrorAccumulatedDt = Math.min(0.12, boundaryErrorAccumulatedDt + dt);
-    if (updateSecondaryEffects || boundaryErrorNeedsUpdate()) {
-      updateBoundaryError(boundaryErrorAccumulatedDt);
-      boundaryErrorAccumulatedDt = 0;
-    }
-    if (!contactTerminalCameraOwned) updateWalkSimulation(dt);
-    if (shouldUpdateTronRunnerSourceCharacter()) tronRunnerOrchestration.update(dt);
-    if (postRevealPerfIsolationState.crowd) {
-      tronRunnerCrowdRuntime.update(dt);
-    } else {
-      tronRunnerCrowdGroup.visible = false;
-      tronRunnerCrowdRuntimeStats.cullingVisibleCount = 0;
-      tronRunnerCrowdRuntimeStats.cullingHiddenCount = tronRunnerCrowd.length;
-      tronRunnerCrowdRuntimeStats.activeReflectionCount = 0;
-    }
-  } else {
-    tronRunnerCrowdRuntimeStats.performanceFreezeFrameCount += 1;
-  }
-  if (now - startPositionLabelLast > 180) {
-    updateStartPositionLiveLabel();
-    startPositionLabelLast = now;
-  }
-  if (!contactTerminalCameraOwned) applyViewMotionOffset();
-  skyDome.update(now);
-  // Sky background bake (on by default, desktop and mobile; ?skyBake=0 turns it
-  // off, ?skyBake=1 forces it): only in steady state — post-reveal with no reveal
-  // compositing active — so the reveal's own sky is untouched.
-  skyDome.syncSkyBackgroundBake(now, cityRevealComplete && !isCityRevealCompositeActive());
-  if (!revealPerformanceCritical) {
-    updateCityDepartmentBoards(now);
-    updateCityRoleBoard();
-    flushHexTileBatchUploads();
-    const edgePulseSeconds = now * 0.001;
-    updateEdgePulse(edgePulseSeconds);
-    updateAtmosphereParticles(cityRevealComplete, edgePulseSeconds);
-    if (fxEnabled('speechBubbles')) {
-      updateGreeterSpeechBubble();
-      updateTronRunnerCrowdSpeechBubbles();
-    }
-  }
-  updateCityRevealWireframe(now);
-  syncTronDiscRevealWaiting();
-  syncCityRevealPerformanceProfile();
-  maybeStartRetroBenchmarkAuto(now);
-  const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
-  const bypassBloomForReveal = shouldBypassBloomForRevealPerformance();
-  if (post.bloomPass) post.bloomPass.enabled = post.bloomEnabled && postRevealPerfIsolationState.bloom && !bypassBloomForReveal && fxEnabled('bloom');
-  syncBloomTemporalBudget();
-  syncCinematicLookPass(now);
-  syncTemporalAaPass();
-  syncBloomLookMerge();
-  if (!postRevealPerformanceCritical) {
-    if (postRevealPerfIsolationState.equalizer) {
-      updateLabEqualizer(now, dt);
-    } else if (labEqualizerGroup.visible) {
-      labEqualizerGroup.visible = false;
-    }
-    tronRunnerReveal.update(now);
-    tronRunnerBeatPulse.update();
-    updateMainFacadeVerticalReveal();
-  }
-  updateStaticCityCulling();
-  const renderStartedAt = performance.now();
-  const captureRevealRenderInfo = cityRevealProfiler.shouldRun() || cityRevealProfiler.isCapturing();
-  const previousRendererInfoAutoReset = renderer.info.autoReset;
-  if (captureRevealRenderInfo) {
-    renderer.info.autoReset = false;
-    renderer.info.reset();
-  }
-  performanceDiagnostics.pollGpuTimerSamples();
-  performanceDiagnostics.beginGpuTimerSample();
-  const temporalAaJittered = applyTemporalAaJitterForRender();
-  syncComposerBufferRoles();
-  try {
-    cityRevealRender.renderCompositeFrame();
-  } finally {
-    clearTemporalAaJitterForRender(temporalAaJittered);
-    performanceDiagnostics.endGpuTimerSample();
-  }
-  // Handed over by reference: the profiler copies the four counters it needs on
-  // the spot, and info.render is only reset by the next render call.
-  const frameRenderInfo = captureRevealRenderInfo ? renderer.info.render : null;
-  if (captureRevealRenderInfo) renderer.info.autoReset = previousRendererInfoAutoReset;
-  const frameEndedAt = performance.now();
-  performanceDiagnostics.timing.updateMs = renderStartedAt - frameStartedAt;
-  performanceDiagnostics.timing.renderMs = frameEndedAt - renderStartedAt;
-  performanceDiagnostics.timing.frameMs = frameEndedAt - frameStartedAt;
-  performanceDiagnostics.updateRollingMetrics(dt, performanceDiagnostics.timing.frameMs, performanceDiagnostics.timing.updateMs, performanceDiagnostics.timing.renderMs);
-  performanceDiagnostics.recordSpike({
-    now,
-    rawRafDtMs,
-    updateMs: performanceDiagnostics.timing.updateMs,
-    renderMs: performanceDiagnostics.timing.renderMs,
-    frameMs: performanceDiagnostics.timing.frameMs,
-  });
-  cityRevealProfiler.recordFrame({
-    now,
-    dt,
-    updateMs: performanceDiagnostics.timing.updateMs,
-    renderMs: performanceDiagnostics.timing.renderMs,
-    frameMs: performanceDiagnostics.timing.frameMs,
-    renderInfo: frameRenderInfo,
-  });
-  retroBenchmarkRuntime.recordFrame({
-    now,
-    rafDtMs: rawRafDtMs,
-    updateMs: performanceDiagnostics.timing.updateMs,
-    renderMs: performanceDiagnostics.timing.renderMs,
-    frameMs: performanceDiagnostics.timing.frameMs,
-    // recordFrame reads these fields synchronously (and early-returns when idle),
-    // so pass the live info objects instead of allocating a copy every frame
-    renderInfo: renderer.info.render,
-    memoryInfo: renderer.info.memory,
-  });
-  techBreakdownOverlay?.update(now);
-}
 export const retroSceneReady = bootSceneWithFinalDefaults().then(() => {
   trimProductionControls();
   return new Promise((resolve) => requestAnimationFrame((now) => {
-    last = now;
-    fpsLast = now;
-    fpsAccum = 0;
-    fpsFrames = 0;
+    frame.last = now;
+    frame.fpsLast = now;
+    frame.fpsAccum = 0;
+    frame.fpsFrames = 0;
     startCityRevealWireframe();
     if (player.backspaceIntroTriggered) startCityRevealWireTimer();
     tick(now);

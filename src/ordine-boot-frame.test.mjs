@@ -1,10 +1,11 @@
-// L'ordine delle chiamate nel boot e nel ciclo dei frame di main.js.
+// L'ordine delle chiamate nel boot e nel ciclo dei frame.
 //
 // Queste prove leggono il sorgente di proposito, e sono fra le poche a cui e' concesso:
 // l'ordine in cui il boot scalda le texture e in cui un frame aggiorna i sottosistemi E'
 // logica, non stile, e finche' il ciclo vive dentro main.js non c'e' altro modo di
-// osservarlo senza far girare la scena intera. Se il ciclo dei frame viene estratto in un
-// modulo iniettabile (tappa 5), queste vanno riscritte come prove di comportamento.
+// osservarlo senza far girare la scena intera. Dalla tappa 5 il boot sta in
+// engine/boot-prewarm.js e il ciclo in engine/frame-loop.js: l'ordine e' lo stesso e le
+// prove leggono quei due file.
 //
 // Vengono da main-boot.test.mjs e contact-terminal-integration.test.mjs (2026-09-19); il
 // resto di quei file cercava nomi di funzioni e valori CSS ed e' stato sostituito da
@@ -15,6 +16,7 @@ import { readFileSync } from 'node:fs';
 
 const main = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
 const boot = readFileSync(new URL('./engine/boot-prewarm.js', import.meta.url), 'utf8');
+const ciclo = readFileSync(new URL('./engine/frame-loop.js', import.meta.url), 'utf8');
 
 /** Il corpo di una funzione, per nome, nel file dove vive; fallisce se non c'e'. */
 function corpo(firma, sorgente = main, dove = 'main.js') {
@@ -46,7 +48,7 @@ test('il boot svuota la coda della folla prima di scaldare le texture, e scalda 
 });
 
 test('nel frame il LOD della strada si aggiorna prima che il rivelo critico salti del lavoro', () => {
-  inOrdine(corpo('function tick(now) {'), [
+  inOrdine(corpo('function tick(now) {', ciclo, 'engine/frame-loop.js'), [
     'syncHexRoadLodForFrame();',
     'const revealPerformanceCritical = isCityRevealPerformanceCritical();',
     'if (!revealPerformanceCritical) {',
@@ -54,7 +56,7 @@ test('nel frame il LOD della strada si aggiorna prima che il rivelo critico salt
 });
 
 test('nel frame il terminale contatti decide se possiede la camera prima di camminata e dondolio', () => {
-  const tick = corpo('function tick(now) {');
+  const tick = corpo('function tick(now) {', ciclo, 'engine/frame-loop.js');
   inOrdine(tick, [
     'const contactTerminalCameraOwned = contactTerminalOwnsCamera()',
     'if (!contactTerminalCameraOwned) updateWalkSimulation(dt)',
