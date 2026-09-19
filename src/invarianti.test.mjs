@@ -15,6 +15,7 @@ import test from 'node:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import * as personaggi from './character/characters.js';
+import { CHARACTER_BUBBLE_BG_OPACITY_RANGE_MULTIPLIER } from './config/costanti.js';
 import { tronRunnerCrowdLedEmissiveIntensity } from './character/runner-crowd-leds.js';
 import {
   CHARACTER_BUBBLE_RENDER_ORDER,
@@ -87,10 +88,8 @@ test('il cursore "Sfondo cartelli" parte dove dicono le costanti', () => {
   // chiama setCharacterBubbleBackgroundOpacity() con il valore del cursore appena parte la
   // scena, e quell'override vince su tutto. Il cursore partiva da 2.88 su 3, cioe' 0.96: lo
   // sfondo restava trasparente e la costante non arrivava mai a schermo.
-  const main = leggi('./main.js');
   const pagina = leggi('../index.html');
-  const divisore = numero(main, 'CHARACTER_BUBBLE_BG_OPACITY_RANGE_MULTIPLIER', 'main.js');
-  const applicato = attributoCursore(pagina, 'character-bubble-bg-opacity', 'value') / divisore;
+  const applicato = attributoCursore(pagina, 'character-bubble-bg-opacity', 'value') / CHARACTER_BUBBLE_BG_OPACITY_RANGE_MULTIPLIER;
   assert.equal(applicato, alpha(GREETER_BUBBLE_PANEL_FILL_STYLE));
   // e il numero mostrato accanto al cursore dice la stessa cosa
   const mostrato = Number(pagina.match(/id="character-bubble-bg-opacity-val">([\d.]+)</)[1]);

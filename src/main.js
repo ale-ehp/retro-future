@@ -747,6 +747,42 @@ import {
   labEqualizerAnalyserSampleReady,
   labEqualizerLastSampleTime,
 } from './controls/equalizer.js';
+import {
+  CHARACTER_BUBBLE_BG_OPACITY_RANGE_MULTIPLIER,
+  PLAYER_SPAWN_KEY,
+  PLAYER_SPAWN_LEGACY_Z,
+  PLAYER_SPAWN_DEFAULT_Z,
+  DRONE_LANDING_KEY,
+  PITCH_LIMIT,
+  DEMO_START_KEY,
+  welcomeWindowMotionAllowed,
+  DRAG_ACTIVATE_PX,
+  POINTER_LOCK_SETTLE_MS,
+  POINTER_CLICK_SUPPRESS_MS,
+  WALK_SURFACE_SNAP_TOLERANCE,
+  FOOTSTEP_MIN_INTERVAL_MS,
+  FOOTSTEP_PLAYER_BUS,
+  FOOTSTEP_NPC_SPATIAL_BUS,
+  FOOTSTEP_PLAYER_VOLUME_SCALE,
+  roadBaseY,
+  ROAD_BOUNDARY_ROW_MAX,
+  TRON_RUNNER_CROWD_PLAYER_COLLISION_DISTANCE,
+  TRON_RUNNER_CROWD_PAUSE_CHANCE,
+  TRON_RUNNER_CROWD_PAUSE_MIN_MS,
+  TRON_RUNNER_CROWD_PAUSE_MAX_MS,
+  TRON_RUNNER_GREETER_INDEX,
+  GREETER_SPEED_MULTIPLIER,
+  GREETER_RUN_SPEED_BOOST,
+  GREETER_HEAD_MAX_YAW,
+  GREETER_HEAD_YAW_SIGN,
+  GREETER_BOARD_SIDE_GAP,
+  GREETER_BOARD_FRONT_GAP,
+  GREETER_BOARD_REACH,
+  GREETER_BOARD_BUBBLE_RANGE,
+  GREETER_BOARD_STANCE_DEG,
+  MOBILE_TARGET_PIXEL_RATIO,
+  SCENE_TEXTURE_PREWARM_KEYS,
+} from './config/costanti.js';
 
 // Postprocessing (optional bloom + FXAA). Best-effort — fallback to plain renderer if any module fails.
 let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null, cinematicLookPass = null, temporalAaPass = null;
@@ -918,7 +954,6 @@ const contactTerminalLiveEl = document.getElementById('contact-terminal-live');
 // non piu' come 8 KB di input nascosti dentro index.html.
 mountFixedControlDefaults();
 const controlEls = createControlEls();
-const CHARACTER_BUBBLE_BG_OPACITY_RANGE_MULTIPLIER = 3;
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 const postRevealPerfIsolationState = {
@@ -1336,9 +1371,6 @@ let yaw, pitch;
   yaw = e.y;
   pitch = e.x;
 }
-const PLAYER_SPAWN_KEY = 'tron-boulevard-player-spawn';
-const PLAYER_SPAWN_LEGACY_Z = 842.7866151854931;
-const PLAYER_SPAWN_DEFAULT_Z = 866.7866151854931;
 const DEFAULT_PLAYER_SPAWN = Object.freeze({
   x: 1021.9157138958009,
   y: 591.0351224586902,
@@ -1346,7 +1378,6 @@ const DEFAULT_PLAYER_SPAWN = Object.freeze({
   spawnYaw: 0.6598680604188623,
   spawnPitch: -0.4052322239066757,
 });
-const DRONE_LANDING_KEY = 'tron-boulevard-drone-landing';
 const DEFAULT_DRONE_LANDING_POSE = Object.freeze({
   x: 0,
   y: 4.1,
@@ -1357,8 +1388,6 @@ const DEFAULT_DRONE_LANDING_POSE = Object.freeze({
 });
 let playerSpawn = { ...DEFAULT_PLAYER_SPAWN };
 let droneLandingPose = { ...DEFAULT_DRONE_LANDING_POSE };
-const PITCH_LIMIT = Math.PI * 0.49;
-const DEMO_START_KEY = 'Space';
 let backspaceIntroTriggered = false;
 let sceneBootComplete = false;
 let cameraCollisionUnlockedByBackspace = false;
@@ -1376,7 +1405,6 @@ const tronDiscCursor = document.getElementById('tron-disc-cursor');
 const tronRevealWaitLabel = document.getElementById('tron-reveal-wait-label');
 const welcomeWindowTouchQuery = window.matchMedia('(hover: none), (pointer: coarse)');
 const welcomeWindowMobileQuery = window.matchMedia('(max-width: 760px)');
-const welcomeWindowMotionAllowed = false;
 const welcomeWindowMotion = {
   frame: 0,
   next: null,
@@ -1520,9 +1548,6 @@ function applyCameraLook() {
 }
 
 const lockEl = renderer.domElement;
-const DRAG_ACTIVATE_PX = 4;
-const POINTER_LOCK_SETTLE_MS = 220;
-const POINTER_CLICK_SUPPRESS_MS = 420;
 initDiscCursor({
   tronDiscCursor,
   lockEl,
@@ -1615,7 +1640,6 @@ const appliedHeadMotion = new THREE.Vector3();
 let walkSurfaceLift = 0;
 let walkSurfaceKind = 'road';
 let activeWalkSurfacePad = null;
-const WALK_SURFACE_SNAP_TOLERANCE = 0.45;
 const TRON_FOOTSTEP_BANKS = Object.freeze({
   road: [
     { side: 'right', key: 'ROUTER1A', url: 'audio/footsteps/road/ROUTER1A.wav' },
@@ -1630,10 +1654,6 @@ const TRON_FOOTSTEP_BANKS = Object.freeze({
     { side: 'left', key: 'GLASS2B', url: 'audio/footsteps/sidewalk/GLASS2B.wav' },
   ],
 });
-const FOOTSTEP_MIN_INTERVAL_MS = 105;
-const FOOTSTEP_PLAYER_BUS = 'player-local';
-const FOOTSTEP_NPC_SPATIAL_BUS = 'npc-spatial';
-const FOOTSTEP_PLAYER_VOLUME_SCALE = 1.2;
 const footstepBuffers = { road: [], sidewalk: [] };
 const footstepSampleData = { road: [], sidewalk: [] };
 const footstepVariantCursor = {
@@ -2180,7 +2200,6 @@ const roadMat = new THREE.MeshBasicMaterial({
   toneMapped: false,
   side: THREE.DoubleSide,
 });
-const roadBaseY = -1.55;
 const ROAD_BACKING_EDGE_INSET = GRID_BLOCK;
 function roadBackingWidth(width = dynamicRoadSurfaceWidth) {
   return Math.max(MAIN_ROAD_WIDTH * 0.25, width - ROAD_BACKING_EDGE_INSET * 2);
@@ -2296,7 +2315,6 @@ function updateMainRoadLength(centerZ, length) {
   updateZTileBand(mainRoadTiles, 0, centerZ, dynamicRoadSurfaceWidth, length);
 }
 
-const ROAD_BOUNDARY_ROW_MAX = 10;
 const roadBoundaryHexRowOffsets = Array.from({ length: ROAD_BOUNDARY_ROW_MAX }, () => 0);
 let roadBoundaryCollisionEnabled = true;
 let roadBoundaryCollisionMargin = 1.2;
@@ -2832,9 +2850,6 @@ function resolveCameraBuildingCollision() {
   }
 }
 
-// Player-vs-person stop distance (centre to centre). Tight so you can get nearly
-// shoulder-to-shoulder before being blocked, unlike the wall collision padding.
-const TRON_RUNNER_CROWD_PLAYER_COLLISION_DISTANCE = 1.6;
 function resolveCameraCrowdCollision() {
   tronRunnerCrowdRuntime?.resolveCameraCollision();
 }
@@ -3665,36 +3680,14 @@ const tronRunnerCrowdDeadlockDeps = {
   setState: tronRunnerCrowdRuntime.setState,
 };
 
-// Occasional standstill at a waypoint so the crowd reads as people, not marchers.
-// Distance-driven walk freezes the legs while paused (no moonwalk).
-const TRON_RUNNER_CROWD_PAUSE_CHANCE = 0.28;
-const TRON_RUNNER_CROWD_PAUSE_MIN_MS = 900;
-const TRON_RUNNER_CROWD_PAUSE_MAX_MS = 2800;
-// The green companion (member index 1) greets the player: it walks over deliberately
-// when the city is revealed, stops at a welcoming distance and turns to face the player,
-// then stays put. The cyan member behaves like a normal crowd member.
-const TRON_RUNNER_GREETER_INDEX = 1;
 const TRON_RUNNER_GREET_DISTANCE = TRON_RUNNER_GREETER_GREET_DISTANCE;
-const GREETER_SPEED_MULTIPLIER = 1.155; // 30% slower than the previous 1.65 approach pace
-const GREETER_RUN_SPEED_BOOST = 3.064;  // keeps board run 30% faster overall after slower approach
-const GREETER_HEAD_MAX_YAW = 1.3963; // +/-80deg => 160deg total head turn, no neck over-rotation
-const GREETER_HEAD_YAW_SIGN = 1;
 const tronRunnerGreeterHeadLookState = {
   camera,
   maxYaw: GREETER_HEAD_MAX_YAW,
   yawSign: GREETER_HEAD_YAW_SIGN,
   lerpAngle,
 };
-// After the welcome bubble dissolves the greeter walks over to the departures board
-// (the "12 reparti" tabellone) and posts up just past its right-hand edge, facing the player.
-// 2026-09-19: era 2.4, e da li' il cartello di chi accoglie andava a sovrapporsi al terminale
-// contatti. Spostato piu' a destra: il cartello ha dove stare senza doversi scansare.
-const GREETER_BOARD_SIDE_GAP = 5.2;  // clearance beyond the board's right edge (world units)
-const GREETER_BOARD_FRONT_GAP = 1.4; // step toward the player off the board plane (no clipping)
-const GREETER_BOARD_REACH = 0.8;     // arrival radius at the board anchor
 const GREETER_FOLLOW_DELAY_MS = TRON_RUNNER_FOLLOW_PROMPT_DELAY_MS; // show "Seguimi" first, then start moving 1.5s later
-const GREETER_BOARD_BUBBLE_RANGE = 32.0; // "Qui vedi i nostri reparti" shows within 32m of the greeter
-const GREETER_BOARD_STANCE_DEG = 45; // at the board the body sits 45deg between player and board
 const tronRunnerGreeterBoardAnchorState = {
   getCityDepartmentBoards: () => (typeof getCityDepartmentBoards === 'function' ? getCityDepartmentBoards() : null),
   sideGap: GREETER_BOARD_SIDE_GAP,
@@ -4543,14 +4536,6 @@ function shouldUseComposer() {
   );
 }
 
-// Mobile renders at a FIXED target pixel ratio instead of the adaptive ~720p
-// budget. Lowered to 1.7 (user decision): fill scales with pixel COUNT, so 1.7x
-// is (1.7/2)^2 = 0.72 = ~28% fewer pixels than 2x, and FXAA hides the softness.
-// A forced ratio (mobile default or ?pixelRatio=N) pins the render resolution:
-// it bypasses the mobile caps + adaptive target, and disables the auto quality
-// downscaler (tunePerformanceBudget) so it stays put in a benchmark.
-// ?pixelRatio=2 still forces the old resolution for A/B.
-const MOBILE_TARGET_PIXEL_RATIO = 1.7;
 const forcedPixelRatioParam = (() => {
   try {
     const v = Number(new URLSearchParams(window.location.search).get('pixelRatio'));
@@ -6329,20 +6314,6 @@ controlSettingsRuntime.bindSaveButtons();
 updateControlTabs();
 controlSettingsRuntime.setupSettingsToggle();
 
-const SCENE_TEXTURE_PREWARM_KEYS = Object.freeze([
-  'map',
-  'normalMap',
-  'roughnessMap',
-  'metalnessMap',
-  'emissiveMap',
-  'alphaMap',
-  'aoMap',
-  'bumpMap',
-  'displacementMap',
-  'lightMap',
-  'specularMap',
-  'envMap',
-]);
 const sceneTexturePrewarmStats = {
   supported: false,
   attempted: 0,
