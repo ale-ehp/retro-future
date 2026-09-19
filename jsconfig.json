@@ -41,6 +41,7 @@
     }
   },
   "include": [
+    "src/**/*.d.ts",
     "src/**/*.js",
     "src/**/*.mjs",
     "test/**/*.mjs"
