@@ -3681,7 +3681,9 @@ const tronRunnerGreeterHeadLookState = {
 };
 // After the welcome bubble dissolves the greeter walks over to the departures board
 // (the "12 reparti" tabellone) and posts up just past its right-hand edge, facing the player.
-const GREETER_BOARD_SIDE_GAP = 2.4;  // clearance beyond the board's right edge (world units)
+// 2026-09-19: era 2.4, e da li' il cartello di chi accoglie andava a sovrapporsi al terminale
+// contatti. Spostato piu' a destra: il cartello ha dove stare senza doversi scansare.
+const GREETER_BOARD_SIDE_GAP = 5.2;  // clearance beyond the board's right edge (world units)
 const GREETER_BOARD_FRONT_GAP = 1.4; // step toward the player off the board plane (no clipping)
 const GREETER_BOARD_REACH = 0.8;     // arrival radius at the board anchor
 const GREETER_FOLLOW_DELAY_MS = TRON_RUNNER_FOLLOW_PROMPT_DELAY_MS; // show "Seguimi" first, then start moving 1.5s later

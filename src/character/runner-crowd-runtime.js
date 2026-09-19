@@ -656,7 +656,8 @@ export function advanceTronRunnerCrowdMemberRuntime({
       // Proximity-gated bubble: the renderer eases opacity in/out over 0.5s as bubbleInRange flips.
       const distToPlayer = Math.hypot(camera.position.x - member.group.position.x, camera.position.z - member.group.position.z);
       member.bubbleText = inLingua(GREETER_BOARD_BUBBLE_TEXT);
-      member.bubbleSizeScale = 2;
+      // Meta' di quanto era (2026-09-19): a 2 il cartello arrivava a sfiorare il terminale.
+      member.bubbleSizeScale = 1;
       member.bubbleProximity = true;
       member.bubbleInRange = distToPlayer <= greeterBoardBubbleRange;
     }
