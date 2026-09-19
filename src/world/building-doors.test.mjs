@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { DEFAULT_BASE_PAD_Y } from './boulevard-constants.js';
@@ -9,9 +8,10 @@ import {
   SIDE_BUILDING_CIVIC_NUMBER_FIXED,
   SIDE_BUILDING_CIVIC_NUMBER_HIGHLIGHT_STROKE_STYLE,
   SIDE_DOOR_FIXED,
+  buildSideBuildingDoorBatches,
+  initBuildingDoors,
+  sideBuildingDoorLedMeshes,
 } from './building-doors.js';
-
-const buildingDoorsSource = readFileSync(new URL('./building-doors.js', import.meta.url), 'utf8');
 
 test('building civic number signs are 50 percent larger in world space', () => {
   assert.equal(SIDE_BUILDING_CIVIC_NUMBER_FIXED.singleWidth, 88.5);
@@ -35,7 +35,28 @@ test('side building doors start above the base pad surface', () => {
   );
 });
 
-test('side building door LEDs keep depth testing enabled', () => {
-  assert.match(buildingDoorsSource, /SIDE_BUILDING_DOOR_LED_DEPTH_TEST\s*=\s*true/);
-  assert.match(buildingDoorsSource, /depthTest:\s*SIDE_BUILDING_DOOR_LED_DEPTH_TEST/);
+test('i LED delle porte, costruiti davvero, fanno depthTest', async () => {
+  // Prima (fino al 2026-09-19) si cercava nel sorgente la riga `depthTest: SIDE_BUILDING_
+  // DOOR_LED_DEPTH_TEST`; qui si costruiscono le porte e si guarda il materiale del LED.
+  const THREE = await import('three');
+  const { installaDocumentoFinto, rendererFinto } = await import('../../test/finti-dom.mjs');
+  installaDocumentoFinto();
+  initBuildingDoors({
+    overlayGroup: new THREE.Group(),
+    renderer: rendererFinto(),
+    reflectionEnvMap: null,
+    PAL: { tealLight: 0x8ffcff },
+    sideBuildingRecords: [],
+    laneZ: [],
+    refreshCullingBounds() {},
+    tunedColor: (c) => new THREE.Color(c),
+    createWetAsphaltFacadeMaterial: (c) => new THREE.MeshStandardMaterial({ color: c }),
+  });
+  buildSideBuildingDoorBatches();
+  assert.ok(sideBuildingDoorLedMeshes.length >= 1, 'nessuna mesh LED costruita');
+  for (const mesh of sideBuildingDoorLedMeshes) {
+    assert.ok(!Array.isArray(mesh.material));
+    assert.equal(mesh.material.depthTest, true, `${mesh.name} non fa depthTest: il LED passerebbe attraverso i muri`);
+    assert.equal(mesh.material.depthWrite, false, `${mesh.name} scrive profondita'`);
+  }
 });

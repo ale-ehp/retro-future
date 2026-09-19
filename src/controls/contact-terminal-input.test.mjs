@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-globalThis.window = {
+// window e document finti: quanto basta ai moduli di input per registrare i listener
+// e ricevere eventi. Prima di importarli, perche' li leggono all'import.
+globalThis.window = /** @type {any} */ (Object.assign(new EventTarget(), {
   matchMedia: () => ({ matches: false }),
-};
+}));
+globalThis.document = /** @type {any} */ (Object.assign(new EventTarget(), { hidden: false }));
 
 const keyboard = await import(`./keyboard.js?contact-input=${Date.now()}`);
 const mouseLook = await import(`../camera/mouse-look.js?contact-input=${Date.now()}`);
 const mobileMovement = await import(`./mobile-movement.js?contact-input=${Date.now()}`);
-const keyboardSource = readFileSync(new URL('./keyboard.js', import.meta.url), 'utf8');
 
 test('contact key routing ignores repeats and reports handled keys', () => {
   let calls = 0;
@@ -24,14 +25,36 @@ test('contact key routing ignores repeats and reports handled keys', () => {
   assert.equal(calls, 1);
 });
 
-test('contact key routing runs before escape release and movement key writes', () => {
-  const routeIndex = keyboardSource.indexOf('routeContactTerminalKeyDown(e, handleContactTerminalKeyDown)');
-  const escapeIndex = keyboardSource.indexOf("if (e.code === 'Escape')");
-  const movementIndex = keyboardSource.indexOf('keys[e.code] = true');
+test('il terminale vede il tasto prima di tutti, e se lo prende non arriva al movimento', () => {
+  // Prima (fino al 2026-09-19) si controllava l'ORDINE DELLE RIGHE nel sorgente di keyboard.js.
+  // Qui si preme davvero un tasto: quando il terminale lo gestisce, `keys` non deve
+  // registrarlo, altrimenti il personaggio cammina mentre scorri i contatti.
+  let gestisce = true;
+  const visti = [];
+  keyboard.initKeyboard({
+    DEMO_START_KEY: 'Space',
+    welcomeWindowVisible: () => false,
+    ensureFootstepAudioReady: () => {},
+    triggerBackspaceDroneIntro: () => {},
+    resetCameraHeightToDefault: () => {},
+    captureLivePlayerSpawn: () => {},
+    getBackspaceIntroTriggered: () => true,
+    handleContactTerminalKeyDown: (e) => {
+      // il terminale deve vedere il tasto PRIMA che venga scritto in keys
+      visti.push({ code: e.code, giaScritto: Boolean(keyboard.keys[e.code]) });
+      return gestisce;
+    },
+  });
+  const premi = (code) => window.dispatchEvent(Object.assign(new Event('keydown'), { code, repeat: false }));
 
-  assert.notEqual(routeIndex, -1);
-  assert.ok(routeIndex < escapeIndex);
-  assert.ok(routeIndex < movementIndex);
+  premi('KeyW');
+  assert.deepEqual(visti, [{ code: 'KeyW', giaScritto: false }]);
+  assert.ok(!keyboard.keys.KeyW, 'il tasto preso dal terminale e\' arrivato al movimento');
+
+  gestisce = false;   // terminale chiuso: il tasto va dove andava prima
+  premi('KeyW');
+  assert.equal(keyboard.keys.KeyW, true);
+  assert.equal(visti.length, 2, 'il terminale deve essere interpellato comunque, per primo');
 });
 
 test('mouse look is disabled while the contact camera owns input', () => {
