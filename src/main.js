@@ -953,6 +953,12 @@ window.__fxToggles = fxToggleInspect;
 // Debug-only scene accessor for viewpoint-independent toggle verification
 // (walk the graph and confirm a subsystem's objects are hidden). No render effect.
 window.__fxScene = () => scene;
+// La catena dei pass del composer, per l'impronta del gate visivo (2026-09-19): l'ordine
+// bloom -> look -> TAA -> FSR e chi e' acceso sono logica, e prima si verificavano cercando
+// `composer.addPass(...)` nel sorgente con espressioni regolari.
+/** @type {any} */ (window).__tronComposerInspect = () => (composer
+  ? composer.passes.map((pass) => ({ name: pass.constructor?.name ?? 'Pass', enabled: Boolean(pass.enabled) }))
+  : null);
 renderer.setPixelRatio(activePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.localClippingEnabled = true;
