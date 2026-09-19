@@ -3870,6 +3870,9 @@ initSpeechBubbles({
   CROWD_TALK_RANGE: TRON_RUNNER_CROWD_TALK_RANGE,
   CROWD_TALK_REARM_RANGE: TRON_RUNNER_CROWD_TALK_REARM_RANGE,
   CROWD_TALK_DURATION_MS: TRON_RUNNER_CROWD_TALK_DURATION_MS,
+  // gli stessi collisori che i personaggi usano per non attraversare i muri: cosi' i
+  // cartelli non finiscono dentro i palazzi (2026-09-19)
+  getColliderRecords: () => tronRunnerCrowdRuntime.colliderRecords(),
 });
 
 initCityRevealWireframe({

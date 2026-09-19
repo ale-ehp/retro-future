@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { retroFutureSignOpacity, retroFutureSignScale } from '../sign-opacity.js';
+import { resolveTronRunnerRoundedCollider } from './character-collision.js';
 import { TRON_RUNNER_CROWD_LINES } from './runner-crowd-lines.js';
 
 // ---------- Speech-bubble rendering subsystem ----------
@@ -560,6 +561,11 @@ export function updateGreeterSpeechBubble() {
   // bubble drift as you looked around. This keeps it dead fixed relative to the character.
   greeter.group.getWorldPosition(greeterBubbleWorldScratch);
   greeterBubbleWorldScratch.y += deps.TARGET_HEIGHT * greeter.group.scale.y + GREETER_BUBBLE_HEAD_GAP;
+  {
+    // fuori dai muri e dai pannelli prima di appoggiarlo
+    const hGia = GREETER_BUBBLE_WORLD_HEIGHT * (greeter.bubbleSizeScale || 1);
+    scansaOstacoli(greeterBubbleWorldScratch, hGia * (getGreeterBubbleTexture(greeter.bubbleText, { greeter: true }).__aspect || 2), hGia);
+  }
   sprite.position.copy(greeterBubbleWorldScratch);
   // Y-only billboard: yaw to face the camera horizontally, stay upright (no pitch/roll tilt).
   sprite.rotation.set(0, Math.atan2(deps.getCamera().position.x - sprite.position.x, deps.getCamera().position.z - sprite.position.z), 0);
@@ -570,6 +576,86 @@ export function updateGreeterSpeechBubble() {
   if (!sprite.visible) sprite.userData.apertaDa = nowMs;
   montaCartello(sprite, greeterBubbleWorldScratch.y, h * aspect, h, puntoApertura(nowMs, sprite.userData.apertaDa), op);
   sprite.visible = true;
+}
+
+// ---------- I cartelli non entrano dentro le cose ----------
+//
+// Un cartello sta sopra la testa di chi parla e guarda la camera: quando il personaggio
+// cammina rasente un palazzo o passa davanti al terminale contatti, il pannello finiva
+// dentro il muro e si vedeva mezzo mangiato (2026-09-19). Qui viene spinto fuori.
+//
+// Due tipi di ostacolo, trattati diversamente perche' sono fatti diversamente:
+//   - i palazzi hanno gia' i loro collisori a pianta (x, z, semiampiezze, smusso), gli stessi
+//     che usano i personaggi per non attraversare i muri: si riusa quel risolutore;
+//   - i pannelli (terminale, cartelloni dei reparti) sono superfici sospese, senza pianta
+//     utile: si prende il loro ingombro in 3D e si scosta il cartello verso la camera, che
+//     e' la direzione in cui resta leggibile.
+
+const scatolaOstacolo = new THREE.Box3();
+const puntoScansato = new THREE.Vector3();
+const versoCamera = new THREE.Vector3();
+const margineOstacolo = new THREE.Vector3();   // riusato: questa funzione gira a ogni frame
+let ostacoliSospesi = null;
+
+/** Gli ingombri dei pannelli sospesi, presi una volta sola: non si muovono. */
+function ingombriPannelli() {
+  if (ostacoliSospesi) return ostacoliSospesi;
+  ostacoliSospesi = [];
+  const scena = deps.getScene?.();
+  if (!scena) return ostacoliSospesi;
+  scena.traverse((oggetto) => {
+    if (!oggetto.isGroup) return;
+    const nome = oggetto.name || '';
+    if (!/^(contact-terminal|city-department-board|city-role-board)/.test(nome)) return;
+    const scatola = new THREE.Box3().setFromObject(oggetto);
+    if (scatola.isEmpty()) return;
+    ostacoliSospesi.push(scatola);
+  });
+  return ostacoliSospesi;
+}
+
+/** Ricomincia a cercare i pannelli: serve se la scena viene ricostruita. */
+export function dimenticaIngombriCartelli() {
+  ostacoliSospesi = null;
+}
+
+/**
+ * Sposta `posizione` in modo che un cartello largo `larghezza` e alto `altezza` non finisca
+ * dentro un palazzo o dentro un pannello. Torna true se ha dovuto spostarlo.
+ */
+export function scansaOstacoli(posizione, larghezza, altezza) {
+  let spostato = false;
+  const mezzaL = larghezza / 2;
+  const mezzaA = altezza / 2;
+
+  const palazzi = deps.getColliderRecords?.() || [];
+  for (const record of palazzi) {
+    if (!record?.collider) continue;
+    puntoScansato.copy(posizione);
+    if (resolveTronRunnerRoundedCollider(puntoScansato, record.collider, mezzaL)) {
+      posizione.x = puntoScansato.x;
+      posizione.z = puntoScansato.z;
+      spostato = true;
+    }
+  }
+
+  const camera = deps.getCamera?.();
+  if (!camera) return spostato;
+  for (const scatola of ingombriPannelli()) {
+    margineOstacolo.set(mezzaL, mezzaA, mezzaL);
+    scatolaOstacolo.copy(scatola).expandByVector(margineOstacolo);
+    if (!scatolaOstacolo.containsPoint(posizione)) continue;
+    // fuori verso la camera, un passo per volta: e' la direzione in cui il cartello si legge
+    versoCamera.copy(camera.position).sub(posizione);
+    versoCamera.y = 0;
+    if (versoCamera.lengthSq() < 1e-6) continue;
+    versoCamera.normalize();
+    for (let passo = 0; passo < 24 && scatolaOstacolo.containsPoint(posizione); passo += 1) {
+      posizione.addScaledVector(versoCamera, mezzaL * 0.5);
+      spostato = true;
+    }
+  }
+  return spostato;
 }
 
 // I cartelli non compaiono: si aprono dal basso verso l'alto, come un pannello che si monta
@@ -683,6 +769,10 @@ export function updateTronRunnerCrowdSpeechBubbles() {
     if (sprite.material.map !== tex) { sprite.material.map = tex; sprite.material.needsUpdate = true; }
     member.group.getWorldPosition(crowdBubbleWorldScratch);
     crowdBubbleWorldScratch.y += deps.TARGET_HEIGHT * member.group.scale.y + GREETER_BUBBLE_HEAD_GAP;
+    {
+      const hGia = GREETER_BUBBLE_WORLD_HEIGHT * CROWD_BUBBLE_SIZE_SCALE;
+      scansaOstacoli(crowdBubbleWorldScratch, hGia * (tex.__aspect || 2), hGia);
+    }
     sprite.position.copy(crowdBubbleWorldScratch);
     sprite.rotation.set(0, Math.atan2(deps.getCamera().position.x - sprite.position.x, deps.getCamera().position.z - sprite.position.z), 0);
     const aspect = tex.__aspect || 2;
