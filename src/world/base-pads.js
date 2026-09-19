@@ -9,7 +9,6 @@ import {
   getHexTileHeightScale,
   getHexTileScale,
   hexRoadTiles,
-  hexTileGeo,
   hexTileHeight,
   hexTileRadius,
   roadMicroNormalTex,

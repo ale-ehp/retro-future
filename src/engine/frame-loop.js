@@ -28,7 +28,7 @@ import { updateGreeterSpeechBubble, updateTronRunnerCrowdSpeechBubbles } from '.
 import { updateStartPositionLiveLabel } from '../controls/control-panel.js';
 import { labEqualizerGroup, updateLabEqualizer } from '../controls/equalizer.js';
 import { applyMovement, updateWalkSimulation } from '../controls/movement.js';
-import { initAtmosphereParticles, updateAtmosphereParticles } from '../world/atmosphere-particles.js';
+import { updateAtmosphereParticles } from '../world/atmosphere-particles.js';
 import {
   boundaryErrorNeedsUpdate,
   updateBoundaryError,

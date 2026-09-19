@@ -3,17 +3,9 @@ import { createCtx } from './ctx.js';
 import {
   GRID_BLOCK,
   MAIN_ROAD_WIDTH,
-  SIDE_ROAD_LENGTH,
-  SIDE_ROAD_X,
-  SIDE_BUILDING_X,
   SIDE_BUILDING_BASE,
-  SIDE_BUILDING_GAP,
   SIDE_BUILDING_SPACING,
-  BRIDGE_BUILDING_CLEARANCE,
   BRIDGE_INNER_BUILDING_FACE_X,
-  BRIDGE_HALF_SPAN,
-  MAIN_ROAD_BASE_LENGTH,
-  START_SIDE_EXTENSION,
   MAIN_ROAD_LENGTH,
   MAIN_ROAD_Z,
   MAIN_BUILDING_BASE,
@@ -25,75 +17,15 @@ import {
   MAIN_BUILDING_SIDE_HEX_EXTENSION_ROWS,
 } from './world/boulevard-constants.js';
 import {
-  CITY_REVEAL_BACKPLATE_SWEEP_PORTION,
-  CITY_REVEAL_MAX_SKY_BACKPLATE_OPACITY,
-  CITY_REVEAL_SWEEP_MARGIN_Z,
   FIXED_CAMERA_FOV,
-  HEX_ROAD_UPDATE_FRAME_STRIDE,
-  MAX_HEX_ROAD_ACCUMULATED_DT,
 } from './world/config.js';
 import {
   createControlEls,
 } from './controls/controls.js';
 import { mountFixedControlDefaults } from './controls/fixed-control-defaults.js';
 import {
-  TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY,
-  TRON_RUNNER_CONTACT_SHADOW_ROUNDNESS,
-  TRON_RUNNER_DISTANCE_DRIVEN_WALK_ENABLED,
-  TRON_RUNNER_ENABLED,
-  TRON_RUNNER_FREE_ROAM_COLLISIONS_ENABLED,
-  TRON_RUNNER_FREE_ROAM_COLLISION_RADIUS,
-  TRON_RUNNER_FREE_ROAM_ENABLED,
-  TRON_RUNNER_FREE_ROAM_FOOTSTEPS_ENABLED,
-  TRON_RUNNER_FREE_ROAM_REACH_RADIUS,
-  TRON_RUNNER_FREE_ROAM_SIDEWALK_INSET,
-  TRON_RUNNER_GROUND_SHADOW_ENABLED,
-  TRON_RUNNER_IDLE_CHARACTER_BODY_CLEARANCE,
-  TRON_RUNNER_IDLE_CHARACTER_CIVIC,
-  TRON_RUNNER_IDLE_CHARACTER_COLOR_PRESET,
-  TRON_RUNNER_IDLE_CHARACTER_CORNER_FLAT_INSET,
-  TRON_RUNNER_IDLE_CHARACTER_ENABLED,
-  TRON_RUNNER_IDLE_CHARACTER_FRONT_WALL_CLEARANCE,
-  TRON_RUNNER_IDLE_CHARACTER_LEAN_DEG,
-  TRON_RUNNER_IDLE_CHARACTER_LIFT_PX,
-  TRON_RUNNER_IDLE_CHARACTER_STATIC,
-  TRON_RUNNER_IDLE_CHARACTER_WALL_CONTACT_EPS,
-  TRON_RUNNER_IDLE_CHARACTER_Y_LIFT,
-  TRON_RUNNER_LIGHTING_MODE,
-  TRON_RUNNER_MODEL_URL,
-  TRON_RUNNER_ROUTE_OFFSET,
-  TRON_RUNNER_SHADOW_CYAN_COLOR,
-  TRON_RUNNER_SIDEWALK_INSET,
-  TRON_RUNNER_SIDEWALK_SIGN,
-  TRON_RUNNER_SUIT_TEXTURE_MODE,
-} from './character/characters.js';
-import {
-  fitTronRunnerModel as fitTronRunnerModelCore,
-  makeTronRunnerActionSet,
-} from './character/character-build.js';
-import {
   cinematicGroundingSettingsFromParams,
 } from './character/runner-visual-controls.js';
-import {
-  tronRunnerCrowdLedEmissiveIntensity,
-} from './character/runner-crowd-leds.js';
-import {
-  tronRunnerFootstepAudioState as tronRunnerFootstepAudioStateCore,
-  updateTronRunnerAutonomyFootsteps as updateTronRunnerAutonomyFootstepsCore,
-} from './character/runner-footsteps.js';
-import {
-  enqueueTronRunnerCrowdBuildJobRuntime,
-} from './character/runner-crowd-runtime.js';
-import {
-  TRON_RUNNER_CROWD_COLOR_PRESETS,
-} from './character/character-colors.js';
-import {
-  resetTronRunnerAutonomy,
-} from './character/runner-controller.js';
-import {
-  playTronRunnerAction,
-  syncTronRunnerActionSetToDistance,
-} from './character/runner-animation.js';
 import { createTronSoundtrackRuntime } from './audio/soundtrack-runtime.js';
 import {
   ensureFootstepAudioReady,
@@ -125,15 +57,9 @@ import {
   initRetroBenchmarkRuntime,
 } from './engine/retro-benchmark-runtime.js';
 import {
-  addCityDepartmentFrame,
-} from './world/city-boards.js';
-import {
   contactTerminalOwnsCamera,
   handleContactTerminalKeyDown,
 } from './world/contact-terminal.js';
-import {
-  setStripInstanceTransform,
-} from './world/building-leds.js';
 import {
   mainBuildingRecords,
   sideBuildingRecords,
@@ -207,9 +133,6 @@ import {
   cityRevealWireAlpha,
   cityRevealWireframeEnabled,
   isCityRevealPerformanceCritical,
-  markCityRevealComplete,
-  renderCityRevealWireframe,
-  setCityRevealRoadGridAlphaFactor,
   startCityRevealWireTimer,
   startCityRevealWireframe,
   updateCityRevealWireframe,
@@ -221,7 +144,6 @@ import {
   applyWelcomeWindowInputMode as applyWelcomeWindowInputModeCore,
   dismissWelcomeWindow as dismissWelcomeWindowCore,
   resetWelcomeWindowMotion as resetWelcomeWindowMotionCore,
-  setupWelcomeWindowMotion,
   triggerWelcomeWindowTouch as triggerWelcomeWindowTouchCore,
   welcomeWindowUsesTouchPrompt as welcomeWindowUsesTouchPromptCore,
   welcomeWindowVisible as welcomeWindowVisibleCore,
@@ -230,27 +152,21 @@ import {
   initAtmosphereParticles,
 } from './world/atmosphere-particles.js';
 import {
-  applyEdgePulseShader,
-} from './world/energy-pulse.js';
-import {
   initMaterialTextures,
   makeBasePadSurfaceTexture,
   makeWetAsphaltFacadeTexture,
 } from './world/material-textures.js';
 import {
-  groundShapeGeometry,
   setGroundLineLoop,
   setGroundSegment,
 } from './world/ground-geometry.js';
 import {
-  boundaryErrorInspect,
   getRoadBoundaryHexStats,
   initBoundaryError,
   setTronNoclip,
 } from './world/boundary-error.js';
 import {
   droneIntroHeroShotRequestedFromParams,
-  droneIntroInspect,
   initDroneIntro,
   startDroneIntroFlight,
 } from './camera/drone-intro.js';
@@ -276,16 +192,11 @@ import {
   clearMovementKeys,
   clearVerticalMovementState,
   initMovement,
-  movementHorizontalSpeed,
-  movementRunMix,
-  movementStrafeDirection,
-  movementStrafeMix,
   movementVelocity,
   setHeadBobOffset,
   setMovementHorizontalSpeed,
   setMovementRunMix,
   setSideSwayOffset,
-  stepPhase,
 } from './controls/movement.js';
 import { initKeyboard, keys } from './controls/keyboard.js';
 import {
@@ -294,12 +205,9 @@ import {
   addHexRoadTiles,
   ensureHexRoadTileCoverage,
   getDirtyHexTileBatchCount,
-  getHexTileHeightScale,
   getHexTileScale,
   hexRoadTileBatches,
   hexRoadTileBuckets,
-  hexTileGeo,
-  hexTileHeight,
   hexTileRadius,
   hexTileRowStep,
   hexRoadBatchStats,
@@ -310,7 +218,6 @@ import {
   recoveringHexTiles,
   setHexRoadLodProfile,
   streetEdgeHexTileBatches,
-  streetEdgeHexTiles,
   updateHexRoadBatchLod,
   updateZTileBand,
 } from './world/hex-tiles.js';
@@ -319,49 +226,6 @@ import {
   initReflectionEnv,
 } from './engine/reflection-env.js';
 import {
-  LAB_EQUALIZER_ANALYSER_MAX_DB,
-  LAB_EQUALIZER_ANALYSER_MIN_DB,
-  LAB_EQUALIZER_ANALYSER_SMOOTHING,
-  LAB_EQUALIZER_AUDIO_KICK_SAMPLE_INTERVAL_MS,
-  LAB_EQUALIZER_AUDIO_SAMPLE_INTERVAL_MS,
-  LAB_EQUALIZER_BAR_COUNT,
-  LAB_EQUALIZER_BASS_BAND_COUNT,
-  LAB_EQUALIZER_BOARD_HEIGHT,
-  LAB_EQUALIZER_BOARD_WIDTH,
-  LAB_EQUALIZER_CANVAS_HEIGHT,
-  LAB_EQUALIZER_CANVAS_WIDTH,
-  LAB_EQUALIZER_DISPLAY_RENDER_ORDER,
-  LAB_EQUALIZER_ENABLED,
-  LAB_EQUALIZER_FFT_SIZE,
-  LAB_EQUALIZER_GRAPH_INTERVAL_MS,
-  LAB_EQUALIZER_GROUP_RENDER_ORDER,
-  LAB_EQUALIZER_IDLE_SAMPLE_INTERVAL_MS,
-  LAB_EQUALIZER_LEVEL_DB_CEILING,
-  LAB_EQUALIZER_LEVEL_DB_FLOOR,
-  LAB_EQUALIZER_LEVEL_GAMMA,
-  LAB_EQUALIZER_MAX_HZ,
-  LAB_EQUALIZER_MIN_HZ,
-  LAB_EQUALIZER_OFFSCREEN_SAMPLE_INTERVAL_MS,
-  LAB_EQUALIZER_OFFSCREEN_TEXTURE_INTERVAL_MS,
-  LAB_EQUALIZER_PANEL_RENDER_ORDER,
-  LAB_EQUALIZER_PEAK_HOLD_SECONDS,
-  LAB_EQUALIZER_PEAK_MAX_FALL_ROWS_PER_SEC,
-  LAB_EQUALIZER_PEAK_MIN_FALL_ROWS_PER_SEC,
-  LAB_EQUALIZER_POSE_INTERVAL_MS,
-  LAB_EQUALIZER_PULSE_CONTROLS,
-  LAB_EQUALIZER_RELATIVE_DB_RANGE,
-  LAB_EQUALIZER_SCENE_SCALE,
-  LAB_EQUALIZER_SEGMENT_ROWS,
-  LAB_EQUALIZER_START_WALL_INSET_Y,
-  LAB_EQUALIZER_STATIC_TEXTURE_REFRESH_MS,
-  LAB_EQUALIZER_TEXTURE_ADAPTIVE_HARD_INTERVAL_MS,
-  LAB_EQUALIZER_TEXTURE_ADAPTIVE_SOFT_INTERVAL_MS,
-  LAB_EQUALIZER_TEXTURE_INTERVAL_MS,
-  LAB_EQUALIZER_VERTICAL_OFFSET,
-  LAB_EQUALIZER_VISIBILITY_INTERVAL_MS,
-  LAB_EQUALIZER_VISIBILITY_RADIUS,
-  LAB_EQUALIZER_WORLD_HEIGHT,
-  LAB_EQUALIZER_WORLD_WIDTH,
   labEqualizerGroup,
   labEqualizerState,
 } from './controls/equalizer.js';
@@ -372,8 +236,6 @@ import {
   DRAG_ACTIVATE_PX,
   POINTER_LOCK_SETTLE_MS,
   POINTER_CLICK_SUPPRESS_MS,
-  FOOTSTEP_PLAYER_BUS,
-  FOOTSTEP_PLAYER_VOLUME_SCALE,
   roadBaseY,
   ROAD_BOUNDARY_ROW_MAX,
 } from './config/costanti.js';

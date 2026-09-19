@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { retroFutureSignOpacity, retroFutureSignScale } from '../sign-opacity.js';
+import { retroFutureSignScale } from '../sign-opacity.js';
 import { resolveTronRunnerRoundedCollider } from './character-collision.js';
 import { TRON_RUNNER_CROWD_LINES } from './runner-crowd-lines.js';
 

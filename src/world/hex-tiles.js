@@ -10,7 +10,6 @@
 
 import * as THREE from 'three';
 import { fxEnabled } from '../engine/fx-debug-toggles.js';
-import { GRID_BLOCK } from './boulevard-constants.js';
 import { HEX_ROAD_UPDATE_FRAME_STRIDE, MAX_HEX_ROAD_ACCUMULATED_DT } from './config.js';
 import { getReflectionEnvMap, getRoadReflectionEnvMap } from '../engine/reflection-env.js';
 import { makeRoadMicroNormalTexture } from './material-textures.js';
