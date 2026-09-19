@@ -18,7 +18,10 @@ export function tronRunnerCrowdLedEmissiveIntensity({ ledBrightness, ledBloom })
   const scale = defaultScale > 0
     ? tronRunnerCharacterLedScale({ ledBrightness, ledBloom }) / defaultScale
     : 1;
-  return THREE.MathUtils.clamp(TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY * scale, 0, 12);
+  // Il tetto era 12 e i personaggi ci sbattevano gia' contro: alzare l'intensita' non
+  // cambiava niente, perche' il risultato veniva tagliato qui (2026-09-19). Alzato del 25%
+  // insieme all'intensita', altrimenti la richiesta di "piu' luminosi" restava lettera morta.
+  return THREE.MathUtils.clamp(TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY * scale, 0, 15);
 }
 
 export function applyTronRunnerCrowdLedControls({

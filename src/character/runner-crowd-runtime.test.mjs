@@ -58,7 +58,9 @@ test('welcome bubble uses the larger branded avstudio.ai lockup', () => {
     assert.ok(testo.endsWith('<br>avstudio.ai'), testo);
   }
   assert.equal(TRON_RUNNER_WELCOME_BUBBLE_DURATION_MS, 3600);
-  assert.ok(TRON_RUNNER_WELCOME_BUBBLE_SIZE_SCALE > 1.35);
+  // 2026-09-19: dimezzato da 1.55 a 0.775 su richiesta, riempiva mezzo schermo da vicino.
+  // Ora e' piu' piccolo anche di quelli della folla (CROWD_BUBBLE_SIZE_SCALE, 1.5): e' voluto.
+  assert.equal(TRON_RUNNER_WELCOME_BUBBLE_SIZE_SCALE, 0.775);
 });
 
 test('greeter keeps the Seguimi state half a second longer before moving', () => {

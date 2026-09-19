@@ -15,6 +15,7 @@ import {
   TRON_RUNNER_IDLE_CHARACTER_CIVIC,
   TRON_RUNNER_IDLE_CHARACTER_COLOR_PRESET,
   TRON_RUNNER_IDLE_CHARACTER_CORNER_FLAT_INSET,
+  TRON_RUNNER_IDLE_CHARACTER_BRIGHTNESS,
   TRON_RUNNER_IDLE_CHARACTER_ENABLED,
   TRON_RUNNER_IDLE_CHARACTER_FRONT_WALL_CLEARANCE,
   TRON_RUNNER_IDLE_CHARACTER_LEAN_DEG,
@@ -243,6 +244,13 @@ export function createTronRunnerIdleCharacterRuntime({
     });
     const idleColorPreset = TRON_RUNNER_CROWD_COLOR_PRESETS[TRON_RUNNER_IDLE_CHARACTER_COLOR_PRESET] || crowdColorPresetForIndex(0);
     const material = makeCrowdSuitMaterial(idleColorPreset);
+    // Piu' luminoso degli altri: vedi TRON_RUNNER_IDLE_CHARACTER_BRIGHTNESS. Si alza anche la
+    // base memorizzata, altrimenti il battito della musica la riporterebbe al valore comune.
+    if (Number.isFinite(material.emissiveIntensity)) {
+      material.emissiveIntensity *= TRON_RUNNER_IDLE_CHARACTER_BRIGHTNESS;
+      material.userData = material.userData || {};
+      material.userData.tronRunnerBaseEmissiveIntensity = material.emissiveIntensity;
+    }
     model.traverse((obj) => {
       if (obj.isMesh) obj.material = material;
     });

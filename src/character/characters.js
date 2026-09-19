@@ -33,7 +33,11 @@ export const TRON_RUNNER_SUIT_EMISSIVE = new THREE.Color(0xffffff);
 export const TRON_RUNNER_CHARACTER_LED_BRIGHTNESS_MULTIPLIER = 1.15;
 export const TRON_RUNNER_CHARACTER_LED_BLOOM_BOOST = 1.77;
 export const TRON_RUNNER_CHARACTER_LED_EMISSIVE_MAX = 1.76;
-export const TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY = 2.4;
+// +25% sul 2.4 di prima (2026-09-19). E' questa la luminosita' vera dei personaggi: il
+// moltiplicatore LED_BRIGHTNESS si annulla nel rapporto di tronRunnerCrowdLedEmissiveIntensity,
+// mentre il battito della musica moltiplica QUESTO valore, quindi salgono insieme sia il
+// riposo sia il lampo.
+export const TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY = 3;
 export const TRON_RUNNER_BEAT_PULSE_ENABLED = true;
 export const TRON_RUNNER_BEAT_PULSE_BPM = 128;
 export const TRON_RUNNER_BEAT_PULSE_OFFSET_SECONDS = 0;
@@ -86,6 +90,9 @@ export const TRON_RUNNER_CROWD_COUNT = 30;
 export const TRON_RUNNER_CROWD_START_CLUSTER_COUNT = 2;
 export const TRON_RUNNER_CROWD_SIDE_STREET_GROUP_EXTRA_COUNT = 0;
 export const TRON_RUNNER_CROWD_LOOP_FRONT_ONLY = true;
+// Chi sta fermo in pausa e' piu' luminoso degli altri del 60% (2026-09-19): non cammina,
+// non ha il movimento a segnalarlo, e senza questo si perdeva nel fondo.
+export const TRON_RUNNER_IDLE_CHARACTER_BRIGHTNESS = 1.6;
 export const TRON_RUNNER_IDLE_CHARACTER_ENABLED = true;
 export const TRON_RUNNER_IDLE_CHARACTER_STATIC = true;
 export const TRON_RUNNER_IDLE_CHARACTER_CIVIC = 2;

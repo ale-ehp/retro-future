@@ -140,7 +140,8 @@ export const TRON_RUNNER_WELCOME_BUBBLE_TEXT = {
   en: 'Welcome to<br>avstudio.ai',
 };
 export const TRON_RUNNER_WELCOME_BUBBLE_DURATION_MS = 3600;
-export const TRON_RUNNER_WELCOME_BUBBLE_SIZE_SCALE = 1.55;
+// Meta' di quanto era (2026-09-19): 1.55 riempiva mezzo schermo da vicino.
+export const TRON_RUNNER_WELCOME_BUBBLE_SIZE_SCALE = 0.775;
 export const TRON_RUNNER_FOLLOW_PROMPT_DELAY_MS = 1500;
 
 export function tronRunnerGreeterStartPosition({
