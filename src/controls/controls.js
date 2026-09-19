@@ -542,7 +542,6 @@ export function createControlEls() {
   };
 }
 
-export const DEFAULT_PRODUCTION_PANEL = 'bloom-fx';
 export const PRODUCTION_CONTROL_PANELS = new Set([
   'movement',
   'character',

@@ -10,10 +10,6 @@ const FORCE_MOBILE_PROFILE = (() => {
   }
 })();
 
-export function mobilePerformanceProfileForced() {
-  return FORCE_MOBILE_PROFILE;
-}
-
 export function mobilePerformanceProfileState(query) {
   const mediaQueryMatches = Boolean(query.matches);
   const touchPoints = Number.isFinite(navigator.maxTouchPoints) ? navigator.maxTouchPoints : 0;

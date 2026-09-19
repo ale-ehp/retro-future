@@ -26,7 +26,6 @@ const SIDE_BUILDING_CIVIC_NUMBER_SHADOW_STYLE = 'rgba(123,255,255,0.90)';
 const SIDE_BUILDING_CIVIC_NUMBER_FILL_STYLE = 'rgba(179,255,255,0.10)';
 const sideBuildingCivicNumberTextureCache = new Map();
 const sideBuildingCivicNumberPlaneGeometry = new THREE.PlaneGeometry(1, 1);
-export const sideDoorCount = () => sideBuildingDoorGroups.length;
 const sideDoorUnitBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
 
 export const SIDE_DOOR_FIXED = Object.freeze({

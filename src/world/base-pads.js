@@ -6,10 +6,8 @@ import {
   GRID_BLOCK,
 } from './boulevard-constants.js';
 import {
-  getHexTileHeightScale,
   getHexTileScale,
   hexRoadTiles,
-  hexTileHeight,
   hexTileRadius,
   roadMicroNormalTex,
   syncHexTileDisplayColor,
@@ -551,82 +549,6 @@ function polygonSignedArea(points) {
   return area / 2;
 }
 
-function segmentIntersection(a, b, c, d) {
-  const bax = b[0] - a[0];
-  const baz = b[1] - a[1];
-  const dcx = d[0] - c[0];
-  const dcz = d[1] - c[1];
-  const denominator = bax * dcz - baz * dcx;
-  if (Math.abs(denominator) < 1e-6) return b;
-  const t = ((c[0] - a[0]) * dcz - (c[1] - a[1]) * dcx) / denominator;
-  return [a[0] + bax * t, a[1] + baz * t];
-}
-
-function clipPolygonToConvex(subject, clip) {
-  let output = subject.slice();
-  if (output.length < 3 || clip.length < 3) return [];
-  const orientation = polygonSignedArea(clip) >= 0 ? 1 : -1;
-  const inside = (point, a, b) => {
-    const cross = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]);
-    return orientation * cross >= -0.001;
-  };
-
-  for (let i = 0; i < clip.length; i++) {
-    const a = clip[i];
-    const b = clip[(i + 1) % clip.length];
-    const input = output;
-    output = [];
-    if (!input.length) break;
-    let previous = input[input.length - 1];
-    let previousInside = inside(previous, a, b);
-    for (const current of input) {
-      const currentInside = inside(current, a, b);
-      if (currentInside) {
-        if (!previousInside) output.push(segmentIntersection(previous, current, a, b));
-        output.push(current);
-      } else if (previousInside) {
-        output.push(segmentIntersection(previous, current, a, b));
-      }
-      previous = current;
-      previousInside = currentInside;
-    }
-  }
-  return output;
-}
-
-function hexTilePolygonLocalToPad(tile, pad) {
-  const localX = tile.userData.x - pad.border.position.x;
-  const localZ = tile.userData.z - pad.border.position.z;
-  const radius = hexTileRadius * getHexTileScale();
-  const points = [];
-  for (let i = 0; i < 6; i++) {
-    const angle = Math.PI / 6 + i * Math.PI / 3;
-    points.push([
-      localX + Math.cos(angle) * radius,
-      localZ + Math.sin(angle) * radius,
-    ]);
-  }
-  return points;
-}
-
-function appendClippedHexSurface(positions, tile, pad, clippedPolygon) {
-  if (clippedPolygon.length < 3) return false;
-  const y = tile.userData.baseY + tile.userData.depression + (hexTileHeight * getHexTileHeightScale() * 0.5) + 0.16;
-  const originX = pad.border.position.x;
-  const originZ = pad.border.position.z;
-  for (let i = 1; i < clippedPolygon.length - 1; i++) {
-    const a = clippedPolygon[0];
-    const b = clippedPolygon[i];
-    const c = clippedPolygon[i + 1];
-    positions.push(
-      originX + a[0], y, originZ + a[1],
-      originX + b[0], y, originZ + b[1],
-      originX + c[0], y, originZ + c[1],
-    );
-  }
-  return true;
-}
-
 export function updateBasePadHexInfluence() {
   for (const tile of hexRoadTiles) {
     if ((tile.userData.basePadLight || 0) > 0) {
@@ -700,14 +622,6 @@ function syncBasePadLedBatchAggregate() {
   basePadLedBatch.count = basePadLedBatch.batches.reduce((sum, batch) => sum + batch.count, 0);
   basePadLedBatch.capacity = basePadLedBatch.batches.reduce((sum, batch) => sum + batch.capacity, 0);
   basePadLedBatch.mesh = basePadLedBatch.batches.length === 1 ? basePadLedBatch.batches[0].mesh : null;
-}
-
-export function basePadLedSegmentCount() {
-  let count = 0;
-  for (const record of [...sideBuildingRecords, ...mainBuildingRecords]) {
-    count += basePadLedSegmentCountForRecord(record);
-  }
-  return count;
 }
 
 export function updateBasePadLedStrips(brightness, thickness, offset, hueDeg) {

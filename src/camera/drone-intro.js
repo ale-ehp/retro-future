@@ -37,7 +37,6 @@ const droneIntroLookAt = new THREE.Vector3();
 const droneIntroControlA = new THREE.Vector3();
 const droneIntroHeroLookAt = new THREE.Vector3();
 const droneIntroHeroScratchA = new THREE.Vector3();
-const droneIntroHeroScratchB = new THREE.Vector3();
 const droneIntroHeroScratchC = new THREE.Vector3();
 let droneIntroAutoTimer = 0;
 let droneIntroAutoTriggered = false;
@@ -114,11 +113,6 @@ function droneIntroEase(t) {
   return clamped < 0.5
     ? 4 * clamped * clamped * clamped
     : 1 - Math.pow(-2 * clamped + 2, 3) / 2;
-}
-
-function droneIntroSmoothstep(edge0, edge1, value) {
-  const x = THREE.MathUtils.clamp((value - edge0) / Math.max(0.00001, edge1 - edge0), 0, 1);
-  return x * x * (3 - 2 * x);
 }
 
 function droneIntroSmootherstep(edge0, edge1, value) {

@@ -562,13 +562,6 @@ function addCityWireLoopDensity(points, y, xOffset = 0, zOffset = 0, material = 
   return tagCityRevealWireObject(line, 'wire-density');
 }
 
-function addCityWireGroundSegment(a, b, y, material = cityRevealRoadGridMat) {
-  return addCityWireLineSegments([
-    new THREE.Vector3(a[0], y, a[1]),
-    new THREE.Vector3(b[0], y, b[1]),
-  ], material);
-}
-
 export function cityRevealRoadGridExtraWidth() {
   return GRID_BLOCK * CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS;
 }
@@ -1165,20 +1158,6 @@ export function updateCityRevealWireframe(now) {
     // so free the wireframe geometries (they are never drawn again this session)
     clearCityRevealWire();
   }
-}
-
-export function renderCityRevealWireframe() {
-  if (!cityRevealWireframeEnabled || cityRevealWireAlpha <= 0.002) return;
-  const previousAutoClear = runtime.renderer.autoClear;
-  runtime.renderer.autoClear = false;
-  runtime.renderer.clearDepth();
-  if (isCityRevealBackplateActive()) {
-    runtime.renderer.render(cityRevealOverlayScene, cityRevealOverlayCamera);
-    runtime.renderer.clearDepth();
-  }
-  runtime.renderer.render(cityRevealRoadGridScene, runtime.camera);
-  runtime.renderer.render(cityRevealWireScene, runtime.camera);
-  runtime.renderer.autoClear = previousAutoClear;
 }
 
 export function isCityRevealCompositeActive() {

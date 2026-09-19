@@ -93,8 +93,6 @@ import {
   hexTileHitLight,
   hexTileMat,
   setHexRoadMaterialGlow,
-  streetEdgeHexMat,
-  streetEdgeHexTileBatches,
   syncHexTileDisplayColor,
 } from '../world/hex-tiles.js';
 import { renderBridgeControls } from './bridge-controls.js';
@@ -243,13 +241,6 @@ export function updateRoadTileMaterials(callback) {
     callback(batch.material);
     batch.material.color.set(0xffffff);
   }
-}
-
-
-
-function updateStreetEdgeTileMaterials(callback) {
-  callback(streetEdgeHexMat);
-  for (const batch of streetEdgeHexTileBatches) callback(batch.material);
 }
 
 

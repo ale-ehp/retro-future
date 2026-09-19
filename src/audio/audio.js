@@ -2,14 +2,6 @@
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (a, b, t) => (1 - t) * a + t * b;
 
-export const TRON_SYNTH_MUSIC_ENABLED = true;
-export const TRON_SYNTH_MUSIC_BPM = 96;
-export const TRON_SYNTH_MUSIC_MASTER_GAIN = 0.14;
-export const TRON_SYNTH_MUSIC_LOOKAHEAD_MS = 45;
-export const TRON_SYNTH_MUSIC_SCHEDULE_AHEAD = 0.32;
-export const TRON_SYNTH_MUSIC_STEP_SEC = 60 / TRON_SYNTH_MUSIC_BPM / 4;
-export const TRON_SYNTH_MUSIC_PATTERN_STEPS = 64;
-
 export const TRON_SOUNDTRACK_ENABLED = true;
 // Safari/iOS does not support the Ogg container, so the .opus soundtrack never
 // loads there — the <audio> element stays silent and the equalizer's analyser

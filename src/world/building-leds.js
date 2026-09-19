@@ -395,16 +395,6 @@ export function elStrip(p1, p2, color = PAL.tealLight, thickness = 0.04, options
   return m;
 }
 
-export function addHorizontalBuildingEdgeLoop(group, w, d, x, y, z, color, thickness, options, chamfer, outset) {
-  const points = buildingEdgeLoopPoints(w, d, chamfer, outset);
-  const loopOptions = { ...options, roundedLoopOffsetMode: true };
-  for (let i = 0; i < points.length; i++) {
-    const a = points[i];
-    const b = points[(i + 1) % points.length];
-    group.add(elStrip([x + a[0], y, z + a[1]], [x + b[0], y, z + b[1]], color, thickness, loopOptions));
-  }
-}
-
 function shiftedEdgePoint(point, center, distance) {
   const shifted = [...point];
   const dx = point[0] - center[0];

@@ -234,14 +234,6 @@ function getMainFacadeVerticalRevealLedMaterial() {
   return mainFacadeVerticalRevealLedMaterial;
 }
 
-function getMainBuildingEdgeVerticalRevealLedMaterial(color = PAL.tealLight) {
-  if (!mainBuildingEdgeVerticalRevealLedMaterial) {
-    mainBuildingEdgeVerticalRevealLedMaterial = createMainFacadeVerticalRevealLedMaterial(color);
-    mainBuildingEdgeVerticalRevealLedMaterial.customProgramCacheKey = () => 'main-building-edge-vertical-led-reveal-v1';
-  }
-  return mainBuildingEdgeVerticalRevealLedMaterial;
-}
-
 function applyMainFacadeVerticalRevealUniformsTo(material, revealY, feather, enabled) {
   if (!material) return;
   material.userData.mainFacadeRevealY = revealY;

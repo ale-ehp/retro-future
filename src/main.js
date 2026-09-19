@@ -5,7 +5,6 @@ import {
   MAIN_ROAD_WIDTH,
   SIDE_BUILDING_BASE,
   SIDE_BUILDING_SPACING,
-  BRIDGE_INNER_BUILDING_FACE_X,
   MAIN_ROAD_LENGTH,
   MAIN_ROAD_Z,
   MAIN_BUILDING_BASE,
@@ -158,7 +157,6 @@ import {
 } from './world/material-textures.js';
 import {
   setGroundLineLoop,
-  setGroundSegment,
 } from './world/ground-geometry.js';
 import {
   getRoadBoundaryHexStats,
@@ -775,7 +773,7 @@ const basePadSurfaceTex = makeBasePadSurfaceTexture();
 
 // ---------- Floor: streetEdges (hex tile) + road (metal mirror) + outer floor ----------
 const ROAD_HALF = MAIN_ROAD_WIDTH / 2;     // road x range -44..+44
-const STREET_EDGE_OUTER = BRIDGE_INNER_BUILDING_FACE_X; // streetEdge x range 44..60
+ // streetEdge x range 44..60
 const Z_FLOOR_LEN = MAIN_ROAD_LENGTH;
 const Z_FLOOR_CENTER = MAIN_ROAD_Z;
 let dynamicRoadSurfaceWidth = roadSurfaceWidthForBuildings();
@@ -1059,14 +1057,6 @@ function addGroundLineLoop(points, mat, y = 0.54) {
   setGroundLineLoop(line, points, y);
   scene.add(line);
   return line;
-}
-
-function addGroundSegment(p1, p2, mat, y = 0.46, thickness = 0.22, height = 0.08) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, 1), mat);
-  mesh.position.y = y;
-  setGroundSegment(mesh, p1, p2, thickness, height);
-  scene.add(mesh);
-  return mesh;
 }
 
 // Cross streets — true intersections in the gaps between the building rows.
