@@ -255,7 +255,6 @@ import {
 } from './world/building-leds.js';
 import {
   bridgeMaterials,
-  buildingColliders,
   buildBuildingShells,
   createWetAsphaltFacadeMaterial,
   initBuildings,
@@ -295,6 +294,14 @@ import {
   updateFacadeStripOutsets,
 } from './world/facade-led-treatment.js';
 import { createSkyDome } from './world/sky-dome.js';
+import {
+  collisioni,
+  initCameraCollision,
+  isCameraCollisionDisabled,
+  resolveCameraBuildingCollision,
+  resolveCameraCrowdCollision,
+  resolveCameraRoadHexBoundaryCollision,
+} from './camera/camera-collision.js';
 import {
   player,
   initPlayerState,
@@ -486,13 +493,10 @@ import {
   applyRoadBoundaryHexVisualSettings,
   boundaryErrorInspect,
   boundaryErrorNeedsUpdate,
-  clearBoundaryError,
   getRoadBoundaryHexStats,
   getTronNoclipEnabled,
   initBoundaryError,
   setTronNoclip,
-  triggerBoundaryError,
-  triggerRoadBoundaryPulse,
   updateBoundaryError,
   updateRoadBoundaryHexMaterial,
   updateRoadBoundaryHexRows,
@@ -1338,20 +1342,14 @@ function updateMainRoadLength(centerZ, length) {
 }
 
 const roadBoundaryHexRowOffsets = Array.from({ length: ROAD_BOUNDARY_ROW_MAX }, () => 0);
-let roadBoundaryCollisionEnabled = true;
-let roadBoundaryCollisionMargin = 1.2;
-let roadBoundaryCameraLead = 8;
-const roadBoundaryProbeVelocity = new THREE.Vector3();
-
-function isCameraCollisionDisabled() {
-  return !player.cameraCollisionUnlockedByBackspace || getTronNoclipEnabled() || getDroneIntroActive();
-}
+// ---------- le collisioni della camera stanno in camera/camera-collision.js ----------
+initCameraCollision({ camera, roadHexBoundaryLimits });
 
 function roadHexBoundaryLimits() {
   const halfW = dynamicRoadSurfaceWidth / 2;
   const halfL = boulevard.dynamicRoadLength / 2;
   const centerZ = boulevard.dynamicRoadCenter;
-  const margin = Math.max(roadBoundaryCollisionMargin, hexTileRadius * getHexTileScale() * 0.22);
+  const margin = Math.max(collisioni.roadBoundaryCollisionMargin, hexTileRadius * getHexTileScale() * 0.22);
   return {
     minX: -halfW + margin,
     maxX: halfW - margin,
@@ -1577,7 +1575,6 @@ dirKey.visible = fxEnabled('dirLight') && dirLightActive;
 // ---------- Tron overlay buildings ----------
 const overlayGroup = new THREE.Group();
 scene.add(overlayGroup);
-let collisionPadding = 3;
 const tronRunnerCrowdColliderRecordCache = {
   records: null,
   sourceLength: -1,
@@ -1615,7 +1612,6 @@ const mainFacadeVerticalRevealState = {
   maxY: null,
   feather: MAIN_FACADE_VERTICAL_REVEAL_FEATHER,
 };
-let mainBuildingCollisionPadding = 7.4;
 initBuildingDoors({
   overlayGroup,
   renderer,
@@ -1694,133 +1690,6 @@ initBridgeControls({
   BRIDGE_PAIR_5_6_INDEX,
   BRIDGE_PAIR_5_6_Y_OFFSET,
 });
-
-function resolveRoundedRectCollider(c, padding) {
-  const dx = camera.position.x - c.x;
-  const dz = camera.position.z - c.z;
-  const sx = dx >= 0 ? 1 : -1;
-  const sz = dz >= 0 ? 1 : -1;
-  const ax = Math.abs(dx);
-  const az = Math.abs(dz);
-  const hx = c.hw + padding;
-  const hz = c.hd + padding;
-  const radius = THREE.MathUtils.clamp((c.chamfer || 0) + padding, 0, Math.min(hx, hz) * 0.98);
-  if (radius <= 0.001) {
-    if (ax >= hx || az >= hz) return false;
-    const pushX = hx - ax;
-    const pushZ = hz - az;
-    if (pushX < pushZ) camera.position.x = c.x + sx * hx;
-    else camera.position.z = c.z + sz * hz;
-    return true;
-  }
-
-  const innerX = hx - radius;
-  const innerZ = hz - radius;
-  const qx = ax - innerX;
-  const qz = az - innerZ;
-  if (qx > 0 && qz > 0) {
-    const dist = Math.hypot(qx, qz);
-    if (dist >= radius) return false;
-    const nx = dist > 1e-5 ? qx / dist : Math.SQRT1_2;
-    const nz = dist > 1e-5 ? qz / dist : Math.SQRT1_2;
-    camera.position.x = c.x + sx * (innerX + nx * radius);
-    camera.position.z = c.z + sz * (innerZ + nz * radius);
-    return true;
-  }
-
-  if (ax >= hx || az >= hz) return false;
-  const pushX = hx - ax;
-  const pushZ = hz - az;
-  if (pushX < pushZ) camera.position.x = c.x + sx * hx;
-  else camera.position.z = c.z + sz * hz;
-  return true;
-}
-
-function resolveCameraBuildingCollision() {
-  if (isCameraCollisionDisabled()) return;
-  if (!buildingColliders.length) return;
-  for (const c of buildingColliders) {
-    const padding = c.role === 'main-building' ? mainBuildingCollisionPadding : collisionPadding;
-    if (padding < 0) continue;
-    const bottomY = c.y ?? 0;
-    if (camera.position.y < bottomY - 2 || camera.position.y > bottomY + c.h + 4) continue;
-    resolveRoundedRectCollider(c, padding);
-  }
-}
-
-function resolveCameraCrowdCollision() {
-  tronRunnerCrowdRuntime?.resolveCameraCollision();
-}
-
-function hasRoadBoundaryLeadInput() {
-  return Boolean(
-    keys['KeyW'] || keys['ArrowUp'] ||
-    keys['KeyS'] || keys['ArrowDown'] ||
-    keys['KeyA'] || keys['ArrowLeft'] ||
-    keys['KeyD'] || keys['ArrowRight']
-  );
-}
-
-function isMovingTowardRoadBoundary(edge) {
-  if (!hasRoadBoundaryLeadInput()) return false;
-  const threshold = 0.05;
-  if (edge === 'minX') return movementVelocity.x < -threshold;
-  if (edge === 'maxX') return movementVelocity.x > threshold;
-  if (edge === 'minZ') return movementVelocity.z < -threshold;
-  return movementVelocity.z > threshold;
-}
-
-function handleRoadBoundaryHit(edge, showFeedback = isMovingTowardRoadBoundary(edge)) {
-  if (showFeedback) {
-    triggerRoadBoundaryPulse(edge);
-    triggerBoundaryError(edge);
-    return;
-  }
-  clearBoundaryError();
-}
-
-function resolveCameraRoadHexBoundaryCollision() {
-  if (isCameraCollisionDisabled()) return;
-  if (!roadBoundaryCollisionEnabled) return;
-  const limits = roadHexBoundaryLimits();
-  let probeX = camera.position.x;
-  let probeZ = camera.position.z;
-  if (roadBoundaryCameraLead > 0 && hasRoadBoundaryLeadInput()) {
-    roadBoundaryProbeVelocity.set(movementVelocity.x, 0, movementVelocity.z);
-    if (roadBoundaryProbeVelocity.lengthSq() > 1e-4) {
-      roadBoundaryProbeVelocity.normalize();
-      probeX += roadBoundaryProbeVelocity.x * roadBoundaryCameraLead;
-      probeZ += roadBoundaryProbeVelocity.z * roadBoundaryCameraLead;
-    }
-  }
-  const minProbeX = Math.min(camera.position.x, probeX);
-  const maxProbeX = Math.max(camera.position.x, probeX);
-  const minProbeZ = Math.min(camera.position.z, probeZ);
-  const maxProbeZ = Math.max(camera.position.z, probeZ);
-  if (minProbeX < limits.minX) {
-    const showFeedback = isMovingTowardRoadBoundary('minX');
-    camera.position.x += limits.minX - minProbeX;
-    movementVelocity.x = Math.max(0, movementVelocity.x);
-    handleRoadBoundaryHit('minX', showFeedback);
-  } else if (maxProbeX > limits.maxX) {
-    const showFeedback = isMovingTowardRoadBoundary('maxX');
-    camera.position.x += limits.maxX - maxProbeX;
-    movementVelocity.x = Math.min(0, movementVelocity.x);
-    handleRoadBoundaryHit('maxX', showFeedback);
-  }
-
-  if (minProbeZ < limits.minZ) {
-    const showFeedback = isMovingTowardRoadBoundary('minZ');
-    camera.position.z += limits.minZ - minProbeZ;
-    movementVelocity.z = Math.max(0, movementVelocity.z);
-    handleRoadBoundaryHit('minZ', showFeedback);
-  } else if (maxProbeZ > limits.maxZ) {
-    const showFeedback = isMovingTowardRoadBoundary('maxZ');
-    camera.position.z += limits.maxZ - maxProbeZ;
-    movementVelocity.z = Math.min(0, movementVelocity.z);
-    handleRoadBoundaryHit('maxZ', showFeedback);
-  }
-}
 
 function buildingLedBatchInspect() {
   const sideRingBatches = Object.entries(sideHorizontalLedRingBatches).map(([band, batch]) => ({
@@ -2023,8 +1892,8 @@ initRunnerWiring({
   roadHexBoundaryLimits,
   getPlayerSpawn: () => player.playerSpawn,
   getDroneLandingPose: () => player.droneLandingPose,
-  getCollisionPadding: () => collisionPadding,
-  getMainBuildingCollisionPadding: () => mainBuildingCollisionPadding,
+  getCollisionPadding: () => collisioni.collisionPadding,
+  getMainBuildingCollisionPadding: () => collisioni.mainBuildingCollisionPadding,
   getLatestMeasuredFps: () => latestMeasuredFps,
 });
 
@@ -2741,8 +2610,8 @@ function applyMovementControlsFromUI() {
   if (controlEls.noclipEnabled) {
     setTronNoclip(controlEls.noclipEnabled.value === 'on', { silent: true });
   }
-  collisionPadding = Number(controlEls.collisionPadding.value);
-  mainBuildingCollisionPadding = Number(controlEls.mainBuildingCollisionPadding.value);
+  collisioni.collisionPadding = Number(controlEls.collisionPadding.value);
+  collisioni.mainBuildingCollisionPadding = Number(controlEls.mainBuildingCollisionPadding.value);
   player.cameraMinHeight = Number(controlEls.cameraMinHeight.value);
   player.speedBase = Number(controlEls.walkSpeed.value);
   player.speedSprint = Number(controlEls.sprintSpeed.value);
@@ -2765,8 +2634,8 @@ function applyMovementControlsFromUI() {
   player.headMotionSmoothing = Number(controlEls.headMotionSmoothing.value);
   player.mouseSensitivityScale = Number(controlEls.mouseSensitivity.value);
   setFixedCameraFov();
-  controlEls.collisionPaddingVal.textContent = collisionPadding.toFixed(1);
-  controlEls.mainBuildingCollisionPaddingVal.textContent = mainBuildingCollisionPadding.toFixed(1);
+  controlEls.collisionPaddingVal.textContent = collisioni.collisionPadding.toFixed(1);
+  controlEls.mainBuildingCollisionPaddingVal.textContent = collisioni.mainBuildingCollisionPadding.toFixed(1);
   controlEls.cameraMinHeightVal.textContent = player.cameraMinHeight.toFixed(1);
   controlEls.walkSpeedVal.textContent = player.speedBase.toFixed(0);
   controlEls.sprintSpeedVal.textContent = player.speedSprint.toFixed(0);
@@ -2891,9 +2760,9 @@ function applyBasePadMaterialControlsFromUI() {
 }
 
 function applyBoundaryErrorControlsFromUI() {
-  roadBoundaryCollisionEnabled = controlEls.roadBoundaryCollisionEnabled.value === 'on';
-  roadBoundaryCollisionMargin = Number(controlEls.roadBoundaryCollisionMargin.value);
-  roadBoundaryCameraLead = Number(controlEls.roadBoundaryCameraLead.value);
+  collisioni.roadBoundaryCollisionEnabled = controlEls.roadBoundaryCollisionEnabled.value === 'on';
+  collisioni.roadBoundaryCollisionMargin = Number(controlEls.roadBoundaryCollisionMargin.value);
+  collisioni.roadBoundaryCameraLead = Number(controlEls.roadBoundaryCameraLead.value);
   const visualSettings = {
     roadBoundaryPulseStrength: Number(controlEls.roadBoundaryPulseStrength.value),
     boundaryErrorVisible: controlEls.boundaryErrorVisible.value === 'on',
@@ -2912,9 +2781,9 @@ function applyBoundaryErrorControlsFromUI() {
     boundaryErrorFloorLightSoftness: Number(controlEls.boundaryErrorFloorLightSoftness.value),
   };
   applyBoundaryErrorVisualSettings(visualSettings);
-  controlEls.roadBoundaryCollisionEnabledVal.textContent = roadBoundaryCollisionEnabled ? 'on' : 'off';
-  controlEls.roadBoundaryCollisionMarginVal.textContent = roadBoundaryCollisionMargin.toFixed(1);
-  controlEls.roadBoundaryCameraLeadVal.textContent = roadBoundaryCameraLead.toFixed(1);
+  controlEls.roadBoundaryCollisionEnabledVal.textContent = collisioni.roadBoundaryCollisionEnabled ? 'on' : 'off';
+  controlEls.roadBoundaryCollisionMarginVal.textContent = collisioni.roadBoundaryCollisionMargin.toFixed(1);
+  controlEls.roadBoundaryCameraLeadVal.textContent = collisioni.roadBoundaryCameraLead.toFixed(1);
   controlEls.roadBoundaryPulseStrengthVal.textContent = visualSettings.roadBoundaryPulseStrength.toFixed(2);
   controlEls.boundaryErrorVisibleVal.textContent = visualSettings.boundaryErrorVisible ? 'on' : 'off';
   controlEls.boundaryErrorSizeVal.textContent = visualSettings.boundaryErrorSize.toFixed(2);
@@ -3247,9 +3116,9 @@ function applyLiveControls() {
   nextRoadBoundaryHexRowOffsets.forEach((value, index) => {
     roadBoundaryHexRowOffsets[index] = value;
   });
-  roadBoundaryCollisionEnabled = nextRoadBoundaryCollisionEnabled;
-  roadBoundaryCollisionMargin = nextRoadBoundaryCollisionMargin;
-  roadBoundaryCameraLead = nextRoadBoundaryCameraLead;
+  collisioni.roadBoundaryCollisionEnabled = nextRoadBoundaryCollisionEnabled;
+  collisioni.roadBoundaryCollisionMargin = nextRoadBoundaryCollisionMargin;
+  collisioni.roadBoundaryCameraLead = nextRoadBoundaryCameraLead;
   applyBoundaryErrorVisualSettings({
     roadBoundaryPulseStrength: nextRoadBoundaryPulseStrength,
     boundaryErrorVisible: nextBoundaryErrorVisible,
@@ -3294,8 +3163,8 @@ function applyLiveControls() {
   updateSideRoadLayout(nextSideBuildingSpacingScale, nextStreetEdgeWidth);
   updateLongitudinalRoadEdges(nextSideBuildingSpacingScale);
   updateStreetEdgeHexTileScale();
-  collisionPadding = nextCollisionPadding;
-  mainBuildingCollisionPadding = nextMainBuildingCollisionPadding;
+  collisioni.collisionPadding = nextCollisionPadding;
+  collisioni.mainBuildingCollisionPadding = nextMainBuildingCollisionPadding;
   player.cameraMinHeight = nextCameraMinHeight;
   player.speedBase = nextWalkSpeed;
   player.speedSprint = nextSprintSpeed;
