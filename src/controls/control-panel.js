@@ -126,12 +126,6 @@ import * as THREE from 'three';
 let getLatestMeasuredFps = () => 0;
 /** @type {any} */ let scheduleLiveControls = null;
 
-/** L'unico pezzo di stato del pannello che vive oltre una chiamata. Lo scrivono sia
- *  questo file sia applyLiveControls, quindi sta in un oggetto invece che in un `let`. */
-export const pannello = {
-  hexTileBaseEmissiveIntensity: 0.18,
-};
-
 // I binding costruiti da initControlPanel().
 export let controlSettingsRuntime = null;
 let formatRevealDelaySeconds = null;
@@ -804,7 +798,6 @@ export function applyRoadMaterialControlsFromUI() {
   const roadEmissive = new THREE.Color(0x061419).lerp(new THREE.Color(0x7df6ff), Math.min(1, roadLight / 1.5));
   hexTileDisplayBaseEmissive.copy(roadEmissive).multiplyScalar(lightResponse.emissive);
   hexTileDisplayHitEmissive.copy(tunedColor(new THREE.Color(0x7df6ff), roadHue, roadSat, Math.max(1, roadBright * 1.25)));
-  pannello.hexTileBaseEmissiveIntensity = roadLight * 0.36 * lightResponse.emissive + lightResponse.floorFill;
   roadMat.color.set(0x000000);
   const hexInstanceGlow = 1.25 + hexTileHitLight * 1.1 + hexPlayerTileLight * 1.4 + roadLight * 0.25;
   updateRoadBoundaryHexMaterial(Number(controlEls.ledHue.value), roadLightFactor);

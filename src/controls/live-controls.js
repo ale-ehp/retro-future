@@ -34,9 +34,7 @@ import {
   boulevard,
   roadSurfaceWidthForBuildings,
   safeSideBuildingSpacingScale,
-  updateBuildingStreetEdgeBlocks,
   updateLongitudinalRoadEdges,
-  updateMainBuildingStreetEdgeBlock,
   updateSideRoadLayout,
   updateStreetEdgeLayout,
 } from '../world/boulevard-layout.js';
@@ -95,7 +93,6 @@ import {
 } from './controls.js';
 import * as THREE from 'three';
 import {
-  pannello,
   applyBasePadMaterialControlsFromUI,
   applyBoundaryErrorControlsFromUI,
   applyBuildingMaterialControlsFromUI,
@@ -555,8 +552,6 @@ export function applyLiveControls() {
   updateRoadBoundaryHexRows();
   updateRoadBoundaryPulseLayout();
   updateStreetEdgeLayout(nextStreetEdgeWidth);
-  updateBuildingStreetEdgeBlocks(nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextSideBuildingDepthScale);
-  updateMainBuildingStreetEdgeBlock(nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextMainBuildingZ, nextStreetEdgeWidth);
   updateSideRoadLayout(nextSideBuildingSpacingScale, nextStreetEdgeWidth);
   updateLongitudinalRoadEdges(nextSideBuildingSpacingScale);
   updateStreetEdgeHexTileScale();
@@ -612,7 +607,6 @@ export function applyLiveControls() {
   const roadEmissive = new THREE.Color(0x061419).lerp(new THREE.Color(0x7df6ff), Math.min(1, roadLight / 1.5));
   hexTileDisplayBaseEmissive.copy(roadEmissive).multiplyScalar(lightResponse.emissive);
   hexTileDisplayHitEmissive.copy(tunedColor(new THREE.Color(0x7df6ff), roadHue, roadSat, Math.max(1, roadBright * 1.25)));
-  pannello.hexTileBaseEmissiveIntensity = roadLight * 0.36 * lightResponse.emissive + lightResponse.floorFill;
 
   roadMat.color.set(0x000000);
 
