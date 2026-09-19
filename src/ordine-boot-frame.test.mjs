@@ -14,13 +14,14 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
 const main = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
+const boot = readFileSync(new URL('./engine/boot-prewarm.js', import.meta.url), 'utf8');
 
-/** Il corpo di una funzione di main.js, per nome; fallisce se non c'e'. */
-function corpo(firma) {
-  const inizio = main.indexOf(firma);
-  assert.notEqual(inizio, -1, `${firma} non trovata in main.js`);
-  const fine = main.indexOf('\n}\n', inizio);
-  return main.slice(inizio, fine);
+/** Il corpo di una funzione, per nome, nel file dove vive; fallisce se non c'e'. */
+function corpo(firma, sorgente = main, dove = 'main.js') {
+  const inizio = sorgente.indexOf(firma);
+  assert.notEqual(inizio, -1, `${firma} non trovata in ${dove}`);
+  const fine = sorgente.indexOf('\n}\n', inizio);
+  return sorgente.slice(inizio, fine);
 }
 
 /** Pretende che le stringhe compaiano nel testo in quest'ordine. */
@@ -34,7 +35,7 @@ function inOrdine(testo, passi) {
 }
 
 test('il boot svuota la coda della folla prima di scaldare le texture, e scalda i post-processing per ultimi', () => {
-  inOrdine(corpo('async function bootSceneWithFinalDefaults() {'), [
+  inOrdine(corpo('async function bootSceneWithFinalDefaults() {', boot, 'engine/boot-prewarm.js'), [
     'await tronRunnerOrchestration.load();',
     'await tronRunnerCrowdRuntime.drainBuildQueue();',
     'prewarmSkinnedMeshBoneTextures(scene);',

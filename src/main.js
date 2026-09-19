@@ -123,7 +123,6 @@ import {
   inspectPlayerFootsteps,
   resetFootstepCadence,
   updateFootstepAudioFromWalk,
-  waitForNextFrame,
 } from './audio/player-footsteps.js';
 import { setButtonFeedback } from './controls/control-settings-runtime.js';
 import { fxEnabled, fxToggleInspect } from './engine/fx-debug-toggles.js';
@@ -255,11 +254,17 @@ import {
 } from './world/facade-led-treatment.js';
 import { createSkyDome } from './world/sky-dome.js';
 import {
+  initBootPrewarm,
+  bootSceneWithFinalDefaults,
+  sceneTexturePrewarmStats,
+  postProcessingPrewarmStats,
+  skinnedMeshPrewarmStats,
+  hiddenSkinnedRenderPrewarmStats,
+} from './engine/boot-prewarm.js';
+import {
   initControlPanel,
   applyPlayerSpawn,
   captureLivePlayerSpawn,
-  controlSettingsRuntime,
-  loadStoredPlayerSpawn,
   performanceDiagnosticsEl,
   resetCameraHeightToDefault,
   trimProductionControls,
@@ -382,11 +387,8 @@ import {
   markCityRevealComplete,
   refreshCityRevealSweepBounds,
   renderCityRevealWireframe,
-  restoreCityRevealWireframeState,
-  setCityRevealPostProcessingPrewarmState,
   setCityRevealRoadGridAlphaFactor,
   setCityRevealSweepFront,
-  snapshotCityRevealWireframeState,
   startCityRevealWireTimer,
   startCityRevealWireframe,
   updateCityRevealWireframe,
@@ -408,7 +410,6 @@ import {
   updateStaticCityCulling,
 } from './engine/static-city-culling.js';
 import {
-  applyBridgeFixedDefaults,
   initBridgeControls,
   readBridgeNumber,
   readBridgeVisible,
@@ -461,7 +462,6 @@ import {
   droneIntroInspect,
   getDroneIntroActive,
   initDroneIntro,
-  scheduleDroneIntroAutoFlight,
   startDroneIntroFlight,
   updateDroneIntroFlight,
 } from './camera/drone-intro.js';
@@ -589,7 +589,6 @@ import {
   LAB_EQUALIZER_WORLD_WIDTH,
   labEqualizerGroup,
   initLabEqualizer,
-  buildLabEqualizer,
   updateLabEqualizer,
   labEqualizerState,
 } from './controls/equalizer.js';
@@ -605,7 +604,6 @@ import {
   roadBaseY,
   ROAD_BOUNDARY_ROW_MAX,
   TRON_RUNNER_GREETER_INDEX,
-  SCENE_TEXTURE_PREWARM_KEYS,
 } from './config/costanti.js';
 
 const droneIntroHeroShotEnabled = droneIntroHeroShotRequestedFromParams(new URLSearchParams(window.location.search));
@@ -2077,270 +2075,8 @@ initControlPanel({
   scheduleLiveControls,
 });
 
-const sceneTexturePrewarmStats = {
-  supported: false,
-  attempted: 0,
-  uploaded: 0,
-  errors: 0,
-  durationMs: 0,
-};
-const postProcessingPrewarmStats = {
-  attempted: false,
-  rendered: false,
-  postRevealRendered: false,
-  errors: 0,
-  durationMs: 0,
-  texturesAfter: 0,
-};
-const skinnedMeshPrewarmStats = {
-  attempted: 0,
-  created: 0,
-  uploaded: 0,
-  errors: 0,
-  durationMs: 0,
-};
-const hiddenSkinnedRenderPrewarmStats = {
-  attempted: 0,
-  forcedVisible: 0,
-  forcedUnculled: 0,
-  rendered: false,
-  errors: 0,
-  durationMs: 0,
-  texturesBefore: 0,
-  texturesAfter: 0,
-};
-
-function prewarmTextureUpload(texture, seen) {
-  if (!texture?.isTexture || seen.has(texture)) return;
-  seen.add(texture);
-  sceneTexturePrewarmStats.attempted += 1;
-  try {
-    renderer.initTexture?.(texture);
-    sceneTexturePrewarmStats.uploaded += 1;
-  } catch {
-    sceneTexturePrewarmStats.errors += 1;
-  }
-}
-
-function prewarmMaterialTextureUploads(material, seen) {
-  if (!material) return;
-  for (const key of SCENE_TEXTURE_PREWARM_KEYS) {
-    prewarmTextureUpload(material[key], seen);
-  }
-  for (const uniform of Object.values(material.uniforms || {})) {
-    prewarmTextureUpload(uniform?.value, seen);
-  }
-}
-
-function prewarmSceneTextureUploads(root = scene) {
-  const started = performance.now();
-  sceneTexturePrewarmStats.supported = typeof renderer.initTexture === 'function';
-  sceneTexturePrewarmStats.attempted = 0;
-  sceneTexturePrewarmStats.uploaded = 0;
-  sceneTexturePrewarmStats.errors = 0;
-  if (!sceneTexturePrewarmStats.supported) return sceneTexturePrewarmStats;
-  const seen = new Set();
-  root.traverse((object) => {
-    const materials = Array.isArray(object.material) ? object.material : [object.material];
-    for (const material of materials) prewarmMaterialTextureUploads(material, seen);
-  });
-  sceneTexturePrewarmStats.durationMs = Number((performance.now() - started).toFixed(2));
-  return sceneTexturePrewarmStats;
-}
-
-function prewarmSkinnedMeshBoneTextures(root = scene) {
-  const started = performance.now();
-  skinnedMeshPrewarmStats.attempted = 0;
-  skinnedMeshPrewarmStats.created = 0;
-  skinnedMeshPrewarmStats.uploaded = 0;
-  skinnedMeshPrewarmStats.errors = 0;
-  const seenSkeletons = new Set();
-  root.traverse((object) => {
-    if (!object?.isSkinnedMesh || !object.skeleton || seenSkeletons.has(object.skeleton)) return;
-    seenSkeletons.add(object.skeleton);
-    skinnedMeshPrewarmStats.attempted += 1;
-    try {
-      if (!object.skeleton.boneTexture && typeof object.skeleton.computeBoneTexture === 'function') {
-        object.skeleton.computeBoneTexture();
-        skinnedMeshPrewarmStats.created += 1;
-      }
-      if (object.skeleton.boneTexture) {
-        renderer.initTexture?.(object.skeleton.boneTexture);
-        skinnedMeshPrewarmStats.uploaded += 1;
-      }
-    } catch {
-      skinnedMeshPrewarmStats.errors += 1;
-    }
-  });
-  skinnedMeshPrewarmStats.durationMs = Number((performance.now() - started).toFixed(2));
-  return skinnedMeshPrewarmStats;
-}
-
-async function prewarmHiddenSkinnedMeshRender(root = scene) {
-  const started = performance.now();
-  hiddenSkinnedRenderPrewarmStats.attempted = 0;
-  hiddenSkinnedRenderPrewarmStats.forcedVisible = 0;
-  hiddenSkinnedRenderPrewarmStats.forcedUnculled = 0;
-  hiddenSkinnedRenderPrewarmStats.rendered = false;
-  hiddenSkinnedRenderPrewarmStats.errors = 0;
-  hiddenSkinnedRenderPrewarmStats.texturesBefore = renderer.info.memory?.textures ?? 0;
-  hiddenSkinnedRenderPrewarmStats.texturesAfter = hiddenSkinnedRenderPrewarmStats.texturesBefore;
-  if (typeof renderer.render !== 'function') return hiddenSkinnedRenderPrewarmStats;
-
-  const visibilityState = [];
-  const frustumState = [];
-  const seenVisibility = new Set();
-  try {
-    root.traverse((object) => {
-      if (!object?.isSkinnedMesh) return;
-      hiddenSkinnedRenderPrewarmStats.attempted += 1;
-      if (object.frustumCulled) {
-        frustumState.push([object, object.frustumCulled]);
-        object.frustumCulled = false;
-        hiddenSkinnedRenderPrewarmStats.forcedUnculled += 1;
-      }
-      let current = object;
-      while (current && current !== root.parent) {
-        if (!seenVisibility.has(current) && current.visible === false) {
-          seenVisibility.add(current);
-          visibilityState.push([current, current.visible]);
-          current.visible = true;
-          hiddenSkinnedRenderPrewarmStats.forcedVisible += 1;
-        }
-        if (current === root) break;
-        current = current.parent;
-      }
-    });
-
-    if (hiddenSkinnedRenderPrewarmStats.attempted > 0) {
-      const target = new THREE.WebGLRenderTarget(4, 4, {
-        depthBuffer: true,
-        stencilBuffer: false,
-      });
-      // The program variant depends on the bound render target (output colour
-      // space and tone mapping are only applied when drawing to the screen), and
-      // the real frames draw the scene into the composer's target, never to the
-      // screen. So both the compile and the warm render below run with an
-      // off-screen target bound, or the compile would link the on-screen variants
-      // and the render would compile the whole set again, synchronously.
-      const withPrewarmTarget = (run) => {
-        const previousRenderTarget = renderer.getRenderTarget();
-        const previousAutoClear = renderer.autoClear;
-        renderer.setRenderTarget(target);
-        renderer.autoClear = true;
-        try {
-          return run();
-        } finally {
-          renderer.setRenderTarget(previousRenderTarget);
-          renderer.autoClear = previousAutoClear;
-        }
-      };
-      try {
-        // compileAsync lets the driver link the program set on its own threads
-        // (KHR_parallel_shader_compile) instead of blocking this task on every
-        // program in turn. Its program creation is synchronous — only the link
-        // wait is deferred — so the target is bound just for the call, not
-        // across the await, where a frame could otherwise render into it.
-        if (typeof renderer.compileAsync === 'function') {
-          try {
-            await withPrewarmTarget(() => renderer.compileAsync(root, camera));
-          } catch {
-            hiddenSkinnedRenderPrewarmStats.errors += 1;
-          }
-        }
-        withPrewarmTarget(() => {
-          renderer.clear();
-          renderer.render(root, camera);
-        });
-        hiddenSkinnedRenderPrewarmStats.rendered = true;
-      } finally {
-        target.dispose();
-      }
-    }
-  } catch {
-    hiddenSkinnedRenderPrewarmStats.errors += 1;
-  } finally {
-    for (let i = visibilityState.length - 1; i >= 0; i -= 1) {
-      visibilityState[i][0].visible = visibilityState[i][1];
-    }
-    for (let i = frustumState.length - 1; i >= 0; i -= 1) {
-      frustumState[i][0].frustumCulled = frustumState[i][1];
-    }
-    hiddenSkinnedRenderPrewarmStats.durationMs = Number((performance.now() - started).toFixed(2));
-    hiddenSkinnedRenderPrewarmStats.texturesAfter = renderer.info.memory?.textures ?? 0;
-    performanceDiagnostics.setLastTextureCount(hiddenSkinnedRenderPrewarmStats.texturesAfter);
-  }
-  return hiddenSkinnedRenderPrewarmStats;
-}
-
-function prewarmPostProcessingPasses() {
-  postProcessingPrewarmStats.attempted = true;
-  postProcessingPrewarmStats.rendered = false;
-  postProcessingPrewarmStats.postRevealRendered = false;
-  postProcessingPrewarmStats.errors = 0;
-  const started = performance.now();
-  if (!post.composer) return postProcessingPrewarmStats;
-  const previousPostEnabled = post.postEnabled;
-  const previousBloomEnabled = post.bloomPass?.enabled;
-  const previousFxaaEnabled = post.fxaaPass?.enabled;
-  const previousRevealState = snapshotCityRevealWireframeState();
-  try {
-    post.postEnabled = true;
-    if (post.bloomPass) post.bloomPass.enabled = true;
-    if (post.fxaaPass) post.fxaaPass.enabled = post.antialiasMode === 'fxaa';
-    cityRevealRender.syncComposerPasses();
-    post.composer.render();
-    postProcessingPrewarmStats.rendered = true;
-    setCityRevealPostProcessingPrewarmState();
-    cityRevealRender.syncComposerPasses();
-    post.composer.render();
-    postProcessingPrewarmStats.postRevealRendered = true;
-  } catch {
-    postProcessingPrewarmStats.errors += 1;
-  } finally {
-    restoreCityRevealWireframeState(previousRevealState);
-    post.postEnabled = previousPostEnabled;
-    if (post.bloomPass) post.bloomPass.enabled = previousBloomEnabled;
-    if (post.fxaaPass) post.fxaaPass.enabled = previousFxaaEnabled;
-    cityRevealRender.syncComposerPasses();
-    postProcessingPrewarmStats.durationMs = Number((performance.now() - started).toFixed(2));
-    postProcessingPrewarmStats.texturesAfter = renderer.info.memory?.textures ?? 0;
-    performanceDiagnostics.setLastTextureCount(postProcessingPrewarmStats.texturesAfter);
-  }
-  return postProcessingPrewarmStats;
-}
-
-async function bootSceneWithFinalDefaults() {
-  await controlSettingsRuntime.loadProjectCanonicalDefaults();
-  controlSettingsRuntime.loadStoredControlDefaults();
-  controlSettingsRuntime.applyRetroFutureRevealTimingDefaults();
-  controlSettingsRuntime.applyFullResolutionFsrDefaults();
-  applyBridgeFixedDefaults();
-  loadStoredPlayerSpawn();
-  applyLiveControls();
-  buildLabEqualizer({ visible: false });
-  setTronNoclip(false, { silent: true });
-  applyPlayerSpawn(player.playerSpawn, false);
-  await tronRunnerOrchestration.load();
-  await tronRunnerCrowdRuntime.drainBuildQueue();
-  // Each of these is a heavy synchronous block (bone-texture uploads, a full
-  // scene compile + render, two composer renders, then a compile with the reveal
-  // clip planes). Chained without a break they form one long main-thread task —
-  // hundreds of ms on mobile with input and paint frozen throughout. Yield to the
-  // browser between them, and let the driver link programs in parallel where it
-  // can (compileAsync, KHR_parallel_shader_compile) before the warm render.
-  prewarmSkinnedMeshBoneTextures(scene);
-  await waitForNextFrame();
-  prewarmSceneTextureUploads(scene);
-  await waitForNextFrame();
-  await prewarmHiddenSkinnedMeshRender(scene);
-  await waitForNextFrame();
-  prewarmPostProcessingPasses();
-  await waitForNextFrame();
-  await ensureFootstepAudioReady();
-  await cityRevealRender.prewarmRealPass();
-  scheduleDroneIntroAutoFlight();
-}
+// ---------- il prewarm e il boot stanno in engine/boot-prewarm.js ----------
+initBootPrewarm({ scene, camera, renderer, performanceDiagnostics, cityRevealRender });
 
 window.__tronInspect = () => ({
   cameraX: camera.position.x,
