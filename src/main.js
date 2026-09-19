@@ -1,14 +1,28 @@
 import * as THREE from 'three';
 import { createCtx } from './ctx.js';
 import {
-  GRID_BLOCK, MAIN_ROAD_WIDTH, SIDE_ROAD_LENGTH, SIDE_ROAD_X, SIDE_BUILDING_X, SIDE_ROAD_WIDTH,
-  SIDE_BUILDING_BASE, SIDE_BUILDING_GAP, SIDE_BUILDING_SPACING,
-  SIDE_BUILDING_MIN_CLEARANCE, BRIDGE_BUILDING_CLEARANCE, BRIDGE_INNER_BUILDING_FACE_X, BRIDGE_HALF_SPAN,
-  MAIN_ROAD_BASE_LENGTH, START_SIDE_EXTENSION, MAIN_ROAD_LENGTH, MAIN_ROAD_Z, MAIN_BUILDING_BASE,
-  MAIN_BUILDING_Z, laneZ, STREET_EDGE_WIDTH_DEFAULT, STREET_EDGE_WIDTH_MAX,
-  MAX_BUILDING_AXIS_SCALE, MAX_BOULEVARD_WIDTH_SCALE, MAX_DYNAMIC_ROAD_MARGIN,
-  MAIN_BUILDING_SIDE_HEX_EXTENSION_ROWS, DEFAULT_BASE_PAD_Y,
-  DEFAULT_BASE_PAD_THICKNESS,
+  GRID_BLOCK,
+  MAIN_ROAD_WIDTH,
+  SIDE_ROAD_LENGTH,
+  SIDE_ROAD_X,
+  SIDE_BUILDING_X,
+  SIDE_BUILDING_BASE,
+  SIDE_BUILDING_GAP,
+  SIDE_BUILDING_SPACING,
+  BRIDGE_BUILDING_CLEARANCE,
+  BRIDGE_INNER_BUILDING_FACE_X,
+  BRIDGE_HALF_SPAN,
+  MAIN_ROAD_BASE_LENGTH,
+  START_SIDE_EXTENSION,
+  MAIN_ROAD_LENGTH,
+  MAIN_ROAD_Z,
+  MAIN_BUILDING_BASE,
+  laneZ,
+  STREET_EDGE_WIDTH_MAX,
+  MAX_BUILDING_AXIS_SCALE,
+  MAX_BOULEVARD_WIDTH_SCALE,
+  MAX_DYNAMIC_ROAD_MARGIN,
+  MAIN_BUILDING_SIDE_HEX_EXTENSION_ROWS,
 } from './world/boulevard-constants.js';
 import {
   BLOOM_RESOLUTION_CAP,
@@ -420,6 +434,20 @@ import {
   updateFacadeStripOutsets,
 } from './world/facade-led-treatment.js';
 import { createSkyDome } from './world/sky-dome.js';
+import {
+  boulevard,
+  initBoulevardLayout,
+  roadHalf,
+  boulevardRoadWidth,
+  sideBuildingVisualWidth,
+  safeSideBuildingSpacingScale,
+  roadSurfaceWidthForBuildings,
+  updateStreetEdgeLayout,
+  updateBuildingStreetEdgeBlocks,
+  updateMainBuildingStreetEdgeBlock,
+  updateLongitudinalRoadEdges,
+  updateSideRoadLayout,
+} from './world/boulevard-layout.js';
 import { createCityRevealMainLed } from './world/city-reveal-main-led.js';
 import {
   CITY_REVEAL_MAIN_BUILDING_LED_WIREFRAME_ENABLED,
@@ -563,7 +591,6 @@ import {
   groundShapeGeometry,
   setGroundLineLoop,
   setGroundSegment,
-  setGroundShape,
 } from './world/ground-geometry.js';
 import {
   applyBoundaryErrorVisualSettings,
@@ -640,7 +667,6 @@ import { initKeyboard, keys } from './controls/keyboard.js';
 import {
   HEX_ROAD_EMPTY_BATCH_CULLING_ENABLED,
   HEX_ROAD_UPLOAD_BATCH_LIMIT,
-  compactHexTileBatchesForTiles,
   addHexRoadTiles,
   ensureHexRoadTileCoverage,
   applyHexRuntimeSettings,
@@ -667,7 +693,6 @@ import {
   initHexTileSync,
   recoveringHexTiles,
   roadTileTopY,
-  setHexTileLayoutPosition,
   setHexTileGap,
   setHexTileHeightScale,
   setHexRoadMaterialGlow,
@@ -1418,121 +1443,6 @@ const asphalt = makeWetAsphaltFacadeTexture();
 initHexTileMaterials({ dropNormalMap: floorLiteActive, liteReflect: floorReflectLite });
 const basePadSurfaceTex = makeBasePadSurfaceTexture();
 
-// ---------- Exact boulevard map constants (pure values -> world/boulevard-constants.js) ----------
-// The road band is seeded for the CURRENT control values; ensureHexRoadTileCoverage
-// (called from updateMainRoadLength) tops it up when sliders grow the requirement,
-// so the old slider-extreme constants (DYNAMIC_ROAD_MAX_LENGTH & co.) are gone.
-let streetEdgeWidth = 0;
-let sideBuildingWidthScale = 2;
-let sideBuildingDepthScale = 1;
-let sideBuildingSpacingScale = 1;
-let mainBuildingWidthScale = 2;
-let mainBuildingDepthScale = 1;
-let mainBuildingZ = MAIN_BUILDING_Z;
-let mainBuildingY = 0;
-let mainBuildingSaturation = 1.2;
-let boulevardWidthScale = 1;
-let sideBuildingBasePadScale = 1.12;
-let sideBuildingBasePadXScale = 1;
-let sideBuildingBasePadY = DEFAULT_BASE_PAD_Y;
-let sideBuildingBasePadThickness = DEFAULT_BASE_PAD_THICKNESS;
-let sideBuildingBasePadCut = 10;
-let sideBuildingBasePadRadius = 1.2;
-let mainBuildingBasePadScale = 1.12;
-let mainBuildingBasePadXScale = 1;
-let mainBuildingBasePadZScale = 1;
-let mainBuildingBasePadY = DEFAULT_BASE_PAD_Y;
-let mainBuildingBasePadThickness = DEFAULT_BASE_PAD_THICKNESS;
-let mainBuildingBasePadCut = 12;
-let mainBuildingBasePadRadius = 1.5;
-let crossRoadWidth = SIDE_ROAD_WIDTH;
-let crossStreetEdgeWidth = 0;
-let dynamicRoadLength = MAIN_ROAD_LENGTH;
-let dynamicRoadCenter = MAIN_ROAD_Z;
-let roadSideHexExtraRows = 3;
-
-function sideBuildingVisualWidth() {
-  return SIDE_BUILDING_BASE * sideBuildingWidthScale;
-}
-
-function sideBuildingZSpacing() {
-  return SIDE_BUILDING_SPACING * sideBuildingSpacingScale;
-}
-
-function safeSideBuildingSpacingScale(requestedScale, depthScale) {
-  const input = controlEls?.sideBuildingSpacingScale;
-  const min = Number(input?.min ?? 1);
-  const max = Number(input?.max ?? 8);
-  const requested = Number.isFinite(requestedScale) ? requestedScale : min;
-  const depth = Number.isFinite(depthScale) ? Math.max(0.01, depthScale) : 1;
-  const noOverlapScale = (SIDE_BUILDING_BASE * depth + SIDE_BUILDING_MIN_CLEARANCE) / SIDE_BUILDING_SPACING;
-  return THREE.MathUtils.clamp(Math.max(requested, noOverlapScale), min, max);
-}
-
-function sideBuildingVisualDepth() {
-  return SIDE_BUILDING_BASE * sideBuildingDepthScale;
-}
-
-function boulevardRoadWidth(scale = boulevardWidthScale) {
-  return MAIN_ROAD_WIDTH * scale;
-}
-
-function roadHalf(scale = boulevardWidthScale) {
-  return boulevardRoadWidth(scale) / 2;
-}
-
-function sideBuildingX(sign) {
-  return sign * (roadHalf() + streetEdgeWidth + sideBuildingVisualWidth() / 2);
-}
-
-function crossStreetVisualLength(width = streetEdgeWidth, sideWidth = sideBuildingVisualWidth(), roadWidthScale = boulevardWidthScale) {
-  return 2 * (roadHalf(roadWidthScale) + width + sideWidth);
-}
-
-function crossStreetSideSegmentLength(width = streetEdgeWidth, sideWidth = sideBuildingVisualWidth()) {
-  return Math.max(0.01, width + sideWidth);
-}
-
-function roadSideHexExtraWidth(rows = roadSideHexExtraRows) {
-  return Math.max(0, rows) * GRID_BLOCK;
-}
-
-function sideBuildingBasePadWidthForRoad(nextSideWidthScale = sideBuildingWidthScale, nextSideDepthScale = sideBuildingDepthScale, padScale = sideBuildingBasePadScale, padXScale = sideBuildingBasePadXScale) {
-  const footprintWidth = SIDE_BUILDING_BASE * nextSideWidthScale;
-  const footprintDepth = SIDE_BUILDING_BASE * nextSideDepthScale;
-  return Math.max(footprintWidth, footprintDepth) * padScale * padXScale;
-}
-
-function mainBuildingBasePadWidthForRoad(nextMainWidthScale = mainBuildingWidthScale, nextMainDepthScale = mainBuildingDepthScale, padScale = mainBuildingBasePadScale, padXScale = mainBuildingBasePadXScale) {
-  const footprintWidth = MAIN_BUILDING_BASE * nextMainWidthScale;
-  const footprintDepth = MAIN_BUILDING_BASE * nextMainDepthScale;
-  return Math.max(footprintWidth, footprintDepth) * padScale * padXScale;
-}
-
-function roadSurfaceWidthForBuildings(
-  nextSideWidthScale = sideBuildingWidthScale,
-  nextMainWidthScale = mainBuildingWidthScale,
-  width = streetEdgeWidth,
-  roadWidthScale = boulevardWidthScale,
-  nextSideDepthScale = sideBuildingDepthScale,
-  nextSidePadScale = sideBuildingBasePadScale,
-  nextSidePadXScale = sideBuildingBasePadXScale,
-  nextMainDepthScale = mainBuildingDepthScale,
-  nextMainPadScale = mainBuildingBasePadScale,
-  nextMainPadXScale = mainBuildingBasePadXScale,
-  nextSideHexExtraRows = roadSideHexExtraRows
-) {
-  const baseRoadWidth = boulevardRoadWidth(roadWidthScale);
-  const sideFootprintWidth = SIDE_BUILDING_BASE * nextSideWidthScale;
-  const sidePadWidth = sideBuildingBasePadWidthForRoad(nextSideWidthScale, nextSideDepthScale, nextSidePadScale, nextSidePadXScale);
-  const mainFootprintWidth = MAIN_BUILDING_BASE * nextMainWidthScale;
-  const mainPadWidth = mainBuildingBasePadWidthForRoad(nextMainWidthScale, nextMainDepthScale, nextMainPadScale, nextMainPadXScale);
-  const extraWidth = roadSideHexExtraWidth(nextSideHexExtraRows);
-  const sideSpan = baseRoadWidth + 2 * (width + sideFootprintWidth / 2 + sidePadWidth / 2 + extraWidth);
-  const mainSpan = Math.max(mainFootprintWidth, mainPadWidth) + extraWidth * 2;
-  return Math.max(baseRoadWidth, sideSpan, mainSpan);
-}
-
 // ---------- Floor: streetEdges (hex tile) + road (metal mirror) + outer floor ----------
 const ROAD_HALF = MAIN_ROAD_WIDTH / 2;     // road x range -44..+44
 const STREET_EDGE_OUTER = BRIDGE_INNER_BUILDING_FACE_X; // streetEdge x range 44..60
@@ -1550,7 +1460,7 @@ const ROAD_BACKING_EDGE_INSET = GRID_BLOCK;
 function roadBackingWidth(width = dynamicRoadSurfaceWidth) {
   return Math.max(MAIN_ROAD_WIDTH * 0.25, width - ROAD_BACKING_EDGE_INSET * 2);
 }
-function roadBackingLength(length = dynamicRoadLength) {
+function roadBackingLength(length = boulevard.dynamicRoadLength) {
   return Math.max(GRID_BLOCK * 4, length - ROAD_BACKING_EDGE_INSET * 2);
 }
 function syncRoadBacking() {
@@ -1631,9 +1541,9 @@ function computeDynamicRoadBounds(nextSideSpacingScale, nextSideDepthScale, next
     if (sideMax > maxZ) maxZ = sideMax + MAX_DYNAMIC_ROAD_MARGIN;
   }
   const mainHalfD = MAIN_BUILDING_BASE * nextMainDepthScale / 2;
-  const mainMin = mainBuildingZ - mainHalfD - MAX_DYNAMIC_ROAD_MARGIN;
-  const mainMax = mainBuildingZ + mainHalfD + MAX_DYNAMIC_ROAD_MARGIN;
-  if (mainBuildingZ <= MAIN_ROAD_Z) {
+  const mainMin = boulevard.mainBuildingZ - mainHalfD - MAX_DYNAMIC_ROAD_MARGIN;
+  const mainMax = boulevard.mainBuildingZ + mainHalfD + MAX_DYNAMIC_ROAD_MARGIN;
+  if (boulevard.mainBuildingZ <= MAIN_ROAD_Z) {
     minZ = Math.min(minZ, mainMin - mainBuildingSideBoulevardExtension());
     maxZ = Math.max(maxZ, mainMax);
   } else {
@@ -1644,8 +1554,8 @@ function computeDynamicRoadBounds(nextSideSpacingScale, nextSideDepthScale, next
 }
 
 function updateMainRoadLength(centerZ, length) {
-  dynamicRoadCenter = centerZ;
-  dynamicRoadLength = length;
+  boulevard.dynamicRoadCenter = centerZ;
+  boulevard.dynamicRoadLength = length;
   const planeScale = length / Z_FLOOR_LEN;
   for (const mesh of floorPlaneLengthMeshes) {
     mesh.position.z = centerZ;
@@ -1673,8 +1583,8 @@ function isCameraCollisionDisabled() {
 
 function roadHexBoundaryLimits() {
   const halfW = dynamicRoadSurfaceWidth / 2;
-  const halfL = dynamicRoadLength / 2;
-  const centerZ = dynamicRoadCenter;
+  const halfL = boulevard.dynamicRoadLength / 2;
+  const centerZ = boulevard.dynamicRoadCenter;
   const margin = Math.max(roadBoundaryCollisionMargin, hexTileRadius * getHexTileScale() * 0.22);
   return {
     minX: -halfW + margin,
@@ -1692,11 +1602,11 @@ function roadHexBoundaryLimits() {
 // controls the first applyControls pass then needs zero extra tiles, so every
 // z-strip keeps a single batch exactly like the old full seeding.
 {
-  const initialRoadBounds = computeDynamicRoadBounds(sideBuildingSpacingScale, sideBuildingDepthScale, mainBuildingDepthScale);
-  dynamicRoadCenter = initialRoadBounds.center;
-  dynamicRoadLength = initialRoadBounds.length;
+  const initialRoadBounds = computeDynamicRoadBounds(boulevard.sideBuildingSpacingScale, boulevard.sideBuildingDepthScale, boulevard.mainBuildingDepthScale);
+  boulevard.dynamicRoadCenter = initialRoadBounds.center;
+  boulevard.dynamicRoadLength = initialRoadBounds.length;
 }
-const mainRoadTiles = addHexRoadTiles(dynamicRoadSurfaceWidth, dynamicRoadLength, 0, dynamicRoadCenter);
+const mainRoadTiles = addHexRoadTiles(dynamicRoadSurfaceWidth, boulevard.dynamicRoadLength, 0, boulevard.dynamicRoadCenter);
 initBoundaryError(ctx, {
   roadHexBoundaryLimits,
   roadBoundaryHexRowOffsets,
@@ -1707,8 +1617,8 @@ initBoundaryError(ctx, {
   cyan: PAL.cyan,
   reflectionEnvMap,
   getDynamicRoadSurfaceWidth: () => dynamicRoadSurfaceWidth,
-  getDynamicRoadLength: () => dynamicRoadLength,
-  getDynamicRoadCenter: () => dynamicRoadCenter,
+  getDynamicRoadLength: () => boulevard.dynamicRoadLength,
+  getDynamicRoadCenter: () => boulevard.dynamicRoadCenter,
 });
 initDroneIntro(ctx, {
   controlEls,
@@ -1737,9 +1647,9 @@ initDroneIntro(ctx, {
   getDefaultDroneLandingPose: () => DEFAULT_DRONE_LANDING_POSE,
   getSideBuildingRecords: () => sideBuildingRecords,
   getMainBuildingRecords: () => mainBuildingRecords,
-  getSideBuildingDepthScale: () => sideBuildingDepthScale,
-  getDynamicRoadCenter: () => dynamicRoadCenter,
-  getDynamicRoadLength: () => dynamicRoadLength,
+  getSideBuildingDepthScale: () => boulevard.sideBuildingDepthScale,
+  getDynamicRoadCenter: () => boulevard.dynamicRoadCenter,
+  getDynamicRoadLength: () => boulevard.dynamicRoadLength,
   heroShotEnabled: droneIntroHeroShotEnabled,
 });
 
@@ -1797,13 +1707,13 @@ const streetEdgeMat = new THREE.MeshStandardMaterial({
   envMapIntensity: 0.86,
   side: THREE.DoubleSide,
 });
-const streetEdgeLPlane = new THREE.PlaneGeometry(streetEdgeWidth, Z_FLOOR_LEN);
+const streetEdgeLPlane = new THREE.PlaneGeometry(boulevard.streetEdgeWidth, Z_FLOOR_LEN);
 const streetEdgeLeft  = new THREE.Mesh(streetEdgeLPlane, streetEdgeMat);
 const streetEdgeRight = new THREE.Mesh(streetEdgeLPlane, streetEdgeMat);
 streetEdgeLeft.rotation.x  = -Math.PI / 2;
 streetEdgeRight.rotation.x = -Math.PI / 2;
-streetEdgeLeft.position.set( -(roadHalf() + streetEdgeWidth / 2), 0.10, Z_FLOOR_CENTER);
-streetEdgeRight.position.set( roadHalf() + streetEdgeWidth / 2,   0.10, Z_FLOOR_CENTER);
+streetEdgeLeft.position.set( -(roadHalf() + boulevard.streetEdgeWidth / 2), 0.10, Z_FLOOR_CENTER);
+streetEdgeRight.position.set( roadHalf() + boulevard.streetEdgeWidth / 2,   0.10, Z_FLOOR_CENTER);
 streetEdgeLeft.visible = false;
 streetEdgeRight.visible = false;
 scene.add(streetEdgeLeft, streetEdgeRight);
@@ -1836,142 +1746,6 @@ function addGroundSegment(p1, p2, mat, y = 0.46, thickness = 0.22, height = 0.08
   return mesh;
 }
 
-function cornerBevelLength(width) {
-  return Math.max(0.01, Math.min(width, crossStreetEdgeWidth));
-}
-
-function cornerPadPoints(sideSign, zSign, z, width) {
-  const half = roadHalf();
-  const base = [
-    [half, crossRoadWidth / 2],
-    [half + width, crossRoadWidth / 2],
-    [half + width, crossRoadWidth / 2 + crossStreetEdgeWidth],
-    [half, crossRoadWidth / 2 + crossStreetEdgeWidth],
-  ];
-  return base.map(([x, dz]) => [sideSign * x, z + zSign * dz]);
-}
-
-function cornerDiagonalPoints(sideSign, zSign, z, width) {
-  const half = roadHalf();
-  const miter = cornerBevelLength(width);
-  return [
-    [sideSign * half, z + zSign * (crossRoadWidth / 2)],
-    [sideSign * (half + miter), z + zSign * (crossRoadWidth / 2 + miter)],
-  ];
-}
-
-function cornerRoadPerimeterSegments(sideSign, zSign, z, width) {
-  const half = roadHalf();
-  const roadEdge = crossRoadWidth / 2;
-  const streetEdgeEdge = crossRoadWidth / 2 + crossStreetEdgeWidth;
-  const localSegments = [
-    [[half, roadEdge], [half + width, roadEdge]],
-    [[half, roadEdge], [half, streetEdgeEdge]],
-  ];
-  return localSegments.map(([a, b]) => [
-    [sideSign * a[0], z + zSign * a[1]],
-    [sideSign * b[0], z + zSign * b[1]],
-  ]);
-}
-
-function cornerCutPoints(sideSign, zSign, z, width) {
-  const half = roadHalf();
-  const cutX = Math.min(Math.max(width * 0.62, 6), 16);
-  const cutZ = Math.min(Math.max(crossStreetEdgeWidth * 0.72, 6), 14);
-  const base = [
-    [half, crossRoadWidth / 2],
-    [half + cutX, crossRoadWidth / 2],
-    [half, crossRoadWidth / 2 + cutZ],
-  ];
-  return base.map(([x, dz]) => [sideSign * x, z + zSign * dz]);
-}
-
-function mainStreetEdgeRoadMaskPoints(sideSign, z, width) {
-  const half = roadHalf();
-  const base = [
-    [half, -crossRoadWidth / 2],
-    [half + width, -crossRoadWidth / 2],
-    [half + width, crossRoadWidth / 2],
-    [half, crossRoadWidth / 2],
-  ];
-  return base.map(([x, dz]) => [sideSign * x, z + dz]);
-}
-
-function pointInPolygon2D(x, z, polygon) {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i][0], zi = polygon[i][1];
-    const xj = polygon[j][0], zj = polygon[j][1];
-    const crosses = (zi > z) !== (zj > z);
-    if (crosses) {
-      const xAtZ = ((xj - xi) * (z - zi)) / ((zj - zi) || 1e-6) + xi;
-      if (x < xAtZ) inside = !inside;
-    }
-  }
-  return inside;
-}
-
-function applyTilePolygonClip(tiles, polygon, isVisible = true) {
-  for (const tile of tiles) {
-    tile.visible = tile.visible && isVisible && pointInPolygon2D(tile.userData.x, tile.userData.z, polygon);
-  }
-}
-
-function intersectionTracePoints(z) {
-  const rx = roadHalf() * 0.62;
-  const rz = Math.max(12, crossRoadWidth * 0.48);
-  const cut = Math.min(10, rz * 0.45);
-  return [
-    [-rx, z - rz + cut],
-    [-rx + cut, z - rz],
-    [rx - cut, z - rz],
-    [rx, z - rz + cut],
-    [rx, z + rz - cut],
-    [rx - cut, z + rz],
-    [-rx + cut, z + rz],
-    [-rx, z + rz - cut],
-  ];
-}
-
-const buildingStreetEdgeRecords = [];
-let mainBuildingStreetEdgeRecord = null;
-const STREET_EDGE_BLOCK_MAX_DEPTH = SIDE_BUILDING_BASE * MAX_BUILDING_AXIS_SCALE;
-
-function streetEdgeBlockVisualDepth(nextSideDepthScale = sideBuildingDepthScale, nextSideSpacingScale = sideBuildingSpacingScale) {
-  const targetDepth = SIDE_BUILDING_BASE * nextSideDepthScale;
-  const streetGap = crossRoadWidth + crossStreetEdgeWidth * 2;
-  const maxWithoutOverlap = SIDE_BUILDING_SPACING * nextSideSpacingScale - streetGap - GRID_BLOCK * 0.5;
-  return Math.max(GRID_BLOCK, Math.min(targetDepth, maxWithoutOverlap));
-}
-
-function streetEdgeBlockPoints(sign, z, width, depth) {
-  const half = roadHalf();
-  const innerX = sign * half;
-  const outerX = sign * (half + width);
-  const z0 = z - depth / 2;
-  const z1 = z + depth / 2;
-  return [
-    [innerX, z0],
-    [outerX, z0],
-    [outerX, z1],
-    [innerX, z1],
-  ];
-}
-
-function mainBuildingStreetEdgePoints(z = mainBuildingZ, width = streetEdgeWidth, nextMainWidthScale = mainBuildingWidthScale, nextMainDepthScale = mainBuildingDepthScale) {
-  const buildingWidth = MAIN_BUILDING_BASE * nextMainWidthScale;
-  const buildingDepth = MAIN_BUILDING_BASE * nextMainDepthScale;
-  const frontZ = z + buildingDepth / 2;
-  const outerZ = frontZ + Math.max(0.01, width);
-  const halfW = buildingWidth / 2;
-  return [
-    [-halfW, frontZ],
-    [halfW, frontZ],
-    [halfW, outerZ],
-    [-halfW, outerZ],
-  ];
-}
-
 // Cross streets — true intersections in the gaps between the building rows.
 const sideRoadRecords = [];
 const CROSS_STREET_MAX_LENGTH = 2 * (MAIN_ROAD_WIDTH * MAX_BOULEVARD_WIDTH_SCALE / 2 + STREET_EDGE_WIDTH_MAX + SIDE_BUILDING_BASE * MAX_BUILDING_AXIS_SCALE);
@@ -1979,11 +1753,23 @@ const CROSS_STREET_MAX_LENGTH = 2 * (MAIN_ROAD_WIDTH * MAX_BOULEVARD_WIDTH_SCALE
 
 // ---------- RoadEdge EL strips (cyan tube borders between road and streetEdge) ----------
 const longitudinalRoadEdgeRecords = [];
+
+// ---------- la mappa del boulevard sta in world/boulevard-layout.js ----------
+initBoulevardLayout({
+  streetEdgeLeft,
+  streetEdgeRight,
+  streetEdgeLeftTiles,
+  streetEdgeRightTiles,
+  sideRoadRecords,
+  longitudinalRoadEdgeRecords,
+  controlEls,
+  CROSS_STREET_MAX_LENGTH,
+});
 {
   function addLongitudinalRoadEdgeSegments(sign, kind, mat, width, height) {
     for (let i = 0; i <= sideRoadRecords.length; i++) {
       const segment = new THREE.Mesh(new THREE.BoxGeometry(width, height, 1), mat);
-      segment.position.set(sign * (kind === 'inner' ? roadHalf() : roadHalf() + streetEdgeWidth), kind === 'inner' ? 0.38 : 0.36, Z_FLOOR_CENTER);
+      segment.position.set(sign * (kind === 'inner' ? roadHalf() : roadHalf() + boulevard.streetEdgeWidth), kind === 'inner' ? 0.38 : 0.36, Z_FLOOR_CENTER);
       segment.visible = false;
       scene.add(segment);
       longitudinalRoadEdgeRecords.push({ mesh: segment, sign, kind, index: i });
@@ -2081,18 +1867,18 @@ initFacadeLedTreatment({
   refreshCullingBounds,
   tunedColor,
   registerMainBuildingVerticalRevealOverlayObject: cityRevealMainLedReveal.registerOverlayObject,
-  getSideBuildingWidthScale: () => sideBuildingWidthScale,
-  getSideBuildingDepthScale: () => sideBuildingDepthScale,
-  getMainBuildingWidthScale: () => mainBuildingWidthScale,
-  getMainBuildingDepthScale: () => mainBuildingDepthScale,
+  getSideBuildingWidthScale: () => boulevard.sideBuildingWidthScale,
+  getSideBuildingDepthScale: () => boulevard.sideBuildingDepthScale,
+  getMainBuildingWidthScale: () => boulevard.mainBuildingWidthScale,
+  getMainBuildingDepthScale: () => boulevard.mainBuildingDepthScale,
 });
 const bridges = createBridgeRuntime({
   overlayGroup,
   PAL,
   bridgeMaterials,
   getRoadHalf: roadHalf,
-  getSideBuildingWidthScale: () => sideBuildingWidthScale,
-  getStreetEdgeWidth: () => streetEdgeWidth,
+  getSideBuildingWidthScale: () => boulevard.sideBuildingWidthScale,
+  getStreetEdgeWidth: () => boulevard.streetEdgeWidth,
   makeChamferedBox,
   createWetAsphaltFacadeMaterial,
   addBuildingEdges,
@@ -2104,8 +1890,8 @@ const bridges = createBridgeRuntime({
 initBuildingLeds({
   PAL,
   roadHalf,
-  getMainBuildingY: () => mainBuildingY,
-  getMainBuildingZ: () => mainBuildingZ,
+  getMainBuildingY: () => boulevard.mainBuildingY,
+  getMainBuildingZ: () => boulevard.mainBuildingZ,
   getBridgeXOffset: bridges.getXOffset,
   getBridgeZOffset: bridges.getZOffset,
   getBridgeYOffset: bridges.getYOffset,
@@ -2466,8 +2252,8 @@ initLabEqualizer({
   getCityRevealComplete: () => cityRevealComplete,
   getDroneLandingPose: () => droneLandingPose,
   getPlayerSpawn: () => playerSpawn,
-  getDynamicRoadCenter: () => dynamicRoadCenter,
-  getDynamicRoadLength: () => dynamicRoadLength,
+  getDynamicRoadCenter: () => boulevard.dynamicRoadCenter,
+  getDynamicRoadLength: () => boulevard.dynamicRoadLength,
   getLatestMeasuredFps: () => latestMeasuredFps,
 });
 
@@ -2617,12 +2403,12 @@ const tronRunnerCrowdBuildQueueState = {
 };
 const tronRunnerCrowdRoutes = createTronRunnerCrowdRoutesRuntime({
   getSideBuildingRecords: () => sideBuildingRecords,
-  getDynamicRoadCenter: () => dynamicRoadCenter,
-  getDynamicRoadLength: () => dynamicRoadLength,
+  getDynamicRoadCenter: () => boulevard.dynamicRoadCenter,
+  getDynamicRoadLength: () => boulevard.dynamicRoadLength,
   roadHexBoundaryLimits,
   getRoadHalf: roadHalf,
   getRoadTopY: roadTileTopY,
-  getStreetEdgeWidth: () => streetEdgeWidth,
+  getStreetEdgeWidth: () => boulevard.streetEdgeWidth,
   getSideBuildingVisualWidth: sideBuildingVisualWidth,
   getDroneAnchor: tronRunnerDroneAnchor,
   pointInPolygon: pointInBasePadPolygon,
@@ -2933,11 +2719,11 @@ const tronRunnerOrchestration = createTronRunnerOrchestrationRuntime({
   getWalkSpeed: () => tronRunnerWalkSpeed,
   getFloorReflection: () => tronRunnerFloorReflection,
   getShadowPulse: () => tronRunnerShadowPulse,
-  getDynamicRoadCenter: () => dynamicRoadCenter,
-  getDynamicRoadLength: () => dynamicRoadLength,
+  getDynamicRoadCenter: () => boulevard.dynamicRoadCenter,
+  getDynamicRoadLength: () => boulevard.dynamicRoadLength,
   getGridBlock: () => GRID_BLOCK,
   getRoadHalf: roadHalf,
-  getStreetEdgeWidth: () => streetEdgeWidth,
+  getStreetEdgeWidth: () => boulevard.streetEdgeWidth,
   getSideBuildingRecords: () => sideBuildingRecords,
   getMainBuildingRecords: () => mainBuildingRecords,
   getBuildingColliders: () => buildingColliders,
@@ -3170,7 +2956,7 @@ function tronRunnerDroneAnchor() {
   if (target && Number.isFinite(target.x) && Number.isFinite(target.z)) return { x: target.x, z: target.z };
   return {
     x: Number.isFinite(playerSpawn?.x) ? playerSpawn.x : 0,
-    z: Number.isFinite(playerSpawn?.z) ? playerSpawn.z : dynamicRoadCenter,
+    z: Number.isFinite(playerSpawn?.z) ? playerSpawn.z : boulevard.dynamicRoadCenter,
   };
 }
 
@@ -3227,8 +3013,8 @@ initCityRevealWireframe({
   renderer,
   getPlayerSpawn: () => playerSpawn,
   getDynamicRoadSurfaceWidth: () => dynamicRoadSurfaceWidth,
-  getDynamicRoadLength: () => dynamicRoadLength,
-  getDynamicRoadCenter: () => dynamicRoadCenter,
+  getDynamicRoadLength: () => boulevard.dynamicRoadLength,
+  getDynamicRoadCenter: () => boulevard.dynamicRoadCenter,
   getRoadTopY: roadTileTopY,
   getSideBuildingRecords: () => sideBuildingRecords,
   getMainBuildingRecords: () => mainBuildingRecords,
@@ -3435,181 +3221,6 @@ function updateGroundLedMaterials(roadEdgeBrightness, medianBrightness, hueDeg) 
     const amount = item.role === 'median' ? medianBrightness : roadEdgeBrightness;
     item.material.color.copy(tunedColor(item.baseColor, hueDeg, 1, amount));
   }
-}
-
-function updateStreetEdgeTileBand(tiles, sign, width) {
-  const centerX = sign * (roadHalf() + width / 2);
-  updateZTileBand(tiles, centerX, dynamicRoadCenter, width, dynamicRoadLength);
-}
-
-function updateStreetEdgeLayout(width) {
-  streetEdgeWidth = width;
-  const visible = width > 0.1 && STREET_EDGE_WIDTH_DEFAULT > 0;
-  streetEdgeLeft.visible = visible;
-  streetEdgeRight.visible = visible;
-  streetEdgeLeft.scale.x = visible ? width / STREET_EDGE_WIDTH_DEFAULT : 0.001;
-  streetEdgeRight.scale.x = visible ? width / STREET_EDGE_WIDTH_DEFAULT : 0.001;
-  streetEdgeLeft.position.x = -(roadHalf() + width / 2);
-  streetEdgeRight.position.x = roadHalf() + width / 2;
-  updateStreetEdgeTileBand(streetEdgeLeftTiles, -1, width);
-  updateStreetEdgeTileBand(streetEdgeRightTiles, 1, width);
-}
-
-function updateBuildingStreetEdgeBlocks(nextSideSpacingScale, width, nextSideDepthScale) {
-  const depth = streetEdgeBlockVisualDepth(nextSideDepthScale, nextSideSpacingScale);
-  for (const record of buildingStreetEdgeRecords) {
-    const z = record.zFactor * SIDE_BUILDING_SPACING * nextSideSpacingScale;
-    const blockPoints = streetEdgeBlockPoints(record.sign, z, width, depth);
-
-    setGroundShape(record.mesh, blockPoints);
-    record.mesh.position.y = 0.14;
-    record.mesh.visible = width > 0.1 && depth > 0.1;
-    setGroundLineLoop(record.perimeter, blockPoints, 0.54);
-    record.perimeter.visible = record.mesh.visible;
-  }
-}
-
-function updateMainBuildingStreetEdgeBlock(nextMainWidthScale, nextMainDepthScale, nextMainZ, width) {
-  if (!mainBuildingStreetEdgeRecord) return;
-  const points = mainBuildingStreetEdgePoints(nextMainZ, width, nextMainWidthScale, nextMainDepthScale);
-  setGroundShape(mainBuildingStreetEdgeRecord.mesh, points);
-  mainBuildingStreetEdgeRecord.mesh.position.y = 0.14;
-  mainBuildingStreetEdgeRecord.mesh.visible = width > 0.1;
-  setGroundLineLoop(mainBuildingStreetEdgeRecord.perimeter, points, 0.54);
-  mainBuildingStreetEdgeRecord.perimeter.visible = mainBuildingStreetEdgeRecord.mesh.visible;
-}
-
-function getLongitudinalRoadEdgeIntervals(nextSideSpacingScale) {
-  const minZ = dynamicRoadCenter - dynamicRoadLength / 2;
-  const maxZ = dynamicRoadCenter + dynamicRoadLength / 2;
-  const halfGap = crossRoadWidth / 2 + crossStreetEdgeWidth + 1.5;
-  const gaps = sideRoadRecords
-    .map((record) => {
-      const z = record.zFactor * SIDE_BUILDING_SPACING * nextSideSpacingScale;
-      return {
-        min: Math.max(minZ, z - halfGap),
-        max: Math.min(maxZ, z + halfGap),
-      };
-    })
-    .filter((gap) => gap.max > minZ && gap.min < maxZ)
-    .sort((a, b) => a.min - b.min);
-
-  const intervals = [];
-  let cursor = minZ;
-  for (const gap of gaps) {
-    if (gap.min > cursor + 1) intervals.push([cursor, gap.min]);
-    cursor = Math.max(cursor, gap.max);
-  }
-  if (cursor < maxZ - 1) intervals.push([cursor, maxZ]);
-  return intervals;
-}
-
-function updateLongitudinalRoadEdges(nextSideSpacingScale) {
-  for (const record of longitudinalRoadEdgeRecords) {
-    record.mesh.visible = false;
-  }
-}
-
-function updateIntersectionNode(record, z, blockLength, streetEdgeW) {
-  const showCornerStreetEdges = false;
-  for (const item of record.roadMasks) {
-    setGroundShape(item.mesh, mainStreetEdgeRoadMaskPoints(item.sideSign, z, streetEdgeW));
-    item.mesh.visible = false;
-  }
-  for (const item of record.cornerPads) {
-    setGroundShape(item.mesh, cornerPadPoints(item.sideSign, item.zSign, z, blockLength));
-    item.mesh.visible = showCornerStreetEdges;
-  }
-  for (const item of record.cornerCuts) {
-    setGroundShape(item.mesh, cornerCutPoints(item.sideSign, item.zSign, z, blockLength));
-    item.mesh.visible = false;
-  }
-  for (const item of record.diagonalLines) {
-    const diagPts = cornerDiagonalPoints(item.sideSign, item.zSign, z, blockLength);
-    setGroundSegment(item.mesh, diagPts[0], diagPts[1], 0.20, 0.055);
-    item.mesh.visible = showCornerStreetEdges;
-  }
-  let perimeterIndex = 0;
-  [-1, 1].forEach((sideSign) => {
-    [-1, 1].forEach((zSign) => {
-      const segments = cornerRoadPerimeterSegments(sideSign, zSign, z, blockLength);
-      segments.forEach(([a, b]) => {
-        const item = record.perimeterLines[perimeterIndex++];
-        if (!item) return;
-        setGroundSegment(item.mesh, a, b, 0.14, 0.045);
-        item.mesh.visible = showCornerStreetEdges;
-      });
-    });
-  });
-
-  const tracePts = intersectionTracePoints(z);
-  record.traceLines.forEach((line, index) => {
-    setGroundSegment(line, tracePts[index], tracePts[(index + 1) % tracePts.length], 0.12, 0.035);
-  });
-}
-
-function applyMainStreetEdgeIntersectionClips(nextSideSpacingScale) {
-  const cutHalfZ = crossRoadWidth / 2 + crossStreetEdgeWidth + hexTileRadius * 0.22;
-  for (const tiles of [streetEdgeLeftTiles, streetEdgeRightTiles]) {
-    for (const tile of tiles) {
-      if (!tile.visible) continue;
-      for (const record of sideRoadRecords) {
-        const z = record.zFactor * SIDE_BUILDING_SPACING * nextSideSpacingScale;
-        if (Math.abs(tile.userData.z - z) <= cutHalfZ) {
-          tile.visible = false;
-          break;
-        }
-      }
-    }
-  }
-}
-
-function updateSideRoadLayout(nextSideSpacingScale, width) {
-  const roadLength = crossStreetVisualLength(width, SIDE_BUILDING_BASE * sideBuildingWidthScale);
-  const sideSegmentLength = crossStreetSideSegmentLength(width, SIDE_BUILDING_BASE * sideBuildingWidthScale);
-  for (const record of sideRoadRecords) {
-    const z = record.zFactor * SIDE_BUILDING_SPACING * nextSideSpacingScale;
-    record.road.position.set(0, roadBaseY + 0.02, z);
-    record.road.scale.set(roadLength / CROSS_STREET_MAX_LENGTH, crossRoadWidth, 1);
-    for (const tile of record.roadTiles) {
-      tile.userData.centerX = 0;
-      tile.userData.centerZ = z;
-      tile.userData.halfW = crossRoadWidth / 2;
-      tile.userData.halfL = roadLength / 2;
-      setHexTileLayoutPosition(tile, false);
-    }
-    compactHexTileBatchesForTiles(record.roadTiles);
-
-    for (const streetEdge of record.crossStreetEdges) {
-      const x = streetEdge.xSign * (roadHalf() + sideSegmentLength / 2);
-      streetEdge.mesh.position.set(x, 0.11, z + streetEdge.zSign * (crossRoadWidth / 2 + crossStreetEdgeWidth / 2));
-      streetEdge.mesh.scale.set(sideSegmentLength / CROSS_STREET_MAX_LENGTH, Math.max(0.001, crossStreetEdgeWidth), 1);
-      streetEdge.mesh.visible = false;
-    }
-    for (const band of record.streetEdgeTiles) {
-      const x = band.xSign * (roadHalf() + sideSegmentLength / 2);
-      updateZTileBand(
-        band.tiles,
-        x,
-        z + band.zSign * (crossRoadWidth / 2 + crossStreetEdgeWidth / 2),
-        crossStreetEdgeWidth,
-        sideSegmentLength
-      );
-      for (const tile of band.tiles) tile.visible = false;
-      compactHexTileBatchesForTiles(band.tiles);
-    }
-
-    for (const line of record.roadEdgeLines) {
-      const offset = line.edge === 'road' ? crossRoadWidth / 2 : crossRoadWidth / 2 + crossStreetEdgeWidth;
-      const visibleLength = Math.max(0.01, sideSegmentLength);
-      line.mesh.position.set(line.xSign * (roadHalf() + visibleLength / 2), line.edge === 'road' ? 0.37 : 0.35, z + line.zSign * offset);
-      line.mesh.scale.x = visibleLength / CROSS_STREET_MAX_LENGTH;
-      line.mesh.visible = line.edge === 'road' || crossStreetEdgeWidth > 0.1;
-    }
-
-    updateIntersectionNode(record.intersection, z, width, width);
-  }
-  applyMainStreetEdgeIntersectionClips(nextSideSpacingScale);
 }
 
 function updateControlTabs() {
@@ -4234,9 +3845,9 @@ const buildingLiveControls = createBuildingLiveControlsRuntime({
   sideBuildingMaterials,
   bridgeMaterials,
   mainBuildingMaterials,
-  getMainBuildingSaturation: () => mainBuildingSaturation,
+  getMainBuildingSaturation: () => boulevard.mainBuildingSaturation,
   setMainBuildingSaturation: (value) => {
-    mainBuildingSaturation = value;
+    boulevard.mainBuildingSaturation = value;
   },
   applyBasePadMaterialRuntimeSettings,
   applyBasePadMaterialSettings,
@@ -4578,14 +4189,14 @@ function applyLiveControls() {
   setHexTileScale(tileScale);
   setHexTileGap(hexGap);
   setRoadBuildingReflection(roadBuildingReflect);
-  sideBuildingWidthScale = nextSideBuildingWidthScale;
-  sideBuildingDepthScale = nextSideBuildingDepthScale;
-  sideBuildingSpacingScale = nextSideBuildingSpacingScale;
-  mainBuildingWidthScale = nextMainBuildingWidthScale;
-  mainBuildingDepthScale = nextMainBuildingDepthScale;
-  mainBuildingZ = nextMainBuildingZ;
-  mainBuildingY = nextMainBuildingY;
-  mainBuildingSaturation = nextMainBuildingSaturation;
+  boulevard.sideBuildingWidthScale = nextSideBuildingWidthScale;
+  boulevard.sideBuildingDepthScale = nextSideBuildingDepthScale;
+  boulevard.sideBuildingSpacingScale = nextSideBuildingSpacingScale;
+  boulevard.mainBuildingWidthScale = nextMainBuildingWidthScale;
+  boulevard.mainBuildingDepthScale = nextMainBuildingDepthScale;
+  boulevard.mainBuildingZ = nextMainBuildingZ;
+  boulevard.mainBuildingY = nextMainBuildingY;
+  boulevard.mainBuildingSaturation = nextMainBuildingSaturation;
   setFacadeLedRuntimeSettings({
     side: {
       normal: nextBuildingFacadeLedNormal,
@@ -4628,19 +4239,19 @@ function applyLiveControls() {
     borderOpacity: nextBasePadBorderOpacity,
     borderBrightness: nextBasePadBorderBrightness,
   });
-  sideBuildingBasePadScale = nextSideBuildingBasePadScale;
-  sideBuildingBasePadXScale = nextSideBuildingBasePadXScale;
-  sideBuildingBasePadY = nextSideBuildingBasePadY;
-  sideBuildingBasePadThickness = nextSideBuildingBasePadThickness;
-  sideBuildingBasePadCut = nextSideBuildingBasePadCut;
-  sideBuildingBasePadRadius = nextSideBuildingBasePadRadius;
-  mainBuildingBasePadScale = nextMainBuildingBasePadScale;
-  mainBuildingBasePadXScale = nextMainBuildingBasePadXScale;
-  mainBuildingBasePadZScale = nextMainBuildingBasePadZScale;
-  mainBuildingBasePadY = nextMainBuildingBasePadY;
-  mainBuildingBasePadThickness = nextMainBuildingBasePadThickness;
-  mainBuildingBasePadCut = nextMainBuildingBasePadCut;
-  mainBuildingBasePadRadius = nextMainBuildingBasePadRadius;
+  boulevard.sideBuildingBasePadScale = nextSideBuildingBasePadScale;
+  boulevard.sideBuildingBasePadXScale = nextSideBuildingBasePadXScale;
+  boulevard.sideBuildingBasePadY = nextSideBuildingBasePadY;
+  boulevard.sideBuildingBasePadThickness = nextSideBuildingBasePadThickness;
+  boulevard.sideBuildingBasePadCut = nextSideBuildingBasePadCut;
+  boulevard.sideBuildingBasePadRadius = nextSideBuildingBasePadRadius;
+  boulevard.mainBuildingBasePadScale = nextMainBuildingBasePadScale;
+  boulevard.mainBuildingBasePadXScale = nextMainBuildingBasePadXScale;
+  boulevard.mainBuildingBasePadZScale = nextMainBuildingBasePadZScale;
+  boulevard.mainBuildingBasePadY = nextMainBuildingBasePadY;
+  boulevard.mainBuildingBasePadThickness = nextMainBuildingBasePadThickness;
+  boulevard.mainBuildingBasePadCut = nextMainBuildingBasePadCut;
+  boulevard.mainBuildingBasePadRadius = nextMainBuildingBasePadRadius;
   applyRoadBoundaryHexVisualSettings({
     roadBoundaryHexEnabled: nextRoadBoundaryHexEnabled,
     roadBoundaryHexRows: nextRoadBoundaryHexRows,
@@ -4649,7 +4260,7 @@ function applyLiveControls() {
     roadBoundaryHexY: nextRoadBoundaryHexY,
     roadBoundaryHexOutsetScale: nextRoadBoundaryHexOutset,
   });
-  roadSideHexExtraRows = nextRoadSideHexExtraRows;
+  boulevard.roadSideHexExtraRows = nextRoadSideHexExtraRows;
   nextRoadBoundaryHexRowOffsets.forEach((value, index) => {
     roadBoundaryHexRowOffsets[index] = value;
   });
@@ -4673,9 +4284,9 @@ function applyLiveControls() {
     boundaryErrorFloorLightY: nextBoundaryErrorFloorLightY,
     boundaryErrorFloorLightSoftness: nextBoundaryErrorFloorLightSoftness,
   });
-  boulevardWidthScale = nextBoulevardWidthScale;
-  crossRoadWidth = nextCrossRoadWidth;
-  crossStreetEdgeWidth = nextCrossStreetEdgeWidth;
+  boulevard.boulevardWidthScale = nextBoulevardWidthScale;
+  boulevard.crossRoadWidth = nextCrossRoadWidth;
+  boulevard.crossStreetEdgeWidth = nextCrossStreetEdgeWidth;
   updateRoadSurfaceWidth(roadSurfaceWidthForBuildings(
     nextSideBuildingWidthScale,
     nextMainBuildingWidthScale,
@@ -4792,30 +4403,30 @@ function applyLiveControls() {
     nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale,
     nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth,
     nextMainBuildingZ, nextMainBuildingY,
-    sideBuildingBasePadScale, sideBuildingBasePadXScale, sideBuildingBasePadY,
-    sideBuildingBasePadThickness, sideBuildingBasePadCut, sideBuildingBasePadRadius,
-    mainBuildingBasePadScale, mainBuildingBasePadXScale, mainBuildingBasePadZScale,
-    mainBuildingBasePadY, mainBuildingBasePadThickness, mainBuildingBasePadCut,
-    mainBuildingBasePadRadius,
+    boulevard.sideBuildingBasePadScale, boulevard.sideBuildingBasePadXScale, boulevard.sideBuildingBasePadY,
+    boulevard.sideBuildingBasePadThickness, boulevard.sideBuildingBasePadCut, boulevard.sideBuildingBasePadRadius,
+    boulevard.mainBuildingBasePadScale, boulevard.mainBuildingBasePadXScale, boulevard.mainBuildingBasePadZScale,
+    boulevard.mainBuildingBasePadY, boulevard.mainBuildingBasePadThickness, boulevard.mainBuildingBasePadCut,
+    boulevard.mainBuildingBasePadRadius,
     nextBoulevardWidthScale,
     nextBasePadGlobalY, nextBasePadCurbEnabled, nextBasePadCurbWidth,
     nextBasePadInnerRaise, nextBasePadCurbSlope, nextBasePadCurbRadius,
     tileHeight, tileScale,
   )) {
     updateBuildingFootprints(nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextMainBuildingZ, nextMainBuildingY, {
-      sideBuildingBasePadScale,
-      sideBuildingBasePadXScale,
-      sideBuildingBasePadY,
-      sideBuildingBasePadThickness,
-      sideBuildingBasePadCut,
-      sideBuildingBasePadRadius,
-      mainBuildingBasePadScale,
-      mainBuildingBasePadXScale,
-      mainBuildingBasePadZScale,
-      mainBuildingBasePadY,
-      mainBuildingBasePadThickness,
-      mainBuildingBasePadCut,
-      mainBuildingBasePadRadius,
+      sideBuildingBasePadScale: boulevard.sideBuildingBasePadScale,
+      sideBuildingBasePadXScale: boulevard.sideBuildingBasePadXScale,
+      sideBuildingBasePadY: boulevard.sideBuildingBasePadY,
+      sideBuildingBasePadThickness: boulevard.sideBuildingBasePadThickness,
+      sideBuildingBasePadCut: boulevard.sideBuildingBasePadCut,
+      sideBuildingBasePadRadius: boulevard.sideBuildingBasePadRadius,
+      mainBuildingBasePadScale: boulevard.mainBuildingBasePadScale,
+      mainBuildingBasePadXScale: boulevard.mainBuildingBasePadXScale,
+      mainBuildingBasePadZScale: boulevard.mainBuildingBasePadZScale,
+      mainBuildingBasePadY: boulevard.mainBuildingBasePadY,
+      mainBuildingBasePadThickness: boulevard.mainBuildingBasePadThickness,
+      mainBuildingBasePadCut: boulevard.mainBuildingBasePadCut,
+      mainBuildingBasePadRadius: boulevard.mainBuildingBasePadRadius,
     });
     invalidateMainFacadeVerticalRevealLedBounds();
   }
@@ -5535,12 +5146,12 @@ window.__tronInspect = () => ({
   cityRevealRoadGridFadeSamples: (() => {
     const bounds = cityRevealRoadGridBounds();
     return {
-      center: cityRevealRoadGridFadeAt(0, dynamicRoadCenter, bounds),
-      left: cityRevealRoadGridFadeAt(-bounds.gridHalfW, dynamicRoadCenter, bounds),
-      right: cityRevealRoadGridFadeAt(bounds.gridHalfW, dynamicRoadCenter, bounds),
+      center: cityRevealRoadGridFadeAt(0, boulevard.dynamicRoadCenter, bounds),
+      left: cityRevealRoadGridFadeAt(-bounds.gridHalfW, boulevard.dynamicRoadCenter, bounds),
+      right: cityRevealRoadGridFadeAt(bounds.gridHalfW, boulevard.dynamicRoadCenter, bounds),
       near: cityRevealRoadGridFadeAt(0, bounds.gridMinZ, bounds),
       far: cityRevealRoadGridFadeAt(0, bounds.gridMaxZ, bounds),
-      halfLeft: cityRevealRoadGridFadeAt(-(bounds.roadHalfW + bounds.fadeWidth * 0.5), dynamicRoadCenter, bounds),
+      halfLeft: cityRevealRoadGridFadeAt(-(bounds.roadHalfW + bounds.fadeWidth * 0.5), boulevard.dynamicRoadCenter, bounds),
       halfFar: cityRevealRoadGridFadeAt(0, bounds.roadMaxZ + bounds.fadeWidth * 0.5, bounds),
     };
   })(),
