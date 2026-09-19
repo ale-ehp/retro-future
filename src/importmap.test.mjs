@@ -1,7 +1,7 @@
 // La mappa di three esiste in tre copie che devono dire la stessa cosa:
 //   - la importmap di index.html, che il browser legge;
 //   - THREE_IMPORT_MAP in test/resolve-three.mjs, che node legge nei test;
-//   - i `paths` di jsconfig.json, che tsc legge nel typecheck.
+//   - i `paths` di jsconfig.json, che tsc legge nel typecheck (solo gli addon, vedi sotto).
 // Se una diverge, quel consumatore risolve `three` su un file diverso dagli altri e
 // lo scopri solo quando si rompe proprio li'. Il commento di resolve-three.mjs
 // prometteva questa prova dal 2026-09-18 ma il file non esisteva (2026-09-19).
@@ -31,8 +31,18 @@ function pathsDiJsconfig() {
   );
 }
 
-test('importmap di index.html, resolve-three.mjs e jsconfig.json mappano three sugli stessi file', () => {
+test('importmap di index.html e resolve-three.mjs mappano three sugli stessi file', () => {
+  assert.deepEqual(THREE_IMPORT_MAP, importmapDiIndexHtml(), 'test/resolve-three.mjs diverge dalla importmap');
+});
+
+test('jsconfig.json mappa gli addon sugli stessi file, e three sui tipi veri', () => {
+  // `three` non sta nei paths di proposito: tsc lo risolve su @types/three (stessa r184
+  // del vendor), perche' inferire i tipi dal file minificato dava centinaia di falsi
+  // errori (position "non esiste" su PerspectiveCamera: Object3D la dichiara con
+  // defineProperty) e il cricchetto puniva ogni prova nuova (2026-09-19). Gli addon invece
+  // restano sul vendor: UnrealBloomPass e' un fork con campi in piu' che @types non conosce.
   const browser = importmapDiIndexHtml();
-  assert.deepEqual(THREE_IMPORT_MAP, browser, 'test/resolve-three.mjs diverge dalla importmap');
-  assert.deepEqual(pathsDiJsconfig(), browser, 'jsconfig.json diverge dalla importmap');
+  const { three, ...addon } = browser;
+  assert.ok(three, 'la importmap deve mappare three');
+  assert.deepEqual(pathsDiJsconfig(), addon, 'jsconfig.json diverge dalla importmap sugli addon');
 });

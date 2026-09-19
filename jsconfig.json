@@ -6,20 +6,43 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "strict": false,
     "skipLibCheck": true,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "paths": {
-      "three": ["./vendor/three.module.min.js"],
-      "three/addons/postprocessing/EffectComposer.js": ["./vendor/EffectComposer.js"],
-      "three/addons/postprocessing/RenderPass.js": ["./vendor/RenderPass.js"],
-      "three/addons/postprocessing/UnrealBloomPass.js": ["./vendor/UnrealBloomPass.js"],
-      "three/addons/postprocessing/FXAAPass.js": ["./vendor/FXAAPass.js"],
-      "three/addons/postprocessing/ShaderPass.js": ["./vendor/ShaderPass.js"],
-      "three/addons/loaders/GLTFLoader.js": ["./vendor/GLTFLoader.js"],
-      "three/addons/utils/SkeletonUtils.js": ["./vendor/SkeletonUtils.js"]
+      "three/addons/postprocessing/EffectComposer.js": [
+        "./vendor/EffectComposer.js"
+      ],
+      "three/addons/postprocessing/RenderPass.js": [
+        "./vendor/RenderPass.js"
+      ],
+      "three/addons/postprocessing/UnrealBloomPass.js": [
+        "./vendor/UnrealBloomPass.js"
+      ],
+      "three/addons/postprocessing/FXAAPass.js": [
+        "./vendor/FXAAPass.js"
+      ],
+      "three/addons/postprocessing/ShaderPass.js": [
+        "./vendor/ShaderPass.js"
+      ],
+      "three/addons/loaders/GLTFLoader.js": [
+        "./vendor/GLTFLoader.js"
+      ],
+      "three/addons/utils/SkeletonUtils.js": [
+        "./vendor/SkeletonUtils.js"
+      ]
     }
   },
-  "include": ["src/**/*.js", "src/**/*.mjs", "test/**/*.mjs"]
+  "include": [
+    "src/**/*.js",
+    "src/**/*.mjs",
+    "test/**/*.mjs"
+  ]
 }
