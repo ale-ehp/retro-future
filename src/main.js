@@ -38,7 +38,6 @@ import {
 } from './controls/controls.js';
 import { mountFixedControlDefaults } from './controls/fixed-control-defaults.js';
 import {
-  TRON_RUNNER_BEAT_PULSE_AUDIO_KICK_ENABLED,
   TRON_RUNNER_CONTACT_SHADOW_MAX_OPACITY,
   TRON_RUNNER_CONTACT_SHADOW_ROUNDNESS,
   TRON_RUNNER_DISTANCE_DRIVEN_WALK_ENABLED,
@@ -63,14 +62,11 @@ import {
   TRON_RUNNER_IDLE_CHARACTER_Y_LIFT,
   TRON_RUNNER_LIGHTING_MODE,
   TRON_RUNNER_MODEL_URL,
-  TRON_RUNNER_REVEAL_ENABLED,
   TRON_RUNNER_ROUTE_OFFSET,
   TRON_RUNNER_SHADOW_CYAN_COLOR,
   TRON_RUNNER_SIDEWALK_INSET,
   TRON_RUNNER_SIDEWALK_SIGN,
-  TRON_RUNNER_SOURCE_CHARACTER_VISIBLE,
   TRON_RUNNER_SUIT_TEXTURE_MODE,
-  TRON_RUNNER_TARGET_HEIGHT,
 } from './character/characters.js';
 import {
   fitTronRunnerModel as fitTronRunnerModelCore,
@@ -88,16 +84,10 @@ import {
 } from './character/runner-footsteps.js';
 import {
   enqueueTronRunnerCrowdBuildJobRuntime,
-  invalidateTronRunnerCrowdColliderRecordsRuntime,
 } from './character/runner-crowd-runtime.js';
 import {
   TRON_RUNNER_CROWD_COLOR_PRESETS,
 } from './character/character-colors.js';
-import {
-  TRON_RUNNER_CROWD_TALK_DURATION_MS,
-  TRON_RUNNER_CROWD_TALK_RANGE,
-  TRON_RUNNER_CROWD_TALK_REARM_RANGE,
-} from './character/runner-crowd-lines.js';
 import {
   resetTronRunnerAutonomy,
 } from './character/runner-controller.js';
@@ -105,11 +95,6 @@ import {
   playTronRunnerAction,
   syncTronRunnerActionSetToDistance,
 } from './character/runner-animation.js';
-import {
-  TRON_SOUNDTRACK_BEAT_DROP_SECONDS,
-  TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS,
-  TRON_SOUNDTRACK_URL,
-} from './audio/audio.js';
 import { createTronSoundtrackRuntime } from './audio/soundtrack-runtime.js';
 import {
   ensureFootstepAudioReady,
@@ -130,7 +115,6 @@ import {
   syncTemporalAaPass,
   applyTemporalAaJitterForRender,
   clearTemporalAaJitterForRender,
-  syncGlobalFxaaPass,
   syncBloomLookMerge,
   syncComposerBufferRoles,
   isBloomPassActive,
@@ -142,12 +126,10 @@ import {
   effectiveRenderScaleForDevice,
   effectivePixelRatioForDevice,
   syncCityRevealPerformanceProfile,
-  shouldUseComposer,
   applyRenderResolution,
   tunePerformanceBudget,
   setupPost,
 } from './engine/post-pipeline.js';
-import { createCityRevealProfiler, revealProfileDetailRequestedFromParams } from './engine/city-reveal-profiler.js';
 import { createPerformanceDiagnostics } from './engine/performance-diagnostics.js';
 import {
   createTechBreakdownOverlay,
@@ -160,85 +142,34 @@ import {
   initRetroBenchmarkRuntime,
 } from './engine/retro-benchmark-runtime.js';
 import {
-  CITY_DEPARTMENT_BOARD_ENABLED,
   addCityDepartmentFrame,
-  cityDepartmentBoardBottomY,
-  cityDepartmentBoardRevealFactor,
-  getCityDepartmentBoards,
-  initCityDepartmentBoards,
   updateCityDepartmentBoards,
-  CITY_ROLE_BOARD_ENABLED,
-  getCityRoleBoards,
-  initCityRoleBoards,
-  syncCityRoleBoardDoorPose,
   updateCityRoleBoard,
 } from './world/city-boards.js';
 import {
   contactTerminalOwnsCamera,
   handleContactTerminalKeyDown,
-  initContactTerminal,
   updateContactTerminal,
 } from './world/contact-terminal.js';
 import {
-  SIDE_BUILDING_CIVIC_NUMBER_FIXED,
-  buildSideBuildingCivicNumber,
-  buildSideBuildingDoor,
-  buildSideBuildingDoorBatches,
-  getSideDoorEnabled,
-  initBuildingDoors,
-  sideBuildingCivicNumberForBuildIndex,
-  sideDoorBatchState,
-  sideDoorFaceOffset,
-  sideDoorHeight,
-  sideDoorScale,
-  sideDoorWidth,
-  sideDoorY,
-  updateSideBuildingDoorBatchMeshes,
-  updateSideBuildingDoorTransforms,
-} from './world/building-doors.js';
-import {
-  addBuildingEdges,
-  buildBridgeEdgeBatch,
-  buildSideBuildingEdgeBatch,
-  buildSideHorizontalLedRingBatches,
-  addElStripRectFrame,
-  edgeStripSpecs,
-  elStrip,
-  horizontalBuildingLedRings,
-  initBuildingLeds,
-  setBridgeEdgeSpecCullVisible,
   setStripInstanceTransform,
-  sideBuildingEdgeBatch,
-  sideHorizontalLedRingBatches,
 } from './world/building-leds.js';
 import {
-  bridgeMaterials,
-  buildBuildingShells,
-  createWetAsphaltFacadeMaterial,
-  initBuildings,
   mainBuildingRecords,
-  makeChamferedBox,
   sideBuildingRecords,
 } from './world/buildings.js';
-import {
-  BRIDGE_PAIR_5_6_INDEX,
-  BRIDGE_PAIR_5_6_Y_OFFSET,
-  createBridgeRuntime,
-} from './world/bridges.js';
-import {
-  MAIN_FACADE_VERTICAL_REVEAL_FEATHER,
-  addTronFacadeTreatment,
-  buildStaticFacadeStripBatches,
-  createFacadeLedMaterial,
-  facadeLedBatchInspect,
-  hasMainFacadeVerticalRevealLedMaterials,
-  initFacadeLedTreatment,
-  mainFacadeVerticalRevealLedBounds,
-  setMainFacadeVerticalRevealUniforms,
-  updateFacadeLedRibbons,
-  updateFacadeStripOutsets,
-} from './world/facade-led-treatment.js';
 import { createSkyDome } from './world/sky-dome.js';
+import {
+  initCityWiring,
+  bridges,
+  cityRevealMainLedReveal,
+  cityRevealRender,
+  cityRevealProfiler,
+  mainFacadeVerticalRevealState,
+  buildingLedBatchInspect,
+  updateMainFacadeVerticalReveal,
+  shouldUpdateTronRunnerSourceCharacter,
+} from './world/city-wiring.js';
 import { initInspectHooks } from './engine/inspect-hooks.js';
 import {
   initBootPrewarm,
@@ -278,21 +209,13 @@ import {
   resolveCameraWalkSurface,
 } from './camera/player-state.js';
 import {
-  initRunnerWiring,
   tronRunnerBeatPulse,
   tronRunnerCrowd,
   tronRunnerCrowdGroup,
   tronRunnerCrowdRuntime,
   tronRunnerCrowdRuntimeStats,
-  tronRunnerIdleCharacterGroup,
-  tronRunnerIdleTalk,
   tronRunnerOrchestration,
   tronRunnerReveal,
-  tronRunnerRevealIsActive,
-  tronRunnerRevealIsComplete,
-  tronRunnerRevealProgressValue,
-  tronRunnerRevealStartedAtTime,
-  tronRunnerState,
 } from './character/runner-wiring.js';
 import {
   boulevard,
@@ -301,63 +224,27 @@ import {
   boulevardRoadWidth,
   roadSurfaceWidthForBuildings,
 } from './world/boulevard-layout.js';
-import { createCityRevealMainLed } from './world/city-reveal-main-led.js';
 import {
   cityRevealArmedAt,
   cityRevealComplete,
-  cityRevealCompletedAt,
-  cityRevealDelayMs,
-  cityRevealEffectiveDelayMs,
-  cityRevealEstimatedVisibleObjects,
-  cityRevealFadeDurationMs,
-  cityRevealFrontForProgress,
-  cityRevealOverlayCamera,
-  cityRevealOverlayScene,
-  cityRevealRealClipPlane,
-  cityRevealRoadGridGroup,
-  cityRevealRoadGridScene,
-  cityRevealSolidObjects,
   cityRevealStartedAt,
   cityRevealSweepProgress,
   cityRevealWaitingForVisibleFrame,
   cityRevealWireAlpha,
-  cityRevealWireCullStats,
-  cityRevealWireObjects,
-  cityRevealWireScene,
   cityRevealWireframeEnabled,
-  initCityRevealWireframe,
-  isCityRevealBackplateActive,
   isCityRevealCompositeActive,
   isCityRevealPerformanceCritical,
-  isCityRevealRealRevealActive,
   markCityRevealComplete,
-  refreshCityRevealSweepBounds,
   renderCityRevealWireframe,
   setCityRevealRoadGridAlphaFactor,
-  setCityRevealSweepFront,
   startCityRevealWireTimer,
   startCityRevealWireframe,
   updateCityRevealWireframe,
 } from './world/city-reveal-wireframe.js';
-import { createCityRevealRenderRuntime } from './world/city-reveal-render-runtime.js';
 import {
-  basePadLedBatch,
-  createBuildingBasePad,
-  getBasePadCurbEnabled,
-  initBasePads,
-  updateBuildingBasePad,
-} from './world/base-pads.js';
-import {
-  initStaticCityCulling,
   staticCityCullStats,
   updateStaticCityCulling,
 } from './engine/static-city-culling.js';
-import {
-  initBridgeControls,
-  readBridgeNumber,
-  readBridgeVisible,
-  updateBridgeControlOutputs,
-} from './controls/bridge-controls.js';
 import {
   applyWelcomeWindowInputMode as applyWelcomeWindowInputModeCore,
   dismissWelcomeWindow as dismissWelcomeWindowCore,
@@ -368,7 +255,6 @@ import {
   welcomeWindowVisible as welcomeWindowVisibleCore,
 } from './controls/welcome-ui.js';
 import {
-  initSpeechBubbles,
   updateGreeterSpeechBubble,
   updateTronRunnerCrowdSpeechBubbles,
 } from './character/speech-bubbles.js';
@@ -402,7 +288,6 @@ import {
 import {
   droneIntroHeroShotRequestedFromParams,
   droneIntroInspect,
-  getDroneIntroActive,
   initDroneIntro,
   startDroneIntroFlight,
   updateDroneIntroFlight,
@@ -411,8 +296,6 @@ import {
   getPointerLocked,
   getUnlockedMouseLookActive,
   initMouseLook,
-  resumeMouseLookInput,
-  stopMouseLookInput,
   updatePointerLockHint,
 } from './camera/mouse-look.js';
 import {
@@ -426,7 +309,6 @@ import {
 import {
   initMobileMovement,
   isMobileMovementControlTarget,
-  resetMobileMovementInput,
   requestLandscapeFullscreen,
 } from './controls/mobile-movement.js';
 import {
@@ -468,9 +350,7 @@ import {
   initHexTileLayout,
   initHexTileSync,
   recoveringHexTiles,
-  roadTileTopY,
   setHexRoadLodProfile,
-  sidewalkMinSurfaceY,
   stepHexRoadTiles,
   streetEdgeHexTileBatches,
   streetEdgeHexTiles,
@@ -526,7 +406,6 @@ import {
   LAB_EQUALIZER_WORLD_HEIGHT,
   LAB_EQUALIZER_WORLD_WIDTH,
   labEqualizerGroup,
-  initLabEqualizer,
   updateLabEqualizer,
   labEqualizerState,
 } from './controls/equalizer.js';
@@ -541,7 +420,6 @@ import {
   FOOTSTEP_PLAYER_VOLUME_SCALE,
   roadBaseY,
   ROAD_BOUNDARY_ROW_MAX,
-  TRON_RUNNER_GREETER_INDEX,
 } from './config/costanti.js';
 
 const droneIntroHeroShotEnabled = droneIntroHeroShotRequestedFromParams(new URLSearchParams(window.location.search));
@@ -1437,528 +1315,39 @@ const dirLightParam = (() => { try { return new URLSearchParams(location.search)
 const dirLightActive = dirLightParam != null ? dirLightParam !== 'off' : !mobilePerformanceProfileActive();
 dirKey.visible = fxEnabled('dirLight') && dirLightActive;
 
-// ---------- Tron overlay buildings ----------
-const overlayGroup = new THREE.Group();
-scene.add(overlayGroup);
-const tronRunnerCrowdColliderRecordCache = {
-  records: null,
-  sourceLength: -1,
-};
-initBuildings({
+// ---------- il cablaggio della citta' sta in world/city-wiring.js ----------
+initCityWiring({
+  scene,
+  camera,
+  renderer,
+  controlEls,
+  PAL,
+  reflectionEnvMap,
   asphalt,
-  reflectionEnvMap,
-  defaultBuildingColor: PAL.buildingSkin,
-  tunedColor,
-  getRoadHalf: roadHalf,
-  updateBuildingBasePad,
-  updateSideBuildingDoorTransforms,
-  getCityRoleBoards,
-  syncCityRoleBoardDoorPose,
-});
-const cityRevealMainLedReveal = createCityRevealMainLed({
-  scene,
-  camera,
-  domeMesh,
-  getCityRevealStartedAt: () => cityRevealStartedAt,
-  getCityRevealEffectiveDelayMs: () => cityRevealEffectiveDelayMs(),
-  isCityRevealRealRevealActive,
-  getMainFacadeVerticalRevealProgress: () => mainFacadeVerticalRevealProgress(),
-  getSideBuildingRecords: () => sideBuildingRecords,
-  getMainBuildingRecords: () => mainBuildingRecords,
-  getBridgeRecords: () => bridges.records,
-});
-
-const mainFacadeVerticalRevealState = {
-  enabled: false,
-  active: false,
-  progress: 0,
-  revealY: -1e9,
-  minY: null,
-  maxY: null,
-  feather: MAIN_FACADE_VERTICAL_REVEAL_FEATHER,
-};
-initBuildingDoors({
-  overlayGroup,
-  renderer,
-  reflectionEnvMap,
-  PAL,
-  sideBuildingRecords,
-  laneZ,
-  refreshCullingBounds,
-  tunedColor,
-  createWetAsphaltFacadeMaterial,
-});
-initFacadeLedTreatment({
-  PAL,
-  reflectionEnvMap,
-  refreshCullingBounds,
-  tunedColor,
-  registerMainBuildingVerticalRevealOverlayObject: cityRevealMainLedReveal.registerOverlayObject,
-  getSideBuildingWidthScale: () => boulevard.sideBuildingWidthScale,
-  getSideBuildingDepthScale: () => boulevard.sideBuildingDepthScale,
-  getMainBuildingWidthScale: () => boulevard.mainBuildingWidthScale,
-  getMainBuildingDepthScale: () => boulevard.mainBuildingDepthScale,
-});
-const bridges = createBridgeRuntime({
-  overlayGroup,
-  PAL,
-  bridgeMaterials,
-  getRoadHalf: roadHalf,
-  getSideBuildingWidthScale: () => boulevard.sideBuildingWidthScale,
-  getStreetEdgeWidth: () => boulevard.streetEdgeWidth,
-  makeChamferedBox,
-  createWetAsphaltFacadeMaterial,
-  addBuildingEdges,
-  readBridgeNumber,
-  readBridgeVisible,
-  updateBridgeControlOutputs,
-});
-
-initBuildingLeds({
-  PAL,
-  roadHalf,
-  getMainBuildingY: () => boulevard.mainBuildingY,
-  getMainBuildingZ: () => boulevard.mainBuildingZ,
-  getBridgeXOffset: bridges.getXOffset,
-  getBridgeZOffset: bridges.getZOffset,
-  getBridgeYOffset: bridges.getYOffset,
-  getBridgeSpanScale: bridges.getSpanScale,
-  getBridgeHeightScale: bridges.getHeightScale,
-  getBridgeDepthScale: bridges.getDepthScale,
-  bridgeSpanLength: bridges.spanLength,
-  readBridgeNumber,
-  readBridgeVisible,
-  refreshCullingBounds,
-  createFacadeLedMaterial,
-  updateFacadeStripOutsets,
-  updateFacadeLedRibbons,
-});
-initBasePads({
-  scene,
-  overlayGroup,
-  PAL,
-  reflectionEnvMap,
   basePadSurfaceTex,
-  sideBuildingRecords,
-  mainBuildingRecords,
-  refreshCullingBounds,
-  refreshCullingBoundsWithMargin,
-  roadTileTopY,
-  sidewalkMinSurfaceY,
-  tunedColor,
-});
-// ---------- Bridge control panel (extracted -> bridge-controls.js) ----------
-initBridgeControls({
-  controlEls,
-  scheduleLiveControls,
-  bridgeRecords: bridges.records,
-  BRIDGE_PAIR_5_6_INDEX,
-  BRIDGE_PAIR_5_6_Y_OFFSET,
-});
-
-function buildingLedBatchInspect() {
-  const sideRingBatches = Object.entries(sideHorizontalLedRingBatches).map(([band, batch]) => ({
-    band,
-    specs: batch.specs.length,
-    meshReady: Boolean(batch.mesh),
-    visible: Boolean(batch.mesh?.visible),
-    count: batch.mesh?.count ?? 0,
-    frustumCulled: Boolean(batch.mesh?.frustumCulled),
-    geometryKey: batch.geometryKey,
-  }));
-  const sideRingSpecCount = sideRingBatches.reduce((sum, batch) => sum + batch.specs, 0);
-  const sideRingDrawObjects = sideRingBatches.filter((batch) => batch.meshReady).length;
-  const basePadBatches = basePadLedBatch.batches.map((batch, index) => ({
-    index,
-    count: batch.mesh?.count ?? 0,
-    capacity: batch.capacity,
-    visible: Boolean(batch.mesh?.visible),
-    frustumCulled: Boolean(batch.mesh?.frustumCulled),
-    x: batch.record?.mesh?.position.x ?? null,
-    z: batch.record?.mesh?.position.z ?? null,
-  }));
-  const basePadBatchCount = basePadBatches.length;
-  const basePadVisibleCount = basePadBatches.filter((batch) => batch.visible).length;
-  const basePadFrustumCulledCount = basePadBatches.filter((batch) => batch.frustumCulled).length;
-  const facadeInspect = facadeLedBatchInspect();
-  return {
-    sideEdgeBatch: {
-      count: sideBuildingEdgeBatch.mesh?.count ?? 0,
-      visible: Boolean(sideBuildingEdgeBatch.mesh?.visible),
-      frustumCulled: Boolean(sideBuildingEdgeBatch.mesh?.frustumCulled),
-    },
-    sideHorizontalRings: {
-      batched: true,
-      specCount: sideRingSpecCount,
-      drawObjects: sideRingDrawObjects,
-      previousDrawObjects: sideRingSpecCount,
-      savedDrawObjects: Math.max(0, sideRingSpecCount - sideRingDrawObjects),
-      batches: sideRingBatches,
-    },
-    facade: facadeInspect,
-    basePadLedBatch: {
-      count: basePadLedBatch.count,
-      visible: Boolean(basePadLedBatch.mesh?.visible),
-      frustumCulled: basePadBatchCount > 0 && basePadFrustumCulledCount === basePadBatchCount,
-    },
-    basePadLedBatches: {
-      splitByPad: true,
-      batchCount: basePadBatchCount,
-      visibleBatchCount: basePadVisibleCount,
-      frustumCulledCount: basePadFrustumCulledCount,
-      totalSegments: basePadLedBatch.count,
-      previousDrawObjects: basePadBatchCount > 0 ? 1 : 0,
-      batches: basePadBatches,
-    },
-  };
-}
-
-buildBuildingShells({
-  overlayGroup,
-  PAL,
-  addTronFacadeTreatment,
-  createBuildingBasePad,
-  buildSideBuildingDoor,
-  buildSideBuildingCivicNumber,
-  buildSideBuildingDoorBatches,
-  updateSideBuildingDoorTransforms,
-  sideBuildingCivicNumberForBuildIndex,
-  addBuildingEdges,
-  buildSideBuildingEdgeBatch,
-  buildSideHorizontalLedRingBatches,
-  buildStaticFacadeStripBatches,
-  invalidateTronRunnerCrowdColliderRecords: () => (
-    invalidateTronRunnerCrowdColliderRecordsRuntime(tronRunnerCrowdColliderRecordCache)
-  ),
-});
-
-// ---------- City department departures boards (extracted -> city-boards.js) ----------
-initCityDepartmentBoards({
-  scene,
-  camera,
-  renderer,
-  reflectionEnvMap,
-  PAL,
-  elStrip,
-  addElStripRectFrame,
-  sideBuildingRecords,
-  DEFAULT_DRONE_LANDING_POSE,
-  TRON_RUNNER_REVEAL_ENABLED,
-  getDroneLandingPose: () => player.droneLandingPose,
-  getPlayerSpawn: () => player.playerSpawn,
-  getCityRevealComplete: () => cityRevealComplete,
-  getRunnerReady: () => tronRunnerState.ready,
-  getRevealComplete: tronRunnerRevealIsComplete,
-  getRevealStartedAt: tronRunnerRevealStartedAtTime,
-  getRevealActive: tronRunnerRevealIsActive,
-  getRevealProgress: tronRunnerRevealProgressValue,
-});
-
-initContactTerminal({
-  scene,
-  camera,
-  renderer,
-  reflectionEnvMap,
-  PAL,
-  elStrip,
-  addElStripRectFrame,
-  sideBuildingRecords,
-  getBottomY: cityDepartmentBoardBottomY,
-  getPlayerSpawn: () => player.playerSpawn,
-  getRevealComplete: () => cityRevealComplete && tronRunnerRevealIsComplete(),
-  getRevealFactor: cityDepartmentBoardRevealFactor,
-  getEffectEnabled: () => fxEnabled('deptBoards'),
-  getOtherCameraActive: () => getDroneIntroActive() || isCityRevealCompositeActive(),
-  getYaw: () => player.yaw,
-  setYaw: (value) => { player.yaw = value; },
-  getPitch: () => player.pitch,
-  setPitch: (value) => { player.pitch = value; },
-  getViewRoll: () => player.viewRoll,
-  setViewRoll: (value) => { player.viewRoll = value; },
-  applyCameraLook,
-  clearMovement: clearMovementKeys,
-  clearViewMotion: () => {
-    removeViewMotionOffset();
-    setHeadBobOffset(0);
-    setSideSwayOffset(0);
-    setMovementHorizontalSpeed(0);
-    setMovementRunMix(0);
-    player.viewRoll = 0;
-    resetFootstepCadence();
-  },
-  stopMouseLook: stopMouseLookInput,
-  resumeMouseLook: resumeMouseLookInput,
-  resetMobileMovement: resetMobileMovementInput,
-  getPointerLocked,
-  prefersReducedMotion: () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-  isMobile: mobilePerformanceProfileActive,
-  actionButton: contactTerminalActionEl,
-  backButton: contactTerminalBackEl,
-  interactionSurface: contactTerminalSurfaceEl,
-  liveRegion: contactTerminalLiveEl,
-  body: document.body,
-  eventTarget: window,
-  history: window.history,
-  locationHref: window.location.href,
-});
-
-// ---------- City role boards: fixed sector boards beside civic doors (extracted -> city-boards.js) ----------
-initCityRoleBoards({
-  renderer,
-  scene,
-  sideBuildingRecords,
-  sideDoorWidth,
-  sideDoorHeight,
-  sideDoorScale,
-  sideDoorY,
-  sideDoorFaceOffset,
-  SIDE_BUILDING_CIVIC_NUMBER_FIXED,
-});
-
-// ---------- Real demo: phosphor audio equalizer on the start-side wall (extracted -> equalizer.js) ----------
-initLabEqualizer({
-  scene,
-  camera,
-  renderer,
-  controlEls,
-  tronSoundtrack,
-  performanceLiveMetrics: performanceDiagnostics.liveMetrics,
-  postRevealPerfIsolationState,
-  elStrip,
-  addElStripRectFrame,
-  ensureTronAudioContext,
-  setupTronSoundtrackGraph,
-  GRID_BLOCK,
-  TRON_SOUNDTRACK_URL,
-  TRON_RUNNER_BEAT_PULSE_AUDIO_KICK_ENABLED,
-  getCityRevealComplete: () => cityRevealComplete,
-  getDroneLandingPose: () => player.droneLandingPose,
-  getPlayerSpawn: () => player.playerSpawn,
-  getDynamicRoadCenter: () => boulevard.dynamicRoadCenter,
-  getDynamicRoadLength: () => boulevard.dynamicRoadLength,
-  getLatestMeasuredFps: () => latestMeasuredFps,
-});
-
-// ---------- il personaggio e la folla stanno in character/runner-wiring.js ----------
-initRunnerWiring({
-  scene,
-  camera,
-  renderer,
-  controlEls,
-  reflectionEnvMap,
   cinematicGroundingSettings,
-  tronSoundtrack,
-  postRevealPerfIsolationState,
-  tronRunnerCrowdColliderRecordCache,
   RunnerGLTFLoader,
   cloneRunnerSkeleton,
-  lerpAngle,
-  isCameraCollisionDisabled,
+  contactTerminalActionEl,
+  contactTerminalBackEl,
+  contactTerminalSurfaceEl,
+  contactTerminalLiveEl,
+  postRevealPerfIsolationState,
+  performanceDiagnostics,
+  tronSoundtrack,
+  scheduleTronSoundtrackIntroLofiStopForReveal,
+  setupTronSoundtrackGraph,
+  cityRevealSkyScene,
+  domeMesh,
+  renderCityRevealSkyBase,
+  syncCityRevealSkyDome,
+  syncCityRevealSkyMaterial,
+  refreshCullingBounds,
+  refreshCullingBoundsWithMargin,
   roadHexBoundaryLimits,
-  getPlayerSpawn: () => player.playerSpawn,
-  getDroneLandingPose: () => player.droneLandingPose,
-  getCollisionPadding: () => collisioni.collisionPadding,
-  getMainBuildingCollisionPadding: () => collisioni.mainBuildingCollisionPadding,
+  getDynamicRoadSurfaceWidth: () => dynamicRoadSurfaceWidth,
   getLatestMeasuredFps: () => latestMeasuredFps,
 });
-
-// ---------- Exact boulevard elevated links, rendered with cubemap materials ----------
-bridges.buildLinks([-144, -48, 48, 144]);
-buildBridgeEdgeBatch(overlayGroup);
-
-// (Ground rungs / spine strips removed — replaced by roadEdge tubes + clean median above)
-
-initStaticCityCulling({
-  camera,
-  sideBuildingRecords,
-  mainBuildingRecords,
-  bridgeRecords: bridges.records,
-  cityDepartmentBoards: getCityDepartmentBoards(),
-  cityRoleBoards: getCityRoleBoards(),
-  edgeStripSpecs,
-  horizontalBuildingLedRings,
-  setBridgeEdgeSpecCullVisible,
-  basePadLedBatch,
-  sideDoorBatchState,
-  gridBlock: GRID_BLOCK,
-  departmentBoardEnabled: CITY_DEPARTMENT_BOARD_ENABLED,
-  roleBoardEnabled: CITY_ROLE_BOARD_ENABLED,
-  getSideDoorEnabled,
-  getBasePadCurbEnabled,
-  getRevealActive: tronRunnerRevealIsActive,
-  updateDoorBatchMeshes: updateSideBuildingDoorBatchMeshes,
-  departmentBoardRevealFactor: cityDepartmentBoardRevealFactor,
-});
-
-initSpeechBubbles({
-  THREE,
-  getScene: () => scene,
-  getCamera: () => camera,
-  getRenderer: () => renderer,
-  getCrowd: () => tronRunnerCrowd,
-  getCrowdGroup: () => tronRunnerCrowdGroup,
-  getIdleGroup: () => tronRunnerIdleCharacterGroup,
-  getIdleTalk: () => tronRunnerIdleTalk,
-  isReady: () => cityRevealComplete,
-  TARGET_HEIGHT: TRON_RUNNER_TARGET_HEIGHT,
-  GREETER_INDEX: TRON_RUNNER_GREETER_INDEX,
-  CROWD_TALK_RANGE: TRON_RUNNER_CROWD_TALK_RANGE,
-  CROWD_TALK_REARM_RANGE: TRON_RUNNER_CROWD_TALK_REARM_RANGE,
-  CROWD_TALK_DURATION_MS: TRON_RUNNER_CROWD_TALK_DURATION_MS,
-  // gli stessi collisori che i personaggi usano per non attraversare i muri: cosi' i
-  // cartelli non finiscono dentro i palazzi (2026-09-19)
-  getColliderRecords: () => tronRunnerCrowdRuntime.colliderRecords(),
-});
-
-initCityRevealWireframe({
-  camera,
-  renderer,
-  getPlayerSpawn: () => player.playerSpawn,
-  getDynamicRoadSurfaceWidth: () => dynamicRoadSurfaceWidth,
-  getDynamicRoadLength: () => boulevard.dynamicRoadLength,
-  getDynamicRoadCenter: () => boulevard.dynamicRoadCenter,
-  getRoadTopY: roadTileTopY,
-  getSideBuildingRecords: () => sideBuildingRecords,
-  getMainBuildingRecords: () => mainBuildingRecords,
-  getBridgeRecords: () => bridges.records,
-  getEdgeStripSpecs: () => edgeStripSpecs,
-  stopMouseLookInput,
-  updatePointerLockHint,
-  syncCityRevealSkyMaterial,
-  scheduleTronSoundtrackIntroLofiStopForReveal,
-  // Master-clock feed for the beat-drop-anchored sweep: track position plus
-  // where the drop sits in the track and how long the lofi release fade takes.
-  getSoundtrackSyncState: () => ({
-    playing: Boolean(tronSoundtrack.playing),
-    currentTime: tronSoundtrack.elements[tronSoundtrack.activeIndex]?.currentTime ?? 0,
-    dropAtSeconds: TRON_SOUNDTRACK_BEAT_DROP_SECONDS,
-    lofiReleaseFadeSeconds: TRON_SOUNDTRACK_INTRO_FX_FADE_SECONDS,
-  }),
-});
-
-const cityRevealRender = createCityRevealRenderRuntime({
-  renderer,
-  scene,
-  camera,
-  domeMesh,
-  getComposer: () => post.composer,
-  cityRevealSkyScene,
-  cityRevealOverlayScene,
-  cityRevealOverlayCamera,
-  cityRevealWireScene,
-  cityRevealRoadGridScene,
-  cityRevealMainLedReveal,
-  cityRevealRealClipPlane,
-  refreshCityRevealSweepBounds,
-  setCityRevealSweepFront,
-  cityRevealFrontForProgress,
-  isCityRevealCompositeActive,
-  isCityRevealRealRevealActive,
-  isCityRevealBackplateActive,
-  syncCityRevealSkyDome,
-  renderCityRevealSkyBase,
-  syncGlobalFxaaPass,
-  shouldUseComposer,
-});
-
-function mainFacadeVerticalRevealProgress() {
-  if (cityRevealComplete) return 1;
-  const revealElapsed = cityRevealMainLedReveal.revealElapsedMs();
-  const revealDuration = Math.max(1, cityRevealFadeDurationMs() - cityRevealMainLedReveal.visibleDelayMs);
-  const t = THREE.MathUtils.clamp(revealElapsed / revealDuration, 0, 1);
-  return t * t * (3 - 2 * t);
-}
-
-function updateMainFacadeVerticalReveal() {
-  if (!hasMainFacadeVerticalRevealLedMaterials()) return;
-  // Once the city reveal is complete the facade reveal is disabled (shader ignores revealY),
-  // so skip the per-frame bounds recompute (filter + transform/world-position alloc chain).
-  // Re-engages automatically if cityRevealComplete is toggled back off (debug re-run).
-  if (cityRevealComplete) {
-    if (mainFacadeVerticalRevealState.enabled || mainFacadeVerticalRevealState.revealY !== 1e9) {
-      mainFacadeVerticalRevealState.enabled = false;
-      mainFacadeVerticalRevealState.active = false;
-      mainFacadeVerticalRevealState.progress = 1;
-      mainFacadeVerticalRevealState.revealY = 1e9;
-      mainFacadeVerticalRevealState.minY = null;
-      mainFacadeVerticalRevealState.maxY = null;
-      setMainFacadeVerticalRevealUniforms(1e9, MAIN_FACADE_VERTICAL_REVEAL_FEATHER, false);
-    }
-    return;
-  }
-  const bounds = mainFacadeVerticalRevealLedBounds();
-  if (!bounds) {
-    mainFacadeVerticalRevealState.enabled = false;
-    mainFacadeVerticalRevealState.active = false;
-    mainFacadeVerticalRevealState.progress = 1;
-    mainFacadeVerticalRevealState.revealY = 1e9;
-    mainFacadeVerticalRevealState.minY = null;
-    mainFacadeVerticalRevealState.maxY = null;
-    setMainFacadeVerticalRevealUniforms(1e9, MAIN_FACADE_VERTICAL_REVEAL_FEATHER, false);
-    return;
-  }
-  const progress = mainFacadeVerticalRevealProgress();
-  const feather = MAIN_FACADE_VERTICAL_REVEAL_FEATHER;
-  const revealY = THREE.MathUtils.lerp(bounds.minY - feather, bounds.maxY + feather, progress);
-  const enabled = cityRevealWireframeEnabled && !cityRevealComplete;
-  mainFacadeVerticalRevealState.enabled = enabled;
-  mainFacadeVerticalRevealState.active = enabled && progress > 0.001 && progress < 0.999;
-  mainFacadeVerticalRevealState.progress = progress;
-  mainFacadeVerticalRevealState.revealY = revealY;
-  mainFacadeVerticalRevealState.minY = bounds.minY;
-  mainFacadeVerticalRevealState.maxY = bounds.maxY;
-  mainFacadeVerticalRevealState.count = bounds.count;
-  mainFacadeVerticalRevealState.feather = feather;
-  setMainFacadeVerticalRevealUniforms(revealY, feather, enabled);
-}
-
-
-const cityRevealProfiler = createCityRevealProfiler({
-  detailedProfile: revealProfileDetailRequestedFromParams(retroBenchmarkSearchParams),
-  getCityRevealStartedAt: () => cityRevealStartedAt,
-  getCityRevealArmedAt: () => cityRevealArmedAt,
-  getCityRevealComplete: () => cityRevealComplete,
-  getCityRevealCompletedAt: () => cityRevealCompletedAt,
-  getCityRevealDelayMs: () => cityRevealDelayMs,
-  getCityRevealSweepProgress: () => cityRevealSweepProgress,
-  getCityRevealWireAlpha: () => cityRevealWireAlpha,
-  getCityRevealWireCullStats: () => cityRevealWireCullStats,
-  getCityRevealWireObjects: () => cityRevealWireObjects,
-  getCityRevealSolidObjects: () => cityRevealSolidObjects,
-  getCityRevealMainLedDepthProxyVisibleCount: cityRevealMainLedReveal.getDepthProxyVisibleCount,
-  getCityRevealMainLedDepthProxyLastMode: cityRevealMainLedReveal.getDepthProxyLastMode,
-  getMainBuildingVerticalRevealOverlayObjectCount: cityRevealMainLedReveal.getOverlayObjectCount,
-  getTronRunnerCrowd: () => tronRunnerCrowd,
-  getTronRunnerCrowdRuntimeStats: () => tronRunnerCrowdRuntimeStats,
-  getRendererMemory: () => renderer.info.memory,
-  getScene: () => scene,
-  getCityRevealRoadGridGroup: () => cityRevealRoadGridGroup,
-  getCityRevealMainLedDepthGroup: cityRevealMainLedReveal.getDepthGroup,
-  getComposer: () => post.composer,
-  getBloomPass: () => post.bloomPass,
-  getFxaaPass: () => post.fxaaPass,
-  getFsrUpscalePass: () => post.fsrUpscalePass,
-  getCinematicLookPass: () => post.cinematicLookPass,
-  getTemporalAaPass: () => post.temporalAaPass,
-  getCityRevealSkyPass: () => cityRevealRender.getSkyPass(),
-  getCityRevealOverlayPass: () => cityRevealRender.getOverlayPass(),
-  getCityRevealWirePass: () => cityRevealRender.getWirePass(),
-  getCityRevealRoadGridPass: () => cityRevealRender.getRoadGridPass(),
-  getCityRevealScenePass: () => cityRevealRender.getScenePass(),
-  getCityRevealMainLedRevealPass: cityRevealMainLedReveal.getPass,
-  cityRevealPostRevealElapsedMs: (now) => tronRunnerCrowdRuntime.postRevealElapsedMs(now),
-  cityRevealEffectiveDelayMs,
-  cityRevealFadeDurationMs,
-  isCityRevealRealRevealActive,
-  isCityRevealMainLedRevealOverlayActive: cityRevealMainLedReveal.isOverlayActive,
-  cityRevealEstimatedVisibleObjects,
-  shouldUseComposer,
-});
-
-
-function shouldUpdateTronRunnerSourceCharacter() {
-  return Boolean(TRON_RUNNER_SOURCE_CHARACTER_VISIBLE);
-}
 
 // ---------- post (bloom): il dominio sta in engine/post-pipeline.js ----------
 initPostPipeline({ renderer, camera, cityRevealRender, postRevealPerfIsolationState, retroBenchmarkSearchParams });
