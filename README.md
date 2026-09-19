@@ -72,10 +72,10 @@ Due regole che tengono in piedi la divisione:
 
 ## Quanto pesa `src/` sulla rete
 
-`src/` sono 97 moduli per 1,37 MB su disco, serviti senza minificazione per scelta
+`src/` sono 97 moduli per 1,36 MB su disco, serviti senza minificazione per scelta
 (nessun build step: `index.html` usa una importmap). Sulla rete non pesano quello:
 Cloudflare li comprime in brotli (misurato il 2026-09-19 con `brotli -q 11`: `main.js`
-51 KB -> 12 KB, il totale 307 KB). Le intestazioni live sono `cache-control: no-cache`
+46 KB -> 11 KB, il totale 303 KB). Le intestazioni live sono `cache-control: no-cache`
 con ETag: a ogni visita successiva il browser rifa' una richiesta condizionata per
 modulo, e adesso i moduli sono 97 invece di 84. E' il numero di richieste, non i byte, a
 decidere il costo della seconda visita; minificare non lo cambierebbe, cambiare la
