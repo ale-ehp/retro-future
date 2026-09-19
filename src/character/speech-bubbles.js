@@ -687,6 +687,8 @@ export function montaCartello(sprite, baseY, larghezza, altezza, t, opacitaPiena
 const CROWD_BUBBLE_POOL_SIZE = 4; // only the nearest few talkers show at once (readability + perf)
 const CROWD_BUBBLE_SIZE_SCALE = 1.5; // crowd bubbles 50% larger than the base bubble height
 const crowdBubbleWorldScratch = new THREE.Vector3();
+const orientamentoFermo = new THREE.Quaternion();   // riusati: questo giro e' a ogni frame
+const orientamentoEuler = new THREE.Euler();
 let crowdBubbleSprites = null;
 const crowdBubbleTalkers = [];
 // I cartelli vanno dentro un Group loro, e il renderOrder va messo SUL GRUPPO.
@@ -774,7 +776,17 @@ export function updateTronRunnerCrowdSpeechBubbles() {
       scansaOstacoli(crowdBubbleWorldScratch, hGia * (tex.__aspect || 2), hGia);
     }
     sprite.position.copy(crowdBubbleWorldScratch);
-    sprite.rotation.set(0, Math.atan2(deps.getCamera().position.x - sprite.position.x, deps.getCamera().position.z - sprite.position.z), 0);
+    // Chi sta in pausa tiene il cartello fermo (2026-09-19): non cammina e non si gira, e
+    // un cartello che lo insegue mentre gli giri intorno faceva pubblicita' invece che una
+    // persona appoggiata al muro. Il suo resta orientato come lui; quelli della folla, che
+    // passano e vanno, continuano a voltarsi verso chi legge.
+    if (member.group === deps.getIdleGroup?.()) {
+      member.group.getWorldQuaternion(orientamentoFermo);
+      orientamentoEuler.setFromQuaternion(orientamentoFermo, 'YXZ');
+      sprite.rotation.set(0, orientamentoEuler.y, 0);
+    } else {
+      sprite.rotation.set(0, Math.atan2(deps.getCamera().position.x - sprite.position.x, deps.getCamera().position.z - sprite.position.z), 0);
+    }
     const aspect = tex.__aspect || 2;
     const h = GREETER_BUBBLE_WORLD_HEIGHT * CROWD_BUBBLE_SIZE_SCALE;
     montaCartello(sprite, crowdBubbleWorldScratch.y, h * aspect, h, puntoApertura(nowMs, member.talkStart), opacity);

@@ -78,3 +78,16 @@ test('i cartelli stanno in un Group loro, ed e\' il gruppo a portare il renderOr
   // e nessuno li attacca piu' direttamente alla scena
   assert.doesNotMatch(sorgente, /getScene\(\)\.add\((?:greeterBubbleSprite|sprite)\)/);
 });
+
+test('il cartello di chi sta in pausa non insegue la camera', () => {
+  // Chiesto il 2026-09-19: quello del personaggio fermo deve restare fisso, gli altri no.
+  // Misurato in scena: girando la camera di 47 unita\' il suo resta a -1.571, mentre uno
+  // della folla passa da 2.789 a -3.042.
+  const sorgente = readFileSync(new URL('./character/speech-bubbles.js', import.meta.url), 'utf8');
+  const codice = sorgente.replace(/\/\/[^\n]*/g, '');
+  assert.match(codice, /member\.group === deps\.getIdleGroup/);
+  // il suo orientamento viene da chi lo tiene, non dalla camera
+  assert.match(codice, /getWorldQuaternion\(orientamentoFermo\)/);
+  // e quelli della folla continuano a voltarsi
+  assert.match(codice, /Math\.atan2\(deps\.getCamera\(\)\.position\.x/);
+});
