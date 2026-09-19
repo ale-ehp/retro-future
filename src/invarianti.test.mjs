@@ -104,17 +104,8 @@ test('il cursore "Sfondo cartelli" parte dove dicono le costanti', () => {
 // 2026-09-19 scrivendo questa prova. Non e' stato corretto perche' correggerlo cambia la
 // scena (o il cielo si fa piu' chiaro, o il colore di riferimento si abbassa) e la scelta
 // spetta all'autore. Resta qui come eccezione nota: se i numeri cambiano, la prova lo dice.
-// E la folla: con i cursori canonici (runner-led-brightness 3.5, runner-led-bloom 6, in
-// boulevard-canonical-settings.json) tronRunnerCrowdLedEmissiveIntensity() darebbe 31 e
-// viene tagliata a 15, il tetto del clamp. L'impronta del gate lo conferma a scena viva:
-// base emissiva 15 su tutti i 60 materiali della folla, 24 sul fermo (15 x 1.6). Vuol dire
-// che TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY oggi non conta: quando il 2026-09-19 il tetto
-// e' passato da 12 a 15 "insieme all'intensita'", a far luce e' stato il tetto, non
-// l'intensita'. Anche questa non si corregge qui (alzare il tetto o abbassare i cursori
-// cambia quanto brillano i personaggi): eccezione nota, con i numeri.
 const ECCEZIONI_NOTE = {
   'sky-brightness': { cursoreMax: 4.8, tettoShader: 2.4 },
-  'runner-led': { brightness: 3.5, bloom: 6, tetto: 15 },
 };
 
 test('la luminosita\' del cielo: il tetto dello shader sta sotto il cursore, ed e\' un\'eccezione nota', () => {
@@ -130,20 +121,23 @@ test('la luminosita\' del cielo: il tetto dello shader sta sotto il cursore, ed 
     'cambiati i numeri dell\'eccezione: decidi se e\' ancora voluta e aggiorna ECCEZIONI_NOTE');
 });
 
-test('i LED della folla, con i cursori canonici, stanno contro il tetto: eccezione nota', () => {
+test('i LED della folla, con i cursori canonici, NON stanno contro il tetto', () => {
+  // Fino al 2026-09-19 il cursore canonico runner-led-brightness era 3.5 e con bloom 6 il
+  // calcolo dava 31, tagliato a 15 dal clamp: a scena viva la base emissiva era 15 su
+  // tutti i 60 materiali della folla, cioe' il tetto, e TRON_RUNNER_CROWD_LED_EMISSIVE_
+  // INTENSITY non contava niente (quando il tetto e' passato da 12 a 15 "insieme
+  // all'intensita'", a far luce era stato il tetto). L'autore ha scelto di tenere la
+  // luminosita' com'era: il cursore e' sceso a 1.69, che da' 14.94, lo stesso a occhio,
+  // ma sotto il tetto. Da qui in poi alzare l'intensita' arriva a schermo.
   const canonico = JSON.parse(leggi('../boulevard-canonical-settings.json')).settings;
   const leds = leggi('./character/runner-crowd-leds.js');
   const tetto = Number(leds.match(/clamp\(TRON_RUNNER_CROWD_LED_EMISSIVE_INTENSITY \* scale, 0, (\d+(?:\.\d+)?)\)/)?.[1]);
   assert.ok(Number.isFinite(tetto), 'il clamp dei LED non e\' piu\' dove stava: aggiorna la prova');
-  const brightness = canonico['runner-led-brightness'];
-  const bloom = canonico['runner-led-bloom'];
-  const aRiposo = tronRunnerCrowdLedEmissiveIntensity({ ledBrightness: brightness, ledBloom: bloom });
-  const nota = ECCEZIONI_NOTE['runner-led'];
-  if (aRiposo < tetto) {
-    assert.fail(`la relazione e' rientrata (a riposo ${aRiposo}, tetto ${tetto}): togli l'eccezione nota qui sopra`);
-  }
-  assert.deepEqual({ brightness, bloom, tetto }, nota,
-    'cambiati i numeri dell\'eccezione: decidi se e\' ancora voluta e aggiorna ECCEZIONI_NOTE');
+  const aRiposo = tronRunnerCrowdLedEmissiveIntensity({
+    ledBrightness: canonico['runner-led-brightness'],
+    ledBloom: canonico['runner-led-bloom'],
+  });
+  assert.ok(aRiposo < tetto, `a riposo ${aRiposo} contro un tetto di ${tetto}: la costante d'intensita' non conta piu' niente`);
 });
 
 test('ogni tetto scritto come numero lascia spazio alla costante che taglia', () => {
