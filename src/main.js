@@ -28,35 +28,16 @@ import {
   BLOOM_RESOLUTION_CAP,
   CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS,
   CITY_REVEAL_BACKPLATE_SWEEP_PORTION,
-  CITY_REVEAL_DEFAULT_DELAY_MS,
-  CITY_REVEAL_DEFAULT_FADE_MS,
   CITY_REVEAL_MAX_SKY_BACKPLATE_OPACITY,
   CITY_REVEAL_RENDER_ORDER,
   CITY_REVEAL_SWEEP_MARGIN_Z,
   CITY_REVEAL_SWEEP_MODE,
   FIXED_CAMERA_FOV,
-  FSR_BENCHMARK_PRESET_KEYS,
-  FSR_MANUAL_CONTROL_IDS,
-  FSR_PRESETS,
   HEX_ROAD_UPDATE_FRAME_STRIDE,
   MAX_HEX_ROAD_ACCUMULATED_DT,
-  MAX_RENDER_PIXEL_RATIO,
   SECONDARY_EFFECT_UPDATE_STRIDE,
 } from './world/config.js';
 import {
-  AUDIO_FX_FAST_CONTROL_IDS,
-  BASE_PAD_MATERIAL_FAST_CONTROL_IDS,
-  BOUNDARY_ERROR_FAST_CONTROL_IDS,
-  BUILDING_MATERIAL_FAST_CONTROL_IDS,
-  CHARACTER_FAST_CONTROL_IDS,
-  HEX_RUNTIME_FAST_CONTROL_IDS,
-  LIGHT_FAST_CONTROL_IDS,
-  MOVEMENT_FAST_CONTROL_IDS,
-  POST_FAST_CONTROL_IDS,
-  PRODUCTION_LIVE_CONTROL_SELECTOR,
-  ROAD_MATERIAL_FAST_CONTROL_IDS,
-  SKY_FAST_CONTROL_IDS,
-  WIREFRAME_FAST_CONTROL_IDS,
   createControlEls,
 } from './controls/controls.js';
 import { mountFixedControlDefaults } from './controls/fixed-control-defaults.js';
@@ -144,18 +125,13 @@ import {
   updateFootstepAudioFromWalk,
   waitForNextFrame,
 } from './audio/player-footsteps.js';
-import {
-  mountSideFacadeLedControls as mountSideFacadeLedControlsCore,
-} from './controls/facade-led-controls.js';
-import { createBuildingLiveControlsRuntime } from './controls/building-live-controls.js';
-import { createControlSettingsRuntime, setButtonFeedback } from './controls/control-settings-runtime.js';
+import { setButtonFeedback } from './controls/control-settings-runtime.js';
 import { fxEnabled, fxToggleInspect } from './engine/fx-debug-toggles.js';
 import {
   post,
   initPostPipeline,
   adaptiveRenderTargetInspect,
   effectiveComposerPixelRatio,
-  syncFsrUpscalePass,
   syncCinematicLookPass,
   syncTemporalAaPass,
   applyTemporalAaJitterForRender,
@@ -163,13 +139,10 @@ import {
   syncGlobalFxaaPass,
   syncBloomLookMerge,
   syncComposerBufferRoles,
-  applyAntialiasControls,
-  applyBloomEnabled,
   isBloomPassActive,
   hasDroneIntroLanded,
   shouldBypassBloomForRevealPerformance,
   isBloomRevealBypassed,
-  invalidateBloomTemporalCache,
   syncBloomTemporalBudget,
   mobilePerformanceProfileActive,
   mobilePerformanceProfileInspect,
@@ -234,7 +207,6 @@ import {
   sideDoorWidth,
   sideDoorY,
   updateSideBuildingDoorBatchMeshes,
-  updateSideBuildingDoorMaterials,
   updateSideBuildingDoorTransforms,
 } from './world/building-doors.js';
 import {
@@ -251,25 +223,15 @@ import {
   setStripInstanceTransform,
   sideBuildingEdgeBatch,
   sideHorizontalLedRingBatches,
-  updateEdgeStrips,
 } from './world/building-leds.js';
 import {
   bridgeMaterials,
   buildBuildingShells,
   createWetAsphaltFacadeMaterial,
   initBuildings,
-  mainBuildingColliders,
-  mainBuildingMaterials,
-  mainBuildingMeshes,
   mainBuildingRecords,
   makeChamferedBox,
-  sideBuildingColliders,
-  sideBuildingMaterials,
-  sideBuildingMeshes,
   sideBuildingRecords,
-  updateBuildingFootprints,
-  updateBuildingMaterials,
-  updateBuildingScale,
 } from './world/buildings.js';
 import {
   BRIDGE_PAIR_5_6_INDEX,
@@ -285,15 +247,30 @@ import {
   facadeLedRuntimeInspect,
   hasMainFacadeVerticalRevealLedMaterials,
   initFacadeLedTreatment,
-  invalidateMainFacadeVerticalRevealLedBounds,
   mainFacadeVerticalRevealLedBounds,
-  setFacadeLedRuntimeSettings,
   setMainFacadeVerticalRevealUniforms,
   sideBuildingLedLayoutInspect,
   updateFacadeLedRibbons,
   updateFacadeStripOutsets,
 } from './world/facade-led-treatment.js';
 import { createSkyDome } from './world/sky-dome.js';
+import {
+  initControlPanel,
+  applyPlayerSpawn,
+  captureLivePlayerSpawn,
+  controlSettingsRuntime,
+  loadStoredPlayerSpawn,
+  performanceDiagnosticsEl,
+  resetCameraHeightToDefault,
+  trimProductionControls,
+  tunedColor,
+  updateStartPositionLiveLabel,
+} from './controls/control-panel.js';
+import {
+  initLiveControls,
+  applyLiveControls,
+  scheduleLiveControls,
+} from './controls/live-controls.js';
 import {
   collisioni,
   initCameraCollision,
@@ -305,7 +282,6 @@ import {
 import {
   player,
   initPlayerState,
-  DEFAULT_PLAYER_SPAWN,
   DEFAULT_DRONE_LANDING_POSE,
   applyCameraLook,
   lerpAngle,
@@ -316,8 +292,6 @@ import {
 } from './camera/player-state.js';
 import {
   initRunnerWiring,
-  applyCharacterControlsFromUI,
-  applyCinematicGroundingInitialControls,
   tronRunnerBeatPulse,
   tronRunnerCrowd,
   tronRunnerCrowdGroup,
@@ -340,13 +314,7 @@ import {
   initBoulevardLayout,
   roadHalf,
   boulevardRoadWidth,
-  safeSideBuildingSpacingScale,
   roadSurfaceWidthForBuildings,
-  updateStreetEdgeLayout,
-  updateBuildingStreetEdgeBlocks,
-  updateMainBuildingStreetEdgeBlock,
-  updateLongitudinalRoadEdges,
-  updateSideRoadLayout,
 } from './world/boulevard-layout.js';
 import { createCityRevealMainLed } from './world/city-reveal-main-led.js';
 import {
@@ -360,8 +328,6 @@ import {
   CITY_REVEAL_ROAD_SOLID_BACKING_ENABLED,
   CITY_REVEAL_ROAD_SOLID_FADE_ENABLED,
   CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED,
-  applyCityRevealWireframeDisabledControlsState,
-  buildCityRevealWireframe,
   cityRevealArmedAt,
   cityRevealBackplate,
   cityRevealBackplateMat,
@@ -420,8 +386,6 @@ import {
   setCityRevealPostProcessingPrewarmState,
   setCityRevealRoadGridAlphaFactor,
   setCityRevealSweepFront,
-  setCityRevealWireAlpha,
-  setCityRevealWireframeSettings,
   snapshotCityRevealWireframeState,
   startCityRevealWireTimer,
   startCityRevealWireframe,
@@ -431,16 +395,11 @@ import { createCityRevealRenderRuntime } from './world/city-reveal-render-runtim
 import {
   BASE_PAD_CULLING_BOUNDS_MARGIN,
   BASE_PAD_FRUSTUM_CULLING_ENABLED,
-  applyBasePadMaterialSettings,
-  applyBasePadMaterialRuntimeSettings,
-  applyBasePadRuntimeSettings,
   basePadHexClipMesh,
   basePadLedBatch,
   createBuildingBasePad,
   getBasePadCurbEnabled,
   initBasePads,
-  updateBasePadHexInfluence,
-  updateBasePadLedStrips,
   updateBuildingBasePad,
 } from './world/base-pads.js';
 import {
@@ -453,7 +412,6 @@ import {
   initBridgeControls,
   readBridgeNumber,
   readBridgeVisible,
-  renderBridgeControls,
   updateBridgeControlOutputs,
 } from './controls/bridge-controls.js';
 import {
@@ -489,8 +447,6 @@ import {
   setGroundSegment,
 } from './world/ground-geometry.js';
 import {
-  applyBoundaryErrorVisualSettings,
-  applyRoadBoundaryHexVisualSettings,
   boundaryErrorInspect,
   boundaryErrorNeedsUpdate,
   getRoadBoundaryHexStats,
@@ -498,10 +454,7 @@ import {
   initBoundaryError,
   setTronNoclip,
   updateBoundaryError,
-  updateRoadBoundaryHexMaterial,
-  updateRoadBoundaryHexRows,
   updateRoadBoundaryPulse,
-  updateRoadBoundaryPulseLayout,
 } from './world/boundary-error.js';
 import {
   droneIntroHeroShotRequestedFromParams,
@@ -559,7 +512,6 @@ import {
   HEX_ROAD_UPLOAD_BATCH_LIMIT,
   addHexRoadTiles,
   ensureHexRoadTileCoverage,
-  applyHexRuntimeSettings,
   flushHexTileBatchUploads,
   getDirtyHexTileBatchCount,
   getHexTileHeightScale,
@@ -567,11 +519,6 @@ import {
   hexRoadTileBatches,
   hexRoadTileBuckets,
   hexRoadTiles,
-  hexTileMat,
-  hexTileActiveColor,
-  hexTileBaseColor,
-  hexTileDisplayActiveColor,
-  hexTileDisplayBaseColor,
   hexTileGeo,
   hexTileHeight,
   hexTileRadius,
@@ -583,32 +530,19 @@ import {
   initHexTileSync,
   recoveringHexTiles,
   roadTileTopY,
-  setHexTileGap,
-  setHexTileHeightScale,
-  setHexRoadMaterialGlow,
   setHexRoadLodProfile,
-  setHexTileScale,
   sidewalkMinSurfaceY,
-  hexPlayerTileLight,
-  hexTileHitLight,
   hexUpdateEnabled,
   stepHexRoadTiles,
   streetEdgeHexTileBatches,
   streetEdgeHexTiles,
-  syncHexTileDisplayColor,
-  streetEdgeHexMat,
-  updateHexTileLayout,
   updateHexRoadBatchLod,
-  updateStreetEdgeHexTileScale,
   updateZTileBand,
 } from './world/hex-tiles.js';
 import {
   getReflectionEnvMap,
-  getRoadReflectionEnvMap,
   initReflectionEnv,
-  setRoadBuildingReflection,
 } from './engine/reflection-env.js';
-import { mountFxCategoryPanels } from './controls/fx-panels.js';
 import {
   LAB_EQUALIZER_ANALYSER_MAX_DB,
   LAB_EQUALIZER_ANALYSER_MIN_DB,
@@ -660,10 +594,6 @@ import {
   labEqualizerState,
 } from './controls/equalizer.js';
 import {
-  PLAYER_SPAWN_KEY,
-  PLAYER_SPAWN_LEGACY_Z,
-  PLAYER_SPAWN_DEFAULT_Z,
-  DRONE_LANDING_KEY,
   PITCH_LIMIT,
   DEMO_START_KEY,
   welcomeWindowMotionAllowed,
@@ -1254,7 +1184,6 @@ function mainBuildingSideBoulevardExtension() {
 }
 const hexTileDisplayBaseEmissive = new THREE.Color(0x061419);
 const hexTileDisplayHitEmissive = new THREE.Color(0x7df6ff);
-let hexTileBaseEmissiveIntensity = 0.18;
 initHexTileSync({
   refreshCullingBounds,
 });
@@ -2105,1436 +2034,48 @@ function syncHexRoadLodForFrame() {
 
 setupPost();
 
-function formatOffsetLabel(value) {
-  if (Math.abs(value) < 0.005) return '0.00';
-  return `${value > 0 ? '+' : ''}${value.toFixed(2)} ${value > 0 ? 'su' : 'giu'}`;
-}
-
-function tunedColor(baseColor, hueDeg, saturationScale, brightnessScale) {
-  const hsl = {};
-  baseColor.getHSL(hsl);
-  const h = (hsl.h + hueDeg / 360 + 1) % 1;
-  const s = THREE.MathUtils.clamp(hsl.s * saturationScale, 0, 1);
-  const l = THREE.MathUtils.clamp(hsl.l * brightnessScale, 0, 1);
-  return new THREE.Color().setHSL(h, s, l);
-}
-
-function sceneLightResponse(ambient, key) {
-  const ambientDelta = ambient - 0.10;
-  const keyDelta = key - 0.18;
-  return {
-    surface: THREE.MathUtils.clamp(1 + ambientDelta * 0.62 + keyDelta * 0.16, 0.34, 2.05),
-    reflection: THREE.MathUtils.clamp(1 + ambientDelta * 0.82 + keyDelta * 0.22, 0.24, 2.35),
-    emissive: THREE.MathUtils.clamp(1 + ambientDelta * 0.38 + keyDelta * 0.10, 0.38, 1.75),
-    floorFill: THREE.MathUtils.clamp(ambient * 0.05 + key * 0.012, 0, 0.13),
-    facadeFill: THREE.MathUtils.clamp(ambient * 0.035 + key * 0.008, 0, 0.10),
-  };
-}
-
-function updateRoadTileMaterials(callback) {
-  callback(hexTileMat);
-  for (const batch of hexRoadTileBatches) {
-    callback(batch.material);
-    batch.material.color.set(0xffffff);
-  }
-}
-
-function updateStreetEdgeTileMaterials(callback) {
-  callback(streetEdgeHexMat);
-  for (const batch of streetEdgeHexTileBatches) callback(batch.material);
-}
-
-function refreshRoadTileInstances() {
-  for (const tile of hexRoadTiles) {
-    const hitLight = tile.userData.hitLight || 0;
-    const playerLight = tile.userData.playerLight || 0;
-    const basePadLight = tile.userData.basePadLight || 0;
-    syncHexTileDisplayColor(tile, hitLight, playerLight, basePadLight);
-  }
-}
-
-function updateGroundLedMaterials(roadEdgeBrightness, medianBrightness, hueDeg) {
-  for (const item of groundLedMaterials) {
-    const amount = item.role === 'median' ? medianBrightness : roadEdgeBrightness;
-    item.material.color.copy(tunedColor(item.baseColor, hueDeg, 1, amount));
-  }
-}
-
-function updateControlTabs() {
-  const tabs = document.querySelectorAll('#hud-controls .control-tab');
-  const panels = document.querySelectorAll('#hud-controls .control-panel');
-  tabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      const target = tab.dataset.tab;
-      tabs.forEach((button) => button.classList.toggle('active', button === tab));
-      panels.forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === target));
-    });
-  });
-}
-
-
-
-function trimProductionControls() {
-  // The live-tuning UI is retired: control VALUES still come from the markup
-  // defaults + canonical settings applied at boot (controlEls keeps reading
-  // the detached elements), but no user-facing settings button or panel stays.
-  document.getElementById('settings-toggle')?.remove();
-  document.getElementById('hud-controls')?.remove();
-}
-
-// mountFxCategoryPanels moved to ./fx-panels.js (called once below, after performanceDiagnosticsEl).
-
-const controlSettingsRuntime = createControlSettingsRuntime({
+// ---------- il pannello dei controlli sta in controls/control-panel.js ----------
+// ---------- applyLiveControls sta in controls/live-controls.js ----------
+initLiveControls({
+  ambientLight,
+  applySkyControlsFromUI,
+  applySkyPreset,
+  applyStormControlsFromUI,
+  bridges,
   controlEls,
-  CITY_REVEAL_DEFAULT_DELAY_MS,
-  CITY_REVEAL_DEFAULT_FADE_MS,
-  updateStartPositionLiveLabel,
-  sanitizePlayerSpawn,
-  sanitizeDroneLandingPose,
-  updatePlayerSpawnLabel,
-  applyPlayerSpawn,
-  setPlayerSpawn: (nextSpawn) => {
-    player.playerSpawn = nextSpawn;
-  },
-  setDroneLandingPose: (nextLanding) => {
-    player.droneLandingPose = nextLanding;
-  },
-});
-
-const {
-  formatRevealDelaySeconds,
-  persistSettingsToProject,
-} = controlSettingsRuntime;
-
-function formatPlayerSpawn(spawn = player.playerSpawn) {
-  return `${spawn.x.toFixed(1)}, ${spawn.y.toFixed(1)}, ${spawn.z.toFixed(1)} | yaw ${THREE.MathUtils.radToDeg(spawn.spawnYaw).toFixed(0)} pitch ${THREE.MathUtils.radToDeg(spawn.spawnPitch).toFixed(0)}`;
-}
-
-function formatCurrentPlayerPose() {
-  return formatPlayerSpawn({
-    x: camera.position.x,
-    y: camera.position.y,
-    z: camera.position.z,
-    spawnYaw: player.yaw,
-    spawnPitch: player.pitch,
-  });
-}
-
-function sanitizePlayerSpawn(value) {
-  if (!value || typeof value !== 'object') return null;
-  const spawn = {
-    x: Number(value.x),
-    y: Number(value.y),
-    z: Number(value.z),
-    spawnYaw: Number(value.spawnYaw ?? value.yaw),
-    spawnPitch: Number(value.spawnPitch ?? value.pitch),
-  };
-  if (![spawn.x, spawn.y, spawn.z, spawn.spawnYaw, spawn.spawnPitch].every(Number.isFinite)) return null;
-  if (Math.abs(spawn.x - DEFAULT_PLAYER_SPAWN.x) < 0.001 &&
-      Math.abs(spawn.y - DEFAULT_PLAYER_SPAWN.y) < 0.001 &&
-      Math.abs(spawn.z - PLAYER_SPAWN_LEGACY_Z) < 0.001) {
-    spawn.z = PLAYER_SPAWN_DEFAULT_Z;
-  }
-  spawn.spawnPitch = THREE.MathUtils.clamp(spawn.spawnPitch, -PITCH_LIMIT, PITCH_LIMIT);
-  return spawn;
-}
-
-function sanitizeDroneLandingPose(value) {
-  const landing = sanitizePlayerSpawn(value);
-  if (!landing) return null;
-  if (typeof value.savedAt === 'string') landing.savedAt = value.savedAt;
-  return landing;
-}
-
-function isDefaultDroneLandingPose(spawn) {
-  if (!spawn) return false;
-  return Math.abs(spawn.x - DEFAULT_DRONE_LANDING_POSE.x) < 0.001 &&
-    Math.abs(spawn.y - DEFAULT_DRONE_LANDING_POSE.y) < 0.001 &&
-    Math.abs(spawn.z - DEFAULT_DRONE_LANDING_POSE.z) < 0.001 &&
-    Math.abs(spawn.spawnYaw - DEFAULT_DRONE_LANDING_POSE.spawnYaw) < 0.001;
-}
-
-function updatePlayerSpawnLabel() {
-  if (controlEls.playerSpawnVal) controlEls.playerSpawnVal.textContent = formatPlayerSpawn(player.playerSpawn);
-  if (controlEls.startPositionSavedVal) controlEls.startPositionSavedVal.textContent = formatPlayerSpawn(player.playerSpawn);
-}
-
-function updateStartPositionLiveLabel() {
-  // The label lives in the controls panel, hidden by default; skip the pose-string build + DOM
-  // write while hidden (refreshed on panel open via setHidden). Visual-neutral when not shown.
-  if (document.body.classList.contains('controls-hidden')) return;
-  if (controlEls.startPositionLiveVal) controlEls.startPositionLiveVal.textContent = formatCurrentPlayerPose();
-}
-
-function loadStoredPlayerSpawn() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(PLAYER_SPAWN_KEY) || 'null');
-    const nextSpawn = sanitizePlayerSpawn(stored?.spawn ?? stored);
-    if (nextSpawn) {
-      if (isDefaultDroneLandingPose(nextSpawn)) {
-        player.droneLandingPose = sanitizeDroneLandingPose(stored?.spawn ?? stored) || nextSpawn;
-        localStorage.setItem(DRONE_LANDING_KEY, JSON.stringify({ savedAt: player.droneLandingPose.savedAt || new Date().toISOString(), landing: player.droneLandingPose }, null, 2));
-      } else {
-        player.playerSpawn = nextSpawn;
-      }
-    }
-    const storedLanding = JSON.parse(localStorage.getItem(DRONE_LANDING_KEY) || 'null');
-    const nextLanding = sanitizeDroneLandingPose(storedLanding?.landing ?? storedLanding);
-    if (nextLanding) player.droneLandingPose = nextLanding;
-  } catch (error) {
-    console.warn('Invalid TRON boulevard player spawn', error);
-  }
-  updatePlayerSpawnLabel();
-}
-
-function applyPlayerSpawn(spawn = player.playerSpawn, showFeedback = true) {
-  const nextSpawn = sanitizePlayerSpawn(spawn) || DEFAULT_PLAYER_SPAWN;
-  removeViewMotionOffset();
-  movementVelocity.set(0, 0, 0);
-  camera.position.set(nextSpawn.x, nextSpawn.y, nextSpawn.z);
-  player.yaw = nextSpawn.spawnYaw;
-  player.pitch = nextSpawn.spawnPitch;
-  player.viewRoll = 0;
-  setHeadBobOffset(0);
-  setSideSwayOffset(0);
-  applyCameraLook();
-  resolveCameraBuildingCollision();
-  resolveCameraRoadHexBoundaryCollision();
-  player.walkSurfaceLift = Math.max(0, cameraGroundHeightAt(camera.position.x, camera.position.z) - player.cameraMinHeight);
-  if (showFeedback) setButtonFeedback(controlEls.resetPlayerSpawn, 'Spawn ripristinato');
-  if (showFeedback) setButtonFeedback(controlEls.goStartPosition, 'Posizione ripristinata');
-  updateStartPositionLiveLabel();
-  return window.__tronInspect?.();
-}
-
-function captureLivePlayerSpawn() {
-  removeViewMotionOffset();
-  player.playerSpawn = {
-    x: camera.position.x,
-    y: camera.position.y,
-    z: camera.position.z,
-    spawnYaw: player.yaw,
-    spawnPitch: player.pitch,
-    savedAt: new Date().toISOString(),
-  };
-  const payload = { savedAt: player.playerSpawn.savedAt, spawn: player.playerSpawn };
-  localStorage.setItem(PLAYER_SPAWN_KEY, JSON.stringify(payload, null, 2));
-  updatePlayerSpawnLabel();
-  updateStartPositionLiveLabel();
-  setButtonFeedback(controlEls.saveLiveSpawn, 'Spawn salvato');
-  setButtonFeedback(controlEls.saveStartPosition, 'Inizio salvato');
-  persistSettingsToProject('player-spawn', player.playerSpawn, { savedAt: player.playerSpawn.savedAt }).then((result) => {
-    if (result) setButtonFeedback(controlEls.saveLiveSpawn, 'Spawn + JSON salvato');
-    if (result) setButtonFeedback(controlEls.saveStartPosition, 'JSON salvato');
-  });
-  return player.playerSpawn;
-}
-
-function resetCameraHeightToDefault(showFeedback = true) {
-  removeViewMotionOffset();
-  camera.position.y = cameraGroundHeightAt(camera.position.x, camera.position.z);
-  movementVelocity.y = 0;
-  setHeadBobOffset(0);
-  setSideSwayOffset(0);
-  player.viewRoll = 0;
-  applyCameraLook();
-  keys.KeyE = false;
-  keys.Space = false;
-  keys.KeyQ = false;
-  keys.KeyC = false;
-  if (showFeedback) setButtonFeedback(controlEls.resetCameraHeight, 'Altezza ripristinata');
-}
-
-
-let liveControlsFrame = 0;
-let liveControlsScope = null;
-function fastScopeForControl(target) {
-  if (!target?.id) return 'all';
-  if (FSR_MANUAL_CONTROL_IDS.has(target.id) && controlEls.fsrPreset) {
-    controlEls.fsrPreset.value = 'custom';
-  }
-  if (SKY_FAST_CONTROL_IDS.has(target.id)) return 'sky';
-  if (POST_FAST_CONTROL_IDS.has(target.id)) return 'post';
-  if (WIREFRAME_FAST_CONTROL_IDS.has(target.id)) return 'wireframe';
-  if (AUDIO_FX_FAST_CONTROL_IDS.has(target.id)) return 'audio-fx';
-  if (MOVEMENT_FAST_CONTROL_IDS.has(target.id)) return 'movement';
-  if (CHARACTER_FAST_CONTROL_IDS.has(target.id)) return 'character';
-  if (LIGHT_FAST_CONTROL_IDS.has(target.id)) return 'light';
-  if (HEX_RUNTIME_FAST_CONTROL_IDS.has(target.id)) return 'hex-runtime';
-  if (ROAD_MATERIAL_FAST_CONTROL_IDS.has(target.id)) return 'road-material';
-  if (BUILDING_MATERIAL_FAST_CONTROL_IDS.has(target.id)) return 'building-material';
-  if (BASE_PAD_MATERIAL_FAST_CONTROL_IDS.has(target.id)) return 'base-pad-material';
-  if (BOUNDARY_ERROR_FAST_CONTROL_IDS.has(target.id)) return 'boundary-error';
-  return 'all';
-}
-
-function mergeLiveControlScope(currentScope, nextScope) {
-  if (!currentScope) return nextScope;
-  if (currentScope === nextScope) return currentScope;
-  if (currentScope === 'all' || nextScope === 'all') return 'all';
-  return 'all';
-}
-
-function scheduleLiveControls(event) {
-  const target = event?.currentTarget || event?.target;
-  const nextScope = fastScopeForControl(target);
-  liveControlsScope = mergeLiveControlScope(liveControlsScope, nextScope);
-  if (liveControlsFrame) return;
-  liveControlsFrame = requestAnimationFrame(() => {
-    const scope = liveControlsScope || 'all';
-    liveControlsFrame = 0;
-    liveControlsScope = null;
-    if (scope === 'sky') applySkyControlsFromUI();
-    else if (scope === 'post') applyPostControlsFromUI();
-    else if (scope === 'wireframe') applyWireframeFxControlsFromUI();
-    else if (scope === 'audio-fx') applyTronSoundtrackIntroFxControlsFromUI();
-    else if (scope === 'movement') applyMovementControlsFromUI();
-    else if (scope === 'character') applyCharacterControlsFromUI();
-    else if (scope === 'light') applyLightControlsFromUI();
-    else if (scope === 'hex-runtime') applyHexRuntimeControlsFromUI();
-    else if (scope === 'road-material') applyRoadMaterialControlsFromUI();
-    else if (scope === 'building-material') applyBuildingMaterialControlsFromUI();
-    else if (scope === 'base-pad-material') applyBasePadMaterialControlsFromUI();
-    else if (scope === 'boundary-error') applyBoundaryErrorControlsFromUI();
-    else applyLiveControls();
-  });
-}
-
-function applyFsrPresetSelectionToControls() {
-  if (!controlEls.fsrPreset || !controlEls.fsrUpscaleEnabled || !controlEls.fsrInternalScale) return;
-  const presetKey = controlEls.fsrPreset.value || 'custom';
-  const preset = FSR_PRESETS[presetKey];
-  if (!preset || presetKey === 'custom') return;
-  controlEls.fsrUpscaleEnabled.value = preset.enabled ? 'on' : 'off';
-  controlEls.fsrInternalScale.value = preset.scale.toFixed(2);
-}
-
-function applyFsrPresetKey(presetKey) {
-  if (!controlEls.fsrPreset || !FSR_PRESETS[presetKey]) return;
-  controlEls.fsrPreset.value = presetKey;
-  applyPostControlsFromUI();
-}
-
-function fsrBenchmarkDelay(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-async function waitFsrBenchmarkFrames(frameCount = 12) {
-  for (let index = 0; index < frameCount; index++) {
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-  }
-}
-
-function formatFsrBenchmarkNumber(value, decimals = 1) {
-  return Number.isFinite(value) ? value.toFixed(decimals) : 'n/a';
-}
-
-function collectFsrBenchmarkSample(presetKey) {
-  const stats = performanceDiagnostics.summary(latestMeasuredFps);
-  const preset = FSR_PRESETS[presetKey] || FSR_PRESETS.custom;
-  const passes = Array.isArray(stats.composerActivePasses) ? stats.composerActivePasses.join('+') : '';
-  return {
-    label: preset.label,
-    fps: stats.fps,
-    theoreticalFps: stats.theoreticalFps,
-    gpuMs: stats.gpuMs,
-    gpuSupported: stats.gpuTimerSupported,
-    fsrEnabled: stats.fsrUpscaleEnabled,
-    fsrScale: stats.fsrInternalScale,
-    target: stats.fsrTarget?.key || `${stats.drawingBufferWidth}x${stats.drawingBufferHeight}`,
-    passes,
-  };
-}
-
-function formatFsrBenchmarkResults(results) {
-  if (!results.length) return 'Benchmark FSR non eseguito';
-  return results.map((result) => {
-    const gpu = result.gpuSupported ? `${formatFsrBenchmarkNumber(result.gpuMs)}ms` : 'n/a';
-    const fsr = result.fsrEnabled ? `${Math.round(result.fsrScale * 100)}%` : 'off';
-    return `${result.label}: FPS ${formatFsrBenchmarkNumber(result.fps)} | teo ${formatFsrBenchmarkNumber(result.theoreticalFps, 0)} | GPU ${gpu} | FSR ${fsr} | ${result.target} | ${result.passes}`;
-  }).join('\n');
-}
-
-async function runFsrBenchmark() {
-  if (!controlEls.fsrBenchmarkResults) return;
-  const previous = {
-    preset: controlEls.fsrPreset?.value || 'custom',
-    enabled: controlEls.fsrUpscaleEnabled?.value || 'on',
-    scale: controlEls.fsrInternalScale?.value || '0.85',
-    sharpness: controlEls.fsrSharpness?.value || '0',
-  };
-  controlEls.fsrBenchmarkResults.style.whiteSpace = 'pre-line';
-  controlEls.fsrBenchmarkResults.textContent = 'Benchmark FSR in corso...';
-  const results = [];
-  try {
-    for (const presetKey of FSR_BENCHMARK_PRESET_KEYS) {
-      applyFsrPresetKey(presetKey);
-      performanceDiagnostics.update(latestMeasuredFps);
-      await waitFsrBenchmarkFrames(18);
-      await fsrBenchmarkDelay(180);
-      performanceDiagnostics.update(latestMeasuredFps);
-      results.push(collectFsrBenchmarkSample(presetKey));
-    }
-    controlEls.fsrBenchmarkResults.textContent = formatFsrBenchmarkResults(results);
-  } finally {
-    if (controlEls.fsrPreset) controlEls.fsrPreset.value = previous.preset;
-    if (controlEls.fsrUpscaleEnabled) controlEls.fsrUpscaleEnabled.value = previous.enabled;
-    if (controlEls.fsrInternalScale) controlEls.fsrInternalScale.value = previous.scale;
-    if (controlEls.fsrSharpness) controlEls.fsrSharpness.value = previous.sharpness;
-    applyPostControlsFromUI();
-  }
-}
-
-function applyFsrUpscaleControlsFromUI() {
-  if (!controlEls.fsrUpscaleEnabled || !controlEls.fsrInternalScale || !controlEls.fsrSharpness) return;
-  applyFsrPresetSelectionToControls();
-  post.fsrUpscaleEnabled = controlEls.fsrUpscaleEnabled.value !== 'off';
-  post.fsrInternalScale = THREE.MathUtils.clamp(Number(controlEls.fsrInternalScale.value) || 1, 0.65, 1);
-  post.fsrSharpness = THREE.MathUtils.clamp(Number(controlEls.fsrSharpness.value) || 0, 0, 1.25);
-  controlEls.fsrInternalScale.value = post.fsrInternalScale.toFixed(2);
-  controlEls.fsrSharpness.value = post.fsrSharpness.toFixed(2);
-  controlEls.fsrInternalScaleVal.textContent = `${Math.round(post.fsrInternalScale * 100)}%`;
-  controlEls.fsrSharpnessVal.textContent = post.fsrSharpness.toFixed(2);
-  syncFsrUpscalePass();
-}
-
-function applyPostControlsFromUI() {
-  const nextPerformanceMode = controlEls.performanceMode.value;
-  const nextRenderResolution = Number(controlEls.renderResolution.value);
-  const nextAntialiasMode = controlEls.aaMode.value;
-  const nextBloomEnabled = controlEls.bloomEnabled.value;
-  const bloomStrength = Number(controlEls.bloomStrength.value);
-  const bloomRadius = Number(controlEls.bloomRadius.value);
-  const bloomThreshold = Number(controlEls.bloomThreshold.value);
-  const bloomQuality = Number(controlEls.bloomQuality.value);
-  const pixelRatio = Math.min(Number(controlEls.pixelRatio.value) || MAX_RENDER_PIXEL_RATIO, MAX_RENDER_PIXEL_RATIO);
-  controlEls.pixelRatio.value = pixelRatio.toFixed(2);
-  const previousPerformanceMode = post.performanceMode;
-  post.performanceMode = nextPerformanceMode;
-  post.manualRenderScale = nextRenderResolution;
-  post.requestedBloomResolutionScale = bloomQuality;
-  post.requestedPixelRatio = pixelRatio;
-  applyFsrUpscaleControlsFromUI();
-  applyAntialiasControls(nextAntialiasMode);
-  applyBloomEnabled(nextBloomEnabled);
-  if (post.performanceMode !== previousPerformanceMode || post.performanceMode === 'quality') {
-    post.dynamicQualityScale = 1;
-    post.performanceAdjustCooldown = 0;
-  }
-  applyRenderResolution(post.requestedPixelRatio);
-  if (post.bloomPass) {
-    post.bloomPass.enabled = post.bloomEnabled;
-    post.bloomPass.strength = bloomStrength;
-    post.bloomPass.radius = bloomRadius;
-    post.bloomPass.threshold = bloomThreshold;
-    invalidateBloomTemporalCache();
-  }
-  controlEls.renderResolutionVal.textContent = `${Math.round(nextRenderResolution * 100)}%`;
-  controlEls.bloomVal.textContent = bloomStrength.toFixed(2);
-  controlEls.bloomRadiusVal.textContent = bloomRadius.toFixed(2);
-  controlEls.bloomThresholdVal.textContent = bloomThreshold.toFixed(2);
-  controlEls.bloomQualityVal.textContent = bloomQuality.toFixed(2);
-  controlEls.pixelRatioVal.textContent = pixelRatio.toFixed(2);
-  applyWireframeFxControlsFromUI();
-}
-
-function applyWireframeFxControlsFromUI() {
-  if (!controlEls.wireframeEnabled) return;
-  const previousDensity = cityRevealWireframeDensity;
-  setCityRevealWireframeSettings({
-    enabled: controlEls.wireframeEnabled.value === 'on',
-    delayMs: Number(controlEls.wireframeDelay.value) * 1000,
-    fadeMs: Number(controlEls.wireframeFade.value) * 1000,
-    density: Math.max(1, Math.round(Number(controlEls.wireframeDensity.value))),
-    opacityScale: Number(controlEls.wireframeOpacity.value),
-    backplateOpacityScale: Number(controlEls.wireframeBackplate.value),
-  });
-
-  controlEls.wireframeEnabledVal.textContent = cityRevealWireframeEnabled ? 'on' : 'off';
-  controlEls.wireframeDelayVal.textContent = `${formatRevealDelaySeconds(cityRevealDelayMs / 1000)} s`;
-  controlEls.wireframeFadeVal.textContent = `${(cityRevealFadeMs / 1000).toFixed(1)} s`;
-  controlEls.wireframeDensityVal.textContent = `${cityRevealWireframeDensity}x`;
-  controlEls.wireframeOpacityVal.textContent = cityRevealWireOpacityScale.toFixed(2);
-  controlEls.wireframeBackplateVal.textContent = cityRevealBackplateOpacityScale.toFixed(2);
-
-  if (!cityRevealWireframeEnabled) {
-    applyCityRevealWireframeDisabledControlsState();
-    updatePointerLockHint();
-    return;
-  }
-  if (previousDensity !== cityRevealWireframeDensity && cityRevealWireObjects.length) {
-    buildCityRevealWireframe();
-  }
-  setCityRevealWireAlpha(cityRevealWireAlpha);
-}
-
-function applyTronSoundtrackIntroFxControlsFromUI() {
-  if (!controlEls.musicFxEnabled) return;
-  const fx = {
-    enabled: controlEls.musicFxEnabled.value === 'on',
-    mix: THREE.MathUtils.clamp(Number(controlEls.musicFxMix.value), 0, 1),
-    crusher: THREE.MathUtils.clamp(Number(controlEls.musicFxCrusher.value), 0, 1),
-    bitDepth: THREE.MathUtils.clamp(Math.round(Number(controlEls.musicFxBitDepth.value)), 2, 16),
-    highpassHz: THREE.MathUtils.clamp(Number(controlEls.musicFxHighpass.value), 20, 5000),
-    lowpassHz: THREE.MathUtils.clamp(Number(controlEls.musicFxLowpass.value), 1000, 20000),
-    distortion: THREE.MathUtils.clamp(Number(controlEls.musicFxDistortion.value), 0, 1),
-    telephone: THREE.MathUtils.clamp(Number(controlEls.musicFxTelephone.value), 0, 1),
-    wobble: THREE.MathUtils.clamp(Number(controlEls.musicFxWobble.value), 0, 1),
-    noise: THREE.MathUtils.clamp(Number(controlEls.musicFxNoise.value), 0, 1),
-  };
-  tronSoundtrack.introFx = fx;
-  controlEls.musicFxEnabledVal.textContent = fx.enabled ? 'on' : 'off';
-  controlEls.musicFxMixVal.textContent = fx.mix.toFixed(2);
-  controlEls.musicFxCrusherVal.textContent = fx.crusher.toFixed(2);
-  controlEls.musicFxBitDepthVal.textContent = `${fx.bitDepth} bit`;
-  controlEls.musicFxHighpassVal.textContent = `${Math.round(fx.highpassHz)} Hz`;
-  controlEls.musicFxLowpassVal.textContent = `${Math.round(fx.lowpassHz)} Hz`;
-  controlEls.musicFxDistortionVal.textContent = fx.distortion.toFixed(2);
-  controlEls.musicFxTelephoneVal.textContent = fx.telephone.toFixed(2);
-  controlEls.musicFxWobbleVal.textContent = fx.wobble.toFixed(2);
-  controlEls.musicFxNoiseVal.textContent = fx.noise.toFixed(2);
-  if (!tronSoundtrack.ready) return;
-  if (tronSoundtrack.playing && fx.enabled && !tronSoundtrack.introLofiActive) {
-    setTronSoundtrackIntroLofi(true, 0.03);
-    return;
-  }
-  if (!fx.enabled && tronSoundtrack.introLofiActive) {
-    setTronSoundtrackIntroLofi(false, 0.03);
-    return;
-  }
-  syncTronIntroFxNodeSettings(0.03);
-  applyTronSoundtrackIntroLofiMix(tronSoundtrack.introLofiActive, 0.03);
-}
-
-function applyMovementControlsFromUI() {
-  if (controlEls.noclipEnabled) {
-    setTronNoclip(controlEls.noclipEnabled.value === 'on', { silent: true });
-  }
-  collisioni.collisionPadding = Number(controlEls.collisionPadding.value);
-  collisioni.mainBuildingCollisionPadding = Number(controlEls.mainBuildingCollisionPadding.value);
-  player.cameraMinHeight = Number(controlEls.cameraMinHeight.value);
-  player.speedBase = Number(controlEls.walkSpeed.value);
-  player.speedSprint = Number(controlEls.sprintSpeed.value);
-  player.backwardSpeedScale = Number(controlEls.backwardSpeedScale.value);
-  player.strafeSpeedScale = Number(controlEls.strafeSpeedScale.value);
-  player.diagonalSpeedScale = Number(controlEls.diagonalSpeedScale.value);
-  player.verticalSpeed = Number(controlEls.verticalSpeed.value);
-  player.movementAcceleration = Number(controlEls.movementAccel.value);
-  player.movementDeceleration = Number(controlEls.movementDecel.value);
-  player.walkBobAmount = Number(controlEls.walkBob.value);
-  player.runBobAmount = Number(controlEls.runBob.value);
-  player.strafeBobScale = Number(controlEls.strafeBobScale.value);
-  player.backwardBobScale = Number(controlEls.backwardBobScale.value);
-  player.walkStepRate = Number(controlEls.walkStepRate.value);
-  player.runStepRate = Number(controlEls.runStepRate.value);
-  player.stepSnapAmount = Number(controlEls.stepSnap.value);
-  player.movementSwayAmount = Number(controlEls.movementSway.value);
-  player.movementRollAmount = Number(controlEls.movementRoll.value);
-  player.strafeLeanAmount = Number(controlEls.strafeLean.value);
-  player.headMotionSmoothing = Number(controlEls.headMotionSmoothing.value);
-  player.mouseSensitivityScale = Number(controlEls.mouseSensitivity.value);
-  setFixedCameraFov();
-  controlEls.collisionPaddingVal.textContent = collisioni.collisionPadding.toFixed(1);
-  controlEls.mainBuildingCollisionPaddingVal.textContent = collisioni.mainBuildingCollisionPadding.toFixed(1);
-  controlEls.cameraMinHeightVal.textContent = player.cameraMinHeight.toFixed(1);
-  controlEls.walkSpeedVal.textContent = player.speedBase.toFixed(0);
-  controlEls.sprintSpeedVal.textContent = player.speedSprint.toFixed(0);
-  controlEls.backwardSpeedScaleVal.textContent = player.backwardSpeedScale.toFixed(2);
-  controlEls.strafeSpeedScaleVal.textContent = player.strafeSpeedScale.toFixed(2);
-  controlEls.diagonalSpeedScaleVal.textContent = player.diagonalSpeedScale.toFixed(2);
-  controlEls.verticalSpeedVal.textContent = player.verticalSpeed.toFixed(0);
-  controlEls.movementAccelVal.textContent = player.movementAcceleration.toFixed(1);
-  controlEls.movementDecelVal.textContent = player.movementDeceleration.toFixed(1);
-  controlEls.walkBobVal.textContent = player.walkBobAmount.toFixed(2);
-  controlEls.runBobVal.textContent = player.runBobAmount.toFixed(2);
-  controlEls.strafeBobScaleVal.textContent = player.strafeBobScale.toFixed(2);
-  controlEls.backwardBobScaleVal.textContent = player.backwardBobScale.toFixed(2);
-  controlEls.walkStepRateVal.textContent = player.walkStepRate.toFixed(2);
-  controlEls.runStepRateVal.textContent = player.runStepRate.toFixed(2);
-  controlEls.stepSnapVal.textContent = player.stepSnapAmount.toFixed(2);
-  controlEls.movementSwayVal.textContent = player.movementSwayAmount.toFixed(2);
-  controlEls.movementRollVal.textContent = player.movementRollAmount.toFixed(3);
-  controlEls.strafeLeanVal.textContent = player.strafeLeanAmount.toFixed(3);
-  controlEls.headMotionSmoothingVal.textContent = player.headMotionSmoothing.toFixed(1);
-  controlEls.mouseSensitivityVal.textContent = player.mouseSensitivityScale.toFixed(2);
-}
-
-function applyLightControlsFromUI() {
-  const ambient = Number(controlEls.ambientLight.value);
-  const key = Number(controlEls.keyLight.value);
-  const exposure = Number(controlEls.exposure.value);
-  ambientLight.intensity = ambient;
-  dirKey.intensity = key;
-  renderer.toneMappingExposure = exposure;
-  controlEls.ambientVal.textContent = ambient.toFixed(2);
-  controlEls.keyVal.textContent = key.toFixed(2);
-  controlEls.exposureVal.textContent = exposure.toFixed(2);
-}
-
-function applyHexRuntimeControlsFromUI() {
-  const offset = Number(controlEls.hexOffset.value);
-  const radius = Number(controlEls.hexRadius.value);
-  const dropDelay = Number(controlEls.hexDropDelay.value);
-  const dropSpeed = Number(controlEls.hexDropSpeed.value);
-  const recovery = Number(controlEls.hexRecovery.value);
-  const tileHitLight = Number(controlEls.tileHitLight.value);
-  const playerTileLight = Number(controlEls.playerTileLight.value);
-  applyHexRuntimeSettings({ offset, radius, dropDelay, dropSpeed, recovery, tileHitLight, playerTileLight });
-  controlEls.hexOffsetVal.textContent = formatOffsetLabel(offset);
-  controlEls.hexRadiusVal.textContent = radius.toFixed(1);
-  controlEls.hexDropDelayVal.textContent = `${dropDelay.toFixed(0)} ms`;
-  controlEls.hexDropSpeedVal.textContent = dropSpeed.toFixed(1);
-  controlEls.hexRecoveryVal.textContent = recovery.toFixed(1);
-  controlEls.tileHitLightVal.textContent = tileHitLight.toFixed(2);
-  controlEls.playerTileLightVal.textContent = playerTileLight.toFixed(2);
-}
-
-const buildingLiveControls = createBuildingLiveControlsRuntime({
-  controlEls,
+  dirKey,
+  domeMat,
+  hexTileDisplayBaseEmissive,
+  hexTileDisplayHitEmissive,
   PAL,
-  sceneLightResponse,
-  updateBuildingMaterials,
-  sideBuildingMaterials,
-  bridgeMaterials,
-  mainBuildingMaterials,
-  getMainBuildingSaturation: () => boulevard.mainBuildingSaturation,
-  setMainBuildingSaturation: (value) => {
-    boulevard.mainBuildingSaturation = value;
-  },
-  applyBasePadMaterialRuntimeSettings,
-  applyBasePadMaterialSettings,
+  renderer,
+  roadBoundaryHexRowOffsets,
+  roadMat,
+  setFixedCameraFov,
+  updateRoadSurfaceWidth,
+  computeDynamicRoadBounds,
+  updateMainRoadLength,
 });
-
-function applyRoadMaterialControlsFromUI() {
-  const roadNormal = Number(controlEls.roadNormal.value);
-  const roadLight = Number(controlEls.roadLight.value);
-  const roadReflect = Number(controlEls.roadReflect.value);
-  const roadBuildingReflect = Number(controlEls.roadBuildingReflect.value);
-  const roadMetalness = Number(controlEls.roadMetalness.value);
-  const roadRoughness = Number(controlEls.roadRoughness.value);
-  const roadHue = Number(controlEls.roadHue.value);
-  const roadSat = Number(controlEls.roadSat.value);
-  const roadBright = Number(controlEls.roadBright.value);
-  const ambient = Number(controlEls.ambientLight.value);
-  const key = Number(controlEls.keyLight.value);
-  setRoadBuildingReflection(roadBuildingReflect);
-  const lightResponse = sceneLightResponse(ambient, key);
-  const roadLightFactor = 0.92 + roadLight * 0.95;
-  hexTileDisplayBaseColor.copy(tunedColor(hexTileBaseColor, roadHue, roadSat, roadBright * roadLightFactor * lightResponse.surface));
-  hexTileDisplayActiveColor.copy(tunedColor(hexTileActiveColor, roadHue, roadSat, roadBright * roadLightFactor * lightResponse.surface));
-  const roadEmissive = new THREE.Color(0x061419).lerp(new THREE.Color(0x7df6ff), Math.min(1, roadLight / 1.5));
-  hexTileDisplayBaseEmissive.copy(roadEmissive).multiplyScalar(lightResponse.emissive);
-  hexTileDisplayHitEmissive.copy(tunedColor(new THREE.Color(0x7df6ff), roadHue, roadSat, Math.max(1, roadBright * 1.25)));
-  hexTileBaseEmissiveIntensity = roadLight * 0.36 * lightResponse.emissive + lightResponse.floorFill;
-  roadMat.color.set(0x000000);
-  const hexInstanceGlow = 1.25 + hexTileHitLight * 1.1 + hexPlayerTileLight * 1.4 + roadLight * 0.25;
-  updateRoadBoundaryHexMaterial(Number(controlEls.ledHue.value), roadLightFactor);
-  updateRoadTileMaterials((material) => {
-    material.color.copy(hexTileDisplayBaseColor);
-    material.emissive.copy(roadEmissive);
-    material.emissiveIntensity = roadLight * 0.36 * lightResponse.emissive + lightResponse.floorFill;
-    material.envMap = getRoadReflectionEnvMap();
-    material.envMapIntensity = roadReflect * lightResponse.reflection;
-    material.metalness = roadMetalness;
-    material.roughness = roadRoughness;
-    material.normalScale.set(roadNormal, roadNormal);
-    setHexRoadMaterialGlow(material, hexInstanceGlow, hexTileDisplayBaseColor);
-  });
-  controlEls.roadNormalVal.textContent = roadNormal.toFixed(2);
-  controlEls.roadLightVal.textContent = roadLight.toFixed(2);
-  controlEls.roadReflectVal.textContent = roadReflect.toFixed(2);
-  controlEls.roadBuildingReflectVal.textContent = roadBuildingReflect.toFixed(2);
-  controlEls.roadMetalnessVal.textContent = roadMetalness.toFixed(2);
-  controlEls.roadRoughnessVal.textContent = roadRoughness.toFixed(2);
-  controlEls.roadHueVal.textContent = roadHue.toFixed(0);
-  controlEls.roadSatVal.textContent = roadSat.toFixed(2);
-  controlEls.roadBrightVal.textContent = roadBright.toFixed(2);
-}
-
-function applyBuildingMaterialControlsFromUI() {
-  buildingLiveControls.applyBuildingMaterialControlsFromUI();
-}
-
-function applyBasePadMaterialControlsFromUI() {
-  buildingLiveControls.applyBasePadMaterialControlsFromUI();
-}
-
-function applyBoundaryErrorControlsFromUI() {
-  collisioni.roadBoundaryCollisionEnabled = controlEls.roadBoundaryCollisionEnabled.value === 'on';
-  collisioni.roadBoundaryCollisionMargin = Number(controlEls.roadBoundaryCollisionMargin.value);
-  collisioni.roadBoundaryCameraLead = Number(controlEls.roadBoundaryCameraLead.value);
-  const visualSettings = {
-    roadBoundaryPulseStrength: Number(controlEls.roadBoundaryPulseStrength.value),
-    boundaryErrorVisible: controlEls.boundaryErrorVisible.value === 'on',
-    boundaryErrorSize: Number(controlEls.boundaryErrorSize.value),
-    boundaryErrorAnchor: controlEls.boundaryErrorAnchor.value,
-    boundaryErrorAnimation: Number(controlEls.boundaryErrorAnimation.value),
-    boundaryErrorDuration: Number(controlEls.boundaryErrorDuration.value) / 1000,
-    boundaryErrorGlitch: Number(controlEls.boundaryErrorGlitch.value),
-    boundaryErrorRenderMode: controlEls.boundaryErrorRenderMode.value,
-    boundaryErrorFloorLightEnabled: controlEls.boundaryErrorFloorLightEnabled.value === 'on',
-    boundaryErrorFloorLightRadius: Number(controlEls.boundaryErrorFloorLightRadius.value),
-    boundaryErrorFloorLightIntensity: Number(controlEls.boundaryErrorFloorLightIntensity.value),
-    boundaryErrorFloorLightOpacity: Number(controlEls.boundaryErrorFloorLightOpacity.value),
-    boundaryErrorFloorLightHue: Number(controlEls.boundaryErrorFloorLightHue.value),
-    boundaryErrorFloorLightY: Number(controlEls.boundaryErrorFloorLightY.value),
-    boundaryErrorFloorLightSoftness: Number(controlEls.boundaryErrorFloorLightSoftness.value),
-  };
-  applyBoundaryErrorVisualSettings(visualSettings);
-  controlEls.roadBoundaryCollisionEnabledVal.textContent = collisioni.roadBoundaryCollisionEnabled ? 'on' : 'off';
-  controlEls.roadBoundaryCollisionMarginVal.textContent = collisioni.roadBoundaryCollisionMargin.toFixed(1);
-  controlEls.roadBoundaryCameraLeadVal.textContent = collisioni.roadBoundaryCameraLead.toFixed(1);
-  controlEls.roadBoundaryPulseStrengthVal.textContent = visualSettings.roadBoundaryPulseStrength.toFixed(2);
-  controlEls.boundaryErrorVisibleVal.textContent = visualSettings.boundaryErrorVisible ? 'on' : 'off';
-  controlEls.boundaryErrorSizeVal.textContent = visualSettings.boundaryErrorSize.toFixed(2);
-  controlEls.boundaryErrorAnchorVal.textContent = visualSettings.boundaryErrorAnchor === 'wall' ? 'muro' : 'camera';
-  controlEls.boundaryErrorAnimationVal.textContent = visualSettings.boundaryErrorAnimation.toFixed(2);
-  controlEls.boundaryErrorDurationVal.textContent = `${Math.round(visualSettings.boundaryErrorDuration * 1000)} ms`;
-  controlEls.boundaryErrorGlitchVal.textContent = visualSettings.boundaryErrorGlitch.toFixed(2);
-  controlEls.boundaryErrorRenderModeVal.textContent = visualSettings.boundaryErrorRenderMode;
-  controlEls.boundaryErrorFloorLightEnabledVal.textContent = visualSettings.boundaryErrorFloorLightEnabled ? 'on' : 'off';
-  controlEls.boundaryErrorFloorLightRadiusVal.textContent = visualSettings.boundaryErrorFloorLightRadius.toFixed(1);
-  controlEls.boundaryErrorFloorLightIntensityVal.textContent = visualSettings.boundaryErrorFloorLightIntensity.toFixed(2);
-  controlEls.boundaryErrorFloorLightOpacityVal.textContent = visualSettings.boundaryErrorFloorLightOpacity.toFixed(2);
-  controlEls.boundaryErrorFloorLightHueVal.textContent = visualSettings.boundaryErrorFloorLightHue.toFixed(0);
-  controlEls.boundaryErrorFloorLightYVal.textContent = visualSettings.boundaryErrorFloorLightY.toFixed(2);
-  controlEls.boundaryErrorFloorLightSoftnessVal.textContent = visualSettings.boundaryErrorFloorLightSoftness.toFixed(2);
-}
-
-// Previous argument list of updateBuildingFootprints, compared field by field so
-// a re-run with identical inputs costs nothing. Starts empty, so the first call
-// through applyLiveControls always builds the footprints.
-const lastBuildingFootprintInputs = [];
-
-function buildingFootprintInputsChanged(...inputs) {
-  if (lastBuildingFootprintInputs.length !== inputs.length) {
-    lastBuildingFootprintInputs.length = 0;
-    lastBuildingFootprintInputs.push(...inputs);
-    return true;
-  }
-  let changed = false;
-  for (let i = 0; i < inputs.length; i += 1) {
-    if (lastBuildingFootprintInputs[i] !== inputs[i]) {
-      lastBuildingFootprintInputs[i] = inputs[i];
-      changed = true;
-    }
-  }
-  return changed;
-}
-
-function applyLiveControls() {
-  const offset = Number(controlEls.hexOffset.value);
-  const radius = Number(controlEls.hexRadius.value);
-  const dropDelay = Number(controlEls.hexDropDelay.value);
-  const dropSpeed = Number(controlEls.hexDropSpeed.value);
-  const recovery = Number(controlEls.hexRecovery.value);
-  const tileHeight = Number(controlEls.tileHeight.value);
-  const tileScale = Number(controlEls.tileScale.value);
-  const hexGap = Number(controlEls.hexGap.value);
-  const tileHitLight = Number(controlEls.tileHitLight.value);
-  const playerTileLight = Number(controlEls.playerTileLight.value);
-  const roadNormal = Number(controlEls.roadNormal.value);
-  const ambient = Number(controlEls.ambientLight.value);
-  const key = Number(controlEls.keyLight.value);
-  const exposure = Number(controlEls.exposure.value);
-  const skyChoice = controlEls.skyChoice.value;
-  const skyQuality = controlEls.skyQuality.value;
-  const skyBrightness = Number(controlEls.skyBrightness.value);
-  const skyHue = Number(controlEls.skyHue.value);
-  const skyCloudContrast = Number(controlEls.skyCloudContrast.value);
-  const nextBoulevardWidthScale = Number(controlEls.boulevardWidthScale.value);
-  const roadLight = Number(controlEls.roadLight.value);
-  const roadReflect = Number(controlEls.roadReflect.value);
-  const roadBuildingReflect = Number(controlEls.roadBuildingReflect.value);
-  const roadMetalness = Number(controlEls.roadMetalness.value);
-  const roadRoughness = Number(controlEls.roadRoughness.value);
-  const roadHue = Number(controlEls.roadHue.value);
-  const roadSat = Number(controlEls.roadSat.value);
-  const roadBright = Number(controlEls.roadBright.value);
-  const nextRoadBoundaryHexEnabled = controlEls.roadBoundaryHexEnabled.value === 'on';
-  const nextRoadBoundaryHexRows = Number(controlEls.roadBoundaryHexRows.value);
-  const nextRoadSideHexExtraRows = Number(controlEls.roadSideHexExtraRows.value);
-  const nextRoadBoundaryHexBrightness = Number(controlEls.roadBoundaryHexBrightness.value);
-  const nextRoadBoundaryHexOpacity = Number(controlEls.roadBoundaryHexOpacity.value);
-  const nextRoadBoundaryHexY = Number(controlEls.roadBoundaryHexY.value);
-  const nextRoadBoundaryHexRowOffsets = controlEls.roadBoundaryRowY.map((input) => Number(input?.value ?? 0));
-  const nextRoadBoundaryHexOutset = Number(controlEls.roadBoundaryHexOutset.value);
-  const nextRoadBoundaryCollisionEnabled = controlEls.roadBoundaryCollisionEnabled.value === 'on';
-  const nextRoadBoundaryCollisionMargin = Number(controlEls.roadBoundaryCollisionMargin.value);
-  const nextRoadBoundaryCameraLead = Number(controlEls.roadBoundaryCameraLead.value);
-  const nextRoadBoundaryPulseStrength = Number(controlEls.roadBoundaryPulseStrength.value);
-  const nextBoundaryErrorVisible = controlEls.boundaryErrorVisible.value === 'on';
-  const nextBoundaryErrorSize = Number(controlEls.boundaryErrorSize.value);
-  const nextBoundaryErrorAnchor = controlEls.boundaryErrorAnchor.value;
-  const nextBoundaryErrorAnimation = Number(controlEls.boundaryErrorAnimation.value);
-  const nextBoundaryErrorDuration = Number(controlEls.boundaryErrorDuration.value) / 1000;
-  const nextBoundaryErrorGlitch = Number(controlEls.boundaryErrorGlitch.value);
-  const nextBoundaryErrorRenderMode = controlEls.boundaryErrorRenderMode.value;
-  const nextBoundaryErrorFloorLightEnabled = controlEls.boundaryErrorFloorLightEnabled.value === 'on';
-  const nextBoundaryErrorFloorLightRadius = Number(controlEls.boundaryErrorFloorLightRadius.value);
-  const nextBoundaryErrorFloorLightIntensity = Number(controlEls.boundaryErrorFloorLightIntensity.value);
-  const nextBoundaryErrorFloorLightOpacity = Number(controlEls.boundaryErrorFloorLightOpacity.value);
-  const nextBoundaryErrorFloorLightHue = Number(controlEls.boundaryErrorFloorLightHue.value);
-  const nextBoundaryErrorFloorLightY = Number(controlEls.boundaryErrorFloorLightY.value);
-  const nextBoundaryErrorFloorLightSoftness = Number(controlEls.boundaryErrorFloorLightSoftness.value);
-  const nextStreetEdgeWidth = 0;
-  const nextCrossRoadWidth = 0;
-  const nextCrossStreetEdgeWidth = 0;
-  const ledBrightness = Number(controlEls.ledBrightness.value);
-  const ledThickness = Number(controlEls.ledThickness.value);
-  const nextLedDistance = Number(controlEls.ledDistance.value);
-  const nextBuildingHorizontalLedDistance = Number(controlEls.buildingHorizontalLedDistance.value);
-  const nextBuildingHorizontalLedThickness = Number(controlEls.buildingHorizontalLedThickness.value);
-  const nextBuildingHorizontalLedRadius = Number(controlEls.buildingHorizontalLedRadius.value);
-  const ledHue = Number(controlEls.ledHue.value);
-  const basePadLedBrightness = Number(controlEls.basePadLedBrightness.value);
-  const basePadLedThickness = Number(controlEls.basePadLedThickness.value);
-  const basePadLedOffset = Number(controlEls.basePadLedOffset.value);
-  const basePadLedHue = Number(controlEls.basePadLedHue.value);
-  const nextBasePadGlobalY = Number(controlEls.basePadGlobalY.value);
-  const nextBasePadCurbEnabled = controlEls.basePadCurbEnabled.value === 'on';
-  const nextBasePadCurbWidth = Number(controlEls.basePadCurbWidth.value);
-  const nextBasePadInnerRaise = Number(controlEls.basePadInnerRaise.value);
-  const nextBasePadCurbSlope = Number(controlEls.basePadCurbSlope.value);
-  const nextBasePadCurbRadius = Number(controlEls.basePadCurbRadius.value);
-  const nextBasePadTextureMode = controlEls.basePadTextureMode.value;
-  const nextBasePadTextureRepeat = Number(controlEls.basePadTextureRepeat.value);
-  const nextBasePadTextureRotation = Number(controlEls.basePadTextureRotation.value);
-  const nextBasePadNormalStrength = Number(controlEls.basePadNormal.value);
-  const nextBasePadHue = Number(controlEls.basePadHue.value);
-  const nextBasePadSaturation = Number(controlEls.basePadSat.value);
-  const nextBasePadBrightness = Number(controlEls.basePadBright.value);
-  const nextBasePadMetalness = Number(controlEls.basePadMetalness.value);
-  const nextBasePadRoughness = Number(controlEls.basePadRoughness.value);
-  const nextBasePadReflect = Number(controlEls.basePadReflect.value);
-  const nextBasePadEmissive = Number(controlEls.basePadEmissive.value);
-  const nextBasePadBevelSize = Number(controlEls.basePadBevelSize.value);
-  const nextBasePadBevelSegments = Number(controlEls.basePadBevelSegments.value);
-  const nextBasePadFlatShading = controlEls.basePadFlatShading.value === 'on';
-  const nextBasePadBorderOpacity = Number(controlEls.basePadBorderOpacity.value);
-  const nextBasePadBorderBrightness = Number(controlEls.basePadBorderBright.value);
-  const buildingLowLedOffset = Number(controlEls.buildingLowLedOffset.value);
-  const buildingHighLedOffset = Number(controlEls.buildingHighLedOffset.value);
-  const nextBuildingVerticalLedLength = Number(controlEls.buildingVerticalLedLength.value);
-  const nextBuildingVerticalLedY = Number(controlEls.buildingVerticalLedY.value);
-  const nextBuildingLowLedY = Number(controlEls.buildingLowLedY.value);
-  const nextBuildingHighLedY = Number(controlEls.buildingHighLedY.value);
-  const nextBuildingFacadeLedNormal = Number(controlEls.buildingFacadeLedNormal.value);
-  const nextBuildingFacadeLedX = Number(controlEls.buildingFacadeLedX.value);
-  const nextBuildingFacadeLedY = Number(controlEls.buildingFacadeLedY.value);
-  const nextBuildingFacadeLedZ = Number(controlEls.buildingFacadeLedZ.value);
-  const nextSideFacadeSegmentOffsets = (controlEls.buildingFacadeLedSegmentControls || []).map((controls) => ({
-    u: Number(controls.u.value),
-    y: Number(controls.y.value),
-    normal: Number(controls.normal.value),
-  }));
-  const nextBridgeXOffset = Number(controlEls.bridgeXOffset.value);
-  const nextBridgeZOffset = Number(controlEls.bridgeZOffset.value);
-  const nextBridgeYOffset = Number(controlEls.bridgeYOffset.value);
-  const nextBridgeSpanScale = Number(controlEls.bridgeSpanScale.value);
-  const nextBridgeHeightScale = Number(controlEls.bridgeHeightScale.value);
-  const nextBridgeDepthScale = Number(controlEls.bridgeDepthScale.value);
-  const bridgeLowLedOffset = Number(controlEls.bridgeLowLedOffset.value);
-  const bridgeHighLedOffset = Number(controlEls.bridgeHighLedOffset.value);
-  const roadEdgeBrightness = 0;
-  const medianBrightness = 0;
-  const nextCollisionPadding = Number(controlEls.collisionPadding.value);
-  const nextMainBuildingCollisionPadding = Number(controlEls.mainBuildingCollisionPadding.value);
-  const nextCameraMinHeight = Number(controlEls.cameraMinHeight.value);
-  const nextWalkSpeed = Number(controlEls.walkSpeed.value);
-  const nextSprintSpeed = Number(controlEls.sprintSpeed.value);
-  const nextBackwardSpeedScale = Number(controlEls.backwardSpeedScale.value);
-  const nextStrafeSpeedScale = Number(controlEls.strafeSpeedScale.value);
-  const nextDiagonalSpeedScale = Number(controlEls.diagonalSpeedScale.value);
-  const nextVerticalSpeed = Number(controlEls.verticalSpeed.value);
-  const nextMovementAccel = Number(controlEls.movementAccel.value);
-  const nextMovementDecel = Number(controlEls.movementDecel.value);
-  const nextWalkBob = Number(controlEls.walkBob.value);
-  const nextRunBob = Number(controlEls.runBob.value);
-  const nextStrafeBobScale = Number(controlEls.strafeBobScale.value);
-  const nextBackwardBobScale = Number(controlEls.backwardBobScale.value);
-  const nextWalkStepRate = Number(controlEls.walkStepRate.value);
-  const nextRunStepRate = Number(controlEls.runStepRate.value);
-  const nextStepSnap = Number(controlEls.stepSnap.value);
-  const nextMovementSway = Number(controlEls.movementSway.value);
-  const nextMovementRoll = Number(controlEls.movementRoll.value);
-  const nextStrafeLean = Number(controlEls.strafeLean.value);
-  const nextHeadMotionSmoothing = Number(controlEls.headMotionSmoothing.value);
-  const nextMouseSensitivity = Number(controlEls.mouseSensitivity.value);
-  const sideBuildingBrightness = Number(controlEls.sideBuildingBrightness.value);
-  const sideBuildingHue = Number(controlEls.sideBuildingHue.value);
-  const sideBuildingMetalness = Number(controlEls.sideBuildingMetalness.value);
-  const sideBuildingRoughness = Number(controlEls.sideBuildingRoughness.value);
-  const sideBuildingReflect = Number(controlEls.sideBuildingReflect.value);
-  const sideBuildingEmissive = Number(controlEls.sideBuildingEmissive.value);
-  const nextSideBuildingWidthScale = Number(controlEls.sideBuildingWidthScale.value);
-  const nextSideBuildingDepthScale = Number(controlEls.sideBuildingDepthScale.value);
-  const requestedSideBuildingSpacingScale = Number(controlEls.sideBuildingSpacingScale.value);
-  const nextSideBuildingSpacingScale = safeSideBuildingSpacingScale(requestedSideBuildingSpacingScale, nextSideBuildingDepthScale);
-  if (Math.abs(nextSideBuildingSpacingScale - requestedSideBuildingSpacingScale) > 0.001) {
-    controlEls.sideBuildingSpacingScale.value = nextSideBuildingSpacingScale.toFixed(2);
-  }
-  const sideBuildingScale = Number(controlEls.sideBuildingScale.value);
-  const nextSideBuildingBasePadScale = Number(controlEls.sideBuildingBasePadScale.value);
-  const nextSideBuildingBasePadXScale = Number(controlEls.sideBuildingBasePadXScale.value);
-  const nextSideBuildingBasePadY = Number(controlEls.sideBuildingBasePadY.value);
-  const nextSideBuildingBasePadThickness = Number(controlEls.sideBuildingBasePadThickness.value);
-  const nextSideBuildingBasePadCut = Number(controlEls.sideBuildingBasePadCut.value);
-  const nextSideBuildingBasePadRadius = Number(controlEls.sideBuildingBasePadRadius.value);
-  const mainBuildingBrightness = Number(controlEls.mainBuildingBrightness.value);
-  const mainBuildingHue = Number(controlEls.mainBuildingHue.value);
-  const nextMainBuildingSaturation = Number(controlEls.mainBuildingSaturation.value);
-  const mainBuildingMetalness = Number(controlEls.mainBuildingMetalness.value);
-  const mainBuildingRoughness = Number(controlEls.mainBuildingRoughness.value);
-  const mainBuildingReflect = Number(controlEls.mainBuildingReflect.value);
-  const mainBuildingEmissive = Number(controlEls.mainBuildingEmissive.value);
-  const nextMainBuildingWidthScale = Number(controlEls.mainBuildingWidthScale.value);
-  const nextMainBuildingDepthScale = Number(controlEls.mainBuildingDepthScale.value);
-  const nextMainBuildingZ = Number(controlEls.mainBuildingZ.value);
-  const nextMainBuildingY = Number(controlEls.mainBuildingY.value);
-  const mainBuildingScale = Number(controlEls.mainBuildingScale.value);
-  const nextMainBuildingBasePadScale = Number(controlEls.mainBuildingBasePadScale.value);
-  const nextMainBuildingBasePadXScale = Number(controlEls.mainBuildingBasePadXScale.value);
-  const nextMainBuildingBasePadZScale = Number(controlEls.mainBuildingBasePadZScale.value);
-  const nextMainBuildingBasePadY = Number(controlEls.mainBuildingBasePadY.value);
-  const nextMainBuildingBasePadThickness = Number(controlEls.mainBuildingBasePadThickness.value);
-  const nextMainBuildingBasePadCut = Number(controlEls.mainBuildingBasePadCut.value);
-  const nextMainBuildingBasePadRadius = Number(controlEls.mainBuildingBasePadRadius.value);
-  const mainBuildingLedBrightness = Number(controlEls.mainLedBrightnessUi.value);
-  const mainBuildingLedThickness = Number(controlEls.mainLedThicknessUi.value);
-  const mainBuildingLedDistance = Number(controlEls.mainLedVerticalDistanceUi.value);
-  const nextMainBuildingHorizontalLedDistance = Number(controlEls.mainLedHorizontalDistanceUi.value);
-  const nextMainBuildingHorizontalLedThickness = Number(controlEls.mainLedHorizontalThicknessUi.value);
-  const nextMainBuildingHorizontalLedRadius = Number(controlEls.mainLedHorizontalRadiusUi.value);
-  const mainBuildingLedHue = Number(controlEls.mainLedHueUi.value);
-  const mainBuildingLowLedOffset = Number(controlEls.mainLedLowOffsetUi.value);
-  const mainBuildingHighLedOffset = Number(controlEls.mainLedHighOffsetUi.value);
-  const nextMainBuildingVerticalLedLength = Number(controlEls.mainLedVerticalLengthUi.value);
-  const nextMainBuildingVerticalLedY = Number(controlEls.mainLedVerticalYUi.value);
-  const nextMainBuildingLowLedY = Number(controlEls.mainLedLowYUi.value);
-  const nextMainBuildingHighLedY = Number(controlEls.mainLedHighYUi.value);
-  const nextMainBuildingFacadeLedBrightness = Number(controlEls.mainFacadeLedBrightnessUi.value);
-  const nextMainBuildingFacadeLedNormal = Number(controlEls.mainFacadeLedNormalUi.value);
-  const nextMainBuildingFacadeLedX = Number(controlEls.mainFacadeLedXUi.value);
-  const nextMainBuildingFacadeLedY = Number(controlEls.mainFacadeLedYUi.value);
-  const nextMainBuildingFacadeLedZ = Number(controlEls.mainFacadeLedZUi.value);
-  const nextMainBuildingFacadeLedThickness = Number(controlEls.mainFacadeLedThicknessUi.value);
-  const nextMainFacadeSegmentOffsets = controlEls.mainFacadeLedSegmentControls.map((controls) => ({
-    u: Number(controls.u.value),
-    y: Number(controls.y.value),
-    normal: Number(controls.normal.value),
-  }));
-  const nextPerformanceMode = controlEls.performanceMode.value;
-  const nextRenderResolution = Number(controlEls.renderResolution.value);
-  const nextAntialiasMode = controlEls.aaMode.value;
-  const nextBloomEnabled = controlEls.bloomEnabled.value;
-  const bloomStrength = Number(controlEls.bloomStrength.value);
-  const bloomRadius = Number(controlEls.bloomRadius.value);
-  const bloomThreshold = Number(controlEls.bloomThreshold.value);
-  const bloomQuality = Number(controlEls.bloomQuality.value);
-  const pixelRatio = Math.min(Number(controlEls.pixelRatio.value) || MAX_RENDER_PIXEL_RATIO, MAX_RENDER_PIXEL_RATIO);
-  controlEls.pixelRatio.value = pixelRatio.toFixed(2);
-  const previousPerformanceMode = post.performanceMode;
-
-  applyHexRuntimeSettings({ offset, radius, dropDelay, dropSpeed, recovery, tileHitLight, playerTileLight });
-  setHexTileHeightScale(tileHeight);
-  setHexTileScale(tileScale);
-  setHexTileGap(hexGap);
-  setRoadBuildingReflection(roadBuildingReflect);
-  boulevard.sideBuildingWidthScale = nextSideBuildingWidthScale;
-  boulevard.sideBuildingDepthScale = nextSideBuildingDepthScale;
-  boulevard.sideBuildingSpacingScale = nextSideBuildingSpacingScale;
-  boulevard.mainBuildingWidthScale = nextMainBuildingWidthScale;
-  boulevard.mainBuildingDepthScale = nextMainBuildingDepthScale;
-  boulevard.mainBuildingZ = nextMainBuildingZ;
-  boulevard.mainBuildingY = nextMainBuildingY;
-  boulevard.mainBuildingSaturation = nextMainBuildingSaturation;
-  setFacadeLedRuntimeSettings({
-    side: {
-      normal: nextBuildingFacadeLedNormal,
-      x: nextBuildingFacadeLedX,
-      y: nextBuildingFacadeLedY,
-      z: nextBuildingFacadeLedZ,
-      segments: nextSideFacadeSegmentOffsets,
-    },
-    main: {
-      brightness: nextMainBuildingFacadeLedBrightness,
-      normal: nextMainBuildingFacadeLedNormal,
-      x: nextMainBuildingFacadeLedX,
-      y: nextMainBuildingFacadeLedY,
-      z: nextMainBuildingFacadeLedZ,
-      thickness: nextMainBuildingFacadeLedThickness,
-      segments: nextMainFacadeSegmentOffsets,
-    },
-  });
-  applyBasePadRuntimeSettings({
-    globalY: nextBasePadGlobalY,
-    curbEnabled: nextBasePadCurbEnabled,
-    curbWidth: nextBasePadCurbWidth,
-    innerRaise: nextBasePadInnerRaise,
-    curbSlope: nextBasePadCurbSlope,
-    curbRadius: nextBasePadCurbRadius,
-    textureMode: nextBasePadTextureMode,
-    textureRepeat: nextBasePadTextureRepeat,
-    textureRotation: nextBasePadTextureRotation,
-    normalStrength: nextBasePadNormalStrength,
-    hue: nextBasePadHue,
-    saturation: nextBasePadSaturation,
-    brightness: nextBasePadBrightness,
-    metalness: nextBasePadMetalness,
-    roughness: nextBasePadRoughness,
-    reflect: nextBasePadReflect,
-    emissive: nextBasePadEmissive,
-    bevelSize: nextBasePadBevelSize,
-    bevelSegments: nextBasePadBevelSegments,
-    flatShading: nextBasePadFlatShading,
-    borderOpacity: nextBasePadBorderOpacity,
-    borderBrightness: nextBasePadBorderBrightness,
-  });
-  boulevard.sideBuildingBasePadScale = nextSideBuildingBasePadScale;
-  boulevard.sideBuildingBasePadXScale = nextSideBuildingBasePadXScale;
-  boulevard.sideBuildingBasePadY = nextSideBuildingBasePadY;
-  boulevard.sideBuildingBasePadThickness = nextSideBuildingBasePadThickness;
-  boulevard.sideBuildingBasePadCut = nextSideBuildingBasePadCut;
-  boulevard.sideBuildingBasePadRadius = nextSideBuildingBasePadRadius;
-  boulevard.mainBuildingBasePadScale = nextMainBuildingBasePadScale;
-  boulevard.mainBuildingBasePadXScale = nextMainBuildingBasePadXScale;
-  boulevard.mainBuildingBasePadZScale = nextMainBuildingBasePadZScale;
-  boulevard.mainBuildingBasePadY = nextMainBuildingBasePadY;
-  boulevard.mainBuildingBasePadThickness = nextMainBuildingBasePadThickness;
-  boulevard.mainBuildingBasePadCut = nextMainBuildingBasePadCut;
-  boulevard.mainBuildingBasePadRadius = nextMainBuildingBasePadRadius;
-  applyRoadBoundaryHexVisualSettings({
-    roadBoundaryHexEnabled: nextRoadBoundaryHexEnabled,
-    roadBoundaryHexRows: nextRoadBoundaryHexRows,
-    roadBoundaryHexFillBrightness: nextRoadBoundaryHexBrightness,
-    roadBoundaryHexAlpha: nextRoadBoundaryHexOpacity,
-    roadBoundaryHexY: nextRoadBoundaryHexY,
-    roadBoundaryHexOutsetScale: nextRoadBoundaryHexOutset,
-  });
-  boulevard.roadSideHexExtraRows = nextRoadSideHexExtraRows;
-  nextRoadBoundaryHexRowOffsets.forEach((value, index) => {
-    roadBoundaryHexRowOffsets[index] = value;
-  });
-  collisioni.roadBoundaryCollisionEnabled = nextRoadBoundaryCollisionEnabled;
-  collisioni.roadBoundaryCollisionMargin = nextRoadBoundaryCollisionMargin;
-  collisioni.roadBoundaryCameraLead = nextRoadBoundaryCameraLead;
-  applyBoundaryErrorVisualSettings({
-    roadBoundaryPulseStrength: nextRoadBoundaryPulseStrength,
-    boundaryErrorVisible: nextBoundaryErrorVisible,
-    boundaryErrorSize: nextBoundaryErrorSize,
-    boundaryErrorAnchor: nextBoundaryErrorAnchor,
-    boundaryErrorAnimation: nextBoundaryErrorAnimation,
-    boundaryErrorDuration: nextBoundaryErrorDuration,
-    boundaryErrorGlitch: nextBoundaryErrorGlitch,
-    boundaryErrorRenderMode: nextBoundaryErrorRenderMode,
-    boundaryErrorFloorLightEnabled: nextBoundaryErrorFloorLightEnabled,
-    boundaryErrorFloorLightRadius: nextBoundaryErrorFloorLightRadius,
-    boundaryErrorFloorLightIntensity: nextBoundaryErrorFloorLightIntensity,
-    boundaryErrorFloorLightOpacity: nextBoundaryErrorFloorLightOpacity,
-    boundaryErrorFloorLightHue: nextBoundaryErrorFloorLightHue,
-    boundaryErrorFloorLightY: nextBoundaryErrorFloorLightY,
-    boundaryErrorFloorLightSoftness: nextBoundaryErrorFloorLightSoftness,
-  });
-  boulevard.boulevardWidthScale = nextBoulevardWidthScale;
-  boulevard.crossRoadWidth = nextCrossRoadWidth;
-  boulevard.crossStreetEdgeWidth = nextCrossStreetEdgeWidth;
-  updateRoadSurfaceWidth(roadSurfaceWidthForBuildings(
-    nextSideBuildingWidthScale,
-    nextMainBuildingWidthScale,
-    nextStreetEdgeWidth,
-    nextBoulevardWidthScale,
-    nextSideBuildingDepthScale,
-    nextSideBuildingBasePadScale,
-    nextSideBuildingBasePadXScale,
-    nextMainBuildingDepthScale,
-    nextMainBuildingBasePadScale,
-    nextMainBuildingBasePadXScale,
-    nextRoadSideHexExtraRows
-  ));
-  const roadBounds = computeDynamicRoadBounds(nextSideBuildingSpacingScale, nextSideBuildingDepthScale, nextMainBuildingDepthScale);
-  updateMainRoadLength(roadBounds.center, roadBounds.length);
-  updateHexTileLayout();
-  updateRoadBoundaryHexRows();
-  updateRoadBoundaryPulseLayout();
-  updateStreetEdgeLayout(nextStreetEdgeWidth);
-  updateBuildingStreetEdgeBlocks(nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextSideBuildingDepthScale);
-  updateMainBuildingStreetEdgeBlock(nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextMainBuildingZ, nextStreetEdgeWidth);
-  updateSideRoadLayout(nextSideBuildingSpacingScale, nextStreetEdgeWidth);
-  updateLongitudinalRoadEdges(nextSideBuildingSpacingScale);
-  updateStreetEdgeHexTileScale();
-  collisioni.collisionPadding = nextCollisionPadding;
-  collisioni.mainBuildingCollisionPadding = nextMainBuildingCollisionPadding;
-  player.cameraMinHeight = nextCameraMinHeight;
-  player.speedBase = nextWalkSpeed;
-  player.speedSprint = nextSprintSpeed;
-  player.backwardSpeedScale = nextBackwardSpeedScale;
-  player.strafeSpeedScale = nextStrafeSpeedScale;
-  player.diagonalSpeedScale = nextDiagonalSpeedScale;
-  player.verticalSpeed = nextVerticalSpeed;
-  player.movementAcceleration = nextMovementAccel;
-  player.movementDeceleration = nextMovementDecel;
-  player.walkBobAmount = nextWalkBob;
-  player.runBobAmount = nextRunBob;
-  player.strafeBobScale = nextStrafeBobScale;
-  player.backwardBobScale = nextBackwardBobScale;
-  player.walkStepRate = nextWalkStepRate;
-  player.runStepRate = nextRunStepRate;
-  player.stepSnapAmount = nextStepSnap;
-  player.movementSwayAmount = nextMovementSway;
-  player.movementRollAmount = nextMovementRoll;
-  player.strafeLeanAmount = nextStrafeLean;
-  player.headMotionSmoothing = nextHeadMotionSmoothing;
-  player.mouseSensitivityScale = nextMouseSensitivity;
-
-  ambientLight.intensity = ambient;
-  dirKey.intensity = key;
-  renderer.toneMappingExposure = exposure;
-  applySkyPreset(skyChoice, skyBrightness, skyHue, skyQuality);
-  applyStormControlsFromUI();
-  domeMat.uniforms.uCloudContrast.value = skyCloudContrast;
-  setFixedCameraFov();
-  post.performanceMode = nextPerformanceMode;
-  post.manualRenderScale = nextRenderResolution;
-  post.requestedBloomResolutionScale = bloomQuality;
-  post.requestedPixelRatio = pixelRatio;
-  applyFsrUpscaleControlsFromUI();
-  applyAntialiasControls(nextAntialiasMode);
-  applyBloomEnabled(nextBloomEnabled);
-  if (post.performanceMode !== previousPerformanceMode || post.performanceMode === 'quality') {
-    post.dynamicQualityScale = 1;
-    post.performanceAdjustCooldown = 0;
-  }
-  applyRenderResolution(post.requestedPixelRatio);
-
-  const lightResponse = sceneLightResponse(ambient, key);
-  const roadLightFactor = 0.92 + roadLight * 0.95;
-  applyBasePadMaterialSettings(lightResponse);
-  hexTileDisplayBaseColor.copy(tunedColor(hexTileBaseColor, roadHue, roadSat, roadBright * roadLightFactor * lightResponse.surface));
-  hexTileDisplayActiveColor.copy(tunedColor(hexTileActiveColor, roadHue, roadSat, roadBright * roadLightFactor * lightResponse.surface));
-  const roadEmissive = new THREE.Color(0x061419).lerp(new THREE.Color(0x7df6ff), Math.min(1, roadLight / 1.5));
-  hexTileDisplayBaseEmissive.copy(roadEmissive).multiplyScalar(lightResponse.emissive);
-  hexTileDisplayHitEmissive.copy(tunedColor(new THREE.Color(0x7df6ff), roadHue, roadSat, Math.max(1, roadBright * 1.25)));
-  hexTileBaseEmissiveIntensity = roadLight * 0.36 * lightResponse.emissive + lightResponse.floorFill;
-
-  roadMat.color.set(0x000000);
-
-  const hexInstanceGlow = 1.25 + tileHitLight * 1.1 + playerTileLight * 1.4 + roadLight * 0.25;
-  updateRoadBoundaryHexMaterial(ledHue, roadLightFactor);
-  updateRoadTileMaterials((material) => {
-    material.color.copy(hexTileDisplayBaseColor);
-    material.emissive.copy(roadEmissive);
-    material.emissiveIntensity = roadLight * 0.36 * lightResponse.emissive + lightResponse.floorFill;
-    material.envMap = getRoadReflectionEnvMap();
-    material.envMapIntensity = roadReflect * lightResponse.reflection;
-    material.metalness = roadMetalness;
-    material.roughness = roadRoughness;
-    material.normalScale.set(roadNormal, roadNormal);
-    setHexRoadMaterialGlow(material, hexInstanceGlow, hexTileDisplayBaseColor);
-  });
-
-  bridges.updateLinks(nextSideBuildingWidthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextBridgeXOffset, nextBridgeZOffset, nextBridgeYOffset, nextBridgeSpanScale, nextBridgeHeightScale, nextBridgeDepthScale);
-  updateEdgeStrips(ledBrightness, ledThickness, nextLedDistance, ledHue, mainBuildingLedBrightness, mainBuildingLedThickness, mainBuildingLedDistance, mainBuildingLedHue, nextBuildingHorizontalLedDistance, nextMainBuildingHorizontalLedDistance, nextBuildingHorizontalLedThickness, nextMainBuildingHorizontalLedThickness, nextBuildingHorizontalLedRadius, nextMainBuildingHorizontalLedRadius, buildingLowLedOffset, buildingHighLedOffset, bridgeLowLedOffset, bridgeHighLedOffset, mainBuildingLowLedOffset, mainBuildingHighLedOffset, nextBuildingVerticalLedLength, nextMainBuildingVerticalLedLength, nextBuildingVerticalLedY, nextBuildingLowLedY, nextBuildingHighLedY, nextMainBuildingVerticalLedY, nextMainBuildingLowLedY, nextMainBuildingHighLedY, sideBuildingScale, mainBuildingScale, nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, tunedColor);
-  updateSideBuildingDoorMaterials(ledBrightness, ledHue);
-  updateGroundLedMaterials(roadEdgeBrightness, medianBrightness, ledHue);
-  updateBuildingMaterials(sideBuildingMaterials, PAL.buildingSkin, sideBuildingBrightness, sideBuildingHue, sideBuildingMetalness, sideBuildingRoughness, sideBuildingReflect, sideBuildingEmissive, lightResponse);
-  updateBuildingMaterials(bridgeMaterials, PAL.buildingSkin, sideBuildingBrightness, sideBuildingHue, sideBuildingMetalness, sideBuildingRoughness, sideBuildingReflect, sideBuildingEmissive, lightResponse);
-  updateBuildingMaterials(mainBuildingMaterials, PAL.mainSkin, mainBuildingBrightness, mainBuildingHue, mainBuildingMetalness, mainBuildingRoughness, mainBuildingReflect, mainBuildingEmissive, lightResponse, nextMainBuildingSaturation);
-  // updateBuildingFootprints rebuilds every base pad from scratch — a dispose +
-  // new ExtrudeGeometry (bevelled, with recomputed normals) per pad, up to five
-  // per building across 13 buildings. applyLiveControls re-runs once per animation
-  // frame for as long as ANY unscoped slider is held down, so without this guard a
-  // drag on, say, the ambient light rebuilt the whole city's base pad geometry 60
-  // times a second. Skip the rebuild unless one of its own inputs actually moved.
-  // Besides its arguments the rebuild also reads module state set earlier in this
-  // function: roadHalf() (boulevard width), the base pad runtime settings (global
-  // Y and the curb parameters) and the hex tile height/scale (road top Y, hit
-  // half-size). Those go into the comparison too, or a drag on one of them
-  // would leave the pads where they were.
-  if (buildingFootprintInputsChanged(
-    nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale,
-    nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth,
-    nextMainBuildingZ, nextMainBuildingY,
-    boulevard.sideBuildingBasePadScale, boulevard.sideBuildingBasePadXScale, boulevard.sideBuildingBasePadY,
-    boulevard.sideBuildingBasePadThickness, boulevard.sideBuildingBasePadCut, boulevard.sideBuildingBasePadRadius,
-    boulevard.mainBuildingBasePadScale, boulevard.mainBuildingBasePadXScale, boulevard.mainBuildingBasePadZScale,
-    boulevard.mainBuildingBasePadY, boulevard.mainBuildingBasePadThickness, boulevard.mainBuildingBasePadCut,
-    boulevard.mainBuildingBasePadRadius,
-    nextBoulevardWidthScale,
-    nextBasePadGlobalY, nextBasePadCurbEnabled, nextBasePadCurbWidth,
-    nextBasePadInnerRaise, nextBasePadCurbSlope, nextBasePadCurbRadius,
-    tileHeight, tileScale,
-  )) {
-    updateBuildingFootprints(nextSideBuildingWidthScale, nextSideBuildingDepthScale, nextMainBuildingWidthScale, nextMainBuildingDepthScale, nextSideBuildingSpacingScale, nextStreetEdgeWidth, nextMainBuildingZ, nextMainBuildingY, {
-      sideBuildingBasePadScale: boulevard.sideBuildingBasePadScale,
-      sideBuildingBasePadXScale: boulevard.sideBuildingBasePadXScale,
-      sideBuildingBasePadY: boulevard.sideBuildingBasePadY,
-      sideBuildingBasePadThickness: boulevard.sideBuildingBasePadThickness,
-      sideBuildingBasePadCut: boulevard.sideBuildingBasePadCut,
-      sideBuildingBasePadRadius: boulevard.sideBuildingBasePadRadius,
-      mainBuildingBasePadScale: boulevard.mainBuildingBasePadScale,
-      mainBuildingBasePadXScale: boulevard.mainBuildingBasePadXScale,
-      mainBuildingBasePadZScale: boulevard.mainBuildingBasePadZScale,
-      mainBuildingBasePadY: boulevard.mainBuildingBasePadY,
-      mainBuildingBasePadThickness: boulevard.mainBuildingBasePadThickness,
-      mainBuildingBasePadCut: boulevard.mainBuildingBasePadCut,
-      mainBuildingBasePadRadius: boulevard.mainBuildingBasePadRadius,
-    });
-    invalidateMainFacadeVerticalRevealLedBounds();
-  }
-  updateBasePadLedStrips(basePadLedBrightness, basePadLedThickness, basePadLedOffset, basePadLedHue);
-  updateBuildingScale(sideBuildingMeshes, sideBuildingColliders, sideBuildingScale);
-  updateBuildingScale(mainBuildingMeshes, mainBuildingColliders, mainBuildingScale);
-  updateBasePadHexInfluence();
-  refreshRoadTileInstances();
-
-  if (post.bloomPass) {
-    post.bloomPass.enabled = post.bloomEnabled;
-    post.bloomPass.strength = bloomStrength;
-    post.bloomPass.radius = bloomRadius;
-    post.bloomPass.threshold = bloomThreshold;
-    invalidateBloomTemporalCache();
-  }
-
-  controlEls.hexOffsetVal.textContent = formatOffsetLabel(offset);
-  controlEls.hexRadiusVal.textContent = radius.toFixed(1);
-  controlEls.hexDropDelayVal.textContent = `${dropDelay.toFixed(0)} ms`;
-  controlEls.hexDropSpeedVal.textContent = dropSpeed.toFixed(1);
-  controlEls.hexRecoveryVal.textContent = recovery.toFixed(1);
-  controlEls.tileHeightVal.textContent = tileHeight.toFixed(2);
-  controlEls.tileScaleVal.textContent = tileScale.toFixed(2);
-  controlEls.hexGapVal.textContent = hexGap.toFixed(2);
-  controlEls.tileHitLightVal.textContent = tileHitLight.toFixed(2);
-  controlEls.playerTileLightVal.textContent = playerTileLight.toFixed(2);
-  controlEls.roadNormalVal.textContent = roadNormal.toFixed(2);
-  controlEls.ambientVal.textContent = ambient.toFixed(2);
-  controlEls.keyVal.textContent = key.toFixed(2);
-  controlEls.exposureVal.textContent = exposure.toFixed(2);
-  controlEls.skyBrightnessVal.textContent = skyBrightness.toFixed(2);
-  controlEls.skyHueVal.textContent = skyHue.toFixed(0);
-  controlEls.skyCloudContrastVal.textContent = skyCloudContrast.toFixed(2);
-  controlEls.boulevardWidthScaleVal.textContent = `${nextBoulevardWidthScale.toFixed(2)}x`;
-  controlEls.roadLightVal.textContent = roadLight.toFixed(2);
-  controlEls.roadReflectVal.textContent = roadReflect.toFixed(2);
-  controlEls.roadBuildingReflectVal.textContent = roadBuildingReflect.toFixed(2);
-  controlEls.roadMetalnessVal.textContent = roadMetalness.toFixed(2);
-  controlEls.roadRoughnessVal.textContent = roadRoughness.toFixed(2);
-  controlEls.roadHueVal.textContent = roadHue.toFixed(0);
-  controlEls.roadSatVal.textContent = roadSat.toFixed(2);
-  controlEls.roadBrightVal.textContent = roadBright.toFixed(2);
-  controlEls.roadBoundaryHexEnabledVal.textContent = nextRoadBoundaryHexEnabled ? 'on' : 'off';
-  controlEls.roadBoundaryHexRowsVal.textContent = nextRoadBoundaryHexRows.toFixed(0);
-  controlEls.roadSideHexExtraRowsVal.textContent = `${nextRoadSideHexExtraRows.toFixed(0)} file`;
-  controlEls.roadBoundaryHexBrightnessVal.textContent = nextRoadBoundaryHexBrightness.toFixed(2);
-  controlEls.roadBoundaryHexOpacityVal.textContent = nextRoadBoundaryHexOpacity.toFixed(2);
-  controlEls.roadBoundaryHexYVal.textContent = nextRoadBoundaryHexY.toFixed(2);
-  controlEls.roadBoundaryRowYVal.forEach((output, index) => {
-    if (output) output.textContent = nextRoadBoundaryHexRowOffsets[index].toFixed(2);
-  });
-  controlEls.roadBoundaryHexOutsetVal.textContent = nextRoadBoundaryHexOutset.toFixed(2);
-  controlEls.roadBoundaryCollisionEnabledVal.textContent = nextRoadBoundaryCollisionEnabled ? 'on' : 'off';
-  controlEls.roadBoundaryCollisionMarginVal.textContent = nextRoadBoundaryCollisionMargin.toFixed(1);
-  controlEls.roadBoundaryCameraLeadVal.textContent = nextRoadBoundaryCameraLead.toFixed(1);
-  controlEls.roadBoundaryPulseStrengthVal.textContent = nextRoadBoundaryPulseStrength.toFixed(2);
-  controlEls.boundaryErrorVisibleVal.textContent = nextBoundaryErrorVisible ? 'on' : 'off';
-  controlEls.boundaryErrorSizeVal.textContent = nextBoundaryErrorSize.toFixed(2);
-  controlEls.boundaryErrorAnchorVal.textContent = nextBoundaryErrorAnchor === 'wall' ? 'muro' : 'camera';
-  controlEls.boundaryErrorAnimationVal.textContent = nextBoundaryErrorAnimation.toFixed(2);
-  controlEls.boundaryErrorDurationVal.textContent = `${Math.round(nextBoundaryErrorDuration * 1000)} ms`;
-  controlEls.boundaryErrorGlitchVal.textContent = nextBoundaryErrorGlitch.toFixed(2);
-  controlEls.boundaryErrorRenderModeVal.textContent = nextBoundaryErrorRenderMode;
-  controlEls.boundaryErrorFloorLightEnabledVal.textContent = nextBoundaryErrorFloorLightEnabled ? 'on' : 'off';
-  controlEls.boundaryErrorFloorLightRadiusVal.textContent = nextBoundaryErrorFloorLightRadius.toFixed(1);
-  controlEls.boundaryErrorFloorLightIntensityVal.textContent = nextBoundaryErrorFloorLightIntensity.toFixed(2);
-  controlEls.boundaryErrorFloorLightOpacityVal.textContent = nextBoundaryErrorFloorLightOpacity.toFixed(2);
-  controlEls.boundaryErrorFloorLightHueVal.textContent = nextBoundaryErrorFloorLightHue.toFixed(0);
-  controlEls.boundaryErrorFloorLightYVal.textContent = nextBoundaryErrorFloorLightY.toFixed(2);
-  controlEls.boundaryErrorFloorLightSoftnessVal.textContent = nextBoundaryErrorFloorLightSoftness.toFixed(2);
-  controlEls.ledBrightnessVal.textContent = ledBrightness.toFixed(2);
-  controlEls.ledThicknessVal.textContent = ledThickness.toFixed(2);
-  controlEls.ledDistanceVal.textContent = nextLedDistance.toFixed(2);
-  controlEls.buildingHorizontalLedDistanceVal.textContent = nextBuildingHorizontalLedDistance.toFixed(2);
-  controlEls.buildingHorizontalLedThicknessVal.textContent = nextBuildingHorizontalLedThickness.toFixed(2);
-  controlEls.buildingHorizontalLedRadiusVal.textContent = nextBuildingHorizontalLedRadius.toFixed(2);
-  controlEls.ledHueVal.textContent = ledHue.toFixed(0);
-  controlEls.basePadLedBrightnessVal.textContent = basePadLedBrightness.toFixed(2);
-  controlEls.basePadLedThicknessVal.textContent = basePadLedThickness.toFixed(2);
-  controlEls.basePadLedOffsetVal.textContent = basePadLedOffset.toFixed(2);
-  controlEls.basePadLedHueVal.textContent = basePadLedHue.toFixed(0);
-  controlEls.basePadGlobalYVal.textContent = nextBasePadGlobalY.toFixed(2);
-  controlEls.basePadCurbEnabledVal.textContent = nextBasePadCurbEnabled ? 'on' : 'off';
-  controlEls.basePadCurbWidthVal.textContent = nextBasePadCurbWidth.toFixed(2);
-  controlEls.basePadInnerRaiseVal.textContent = nextBasePadInnerRaise.toFixed(2);
-  controlEls.basePadCurbSlopeVal.textContent = nextBasePadCurbSlope.toFixed(2);
-  controlEls.basePadCurbRadiusVal.textContent = nextBasePadCurbRadius.toFixed(2);
-  controlEls.basePadTextureModeVal.textContent = nextBasePadTextureMode;
-  controlEls.basePadTextureRepeatVal.textContent = `${nextBasePadTextureRepeat.toFixed(2)}x`;
-  controlEls.basePadTextureRotationVal.textContent = nextBasePadTextureRotation.toFixed(0);
-  controlEls.basePadNormalVal.textContent = nextBasePadNormalStrength.toFixed(2);
-  controlEls.basePadHueVal.textContent = nextBasePadHue.toFixed(0);
-  controlEls.basePadSatVal.textContent = nextBasePadSaturation.toFixed(2);
-  controlEls.basePadBrightVal.textContent = nextBasePadBrightness.toFixed(2);
-  controlEls.basePadMetalnessVal.textContent = nextBasePadMetalness.toFixed(2);
-  controlEls.basePadRoughnessVal.textContent = nextBasePadRoughness.toFixed(2);
-  controlEls.basePadReflectVal.textContent = nextBasePadReflect.toFixed(2);
-  controlEls.basePadEmissiveVal.textContent = nextBasePadEmissive.toFixed(3);
-  controlEls.basePadBevelSizeVal.textContent = nextBasePadBevelSize.toFixed(2);
-  controlEls.basePadBevelSegmentsVal.textContent = nextBasePadBevelSegments.toFixed(0);
-  controlEls.basePadFlatShadingVal.textContent = nextBasePadFlatShading ? 'on' : 'off';
-  controlEls.basePadBorderOpacityVal.textContent = nextBasePadBorderOpacity.toFixed(2);
-  controlEls.basePadBorderBrightVal.textContent = nextBasePadBorderBrightness.toFixed(2);
-  controlEls.buildingLowLedOffsetVal.textContent = buildingLowLedOffset.toFixed(2);
-  controlEls.buildingHighLedOffsetVal.textContent = buildingHighLedOffset.toFixed(2);
-  controlEls.buildingVerticalLedLengthVal.textContent = `${Math.round(nextBuildingVerticalLedLength * 100)}%`;
-  controlEls.buildingVerticalLedYVal.textContent = nextBuildingVerticalLedY.toFixed(1);
-  controlEls.buildingLowLedYVal.textContent = nextBuildingLowLedY.toFixed(1);
-  controlEls.buildingHighLedYVal.textContent = nextBuildingHighLedY.toFixed(1);
-  controlEls.buildingFacadeLedNormalVal.textContent = nextBuildingFacadeLedNormal.toFixed(2);
-  controlEls.buildingFacadeLedXVal.textContent = nextBuildingFacadeLedX.toFixed(2);
-  controlEls.buildingFacadeLedYVal.textContent = nextBuildingFacadeLedY.toFixed(2);
-  controlEls.buildingFacadeLedZVal.textContent = nextBuildingFacadeLedZ.toFixed(2);
-  (controlEls.buildingFacadeLedSegmentControls || []).forEach((controls, index) => {
-    const offset = nextSideFacadeSegmentOffsets[index];
-    controls.uVal.textContent = offset.u.toFixed(2);
-    controls.yVal.textContent = offset.y.toFixed(2);
-    controls.normalVal.textContent = offset.normal.toFixed(2);
-  });
-  controlEls.bridgeXOffsetVal.textContent = nextBridgeXOffset.toFixed(1);
-  controlEls.bridgeZOffsetVal.textContent = nextBridgeZOffset.toFixed(1);
-  controlEls.bridgeYOffsetVal.textContent = nextBridgeYOffset.toFixed(1);
-  controlEls.bridgeSpanScaleVal.textContent = nextBridgeSpanScale.toFixed(2);
-  controlEls.bridgeHeightScaleVal.textContent = nextBridgeHeightScale.toFixed(2);
-  controlEls.bridgeDepthScaleVal.textContent = nextBridgeDepthScale.toFixed(2);
-  controlEls.bridgeLowLedOffsetVal.textContent = bridgeLowLedOffset.toFixed(2);
-  controlEls.bridgeHighLedOffsetVal.textContent = bridgeHighLedOffset.toFixed(2);
-  controlEls.collisionPaddingVal.textContent = nextCollisionPadding.toFixed(1);
-  controlEls.mainBuildingCollisionPaddingVal.textContent = nextMainBuildingCollisionPadding.toFixed(1);
-  controlEls.cameraMinHeightVal.textContent = nextCameraMinHeight.toFixed(1);
-  controlEls.walkSpeedVal.textContent = nextWalkSpeed.toFixed(0);
-  controlEls.sprintSpeedVal.textContent = nextSprintSpeed.toFixed(0);
-  controlEls.backwardSpeedScaleVal.textContent = nextBackwardSpeedScale.toFixed(2);
-  controlEls.strafeSpeedScaleVal.textContent = nextStrafeSpeedScale.toFixed(2);
-  controlEls.diagonalSpeedScaleVal.textContent = nextDiagonalSpeedScale.toFixed(2);
-  controlEls.verticalSpeedVal.textContent = nextVerticalSpeed.toFixed(0);
-  controlEls.movementAccelVal.textContent = nextMovementAccel.toFixed(1);
-  controlEls.movementDecelVal.textContent = nextMovementDecel.toFixed(1);
-  controlEls.walkBobVal.textContent = nextWalkBob.toFixed(2);
-  controlEls.runBobVal.textContent = nextRunBob.toFixed(2);
-  controlEls.strafeBobScaleVal.textContent = nextStrafeBobScale.toFixed(2);
-  controlEls.backwardBobScaleVal.textContent = nextBackwardBobScale.toFixed(2);
-  controlEls.walkStepRateVal.textContent = nextWalkStepRate.toFixed(2);
-  controlEls.runStepRateVal.textContent = nextRunStepRate.toFixed(2);
-  controlEls.stepSnapVal.textContent = nextStepSnap.toFixed(2);
-  controlEls.movementSwayVal.textContent = nextMovementSway.toFixed(2);
-  controlEls.movementRollVal.textContent = nextMovementRoll.toFixed(3);
-  controlEls.strafeLeanVal.textContent = nextStrafeLean.toFixed(3);
-  controlEls.headMotionSmoothingVal.textContent = nextHeadMotionSmoothing.toFixed(1);
-  controlEls.mouseSensitivityVal.textContent = nextMouseSensitivity.toFixed(2);
-  controlEls.sideBuildingBrightnessVal.textContent = sideBuildingBrightness.toFixed(2);
-  controlEls.sideBuildingHueVal.textContent = sideBuildingHue.toFixed(0);
-  controlEls.sideBuildingMetalnessVal.textContent = sideBuildingMetalness.toFixed(2);
-  controlEls.sideBuildingRoughnessVal.textContent = sideBuildingRoughness.toFixed(2);
-  controlEls.sideBuildingReflectVal.textContent = sideBuildingReflect.toFixed(2);
-  controlEls.sideBuildingEmissiveVal.textContent = sideBuildingEmissive.toFixed(2);
-  controlEls.sideBuildingWidthScaleVal.textContent = nextSideBuildingWidthScale.toFixed(2);
-  controlEls.sideBuildingDepthScaleVal.textContent = nextSideBuildingDepthScale.toFixed(2);
-  controlEls.sideBuildingSpacingScaleVal.textContent = nextSideBuildingSpacingScale.toFixed(2);
-  controlEls.sideBuildingScaleVal.textContent = sideBuildingScale.toFixed(2);
-  controlEls.sideBuildingBasePadScaleVal.textContent = `${nextSideBuildingBasePadScale.toFixed(2)}x`;
-  controlEls.sideBuildingBasePadXScaleVal.textContent = nextSideBuildingBasePadXScale.toFixed(2);
-  controlEls.sideBuildingBasePadYVal.textContent = nextSideBuildingBasePadY.toFixed(2);
-  controlEls.sideBuildingBasePadThicknessVal.textContent = nextSideBuildingBasePadThickness.toFixed(2);
-  controlEls.sideBuildingBasePadCutVal.textContent = nextSideBuildingBasePadCut.toFixed(1);
-  controlEls.sideBuildingBasePadRadiusVal.textContent = nextSideBuildingBasePadRadius.toFixed(1);
-  controlEls.mainBuildingBrightnessVal.textContent = mainBuildingBrightness.toFixed(2);
-  controlEls.mainBuildingHueVal.textContent = mainBuildingHue.toFixed(0);
-  controlEls.mainBuildingSaturationVal.textContent = nextMainBuildingSaturation.toFixed(2);
-  controlEls.mainBuildingMetalnessVal.textContent = mainBuildingMetalness.toFixed(2);
-  controlEls.mainBuildingRoughnessVal.textContent = mainBuildingRoughness.toFixed(2);
-  controlEls.mainBuildingReflectVal.textContent = mainBuildingReflect.toFixed(2);
-  controlEls.mainBuildingEmissiveVal.textContent = mainBuildingEmissive.toFixed(2);
-  controlEls.mainBuildingWidthScaleVal.textContent = nextMainBuildingWidthScale.toFixed(2);
-  controlEls.mainBuildingDepthScaleVal.textContent = nextMainBuildingDepthScale.toFixed(2);
-  controlEls.mainBuildingZVal.textContent = nextMainBuildingZ.toFixed(0);
-  controlEls.mainBuildingYVal.textContent = nextMainBuildingY.toFixed(0);
-  controlEls.mainBuildingScaleVal.textContent = mainBuildingScale.toFixed(2);
-  controlEls.mainBuildingBasePadScaleVal.textContent = `${nextMainBuildingBasePadScale.toFixed(2)}x`;
-  controlEls.mainBuildingBasePadXScaleVal.textContent = nextMainBuildingBasePadXScale.toFixed(2);
-  controlEls.mainBuildingBasePadZScaleVal.textContent = nextMainBuildingBasePadZScale.toFixed(2);
-  controlEls.mainBuildingBasePadYVal.textContent = nextMainBuildingBasePadY.toFixed(2);
-  controlEls.mainBuildingBasePadThicknessVal.textContent = nextMainBuildingBasePadThickness.toFixed(2);
-  controlEls.mainBuildingBasePadCutVal.textContent = nextMainBuildingBasePadCut.toFixed(1);
-  controlEls.mainBuildingBasePadRadiusVal.textContent = nextMainBuildingBasePadRadius.toFixed(1);
-  controlEls.mainBuildingLedBrightnessVal.textContent = mainBuildingLedBrightness.toFixed(2);
-  controlEls.mainBuildingLedThicknessVal.textContent = mainBuildingLedThickness.toFixed(2);
-  controlEls.mainBuildingLedDistanceVal.textContent = mainBuildingLedDistance.toFixed(2);
-  controlEls.mainBuildingHorizontalLedDistanceVal.textContent = nextMainBuildingHorizontalLedDistance.toFixed(2);
-  controlEls.mainBuildingHorizontalLedThicknessVal.textContent = nextMainBuildingHorizontalLedThickness.toFixed(2);
-  controlEls.mainBuildingHorizontalLedRadiusVal.textContent = nextMainBuildingHorizontalLedRadius.toFixed(2);
-  controlEls.mainBuildingLedHueVal.textContent = mainBuildingLedHue.toFixed(0);
-  controlEls.mainBuildingLowLedOffsetVal.textContent = mainBuildingLowLedOffset.toFixed(2);
-  controlEls.mainBuildingHighLedOffsetVal.textContent = mainBuildingHighLedOffset.toFixed(2);
-  controlEls.mainBuildingVerticalLedLengthVal.textContent = `${Math.round(nextMainBuildingVerticalLedLength * 100)}%`;
-  controlEls.mainBuildingVerticalLedYVal.textContent = nextMainBuildingVerticalLedY.toFixed(1);
-  controlEls.mainBuildingLowLedYVal.textContent = nextMainBuildingLowLedY.toFixed(1);
-  controlEls.mainBuildingHighLedYVal.textContent = nextMainBuildingHighLedY.toFixed(1);
-  controlEls.mainLedBrightnessUiVal.textContent = mainBuildingLedBrightness.toFixed(2);
-  controlEls.mainLedHueUiVal.textContent = mainBuildingLedHue.toFixed(0);
-  controlEls.mainLedVerticalDistanceUiVal.textContent = mainBuildingLedDistance.toFixed(2);
-  controlEls.mainLedThicknessUiVal.textContent = mainBuildingLedThickness.toFixed(2);
-  controlEls.mainLedVerticalLengthUiVal.textContent = `${Math.round(nextMainBuildingVerticalLedLength * 100)}%`;
-  controlEls.mainLedVerticalYUiVal.textContent = nextMainBuildingVerticalLedY.toFixed(1);
-  controlEls.mainLedHorizontalDistanceUiVal.textContent = nextMainBuildingHorizontalLedDistance.toFixed(2);
-  controlEls.mainLedHorizontalThicknessUiVal.textContent = nextMainBuildingHorizontalLedThickness.toFixed(2);
-  controlEls.mainLedHorizontalRadiusUiVal.textContent = nextMainBuildingHorizontalLedRadius.toFixed(2);
-  controlEls.mainLedLowOffsetUiVal.textContent = mainBuildingLowLedOffset.toFixed(2);
-  controlEls.mainLedLowYUiVal.textContent = nextMainBuildingLowLedY.toFixed(1);
-  controlEls.mainLedHighOffsetUiVal.textContent = mainBuildingHighLedOffset.toFixed(2);
-  controlEls.mainLedHighYUiVal.textContent = nextMainBuildingHighLedY.toFixed(1);
-  controlEls.mainFacadeLedBrightnessUiVal.textContent = nextMainBuildingFacadeLedBrightness.toFixed(2);
-  controlEls.mainFacadeLedNormalUiVal.textContent = nextMainBuildingFacadeLedNormal.toFixed(2);
-  controlEls.mainFacadeLedXUiVal.textContent = nextMainBuildingFacadeLedX.toFixed(2);
-  controlEls.mainFacadeLedYUiVal.textContent = nextMainBuildingFacadeLedY.toFixed(2);
-  controlEls.mainFacadeLedZUiVal.textContent = nextMainBuildingFacadeLedZ.toFixed(2);
-  controlEls.mainFacadeLedThicknessUiVal.textContent = `${nextMainBuildingFacadeLedThickness.toFixed(2)}x`;
-  controlEls.mainFacadeLedSegmentControls.forEach((controls, index) => {
-    const offset = nextMainFacadeSegmentOffsets[index];
-    controls.uVal.textContent = offset.u.toFixed(2);
-    controls.yVal.textContent = offset.y.toFixed(2);
-    controls.normalVal.textContent = offset.normal.toFixed(2);
-  });
-  controlEls.renderResolutionVal.textContent = `${Math.round(nextRenderResolution * 100)}%`;
-  controlEls.bloomVal.textContent = bloomStrength.toFixed(2);
-  controlEls.bloomRadiusVal.textContent = bloomRadius.toFixed(2);
-  controlEls.bloomThresholdVal.textContent = bloomThreshold.toFixed(2);
-  controlEls.bloomQualityVal.textContent = bloomQuality.toFixed(2);
-  controlEls.pixelRatioVal.textContent = pixelRatio.toFixed(2);
-  applyTronSoundtrackIntroFxControlsFromUI();
-  applyCinematicGroundingInitialControls();
-  applyCharacterControlsFromUI();
-}
-
-renderBridgeControls();
-let performanceDiagnosticsEl = null;
-mountFxCategoryPanels({ setPerformanceDiagnosticsEl: (el) => { performanceDiagnosticsEl = el; } });
-function mountSideFacadeLedControls() {
-  return mountSideFacadeLedControlsCore(controlEls);
-}
-mountSideFacadeLedControls();
-document.querySelectorAll(PRODUCTION_LIVE_CONTROL_SELECTOR).forEach((input) => {
-  input.addEventListener(input.tagName === 'SELECT' || input.type === 'checkbox' ? 'change' : 'input', scheduleLiveControls);
+initControlPanel({
+  ambientLight,
+  applyTronSoundtrackIntroLofiMix,
+  camera,
+  controlEls,
+  dirKey,
+  groundLedMaterials,
+  hexTileDisplayBaseEmissive,
+  hexTileDisplayHitEmissive,
+  PAL,
+  performanceDiagnostics,
+  renderer,
+  roadMat,
+  setTronSoundtrackIntroLofi,
+  syncTronIntroFxNodeSettings,
+  tronSoundtrack,
+  setFixedCameraFov,
+  getLatestMeasuredFps: () => latestMeasuredFps,
+  scheduleLiveControls,
 });
-controlEls.resetCameraHeight.addEventListener('click', resetCameraHeightToDefault);
-controlEls.saveLiveSpawn.addEventListener('click', captureLivePlayerSpawn);
-controlEls.resetPlayerSpawn.addEventListener('click', () => applyPlayerSpawn(player.playerSpawn, true));
-controlEls.saveStartPosition.addEventListener('click', captureLivePlayerSpawn);
-controlEls.goStartPosition.addEventListener('click', () => applyPlayerSpawn(player.playerSpawn, true));
-controlEls.droneIntroFlight?.addEventListener('click', () => startDroneIntroFlight('manual'));
-controlEls.runFsrBenchmark?.addEventListener('click', runFsrBenchmark);
-controlSettingsRuntime.bindSaveButtons();
-
-updateControlTabs();
-controlSettingsRuntime.setupSettingsToggle();
 
 const sceneTexturePrewarmStats = {
   supported: false,
