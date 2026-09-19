@@ -609,6 +609,19 @@
   @media (prefers-reduced-motion: reduce) {
     .welcome-start-button::before { animation: none; opacity: 0; }
   }
+  /* L'avviso che prende il posto del bottone quando JavaScript e' spento (2026-09-19). */
+  .welcome-noscript {
+    position: relative;
+    z-index: 3;
+    max-width: 34em;
+    margin: clamp(52px, 7.5vh, 84px) auto clamp(20px, 3vh, 32px);
+    color: oklch(96% 0.018 220);
+    font-family: Sora, Avenir Next, Segoe UI, sans-serif;
+    font-size: clamp(15px, 1.4vw, 19px);
+    font-weight: 700;
+    line-height: 1.4;
+    text-align: center;
+  }
   .welcome-home-link {
     position: relative;
     z-index: 3;

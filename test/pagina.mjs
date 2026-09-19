@@ -50,9 +50,9 @@ export async function chiudiBrowser() {
 
 /**
  * Apre index.html e aspetta la copertina.
- * @param {{ query?: string, mobile?: boolean, bloccaMain?: boolean, reducedMotion?: 'reduce'|'no-preference', viewport?: {width:number,height:number} }} [opzioni]
+ * @param {{ query?: string, mobile?: boolean, bloccaMain?: boolean, reducedMotion?: 'reduce'|'no-preference', viewport?: {width:number,height:number}, javascript?: boolean }} [opzioni]
  */
-export async function apriPagina({ query = '', mobile = false, bloccaMain = true, reducedMotion, viewport } = {}) {
+export async function apriPagina({ query = '', mobile = false, bloccaMain = true, reducedMotion, viewport, javascript = true } = {}) {
   const b = await apriBrowser();
   const context = await b.newContext({
     viewport: viewport ?? (mobile ? { width: 812, height: 375 } : { width: 1280, height: 800 }),
@@ -60,6 +60,7 @@ export async function apriPagina({ query = '', mobile = false, bloccaMain = true
     hasTouch: mobile,
     isMobile: mobile,
     reducedMotion,
+    javaScriptEnabled: javascript,   // false = la pagina come la vede chi ha JavaScript spento
   });
   const page = await context.newPage();
   const errori = [];
@@ -80,7 +81,8 @@ export async function apriPagina({ query = '', mobile = false, bloccaMain = true
     }));
   }
   await page.goto(`${ORIGINE}/index.html${query}`, { waitUntil: 'load', timeout: 60_000 });
-  await page.waitForSelector('#welcome-start-button', { timeout: 30_000 });
+  // 'attached' e non 'visible': senza JavaScript il bottone e' nascosto dal <noscript>
+  await page.waitForSelector('#welcome-start-button', { state: 'attached', timeout: 30_000 });
   return {
     page,
     errori,

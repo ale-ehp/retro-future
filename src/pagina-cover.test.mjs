@@ -209,3 +209,16 @@ test('ogni canvas rifiuta i gesti del browser (touch-action none)', async () => 
     assert.equal(azione, 'none', 'un pinch sul canvas farebbe zoom alla pagina invece di girare la camera');
   } finally { await chiudi(); }
 });
+
+test('senza JavaScript la copertina dice perche\' la demo non parte, e il bottone morto sparisce', async () => {
+  // Prima (fino al 2026-09-19) senza JavaScript la copertina si vedeva intera con un bottone
+  // che non faceva niente: nessun messaggio. Qui la pagina si apre con JavaScript spento.
+  const { page, chiudi } = await apriPagina({ javascript: false });
+  try {
+    assert.equal(await page.isVisible('#welcome-start-button'), false, 'il bottone morto resta visibile');
+    assert.equal(await page.isVisible('.welcome-noscript'), true, 'manca l\'avviso');
+    const testo = (await page.textContent('.welcome-noscript'))?.trim() ?? '';
+    assert.match(testo, /JavaScript/);
+    assert.equal(await page.isVisible('a.welcome-home-link'), true, 'senza JavaScript deve restare una via d\'uscita');
+  } finally { await chiudi(); }
+});

@@ -184,6 +184,13 @@
       <button id="welcome-start-button" class="welcome-start-button" type="button">
         Esplora i reparti
       </button>
+      <noscript>
+        <!-- Senza JavaScript la copertina si vede ma il bottone qui sopra non fa niente: la
+             demo e' una scena 3D. Il bottone viene nascosto e al suo posto si dice il perche'
+             (tappa 7, 2026-09-19). -->
+        <style>#welcome-start-button { display: none; }</style>
+        <p class="welcome-noscript">Questa demo e' una scena 3D e ha bisogno di JavaScript, che qui e' spento.</p>
+      </noscript>
       <a class="welcome-home-link" href="/">torna alla home</a>
       <p class="welcome-action" aria-hidden="true"><span class="welcome-action-prefix">Premi </span><span class="welcome-key" data-desktop-label="[Spazio]" data-touch-label="Clicca">[Spazio]</span></p>
     </div>
