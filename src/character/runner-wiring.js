@@ -98,10 +98,6 @@ import {
 import { createTronRunnerCrowdMaterialsRuntime } from './runner-crowd-materials.js';
 import { createTronRunnerCrowdRoutesRuntime } from './runner-crowd-routes.js';
 import {
-  TRON_RUNNER_FOLLOW_PROMPT_DELAY_MS,
-  TRON_RUNNER_GREETER_GREET_DISTANCE,
-  TRON_RUNNER_WELCOME_BUBBLE_DURATION_MS,
-  applyGreeterHeadLookRuntime,
   buildTronRunnerCrowdMemberRuntime,
   cityRevealPostRevealElapsedMsRuntime,
   clearTronRunnerCrowdState,
@@ -113,11 +109,8 @@ import {
   normalizeTronRunnerCrowdStateRuntime,
   prepareTronRunnerCrowdSpatialGridRuntime,
   processTronRunnerCrowdBuildQueueRuntime,
-  resolveGreeterBoardAnchorRuntime,
   resolveTronRunnerCrowdCollisionRuntime,
-  setGreeterBubbleRuntime,
   setTronRunnerCrowdStateRuntime,
-  startGreeterWalkingToBoardRuntime,
   startTronRunnerCrowdBuildQueueRuntime,
   syncTronRunnerCrowdScaleAndGround,
   syncTronRunnerCrowdVisibilityState,
@@ -135,6 +128,15 @@ import {
   updateTronRunnerCrowdReflectionRuntime,
   updateTronRunnerCrowdRuntime,
 } from './runner-crowd-runtime.js';
+import {
+  TRON_RUNNER_FOLLOW_PROMPT_DELAY_MS,
+  TRON_RUNNER_GREETER_GREET_DISTANCE,
+  TRON_RUNNER_WELCOME_BUBBLE_DURATION_MS,
+  applyGreeterHeadLookRuntime,
+  resolveGreeterBoardAnchorRuntime,
+  setGreeterBubbleRuntime,
+  startGreeterWalkingToBoardRuntime,
+} from './runner-greeter.js';
 import { createTronRunnerIdleCharacterRuntime } from './runner-idle-character.js';
 import { createTronRunnerOrchestrationRuntime } from './runner-orchestration.js';
 import { createTronRunnerReflectionRigRuntime } from './runner-reflection-rig.js';

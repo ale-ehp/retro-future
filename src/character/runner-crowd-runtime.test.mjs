@@ -16,7 +16,7 @@ import {
   GREETER_BOARD_BUBBLE_TEXT,
   TRON_RUNNER_WELCOME_BUBBLE_SIZE_SCALE,
   tronRunnerGreeterStartPosition,
-} from './runner-crowd-runtime.js';
+} from './runner-greeter.js';
 
 const EXPECTED_VISIBLE_FOOTFALLS_BEFORE_GREETING = 6;
 

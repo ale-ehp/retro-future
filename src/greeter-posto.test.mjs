@@ -10,9 +10,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   advanceTronRunnerCrowdMemberRuntime,
+} from './character/runner-crowd-runtime.js';
+import {
   resolveGreeterBoardAnchorRuntime,
   TRON_RUNNER_WELCOME_BUBBLE_SIZE_SCALE,
-} from './character/runner-crowd-runtime.js';
+} from './character/runner-greeter.js';
 
 /** Un tabellone finto, allineato agli assi: yaw 0 significa "destra" lungo le x. */
 const tabellone = (extra = {}) => ({
