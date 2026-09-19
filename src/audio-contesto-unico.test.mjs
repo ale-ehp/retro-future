@@ -11,10 +11,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
-const main = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
+// Dal 2026-09-19 (tappa 5) i passi del giocatore, e con loro il contesto audio, stanno in
+// audio/player-footsteps.js: e' quel file che non deve fotografare il contesto all'import.
+const main = readFileSync(new URL('./audio/player-footsteps.js', import.meta.url), 'utf8');
 const pagina = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
-test('main.js non fotografa il contesto audio della pagina quando viene importato', () => {
+test('player-footsteps.js non fotografa il contesto audio della pagina quando viene importato', () => {
   assert.doesNotMatch(main, /let footstepAudioContext = window\.__retroAudio/);
   assert.match(main, /let footstepAudioContext = null;/);
 });
