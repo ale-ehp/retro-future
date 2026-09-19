@@ -80,7 +80,9 @@ export function createSkyDome(deps) {
 
   const SKY_DOME_RADIUS = 8500;
   const domeGeo = new THREE.SphereGeometry(SKY_DOME_RADIUS, 32, 18);
-  const SKY_ANIMATION_SPEED = 0.3;
+  // +50% sul 0.3 di prima (2026-09-19). Governa uTime, e da li' la deriva delle nuvole
+  // dentro lo shader: e' l'unico numero che decide quanto corre il cielo.
+  const SKY_ANIMATION_SPEED = 0.45;
   const domeMat = new THREE.ShaderMaterial({
     uniforms: {
       uTime: { value: 0 },
