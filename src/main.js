@@ -11,18 +11,12 @@ import {
   DEFAULT_BASE_PAD_THICKNESS,
 } from './world/boulevard-constants.js';
 import {
-  BLOOM_BYPASS_STRENGTH,
-  BLOOM_OPTIMIZED_ACTIVE_MIPS,
-  BLOOM_OPTIMIZED_UPDATE_STRIDE,
   BLOOM_RESOLUTION_CAP,
-  BLOOM_TEMPORAL_MOVE_EPS_SQ,
-  BLOOM_TEMPORAL_ROTATE_EPS,
   CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS,
   CITY_REVEAL_BACKPLATE_SWEEP_PORTION,
   CITY_REVEAL_DEFAULT_DELAY_MS,
   CITY_REVEAL_DEFAULT_FADE_MS,
   CITY_REVEAL_MAX_SKY_BACKPLATE_OPACITY,
-  CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP,
   CITY_REVEAL_RENDER_ORDER,
   CITY_REVEAL_SWEEP_MARGIN_Z,
   CITY_REVEAL_SWEEP_MODE,
@@ -30,34 +24,11 @@ import {
   FSR_BENCHMARK_PRESET_KEYS,
   FSR_MANUAL_CONTROL_IDS,
   FSR_PRESETS,
-  FULL_HD_RENDER_HEIGHT,
-  FULL_HD_RENDER_WIDTH,
-  HD_READY_RENDER_HEIGHT,
-  HD_READY_RENDER_WIDTH,
   HEX_ROAD_UPDATE_FRAME_STRIDE,
   MAX_HEX_ROAD_ACCUMULATED_DT,
   MAX_RENDER_PIXEL_RATIO,
-  MIN_BLOOM_TARGET_SIZE,
-  MIN_DYNAMIC_BLOOM_SCALE,
-  MIN_DYNAMIC_PIXEL_RATIO,
-  MIN_DYNAMIC_QUALITY_SCALE,
-  MOBILE_PERFORMANCE_BLOOM_SCALE_CAP,
-  MOBILE_PERFORMANCE_PIXEL_RATIO_CAP,
-  MOBILE_PERFORMANCE_QUERY,
-  MOBILE_PERFORMANCE_RENDER_SCALE_CAP,
   SECONDARY_EFFECT_UPDATE_STRIDE,
 } from './world/config.js';
-import {
-  TRON_CINEMATIC_LOOK_SHADER,
-  TRON_FSR_UPSCALE_SHADER,
-  cinematicLookRequestedFromParams,
-  linearPipelineRequestedFromParams,
-  withOutputEncode,
-} from './engine/shaders.js';
-import {
-  TemporalAaPass,
-  temporalAaSettingsFromParams,
-} from './engine/temporal-aa-pass.js';
 import {
   AUDIO_FX_FAST_CONTROL_IDS,
   BASE_PAD_MATERIAL_FAST_CONTROL_IDS,
@@ -303,14 +274,40 @@ import {
 } from './controls/facade-led-controls.js';
 import { createBuildingLiveControlsRuntime } from './controls/building-live-controls.js';
 import { createControlSettingsRuntime, setButtonFeedback } from './controls/control-settings-runtime.js';
-import {
-  effectiveBloomScaleForDevice as effectiveBloomScaleForDeviceCore,
-  effectivePixelRatioForDevice as effectivePixelRatioForDeviceCore,
-  effectiveRenderScaleForDevice as effectiveRenderScaleForDeviceCore,
-  mobilePerformanceProfileActive as mobilePerformanceProfileActiveCore,
-  mobilePerformanceProfileState as mobilePerformanceProfileStateCore,
-} from './engine/performance-mobile.js';
 import { fxEnabled, fxLevers, fxToggleInspect } from './engine/fx-debug-toggles.js';
+import {
+  post,
+  initPostPipeline,
+  adaptiveRenderTargetInspect,
+  effectiveComposerPixelRatio,
+  syncFsrUpscalePass,
+  syncCinematicLookPass,
+  syncTemporalAaPass,
+  applyTemporalAaJitterForRender,
+  clearTemporalAaJitterForRender,
+  msaaSampleCount,
+  syncGlobalFxaaPass,
+  syncBloomLookMerge,
+  syncComposerBufferRoles,
+  applyAntialiasControls,
+  applyBloomEnabled,
+  isBloomPassActive,
+  hasDroneIntroLanded,
+  shouldBypassBloomForRevealPerformance,
+  isBloomRevealBypassed,
+  invalidateBloomTemporalCache,
+  syncBloomTemporalBudget,
+  mobilePerformanceProfileActive,
+  mobilePerformanceProfileInspect,
+  effectiveRenderScaleForDevice,
+  effectivePixelRatioForDevice,
+  syncCityRevealPerformanceProfile,
+  shouldUseComposer,
+  forcedRenderPixelRatio,
+  applyRenderResolution,
+  tunePerformanceBudget,
+  setupPost,
+} from './engine/post-pipeline.js';
 import { createCityRevealProfiler, revealProfileDetailRequestedFromParams } from './engine/city-reveal-profiler.js';
 import { createPerformanceDiagnostics } from './engine/performance-diagnostics.js';
 import {
@@ -591,7 +588,6 @@ import {
   droneIntroHeroShotRequestedFromParams,
   droneIntroInspect,
   getDroneIntroActive,
-  getDroneIntroProgress,
   initDroneIntro,
   scheduleDroneIntroAutoFlight,
   startDroneIntroFlight,
@@ -618,7 +614,6 @@ import {
   initMobileMovement,
   isMobileMovementControlTarget,
   mobileTouchControlsInspect,
-  mobileTouchControlsState,
   resetMobileMovementInput,
   requestLandscapeFullscreen,
 } from './controls/mobile-movement.js';
@@ -785,105 +780,11 @@ import {
   GREETER_BOARD_REACH,
   GREETER_BOARD_BUBBLE_RANGE,
   GREETER_BOARD_STANCE_DEG,
-  MOBILE_TARGET_PIXEL_RATIO,
   SCENE_TEXTURE_PREWARM_KEYS,
 } from './config/costanti.js';
 
-// Postprocessing (optional bloom + FXAA). Best-effort — fallback to plain renderer if any module fails.
-let composer = null, bloomPass = null, fxaaPass = null, fsrUpscalePass = null, cinematicLookPass = null, temporalAaPass = null;
-// True when the FSR pass is the one carrying the output encode (?look=classic
-// or ?pipeline=0): then it has to stay enabled even with upscale and sharpen off.
-let fsrPassCarriesOutputEncode = true;
-let postEnabled = true;
-let usePost = false;
-const mobilePerformanceQuery = window.matchMedia(MOBILE_PERFORMANCE_QUERY);
-
-function physicalScreenSize() {
-  const dpr = window.devicePixelRatio || 1;
-  const screenWidth = Math.max(window.innerWidth, window.screen?.width || 0) * dpr;
-  const screenHeight = Math.max(window.innerHeight, window.screen?.height || 0) * dpr;
-  return {
-    width: Math.round(screenWidth),
-    height: Math.round(screenHeight),
-  };
-}
-
-function adaptiveRenderTarget() {
-  const screenSize = physicalScreenSize();
-  const longEdge = Math.max(screenSize.width, screenSize.height);
-  const shortEdge = Math.min(screenSize.width, screenSize.height);
-  const fullHd = longEdge >= FULL_HD_RENDER_WIDTH && shortEdge >= FULL_HD_RENDER_HEIGHT;
-  return fullHd
-    ? { key: 'full-hd', width: FULL_HD_RENDER_WIDTH, height: FULL_HD_RENDER_HEIGHT }
-    : { key: 'hd-ready', width: HD_READY_RENDER_WIDTH, height: HD_READY_RENDER_HEIGHT };
-}
-
-function adaptiveRenderTargetPixelRatio() {
-  const target = adaptiveRenderTarget();
-  const viewportWidth = Math.max(1, window.innerWidth || target.width);
-  const viewportHeight = Math.max(1, window.innerHeight || target.height);
-  return Math.max(
-    MIN_DYNAMIC_PIXEL_RATIO,
-    Math.min(
-      window.devicePixelRatio || 1,
-      target.width / viewportWidth,
-      target.height / viewportHeight
-    )
-  );
-}
-
-function adaptiveRenderTargetInspect() {
-  const target = adaptiveRenderTarget();
-  return {
-    ...target,
-    screen: physicalScreenSize(),
-    pixelRatioCap: Number(adaptiveRenderTargetPixelRatio().toFixed(3)),
-  };
-}
-
-let activePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO, adaptiveRenderTargetPixelRatio());
-let requestedPixelRatio = MAX_RENDER_PIXEL_RATIO;
-let manualRenderScale = 1;
-let requestedBloomResolutionScale = 0.32;
-let bloomResolutionScale = 0.32;
-let bloomEnabled = true;
-// AA mode: fxaa (post pass) | msaa (hardware multisample — cheaper on tile GPUs:
-// iOS + Android Adreno/Mali/PowerVR, and Apple-Silicon Macs) | off. ?aa=msaa|fxaa|off
-// is authoritative (wins over the control default). msaa falls back to fxaa when
-// the WebGL2 context can't provide >=2 samples.
-const antialiasUrlOverride = (() => {
-  try {
-    const p = new URLSearchParams(location.search).get('aa');
-    return (p === 'msaa' || p === 'fxaa' || p === 'off') ? p : null;
-  } catch { return null; }
-})();
-// Default: MSAA on DESKTOP (sharper, higher res hides the lack of temporal AA);
-// FXAA on MOBILE. MSAA is spatial-only, so at mobile's lower pixel ratio the
-// edges crawl/shimmer during camera motion ("tremble"); FXAA's blur hides it.
-// ?aa=msaa|fxaa|off overrides.
-let antialiasMode = antialiasUrlOverride || (mobilePerformanceProfileActive() ? 'fxaa' : 'msaa');
-let composerMsaaActive = false;
-let fsrUpscaleEnabled = false;
-let fsrInternalScale = 1;
-let fsrSharpness = 0;
-const cinematicLookEnabled = cinematicLookRequestedFromParams(new URLSearchParams(window.location.search));
-const temporalAaSettings = temporalAaSettingsFromParams(new URLSearchParams(window.location.search), { mobile: mobilePerformanceProfileActive() });
-const temporalAaEnabled = temporalAaSettings.enabled;
 const droneIntroHeroShotEnabled = droneIntroHeroShotRequestedFromParams(new URLSearchParams(window.location.search));
 const cinematicGroundingSettings = cinematicGroundingSettingsFromParams(new URLSearchParams(window.location.search));
-let dynamicQualityScale = 1;
-let performanceMode = 'auto';
-let performanceAdjustCooldown = 0;
-let lastAppliedRendererPixelRatio = -1;
-let lastAppliedComposerPixelRatio = -1;
-let lastBloomTargetKey = '';
-let lastFxaaTargetKey = '';
-let lastFsrTargetKey = '';
-let lastCinematicLookTargetKey = '';
-let temporalAaMotionPrimed = false;
-const temporalAaCameraPosition = new THREE.Vector3();
-const temporalAaCameraQuaternion = new THREE.Quaternion();
-let cityRevealPerformanceProfileActive = false;
 let secondaryEffectFrame = 0;
 let boundaryErrorAccumulatedDt = 0;
 // Kick off both module groups before awaiting either, so their network
@@ -906,7 +807,7 @@ runnerModulesPromise.catch(() => {});
 try {
   const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { FXAAPass }, { ShaderPass }] = await postModulesPromise;
   window.__POST = { EffectComposer, RenderPass, UnrealBloomPass, FXAAPass, ShaderPass };
-  usePost = true;
+  post.usePost = true;
 } catch (e) {
   console.warn('Postprocessing unavailable, falling back to plain renderer:', e.message);
 }
@@ -996,10 +897,10 @@ window.__fxScene = () => scene;
 // La catena dei pass del composer, per l'impronta del gate visivo (2026-09-19): l'ordine
 // bloom -> look -> TAA -> FSR e chi e' acceso sono logica, e prima si verificavano cercando
 // `composer.addPass(...)` nel sorgente con espressioni regolari.
-/** @type {any} */ (window).__tronComposerInspect = () => (composer
-  ? composer.passes.map((pass) => ({ name: pass.constructor?.name ?? 'Pass', enabled: Boolean(pass.enabled) }))
+/** @type {any} */ (window).__tronComposerInspect = () => (post.composer
+  ? post.composer.passes.map((pass) => ({ name: pass.constructor?.name ?? 'Pass', enabled: Boolean(pass.enabled) }))
   : null);
-renderer.setPixelRatio(activePixelRatio);
+renderer.setPixelRatio(post.activePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.localClippingEnabled = true;
 renderer.shadowMap.enabled = false;
@@ -1027,23 +928,23 @@ const performanceDiagnostics = createPerformanceDiagnostics({
     mobileText: mobilePerformanceDiagnosticsEl,
   },
   getLatestMeasuredFps: () => latestMeasuredFps,
-  getActivePixelRatio: () => activePixelRatio,
-  getRequestedPixelRatio: () => requestedPixelRatio,
-  getManualRenderScale: () => manualRenderScale,
-  getDynamicQualityScale: () => dynamicQualityScale,
-  getPerformanceMode: () => performanceMode,
-  getBloomEnabled: () => bloomEnabled,
-  getBloomPass: () => bloomPass,
-  getFxaaPass: () => fxaaPass,
-  getFsrUpscalePass: () => fsrUpscalePass,
-  getAntialiasMode: () => antialiasMode,
-  getBloomResolutionScale: () => bloomResolutionScale,
-  getLastBloomTargetKey: () => lastBloomTargetKey,
-  getLastFxaaTargetKey: () => lastFxaaTargetKey,
-  getLastFsrTargetKey: () => lastFsrTargetKey,
-  getFsrUpscaleEnabled: () => fsrUpscaleEnabled,
-  getFsrInternalScale: () => fsrInternalScale,
-  getFsrSharpness: () => fsrSharpness,
+  getActivePixelRatio: () => post.activePixelRatio,
+  getRequestedPixelRatio: () => post.requestedPixelRatio,
+  getManualRenderScale: () => post.manualRenderScale,
+  getDynamicQualityScale: () => post.dynamicQualityScale,
+  getPerformanceMode: () => post.performanceMode,
+  getBloomEnabled: () => post.bloomEnabled,
+  getBloomPass: () => post.bloomPass,
+  getFxaaPass: () => post.fxaaPass,
+  getFsrUpscalePass: () => post.fsrUpscalePass,
+  getAntialiasMode: () => post.antialiasMode,
+  getBloomResolutionScale: () => post.bloomResolutionScale,
+  getLastBloomTargetKey: () => post.lastBloomTargetKey,
+  getLastFxaaTargetKey: () => post.lastFxaaTargetKey,
+  getLastFsrTargetKey: () => post.lastFsrTargetKey,
+  getFsrUpscaleEnabled: () => post.fsrUpscaleEnabled,
+  getFsrInternalScale: () => post.fsrInternalScale,
+  getFsrSharpness: () => post.fsrSharpness,
   getStaticCityCullStats: () => staticCityCullStats,
   getTronRunnerCrowd: () => tronRunnerCrowd,
   getTronRunnerCrowdRuntimeStats: () => tronRunnerCrowdRuntimeStats,
@@ -1055,7 +956,7 @@ const performanceDiagnostics = createPerformanceDiagnostics({
   getCityRevealComplete: () => cityRevealComplete,
   getCityRevealArmedAt: () => cityRevealArmedAt,
   getCityRevealStartedAt: () => cityRevealStartedAt,
-  getCityRevealPerformanceProfileActive: () => cityRevealPerformanceProfileActive,
+  getCityRevealPerformanceProfileActive: () => post.cityRevealPerformanceProfileActive,
   effectivePixelRatioForDevice,
   effectiveRenderScaleForDevice,
   effectiveComposerPixelRatio,
@@ -1121,27 +1022,27 @@ function retroBenchmarkEnvironment() {
     canvas: performanceDiagnostics.canvasSummary(),
     gpu: getRetroBenchmarkGpuInfo(),
     quality: {
-      performanceMode,
-      activePixelRatio,
-      requestedPixelRatio,
-      manualRenderScale,
-      dynamicQualityScale,
-      antialiasMode,
-      composerMsaaActive,
-      msaaSamples: composerMsaaActive ? msaaSampleCount() : 0,
-      bloomEnabled,
+      performanceMode: post.performanceMode,
+      activePixelRatio: post.activePixelRatio,
+      requestedPixelRatio: post.requestedPixelRatio,
+      manualRenderScale: post.manualRenderScale,
+      dynamicQualityScale: post.dynamicQualityScale,
+      antialiasMode: post.antialiasMode,
+      composerMsaaActive: post.composerMsaaActive,
+      msaaSamples: post.composerMsaaActive ? msaaSampleCount() : 0,
+      bloomEnabled: post.bloomEnabled,
       bloomActive: isBloomPassActive(),
-      bloomPassEnabled: Boolean(bloomPass?.enabled),
-      bloomResolutionScale,
+      bloomPassEnabled: Boolean(post.bloomPass?.enabled),
+      bloomResolutionScale: post.bloomResolutionScale,
       composerActive: shouldUseComposer(),
-      fsrUpscaleEnabled,
-      fsrInternalScale,
-      fsrSharpness,
-      cinematicLookEnabled,
-      cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
-      temporalAaEnabled,
-      temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
-      temporalAaProfile: temporalAaSettings.profile,
+      fsrUpscaleEnabled: post.fsrUpscaleEnabled,
+      fsrInternalScale: post.fsrInternalScale,
+      fsrSharpness: post.fsrSharpness,
+      cinematicLookEnabled: post.cinematicLookEnabled,
+      cinematicLookPassEnabled: Boolean(post.cinematicLookPass?.enabled),
+      temporalAaEnabled: post.temporalAaEnabled,
+      temporalAaPassEnabled: Boolean(post.temporalAaPass?.enabled),
+      temporalAaProfile: post.temporalAaSettings.profile,
       cinematicGrounding: cinematicGroundingSettings,
       mobileProfile: mobilePerformanceProfileInspect(),
     },
@@ -1153,15 +1054,15 @@ function retroBenchmarkEnvironment() {
       floorReflect: floorReflectLite ? 'lite' : 'full',
       buildingReflect: buildingReflectLite ? 'lite' : 'full',
       dirLight: dirLightActive ? 'on' : 'off',
-      antialias: antialiasMode,
-      msaaActive: composerMsaaActive,
-      activePixelRatio,
+      antialias: post.antialiasMode,
+      msaaActive: post.composerMsaaActive,
+      activePixelRatio: post.activePixelRatio,
       forcedPixelRatio: forcedRenderPixelRatio(),
       skyBakeSpread: skyDome.inspectSkyBake().spread,
       skyBakeFaceStride: skyDome.inspectSkyBake().faceStride,
-      cinematicLook: cinematicLookEnabled ? 'on' : 'off',
-      temporalAa: temporalAaEnabled ? 'on' : 'off',
-      temporalAaProfile: temporalAaSettings.profile,
+      cinematicLook: post.cinematicLookEnabled ? 'on' : 'off',
+      temporalAa: post.temporalAaEnabled ? 'on' : 'off',
+      temporalAaProfile: post.temporalAaSettings.profile,
       // Applied state of every per-subsystem debug toggle (see fx-debug-toggles.js)
       // so each capture self-documents which subsystems were disabled.
       fx: fxLevers(),
@@ -1358,7 +1259,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(FIXED_CAMERA_FOV, window.innerWidth / window.innerHeight, 0.1, 10000);
 // World/context object (design §4). composer is created later in the deferred postprocessing setup,
 // so it is read through a late-bound getter. Subsystems are migrated onto ctx phase by phase.
-const ctx = createCtx({ scene, camera, renderer, getComposer: () => composer });
+const ctx = createCtx({ scene, camera, renderer, getComposer: () => post.composer });
 camera.position.set(701.4907301468677, 591.0351224586902, 1110.9745792178219);
 camera.lookAt(0, 80, -300);
 
@@ -3625,7 +3526,7 @@ const cityRevealRender = createCityRevealRenderRuntime({
   scene,
   camera,
   domeMesh,
-  getComposer: () => composer,
+  getComposer: () => post.composer,
   cityRevealSkyScene,
   cityRevealOverlayScene,
   cityRevealOverlayCamera,
@@ -3718,12 +3619,12 @@ const cityRevealProfiler = createCityRevealProfiler({
   getScene: () => scene,
   getCityRevealRoadGridGroup: () => cityRevealRoadGridGroup,
   getCityRevealMainLedDepthGroup: cityRevealMainLedReveal.getDepthGroup,
-  getComposer: () => composer,
-  getBloomPass: () => bloomPass,
-  getFxaaPass: () => fxaaPass,
-  getFsrUpscalePass: () => fsrUpscalePass,
-  getCinematicLookPass: () => cinematicLookPass,
-  getTemporalAaPass: () => temporalAaPass,
+  getComposer: () => post.composer,
+  getBloomPass: () => post.bloomPass,
+  getFxaaPass: () => post.fxaaPass,
+  getFsrUpscalePass: () => post.fsrUpscalePass,
+  getCinematicLookPass: () => post.cinematicLookPass,
+  getTemporalAaPass: () => post.temporalAaPass,
   getCityRevealSkyPass: () => cityRevealRender.getSkyPass(),
   getCityRevealOverlayPass: () => cityRevealRender.getOverlayPass(),
   getCityRevealWirePass: () => cityRevealRender.getWirePass(),
@@ -3744,601 +3645,14 @@ function shouldUpdateTronRunnerSourceCharacter() {
   return Boolean(TRON_RUNNER_SOURCE_CHARACTER_VISIBLE);
 }
 
-// ---------- post (bloom) ----------
-function effectiveComposerPixelRatio() {
-  const internalScale = fsrUpscaleEnabled
-    ? THREE.MathUtils.clamp(fsrInternalScale, 0.65, 1)
-    : 1;
-  return Math.max(MIN_DYNAMIC_PIXEL_RATIO, activePixelRatio * internalScale);
-}
-
-function isFsrUpscaleActive() {
-  return Boolean(fsrUpscaleEnabled && fsrInternalScale < 0.999);
-}
-
-function syncFsrUpscalePass() {
-  if (!fsrUpscalePass) return;
-  // With upscale off, sharpness 0 and the cinematic look carrying the output
-  // encode, the shader collapses to `color = center.rgb`: a full-res copy that
-  // costs a whole pass of fill for nothing. Skip it unless it does real work.
-  fsrUpscalePass.enabled = fsrPassCarriesOutputEncode || isFsrUpscaleActive() || fsrSharpness > 0;
-  const upscaleActive = isFsrUpscaleActive() ? 1 : 0;
-  if (fsrUpscalePass.uniforms?.upscaleActive) {
-    fsrUpscalePass.uniforms.upscaleActive.value = upscaleActive;
-  }
-  if (fsrUpscalePass.uniforms?.sharpness) {
-    fsrUpscalePass.uniforms.sharpness.value = THREE.MathUtils.clamp(fsrSharpness, 0, 1.25);
-  }
-}
-
-function resizeFsrUpscaleTarget() {
-  if (!fsrUpscalePass) return;
-  const composerPixelRatio = effectiveComposerPixelRatio();
-  const width = Math.max(1, Math.round(window.innerWidth * composerPixelRatio));
-  const height = Math.max(1, Math.round(window.innerHeight * composerPixelRatio));
-  const key = `${width}x${height}`;
-  if (key === lastFsrTargetKey) return;
-  lastFsrTargetKey = key;
-  fsrUpscalePass.uniforms?.sourceResolution?.value?.set(width, height);
-}
-
-function resizeCinematicLookTarget() {
-  if (!cinematicLookPass) return;
-  const composerPixelRatio = effectiveComposerPixelRatio();
-  const width = Math.max(1, Math.round(window.innerWidth * composerPixelRatio));
-  const height = Math.max(1, Math.round(window.innerHeight * composerPixelRatio));
-  const key = `${width}x${height}`;
-  if (key === lastCinematicLookTargetKey) return;
-  lastCinematicLookTargetKey = key;
-  cinematicLookPass.uniforms?.resolution?.value?.set(width, height);
-}
-
-function syncCinematicLookPass(now = performance.now()) {
-  if (!cinematicLookPass) return;
-  cinematicLookPass.enabled = cinematicLookEnabled;
-  cinematicLookPass.uniforms.time.value = now * 0.001;
-}
-
-function temporalAaMotionAmount() {
-  if (!temporalAaMotionPrimed) {
-    temporalAaCameraPosition.copy(camera.position);
-    temporalAaCameraQuaternion.copy(camera.quaternion);
-    temporalAaMotionPrimed = true;
-    return 1;
-  }
-  const moved = Math.min(1, camera.position.distanceTo(temporalAaCameraPosition) * 2.5);
-  const rotated = Math.min(1, (1 - Math.abs(camera.quaternion.dot(temporalAaCameraQuaternion))) * 64);
-  temporalAaCameraPosition.copy(camera.position);
-  temporalAaCameraQuaternion.copy(camera.quaternion);
-  return Math.max(moved, rotated);
-}
-
-function temporalAaInteractionMotionAmount() {
-  const keyMotion = (
-    keys['KeyW'] || keys['ArrowUp'] ||
-    keys['KeyS'] || keys['ArrowDown'] ||
-    keys['KeyA'] || keys['ArrowLeft'] ||
-    keys['KeyD'] || keys['ArrowRight'] ||
-    keys['ShiftLeft'] || keys['ShiftRight']
-  ) ? 0.72 : 0;
-  const mobileMotion = mobileTouchControlsState.movement?.active
-    ? Math.min(1, mobileTouchControlsState.movement.magnitude || 0)
-    : 0;
-  const velocityMotion = Math.min(1, movementVelocity.length() / 24);
-  return Math.max(keyMotion, mobileMotion, velocityMotion);
-}
-
-function syncTemporalAaPass() {
-  if (!temporalAaPass) return;
-  const stable = temporalAaEnabled && cityRevealComplete && !isCityRevealCompositeActive();
-  temporalAaPass.enabled = stable;
-  if (!stable) {
-    temporalAaPass.sync({ stable: false, motionAmount: 1 });
-    temporalAaMotionPrimed = false;
-    return;
-  }
-  temporalAaPass.sync({ stable: true, motionAmount: Math.max(temporalAaMotionAmount(), temporalAaInteractionMotionAmount()) });
-}
-
-function applyTemporalAaJitterForRender() {
-  if (!temporalAaPass?.enabled) return false;
-  const jitter = temporalAaPass.nextJitter();
-  camera.setViewOffset(
-    temporalAaPass.width,
-    temporalAaPass.height,
-    jitter.x,
-    jitter.y,
-    temporalAaPass.width,
-    temporalAaPass.height
-  );
-  camera.updateProjectionMatrix();
-  return true;
-}
-
-function clearTemporalAaJitterForRender(active) {
-  if (!active) return;
-  camera.clearViewOffset();
-  camera.updateProjectionMatrix();
-}
-
-function resizeBloomTargets() {
-  if (!bloomPass) return;
-  const requestedScale = Math.min(effectiveBloomScaleForDevice(requestedBloomResolutionScale), BLOOM_RESOLUTION_CAP);
-  bloomResolutionScale = Math.max(MIN_DYNAMIC_BLOOM_SCALE, requestedScale * dynamicQualityScale);
-  const composerPixelRatio = effectiveComposerPixelRatio();
-  const width = Math.max(MIN_BLOOM_TARGET_SIZE, Math.round(window.innerWidth * composerPixelRatio * bloomResolutionScale));
-  const height = Math.max(MIN_BLOOM_TARGET_SIZE, Math.round(window.innerHeight * composerPixelRatio * bloomResolutionScale));
-  const key = `${width}x${height}`;
-  if (key === lastBloomTargetKey) return;
-  lastBloomTargetKey = key;
-  bloomPass.setSize(width, height);
-}
-
-function resizeFxaaTargets() {
-  if (!fxaaPass) return;
-  const composerPixelRatio = effectiveComposerPixelRatio();
-  const width = Math.max(1, Math.round(window.innerWidth * composerPixelRatio));
-  const height = Math.max(1, Math.round(window.innerHeight * composerPixelRatio));
-  const key = `${width}x${height}`;
-  if (key === lastFxaaTargetKey) return;
-  lastFxaaTargetKey = key;
-  fxaaPass?.setSize(width, height);
-  resizeFsrUpscaleTarget();
-  resizeCinematicLookTarget();
-}
-
-function normalizedAntialiasMode(mode) {
-  if (mode === 'off') return 'off';
-  if (mode === 'msaa') return 'msaa';
-  return 'fxaa';
-}
-
-// Hardware MSAA sample count the context can give (WebGL2 only). 0 = unsupported.
-// Default 2x: 2 samples is far cheaper than 4x (half the MSAA bandwidth/tile) and
-// still resolves most edge jaggies. ?aaSamples=N overrides for A/B.
-const msaaSamplesParam = (() => {
-  try {
-    const v = Number(new URLSearchParams(location.search).get('aaSamples'));
-    return Number.isFinite(v) && v >= 2 ? Math.round(v) : null;
-  } catch { return null; }
-})();
-function msaaSampleCount() {
-  try {
-    if (!renderer.capabilities?.isWebGL2) return 0;
-    const max = renderer.getContext().getParameter(renderer.getContext().MAX_SAMPLES) || 0;
-    if (max < 2) return 0;
-    return Math.min(msaaSamplesParam || 2, max);
-  } catch {
-    return 0;
-  }
-}
-
-function syncGlobalFxaaPass() {
-  if (!fxaaPass) return;
-  // FXAA runs in 'fxaa' mode, OR as the fallback when 'msaa' was requested but the
-  // device gave no usable multisampling. fx.fxaa=0 still drops it (composer may
-  // then be bypassed to a direct render via shouldUseComposer).
-  const fxaaFallback = antialiasMode === 'msaa' && !composerMsaaActive;
-  fxaaPass.enabled = (antialiasMode === 'fxaa' || fxaaFallback) && fxEnabled('fxaa');
-}
-
-function disposeComposerTargets() {
-  if (!composer) return;
-  bloomPass?.dispose?.();
-  fxaaPass?.dispose?.();
-  fsrUpscalePass?.material?.dispose?.();
-  fsrUpscalePass?.dispose?.();
-  cinematicLookPass?.material?.dispose?.();
-  cinematicLookPass?.dispose?.();
-  temporalAaPass?.dispose?.();
-  composer.dispose?.();
-  bloomPass = null;
-  fxaaPass = null;
-  fsrUpscalePass = null;
-  cinematicLookPass = null;
-  temporalAaPass = null;
-  temporalAaMotionPrimed = false;
-  cityRevealRender.clearComposerPasses();
-  composer = null;
-}
-
-function rebuildComposer() {
-  if (!usePost) return;
-  const { EffectComposer, RenderPass, UnrealBloomPass, FXAAPass, ShaderPass } = window.__POST;
-  disposeComposerTargets();
-  // MSAA mode: give the composer a multisampled render target so the scene pass
-  // is antialiased by hardware (tile-resolved, cheap on mobile) instead of the
-  // FXAA post pass. Falls back to a plain composer + FXAA if unsupported.
-  const msaaSamples = antialiasMode === 'msaa' ? msaaSampleCount() : 0;
-  composerMsaaActive = msaaSamples >= 2;
-  if (composerMsaaActive) {
-    const dpr = effectiveComposerPixelRatio();
-    const msaaTarget = new THREE.WebGLRenderTarget(
-      Math.max(1, Math.round(window.innerWidth * dpr)),
-      Math.max(1, Math.round(window.innerHeight * dpr)),
-      { samples: msaaSamples }
-    );
-    composer = new EffectComposer(renderer, msaaTarget);
-    // OPTIMIZED: multisample ONLY the scene target (rt1). EffectComposer clones
-    // rt1 for rt2, which would make the fullscreen ping-pong passes (bloom/fsr)
-    // render at Nx samples for zero AA benefit — pure bandwidth. Swap rt2 for a
-    // single-sample target so the scene resolves ONCE and the post passes are 1x.
-    try {
-      const singleTarget = new THREE.WebGLRenderTarget(msaaTarget.width, msaaTarget.height);
-      singleTarget.texture.name = 'EffectComposer.rt2';
-      composer.renderTarget2?.dispose?.();
-      composer.renderTarget2 = singleTarget;
-    } catch {}
-  } else {
-    composer = new EffectComposer(renderer);
-  }
-  lastAppliedComposerPixelRatio = -1;
-  lastBloomTargetKey = '';
-  lastFxaaTargetKey = '';
-  lastFsrTargetKey = '';
-  lastCinematicLookTargetKey = '';
-  composer.setSize(window.innerWidth, window.innerHeight);
-  composer.setPixelRatio(effectiveComposerPixelRatio());
-  cityRevealRender.addComposerPasses(composer, { RenderPass, FXAAPass });
-  bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
-    0.58,
-    0.56,
-    0.68
-  );
-  bloomPass.activeMips = BLOOM_OPTIMIZED_ACTIVE_MIPS;
-  bloomPass.updateStride = BLOOM_OPTIMIZED_UPDATE_STRIDE;
-  composer.addPass(bloomPass);
-  fxaaPass = new FXAAPass();
-  composer.addPass(fxaaPass);
-  // Ordine della catena. Di default il TAA sta prima del grade, cosi' accumula su
-  // dati lineari e la grana per-frame non finisce dentro la history, e l'encode di
-  // output sta nell'ultimo pass, l'unico che presenta a schermo.
-  //
-  // ?pipeline=0 rimette la catena storica: encode dentro il pass FSR, con look e
-  // TAA che lavorano su valori gia' tonemappati e gia' in sRGB. Serve a confrontare.
-  const linearPipeline = linearPipelineRequestedFromParams(retroBenchmarkSearchParams);
-  const lastPassIsLook = linearPipeline && cinematicLookEnabled;
-
-  function createFsrUpscalePass(encodesOutput) {
-    const pass = new ShaderPass(withOutputEncode(TRON_FSR_UPSCALE_SHADER, encodesOutput));
-    pass.setSize = (width, height) => {
-      pass.uniforms?.sourceResolution?.value?.set(Math.max(1, width), Math.max(1, height));
-    };
-    return pass;
-  }
-
-  function createCinematicLookPass(encodesOutput) {
-    const pass = new ShaderPass(withOutputEncode(TRON_CINEMATIC_LOOK_SHADER, encodesOutput));
-    pass.setSize = (width, height) => {
-      pass.uniforms?.resolution?.value?.set(Math.max(1, width), Math.max(1, height));
-    };
-    return pass;
-  }
-
-  if (linearPipeline && temporalAaEnabled) {
-    temporalAaPass = new TemporalAaPass({ ...temporalAaSettings, hdrHistory: true });
-    temporalAaPass.enabled = false;
-    composer.addPass(temporalAaPass);
-  }
-
-  fsrPassCarriesOutputEncode = !lastPassIsLook;
-  fsrUpscalePass = createFsrUpscalePass(fsrPassCarriesOutputEncode);
-  syncFsrUpscalePass();
-  composer.addPass(fsrUpscalePass);
-
-  if (cinematicLookEnabled) {
-    cinematicLookPass = createCinematicLookPass(lastPassIsLook);
-    syncCinematicLookPass();
-    composer.addPass(cinematicLookPass);
-  }
-
-  if (!linearPipeline && temporalAaEnabled) {
-    temporalAaPass = new TemporalAaPass(temporalAaSettings);
-    temporalAaPass.enabled = false;
-    composer.addPass(temporalAaPass);
-  }
-  resizeBloomTargets();
-  resizeFxaaTargets();
-  resizeFsrUpscaleTarget();
-  resizeCinematicLookTarget();
-  applyBloomEnabled(bloomEnabled);
-  syncComposerBufferRoles();
-}
-
-// EffectComposer captures readBuffer/writeBuffer in its constructor, so swapping
-// renderTarget2 for the single-sample target above leaves readBuffer pointing at
-// the discarded MSAA clone: the scene pass (which writes into readBuffer) would
-// render into a buffer that setSize/setPixelRatio never resize, so the adaptive
-// resolution scaler could not shrink the scene at all. Pin the roles instead:
-// readBuffer is the multisampled scene target, writeBuffer the 1x ping-pong one.
-// Re-asserted every frame because swapBuffers() flips them on each needsSwap pass
-// and an odd number of them would leave the scene rendering at 1 sample.
-// The bloom pass normally ends by drawing itself additively back into the scene
-// buffer — a full-screen draw that, with MSAA on, rasterizes at the scene target's
-// sample rate for no antialiasing benefit. The cinematic look pass reads that same
-// buffer immediately afterwards, so when nothing sits between the two the addition
-// can happen inside the look shader instead: one full-res pass disappears.
-//
-// Only when the chain really is bloom -> look with nothing in between. FXAA, TAA
-// and FSR all process the combined image, so if any of them is enabled the bloom
-// has to be in the buffer before they run and the merge is off. Re-evaluated every
-// frame because those passes are toggled at runtime.
-function syncBloomLookMerge() {
-  if (!bloomPass) return;
-  const merged = Boolean(
-    cinematicLookPass?.enabled
-    && bloomPass.enabled
-    && !fxaaPass?.enabled
-    && !temporalAaPass?.enabled
-    && !fsrUpscalePass?.enabled
-  );
-  bloomPass.compositeToInput = !merged;
-  const uniforms = cinematicLookPass?.uniforms;
-  if (!uniforms) return;
-  uniforms.bloomMix.value = merged ? 1 : 0;
-  // The clamp reproduces the clipping the old in-place blend got for free from an
-  // 8-bit scene target. With MSAA off the composer runs on a HalfFloat target,
-  // where the old blend never clipped — clamping there would change the look.
-  if (uniforms.bloomClamp) uniforms.bloomClamp.value = composerMsaaActive ? 1 : 0;
-  // Bound even when unused: the sampler must stay valid, the shader gates on the mix.
-  if (uniforms.tBloom) uniforms.tBloom.value = bloomPass.bloomTexture?.() || null;
-}
-
-function syncComposerBufferRoles() {
-  if (!composer || !composerMsaaActive) return;
-  composer.readBuffer = composer.renderTarget1;
-  composer.writeBuffer = composer.renderTarget2;
-}
-
-function applyAntialiasControls(mode = antialiasMode) {
-  // ?aa URL override wins. Otherwise desktop defaults to msaa (control default is
-  // fxaa); mobile keeps fxaa (msaa crawls in motion at low res). 'off' honored.
-  const effective = antialiasUrlOverride
-    || (mobilePerformanceProfileActive() ? mode : (mode === 'off' ? 'off' : 'msaa'));
-  antialiasMode = normalizedAntialiasMode(effective);
-  syncGlobalFxaaPass();
-  resizeFxaaTargets();
-}
-
-function applyBloomEnabled(value = bloomEnabled) {
-  bloomEnabled = value !== false && value !== 'off';
-  if (bloomPass) {
-    bloomPass.enabled = bloomEnabled;
-    bloomPass._hasCachedBloom = false;
-  }
-}
-
-function isBloomPassActive() {
-  return Boolean(bloomPass?.enabled && (bloomPass.strength ?? 0) > BLOOM_BYPASS_STRENGTH);
-}
-
-function hasDroneIntroLanded() {
-  return Boolean(!getDroneIntroActive() && getDroneIntroProgress() >= 0.999);
-}
-
-function shouldBypassBloomForRevealPerformance() {
-  return Boolean(isCityRevealPerformanceCritical() && (mobilePerformanceProfileActive() || !hasDroneIntroLanded()));
-}
-
-function isBloomRevealBypassed() {
-  return Boolean(bloomEnabled && bloomPass && !bloomPass.enabled && shouldBypassBloomForRevealPerformance());
-}
-
-const bloomTemporalCameraPosition = new THREE.Vector3();
-const bloomTemporalCameraQuaternion = new THREE.Quaternion();
-let bloomTemporalPrimed = false;
-let bloomTemporalAppliedStride = 1;
-
-function invalidateBloomTemporalCache() {
-  if (bloomPass) bloomPass._hasCachedBloom = false;
-  bloomTemporalPrimed = false;
-  bloomTemporalAppliedStride = 1;
-}
-
-function syncBloomTemporalBudget() {
-  if (!bloomPass) return;
-  const active = Boolean(
-    bloomEnabled &&
-    postRevealPerfIsolationState.bloom &&
-    bloomPass.enabled &&
-    !isCityRevealPerformanceCritical()
-  );
-  if (!active) {
-    bloomPass.updateStride = 1;
-    bloomTemporalAppliedStride = 1;
-    bloomTemporalPrimed = false;
-    return;
-  }
-  let cameraMoving = true;
-  if (bloomTemporalPrimed) {
-    const moved = camera.position.distanceToSquared(bloomTemporalCameraPosition) > BLOOM_TEMPORAL_MOVE_EPS_SQ;
-    const rotated = 1 - Math.abs(camera.quaternion.dot(bloomTemporalCameraQuaternion)) > BLOOM_TEMPORAL_ROTATE_EPS;
-    const revealSweeping = cityRevealStartedAt > 0 && !cityRevealComplete;
-    cameraMoving = moved || rotated || getDroneIntroActive() || revealSweeping;
-  }
-  const nextStride = cameraMoving ? 1 : BLOOM_OPTIMIZED_UPDATE_STRIDE;
-  if (bloomPass.updateStride !== nextStride) {
-    bloomPass.updateStride = nextStride;
-    if (nextStride === 1) bloomPass._hasCachedBloom = false;
-  }
-  bloomTemporalAppliedStride = nextStride;
-  bloomTemporalCameraPosition.copy(camera.position);
-  bloomTemporalCameraQuaternion.copy(camera.quaternion);
-  bloomTemporalPrimed = true;
-}
-
-function mobilePerformanceProfileState() {
-  return mobilePerformanceProfileStateCore(mobilePerformanceQuery);
-}
-
-function mobilePerformanceProfileActive() {
-  return mobilePerformanceProfileActiveCore(mobilePerformanceQuery);
-}
-
-function effectiveRenderScaleForDevice(baseScale = manualRenderScale) {
-  return effectiveRenderScaleForDeviceCore(mobilePerformanceProfileActive(), baseScale, MOBILE_PERFORMANCE_RENDER_SCALE_CAP);
-}
-
-function cityRevealPerformanceWindowActive() {
-  return Boolean(
-    cityRevealWireframeEnabled &&
-    cityRevealWireAlpha > 0.002 &&
-    !cityRevealComplete
-  );
-}
-
-function shouldUseCityRevealPerformanceProfile() {
-  return cityRevealPerformanceWindowActive() && !mobilePerformanceProfileActive();
-}
-
-function syncCityRevealPerformanceProfile() {
-  const next = shouldUseCityRevealPerformanceProfile();
-  if (next === cityRevealPerformanceProfileActive) return;
-  cityRevealPerformanceProfileActive = next;
-  applyRenderResolution(requestedPixelRatio);
-}
-
-function effectivePixelRatioForDevice(basePixelRatio = requestedPixelRatio) {
-  return effectivePixelRatioForDeviceCore(mobilePerformanceProfileActive(), basePixelRatio, MOBILE_PERFORMANCE_PIXEL_RATIO_CAP);
-}
-
-function effectiveBloomScaleForDevice(baseScale = requestedBloomResolutionScale) {
-  return effectiveBloomScaleForDeviceCore(mobilePerformanceProfileActive(), baseScale, MOBILE_PERFORMANCE_BLOOM_SCALE_CAP);
-}
-
-function mobilePerformanceProfileInspect() {
-  const state = mobilePerformanceProfileState();
-  return {
-    active: state.active,
-    mode: state.active ? 'mobile-touch' : 'desktop',
-    query: MOBILE_PERFORMANCE_QUERY,
-    mediaQueryMatches: state.mediaQueryMatches,
-    touchPoints: state.touchPoints,
-    widthActive: state.widthActive,
-    activationReasons: state.reasons,
-    viewportWidth: window.innerWidth,
-    viewportHeight: window.innerHeight,
-    devicePixelRatio: window.devicePixelRatio || 1,
-    renderScaleCap: MOBILE_PERFORMANCE_RENDER_SCALE_CAP,
-    pixelRatioCap: MOBILE_PERFORMANCE_PIXEL_RATIO_CAP,
-    bloomScaleCap: MOBILE_PERFORMANCE_BLOOM_SCALE_CAP,
-    preRevealPixelRatioCap: CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP,
-    preRevealPerformanceActive: cityRevealPerformanceProfileActive,
-    revealPixelRatioCap: CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP,
-    revealPerformanceActive: cityRevealPerformanceProfileActive,
-    effectiveRenderScale: effectiveRenderScaleForDevice(manualRenderScale),
-    effectivePixelRatioRequest: effectivePixelRatioForDevice(requestedPixelRatio),
-    effectiveBloomScaleRequest: effectiveBloomScaleForDevice(requestedBloomResolutionScale),
-  };
-}
+// ---------- post (bloom): il dominio sta in engine/post-pipeline.js ----------
+initPostPipeline({ renderer, camera, cityRevealRender, postRevealPerfIsolationState, retroBenchmarkSearchParams });
 
 function syncHexRoadLodForFrame() {
   setHexRoadLodProfile({ mobile: mobilePerformanceProfileActive() });
   updateHexRoadBatchLod();
 }
 
-function shouldUseComposer() {
-  // fx.post=0 master switch: skip the whole composer (RenderPass-to-target +
-  // FXAA + FSR output) and fall to a single direct renderer.render(scene,camera)
-  // — the cleanest aggregate measure of post-processing fill.
-  if (!composer || !postEnabled || !fxEnabled('post')) return false;
-  return Boolean(
-    isBloomPassActive() ||
-    fxaaPass?.enabled ||
-    isFsrUpscaleActive() ||
-    cinematicLookPass?.enabled ||
-    temporalAaPass?.enabled ||
-    (antialiasMode === 'msaa' && composerMsaaActive) ||
-    (cityRevealWireframeEnabled && cityRevealWireAlpha > 0.002)
-  );
-}
-
-const forcedPixelRatioParam = (() => {
-  try {
-    const v = Number(new URLSearchParams(window.location.search).get('pixelRatio'));
-    return Number.isFinite(v) && v > 0 ? v : null;
-  } catch { return null; }
-})();
-function forcedRenderPixelRatio() {
-  if (forcedPixelRatioParam != null) return forcedPixelRatioParam;
-  if (mobilePerformanceProfileActive()) return MOBILE_TARGET_PIXEL_RATIO;
-  return null;
-}
-
-function applyRenderResolution(requestedPixelRatio) {
-  const revealPixelRatioCap = cityRevealPerformanceProfileActive
-    ? CITY_REVEAL_PERFORMANCE_PIXEL_RATIO_CAP
-    : MAX_RENDER_PIXEL_RATIO;
-  const forced = forcedRenderPixelRatio();
-  if (forced != null) {
-    activePixelRatio = Math.min(window.devicePixelRatio || 1, forced, revealPixelRatioCap);
-  } else {
-    const requestedBase = Number.isFinite(requestedPixelRatio) ? requestedPixelRatio : MAX_RENDER_PIXEL_RATIO;
-    const requested = effectivePixelRatioForDevice(requestedBase);
-    const renderScale = effectiveRenderScaleForDevice(manualRenderScale);
-    const dynamicPixelRatio = Math.max(MIN_DYNAMIC_PIXEL_RATIO, requested * renderScale * dynamicQualityScale);
-    activePixelRatio = Math.min(
-      window.devicePixelRatio || 1,
-      dynamicPixelRatio,
-      MAX_RENDER_PIXEL_RATIO,
-      revealPixelRatioCap,
-      adaptiveRenderTargetPixelRatio()
-    );
-  }
-  if (Math.abs(activePixelRatio - lastAppliedRendererPixelRatio) > 0.0001) {
-    renderer.setPixelRatio(activePixelRatio);
-    lastAppliedRendererPixelRatio = activePixelRatio;
-  }
-  if (composer) {
-    const composerPixelRatio = effectiveComposerPixelRatio();
-    if (Math.abs(composerPixelRatio - lastAppliedComposerPixelRatio) > 0.0001) {
-      composer.setPixelRatio(composerPixelRatio);
-      lastAppliedComposerPixelRatio = composerPixelRatio;
-      lastBloomTargetKey = '';
-      lastFxaaTargetKey = '';
-      lastFsrTargetKey = '';
-      lastCinematicLookTargetKey = '';
-    }
-    resizeBloomTargets();
-    resizeFxaaTargets();
-    syncFsrUpscalePass();
-    syncCinematicLookPass();
-    syncTemporalAaPass();
-  }
-}
-
-function tunePerformanceBudget(measuredFps) {
-  // A forced/pinned render resolution must stay fixed (benchmark intent) — never
-  // let the auto budget claw the quality scale down underneath it.
-  if (forcedRenderPixelRatio() != null) return;
-  if (performanceMode !== 'auto' || !Number.isFinite(measuredFps)) return;
-  if (performanceAdjustCooldown > 0) {
-    performanceAdjustCooldown--;
-    return;
-  }
-  const previousScale = dynamicQualityScale;
-  if (measuredFps < 45) {
-    dynamicQualityScale = Math.max(MIN_DYNAMIC_QUALITY_SCALE, dynamicQualityScale - 0.15);
-    performanceAdjustCooldown = 6;
-  } else if (measuredFps < 54) {
-    dynamicQualityScale = Math.max(MIN_DYNAMIC_QUALITY_SCALE, dynamicQualityScale - 0.10);
-    performanceAdjustCooldown = 7;
-  } else if (measuredFps < 58) {
-    dynamicQualityScale = Math.max(MIN_DYNAMIC_QUALITY_SCALE, dynamicQualityScale - 0.05);
-    performanceAdjustCooldown = 6;
-  } else if (measuredFps > 59.7 && dynamicQualityScale < 1) {
-    dynamicQualityScale = Math.min(1, dynamicQualityScale + 0.025);
-    performanceAdjustCooldown = 8;
-  }
-  if (Math.abs(dynamicQualityScale - previousScale) > 0.0001) applyRenderResolution(requestedPixelRatio);
-}
-
-function setupPost() {
-  if (!usePost) return;
-  rebuildComposer();
-  applyAntialiasControls(antialiasMode);
-}
 setupPost();
 
 function formatOffsetLabel(value) {
@@ -4899,13 +4213,13 @@ async function runFsrBenchmark() {
 function applyFsrUpscaleControlsFromUI() {
   if (!controlEls.fsrUpscaleEnabled || !controlEls.fsrInternalScale || !controlEls.fsrSharpness) return;
   applyFsrPresetSelectionToControls();
-  fsrUpscaleEnabled = controlEls.fsrUpscaleEnabled.value !== 'off';
-  fsrInternalScale = THREE.MathUtils.clamp(Number(controlEls.fsrInternalScale.value) || 1, 0.65, 1);
-  fsrSharpness = THREE.MathUtils.clamp(Number(controlEls.fsrSharpness.value) || 0, 0, 1.25);
-  controlEls.fsrInternalScale.value = fsrInternalScale.toFixed(2);
-  controlEls.fsrSharpness.value = fsrSharpness.toFixed(2);
-  controlEls.fsrInternalScaleVal.textContent = `${Math.round(fsrInternalScale * 100)}%`;
-  controlEls.fsrSharpnessVal.textContent = fsrSharpness.toFixed(2);
+  post.fsrUpscaleEnabled = controlEls.fsrUpscaleEnabled.value !== 'off';
+  post.fsrInternalScale = THREE.MathUtils.clamp(Number(controlEls.fsrInternalScale.value) || 1, 0.65, 1);
+  post.fsrSharpness = THREE.MathUtils.clamp(Number(controlEls.fsrSharpness.value) || 0, 0, 1.25);
+  controlEls.fsrInternalScale.value = post.fsrInternalScale.toFixed(2);
+  controlEls.fsrSharpness.value = post.fsrSharpness.toFixed(2);
+  controlEls.fsrInternalScaleVal.textContent = `${Math.round(post.fsrInternalScale * 100)}%`;
+  controlEls.fsrSharpnessVal.textContent = post.fsrSharpness.toFixed(2);
   syncFsrUpscalePass();
 }
 
@@ -4920,24 +4234,24 @@ function applyPostControlsFromUI() {
   const bloomQuality = Number(controlEls.bloomQuality.value);
   const pixelRatio = Math.min(Number(controlEls.pixelRatio.value) || MAX_RENDER_PIXEL_RATIO, MAX_RENDER_PIXEL_RATIO);
   controlEls.pixelRatio.value = pixelRatio.toFixed(2);
-  const previousPerformanceMode = performanceMode;
-  performanceMode = nextPerformanceMode;
-  manualRenderScale = nextRenderResolution;
-  requestedBloomResolutionScale = bloomQuality;
-  requestedPixelRatio = pixelRatio;
+  const previousPerformanceMode = post.performanceMode;
+  post.performanceMode = nextPerformanceMode;
+  post.manualRenderScale = nextRenderResolution;
+  post.requestedBloomResolutionScale = bloomQuality;
+  post.requestedPixelRatio = pixelRatio;
   applyFsrUpscaleControlsFromUI();
   applyAntialiasControls(nextAntialiasMode);
   applyBloomEnabled(nextBloomEnabled);
-  if (performanceMode !== previousPerformanceMode || performanceMode === 'quality') {
-    dynamicQualityScale = 1;
-    performanceAdjustCooldown = 0;
+  if (post.performanceMode !== previousPerformanceMode || post.performanceMode === 'quality') {
+    post.dynamicQualityScale = 1;
+    post.performanceAdjustCooldown = 0;
   }
-  applyRenderResolution(requestedPixelRatio);
-  if (bloomPass) {
-    bloomPass.enabled = bloomEnabled;
-    bloomPass.strength = bloomStrength;
-    bloomPass.radius = bloomRadius;
-    bloomPass.threshold = bloomThreshold;
+  applyRenderResolution(post.requestedPixelRatio);
+  if (post.bloomPass) {
+    post.bloomPass.enabled = post.bloomEnabled;
+    post.bloomPass.strength = bloomStrength;
+    post.bloomPass.radius = bloomRadius;
+    post.bloomPass.threshold = bloomThreshold;
     invalidateBloomTemporalCache();
   }
   controlEls.renderResolutionVal.textContent = `${Math.round(nextRenderResolution * 100)}%`;
@@ -5530,7 +4844,7 @@ function applyLiveControls() {
   const bloomQuality = Number(controlEls.bloomQuality.value);
   const pixelRatio = Math.min(Number(controlEls.pixelRatio.value) || MAX_RENDER_PIXEL_RATIO, MAX_RENDER_PIXEL_RATIO);
   controlEls.pixelRatio.value = pixelRatio.toFixed(2);
-  const previousPerformanceMode = performanceMode;
+  const previousPerformanceMode = post.performanceMode;
 
   applyHexRuntimeSettings({ offset, radius, dropDelay, dropSpeed, recovery, tileHitLight, playerTileLight });
   setHexTileHeightScale(tileHeight);
@@ -5690,18 +5004,18 @@ function applyLiveControls() {
   applyStormControlsFromUI();
   domeMat.uniforms.uCloudContrast.value = skyCloudContrast;
   setFixedCameraFov();
-  performanceMode = nextPerformanceMode;
-  manualRenderScale = nextRenderResolution;
-  requestedBloomResolutionScale = bloomQuality;
-  requestedPixelRatio = pixelRatio;
+  post.performanceMode = nextPerformanceMode;
+  post.manualRenderScale = nextRenderResolution;
+  post.requestedBloomResolutionScale = bloomQuality;
+  post.requestedPixelRatio = pixelRatio;
   applyFsrUpscaleControlsFromUI();
   applyAntialiasControls(nextAntialiasMode);
   applyBloomEnabled(nextBloomEnabled);
-  if (performanceMode !== previousPerformanceMode || performanceMode === 'quality') {
-    dynamicQualityScale = 1;
-    performanceAdjustCooldown = 0;
+  if (post.performanceMode !== previousPerformanceMode || post.performanceMode === 'quality') {
+    post.dynamicQualityScale = 1;
+    post.performanceAdjustCooldown = 0;
   }
-  applyRenderResolution(requestedPixelRatio);
+  applyRenderResolution(post.requestedPixelRatio);
 
   const lightResponse = sceneLightResponse(ambient, key);
   const roadLightFactor = 0.92 + roadLight * 0.95;
@@ -5784,11 +5098,11 @@ function applyLiveControls() {
   updateBasePadHexInfluence();
   refreshRoadTileInstances();
 
-  if (bloomPass) {
-    bloomPass.enabled = bloomEnabled;
-    bloomPass.strength = bloomStrength;
-    bloomPass.radius = bloomRadius;
-    bloomPass.threshold = bloomThreshold;
+  if (post.bloomPass) {
+    post.bloomPass.enabled = post.bloomEnabled;
+    post.bloomPass.strength = bloomStrength;
+    post.bloomPass.radius = bloomRadius;
+    post.bloomPass.threshold = bloomThreshold;
     invalidateBloomTemporalCache();
   }
 
@@ -6234,29 +5548,29 @@ function prewarmPostProcessingPasses() {
   postProcessingPrewarmStats.postRevealRendered = false;
   postProcessingPrewarmStats.errors = 0;
   const started = performance.now();
-  if (!composer) return postProcessingPrewarmStats;
-  const previousPostEnabled = postEnabled;
-  const previousBloomEnabled = bloomPass?.enabled;
-  const previousFxaaEnabled = fxaaPass?.enabled;
+  if (!post.composer) return postProcessingPrewarmStats;
+  const previousPostEnabled = post.postEnabled;
+  const previousBloomEnabled = post.bloomPass?.enabled;
+  const previousFxaaEnabled = post.fxaaPass?.enabled;
   const previousRevealState = snapshotCityRevealWireframeState();
   try {
-    postEnabled = true;
-    if (bloomPass) bloomPass.enabled = true;
-    if (fxaaPass) fxaaPass.enabled = antialiasMode === 'fxaa';
+    post.postEnabled = true;
+    if (post.bloomPass) post.bloomPass.enabled = true;
+    if (post.fxaaPass) post.fxaaPass.enabled = post.antialiasMode === 'fxaa';
     cityRevealRender.syncComposerPasses();
-    composer.render();
+    post.composer.render();
     postProcessingPrewarmStats.rendered = true;
     setCityRevealPostProcessingPrewarmState();
     cityRevealRender.syncComposerPasses();
-    composer.render();
+    post.composer.render();
     postProcessingPrewarmStats.postRevealRendered = true;
   } catch {
     postProcessingPrewarmStats.errors += 1;
   } finally {
     restoreCityRevealWireframeState(previousRevealState);
-    postEnabled = previousPostEnabled;
-    if (bloomPass) bloomPass.enabled = previousBloomEnabled;
-    if (fxaaPass) fxaaPass.enabled = previousFxaaEnabled;
+    post.postEnabled = previousPostEnabled;
+    if (post.bloomPass) post.bloomPass.enabled = previousBloomEnabled;
+    if (post.fxaaPass) post.fxaaPass.enabled = previousFxaaEnabled;
     cityRevealRender.syncComposerPasses();
     postProcessingPrewarmStats.durationMs = Number((performance.now() - started).toFixed(2));
     postProcessingPrewarmStats.texturesAfter = renderer.info.memory?.textures ?? 0;
@@ -6368,7 +5682,7 @@ window.__tronInspect = () => ({
   playerSpawn: { ...playerSpawn },
   fps: fpsEl.textContent,
   pixelRatio: renderer.getPixelRatio(),
-  antialiasMode,
+  antialiasMode: post.antialiasMode,
   bloomActive: isBloomPassActive(),
   hexUpdateEnabled,
   cityRevealWireAlpha,
@@ -6507,30 +5821,30 @@ window.__tronInspect = () => ({
   cityRevealSidewalkInternalLinesEnabled: CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED,
   cityRevealDensityObjects: cityRevealWireObjects.filter((object) => object.userData.cityRevealRole === 'wire-density').length,
   fx: {
-    performanceMode,
-    antialiasMode,
-    fxaaEnabled: Boolean(fxaaPass?.enabled),
-    bloomEnabled,
-    bloomPassEnabled: Boolean(bloomPass?.enabled),
+    performanceMode: post.performanceMode,
+    antialiasMode: post.antialiasMode,
+    fxaaEnabled: Boolean(post.fxaaPass?.enabled),
+    bloomEnabled: post.bloomEnabled,
+    bloomPassEnabled: Boolean(post.bloomPass?.enabled),
     bloomRevealBypassed: isBloomRevealBypassed(),
     bloomRevealBypassActive: shouldBypassBloomForRevealPerformance(),
     bloomActive: isBloomPassActive(),
-    cinematicLookEnabled,
-    cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
-    temporalAaEnabled,
-    temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
+    cinematicLookEnabled: post.cinematicLookEnabled,
+    cinematicLookPassEnabled: Boolean(post.cinematicLookPass?.enabled),
+    temporalAaEnabled: post.temporalAaEnabled,
+    temporalAaPassEnabled: Boolean(post.temporalAaPass?.enabled),
     cinematicGrounding: cinematicGroundingSettings,
-    bloomStrength: bloomPass?.strength ?? 0,
-    bloomRadius: bloomPass?.radius ?? 0,
-    bloomThreshold: bloomPass?.threshold ?? 0,
-    bloomResolutionScale,
-    bloomActiveMips: bloomPass?.activeMips ?? 0,
-    bloomUpdateStride: bloomPass?.updateStride ?? 0,
-    bloomCacheReady: Boolean(bloomPass?._hasCachedBloom),
+    bloomStrength: post.bloomPass?.strength ?? 0,
+    bloomRadius: post.bloomPass?.radius ?? 0,
+    bloomThreshold: post.bloomPass?.threshold ?? 0,
+    bloomResolutionScale: post.bloomResolutionScale,
+    bloomActiveMips: post.bloomPass?.activeMips ?? 0,
+    bloomUpdateStride: post.bloomPass?.updateStride ?? 0,
+    bloomCacheReady: Boolean(post.bloomPass?._hasCachedBloom),
     bloomResolutionCap: BLOOM_RESOLUTION_CAP,
-    manualRenderScale,
-    requestedPixelRatio,
-    activePixelRatio,
+    manualRenderScale: post.manualRenderScale,
+    requestedPixelRatio: post.requestedPixelRatio,
+    activePixelRatio: post.activePixelRatio,
     adaptiveRenderTarget: adaptiveRenderTargetInspect(),
     mobileProfile: mobilePerformanceProfileInspect(),
   },
@@ -6558,30 +5872,30 @@ window.__tronApplyPlayerSpawn = applyPlayerSpawn;
 window.__tronPerfInspect = () => ({
   fps: fpsEl.textContent,
   pixelRatio: renderer.getPixelRatio(),
-  activePixelRatio,
+  activePixelRatio: post.activePixelRatio,
   adaptiveRenderTarget: adaptiveRenderTargetInspect(),
-  manualRenderScale,
-  dynamicQualityScale,
-  performanceMode,
+  manualRenderScale: post.manualRenderScale,
+  dynamicQualityScale: post.dynamicQualityScale,
+  performanceMode: post.performanceMode,
   composerActive: shouldUseComposer(),
-  bloomEnabled,
-  bloomPassEnabled: Boolean(bloomPass?.enabled),
+  bloomEnabled: post.bloomEnabled,
+  bloomPassEnabled: Boolean(post.bloomPass?.enabled),
   bloomRevealBypassed: isBloomRevealBypassed(),
   bloomRevealBypassActive: shouldBypassBloomForRevealPerformance(),
   bloomActive: isBloomPassActive(),
-  fxaaEnabled: Boolean(fxaaPass?.enabled),
-  antialiasMode,
-  cinematicLookEnabled,
-  cinematicLookPassEnabled: Boolean(cinematicLookPass?.enabled),
-  temporalAaEnabled,
-  temporalAaPassEnabled: Boolean(temporalAaPass?.enabled),
+  fxaaEnabled: Boolean(post.fxaaPass?.enabled),
+  antialiasMode: post.antialiasMode,
+  cinematicLookEnabled: post.cinematicLookEnabled,
+  cinematicLookPassEnabled: Boolean(post.cinematicLookPass?.enabled),
+  temporalAaEnabled: post.temporalAaEnabled,
+  temporalAaPassEnabled: Boolean(post.temporalAaPass?.enabled),
   cinematicGrounding: cinematicGroundingSettings,
-  bloomResolutionScale,
+  bloomResolutionScale: post.bloomResolutionScale,
   bloomResolutionCap: BLOOM_RESOLUTION_CAP,
-  bloomActiveMips: bloomPass?.activeMips ?? 0,
-  bloomUpdateStride: bloomPass?.updateStride ?? 0,
-  bloomTemporalStride: bloomTemporalAppliedStride,
-  bloomCacheReady: Boolean(bloomPass?._hasCachedBloom),
+  bloomActiveMips: post.bloomPass?.activeMips ?? 0,
+  bloomUpdateStride: post.bloomPass?.updateStride ?? 0,
+  bloomTemporalStride: post.bloomTemporalAppliedStride,
+  bloomCacheReady: Boolean(post.bloomPass?._hasCachedBloom),
   mobileProfile: mobilePerformanceProfileInspect(),
   wireframeFx: {
     enabled: cityRevealWireframeEnabled,
@@ -6595,7 +5909,7 @@ window.__tronPerfInspect = () => ({
   },
   storm: skyDome.inspectStorm(),
   skyBake: skyDome.inspectSkyBake(),
-  temporalAa: temporalAaPass?.inspect(),
+  temporalAa: post.temporalAaPass?.inspect(),
   hexUpdateEnabled,
   hexTiles: hexRoadTiles.length,
   hexRoad: hexRoadInspect(),
@@ -6619,7 +5933,7 @@ function applyViewportResize() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
-  if (composer) composer.setSize(w, h);
+  if (post.composer) post.composer.setSize(w, h);
   applyRenderResolution(Number(controlEls.pixelRatio.value));
 }
 window.addEventListener('resize', () => {
@@ -6640,7 +5954,7 @@ function collectTechBreakdownStats() {
   return {
     ...performanceDiagnostics.summary(latestMeasuredFps),
     skyBake: skyDome.inspectSkyBake(),
-    temporalAa: temporalAaPass?.inspect() || { enabled: false, profile: temporalAaSettings.profile },
+    temporalAa: post.temporalAaPass?.inspect() || { enabled: false, profile: post.temporalAaSettings.profile },
     webgpu: { roadmap: 'compute TAA + motion vectors' },
     hexRoad: hexRoadInspect(),
     fxDisabled,
@@ -6728,7 +6042,7 @@ function tick(now) {
   maybeStartRetroBenchmarkAuto(now);
   const postRevealPerformanceCritical = isCityRevealPerformanceCritical();
   const bypassBloomForReveal = shouldBypassBloomForRevealPerformance();
-  if (bloomPass) bloomPass.enabled = bloomEnabled && postRevealPerfIsolationState.bloom && !bypassBloomForReveal && fxEnabled('bloom');
+  if (post.bloomPass) post.bloomPass.enabled = post.bloomEnabled && postRevealPerfIsolationState.bloom && !bypassBloomForReveal && fxEnabled('bloom');
   syncBloomTemporalBudget();
   syncCinematicLookPass(now);
   syncTemporalAaPass();
