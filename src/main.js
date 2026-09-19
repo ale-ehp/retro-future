@@ -296,6 +296,18 @@ import {
 } from './world/facade-led-treatment.js';
 import { createSkyDome } from './world/sky-dome.js';
 import {
+  player,
+  initPlayerState,
+  DEFAULT_PLAYER_SPAWN,
+  DEFAULT_DRONE_LANDING_POSE,
+  applyCameraLook,
+  lerpAngle,
+  removeViewMotionOffset,
+  applyViewMotionOffset,
+  cameraGroundHeightAt,
+  resolveCameraWalkSurface,
+} from './camera/player-state.js';
+import {
   initRunnerWiring,
   applyCharacterControlsFromUI,
   applyCinematicGroundingInitialControls,
@@ -415,7 +427,6 @@ import {
   applyBasePadMaterialSettings,
   applyBasePadMaterialRuntimeSettings,
   applyBasePadRuntimeSettings,
-  basePadAtPoint,
   basePadHexClipMesh,
   basePadLedBatch,
   createBuildingBasePad,
@@ -525,7 +536,6 @@ import {
   applyMovement,
   clearMovementKeys,
   clearVerticalMovementState,
-  headBobOffset,
   initMovement,
   movementHorizontalSpeed,
   movementRunMix,
@@ -536,7 +546,6 @@ import {
   setMovementHorizontalSpeed,
   setMovementRunMix,
   setSideSwayOffset,
-  sideSwayOffset,
   stepPhase,
   updateWalkSimulation,
 } from './controls/movement.js';
@@ -657,7 +666,6 @@ import {
   DRAG_ACTIVATE_PX,
   POINTER_LOCK_SETTLE_MS,
   POINTER_CLICK_SUPPRESS_MS,
-  WALK_SURFACE_SNAP_TOLERANCE,
   FOOTSTEP_PLAYER_BUS,
   FOOTSTEP_PLAYER_VOLUME_SCALE,
   roadBaseY,
@@ -881,36 +889,14 @@ function setFixedCameraFov() {
 }
 
 // ---------- free fly controls (WASD + mouse look pointer-lock + Q/E vertical + Shift sprint) ----------
-let yaw, pitch;
+// ---------- lo stato del giocatore sta in camera/player-state.js ----------
+initPlayerState({ camera, isCameraCollisionDisabled });
 {
   const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-  yaw = e.y;
-  pitch = e.x;
+  player.yaw = e.y;
+  player.pitch = e.x;
 }
-const DEFAULT_PLAYER_SPAWN = Object.freeze({
-  x: 1021.9157138958009,
-  y: 591.0351224586902,
-  z: PLAYER_SPAWN_DEFAULT_Z,
-  spawnYaw: 0.6598680604188623,
-  spawnPitch: -0.4052322239066757,
-});
-const DEFAULT_DRONE_LANDING_POSE = Object.freeze({
-  x: 0,
-  y: 4.1,
-  z: 828.8697008214727,
-  spawnYaw: 0,
-  spawnPitch: 0.24349025257385304,
-  savedAt: '2026-06-09T13:01:07.101Z',
-});
-let playerSpawn = { ...DEFAULT_PLAYER_SPAWN };
-let droneLandingPose = { ...DEFAULT_DRONE_LANDING_POSE };
-let backspaceIntroTriggered = false;
-let sceneBootComplete = false;
-let cameraCollisionUnlockedByBackspace = false;
-let mouseSensitivityScale = 1;
-let cameraMinHeight = 1.8;
-let viewRoll = 0;
-let tronDiscRevealWaitingActive = false;
+
 const welcomeWindowOverlay = document.getElementById('welcome-window-overlay');
 const welcomeWindowPanel = welcomeWindowOverlay?.querySelector('.welcome-window');
 const welcomeWindowAction = welcomeWindowOverlay?.querySelector('.welcome-action');
@@ -992,9 +978,9 @@ welcomeWindowOverlay?.addEventListener('pointerdown', triggerWelcomeWindowTouch,
 welcomeWindowOverlay?.addEventListener('touchstart', triggerWelcomeWindowTouch, { passive: false });
 
 function beginDemoReveal(event) {
-  tronDiscRevealWaitingActive = true;
+  player.tronDiscRevealWaitingActive = true;
   setTronDiscCursorRevealWaiting(true, event || null);
-  tronRevealWaitLabel?.classList.toggle('is-active', tronDiscRevealWaitingActive);
+  tronRevealWaitLabel?.classList.toggle('is-active', player.tronDiscRevealWaitingActive);
   triggerBackspaceDroneIntro('welcome-button');
 }
 
@@ -1008,7 +994,7 @@ function isDeviceInLandscape() {
 let awaitingLandscapeStart = false;
 function triggerWelcomeButtonStart(event) {
   event.preventDefault();
-  if (!sceneBootComplete) return;
+  if (!player.sceneBootComplete) return;
   if (awaitingLandscapeStart) return;
   // Unlock audio inside THIS tap gesture, always. On mobile the real start can
   // be deferred to the post-rotation orientationchange handler, which carries
@@ -1055,14 +1041,6 @@ welcomeWindowOverlay?.addEventListener('click', (event) => {
   triggerWelcomeButtonStart(event);
 });
 
-// reused scratch (order 'YXZ') to avoid allocating a THREE.Euler on every applyCameraLook call
-// (runs once per frame plus once per mousemove/touchmove)
-const applyCameraLookEuler = new THREE.Euler(0, 0, 0, 'YXZ');
-function applyCameraLook() {
-  applyCameraLookEuler.set(pitch, yaw, viewRoll);
-  camera.quaternion.setFromEuler(applyCameraLookEuler);
-}
-
 const lockEl = renderer.domElement;
 initDiscCursor({
   tronDiscCursor,
@@ -1071,13 +1049,8 @@ initDiscCursor({
   getUnlockedMouseLookActive,
 });
 
-function lerpAngle(from, to, t) {
-  const delta = Math.atan2(Math.sin(to - from), Math.cos(to - from));
-  return from + delta * t;
-}
-
 function triggerBackspaceDroneIntro(source = 'backspace') {
-  if (!sceneBootComplete) return;
+  if (!player.sceneBootComplete) return;
   dismissWelcomeWindow();
   ensureFootstepAudioReady();
   // The soundtrack is the reveal's master clock: start it immediately, muffled
@@ -1085,27 +1058,27 @@ function triggerBackspaceDroneIntro(source = 'backspace') {
   // (see getSoundtrackSyncState + updateCityRevealWireframe), so audio and
   // reveal can never drift apart.
   startTronProceduralMusic(source, { introLofi: true });
-  if (!backspaceIntroTriggered) {
-    backspaceIntroTriggered = true;
-    cameraCollisionUnlockedByBackspace = true;
+  if (!player.backspaceIntroTriggered) {
+    player.backspaceIntroTriggered = true;
+    player.cameraCollisionUnlockedByBackspace = true;
   }
   startCityRevealWireTimer();
   startDroneIntroFlight(source);
 }
 
 function syncTronDiscRevealWaiting() {
-  const next = Boolean(tronDiscRevealWaitingActive && !cityRevealComplete);
+  const next = Boolean(player.tronDiscRevealWaitingActive && !cityRevealComplete);
   if (next === tronDiscCursorState.revealWaiting) return;
-  tronDiscRevealWaitingActive = next;
-  setTronDiscCursorRevealWaiting(tronDiscRevealWaitingActive);
-  tronRevealWaitLabel?.classList.toggle('is-active', tronDiscRevealWaitingActive);
+  player.tronDiscRevealWaitingActive = next;
+  setTronDiscCursorRevealWaiting(player.tronDiscRevealWaitingActive);
+  tronRevealWaitLabel?.classList.toggle('is-active', player.tronDiscRevealWaitingActive);
 }
 
 initMouseLook(ctx, {
-  getYaw: () => yaw,
-  setYaw: (v) => { yaw = v; },
-  getPitch: () => pitch,
-  setPitch: (v) => { pitch = v; },
+  getYaw: () => player.yaw,
+  setYaw: (v) => { player.yaw = v; },
+  getPitch: () => player.pitch,
+  setPitch: (v) => { player.pitch = v; },
   applyCameraLook,
   PITCH_LIMIT,
   lockEl,
@@ -1120,7 +1093,7 @@ initMouseLook(ctx, {
   requestLandscapeFullscreen,
   isMobileMovementControlTarget,
   getCityRevealComplete: () => cityRevealComplete,
-  getMouseSensitivityScale: () => mouseSensitivityScale,
+  getMouseSensitivityScale: () => player.mouseSensitivityScale,
   contactTerminalOwnsCamera: contactTerminalOwnsCamera,
 });
 
@@ -1132,37 +1105,13 @@ initMobileMovement({
   mobileMovementKnobEl,
 });
 
-// movement step in tick
-let speedBase = 28;       // units / sec
-let speedSprint = 90;
-let backwardSpeedScale = 0.72;
-let strafeSpeedScale = 0.86;
-let diagonalSpeedScale = 1.0;
-let verticalSpeed = 34;
-let movementAcceleration = 12;
-let movementDeceleration = 10;
-let walkBobAmount = 0.16;
-let runBobAmount = 0.34;
-let strafeBobScale = 0.72;
-let backwardBobScale = 0.55;
-let walkStepRate = 1.75;
-let runStepRate = 3.0;
-let stepSnapAmount = 0.35;
-let movementSwayAmount = 0.08;
-let movementRollAmount = 0.018;
-let strafeLeanAmount = 0.035;
-let headMotionSmoothing = 18;
-const appliedHeadMotion = new THREE.Vector3();
-let walkSurfaceLift = 0;
-let walkSurfaceKind = 'road';
-let activeWalkSurfacePad = null;
 // I passi del giocatore vivono in audio/player-footsteps.js (tappa 5, 2026-09-19): qui
 // solo le dipendenze che quel modulo prende da main.
 initPlayerFootsteps({
   camera,
-  getCameraMinHeight: () => cameraMinHeight,
-  getWalkSurfaceLift: () => walkSurfaceLift,
-  getWalkSurfaceKind: () => walkSurfaceKind,
+  getCameraMinHeight: () => player.cameraMinHeight,
+  getWalkSurfaceLift: () => player.walkSurfaceLift,
+  getWalkSurfaceKind: () => player.walkSurfaceKind,
   isCameraCollisionDisabled,
 });
 
@@ -1202,47 +1151,6 @@ window.__tronMusicStop = stopTronProceduralMusic;
 window.__tronMusicSetVolume = setTronProceduralMusicVolume;
 window.__tronMusicForceCrossfade = crossfadeTronSoundtrack;
 window.__tronMusicInspect = () => tronSoundtrackRuntime.inspect();
-
-function removeViewMotionOffset() {
-  if (appliedHeadMotion.lengthSq() <= 0) return;
-  camera.position.sub(appliedHeadMotion);
-  appliedHeadMotion.set(0, 0, 0);
-}
-
-function applyViewMotionOffset() {
-  appliedHeadMotion.set(
-    Math.cos(yaw) * sideSwayOffset,
-    headBobOffset,
-    -Math.sin(yaw) * sideSwayOffset
-  );
-  camera.position.add(appliedHeadMotion);
-}
-
-function walkSurfaceLiftAt(x, z) {
-  const padHit = basePadAtPoint(x, z);
-  activeWalkSurfacePad = padHit?.pad || null;
-  walkSurfaceKind = padHit ? 'sidewalk' : 'road';
-  if (!padHit) return 0;
-  return Math.max(0, (padHit.topY ?? roadTileTopY()) - roadTileTopY());
-}
-
-function cameraGroundHeightAt(x, z) {
-  return cameraMinHeight + walkSurfaceLiftAt(x, z);
-}
-
-function resolveCameraWalkSurface(hasVerticalInput) {
-  if (isCameraCollisionDisabled()) return;
-  const previousGroundY = cameraMinHeight + walkSurfaceLift;
-  const targetGroundY = cameraGroundHeightAt(camera.position.x, camera.position.z);
-  const closeToWalkSurface = camera.position.y <= Math.max(previousGroundY, targetGroundY) + WALK_SURFACE_SNAP_TOLERANCE;
-
-  if (camera.position.y < targetGroundY || (!hasVerticalInput && closeToWalkSurface)) {
-    camera.position.y = targetGroundY;
-    if (movementVelocity.y < 0 || !hasVerticalInput) movementVelocity.y = 0;
-  }
-
-  walkSurfaceLift = Math.max(0, targetGroundY - cameraMinHeight);
-}
 
 // ---------- reflection environment + solid visible sky ----------
 // bakeTronReflectionMap moved to ./reflection-env.js (see initReflectionEnv below).
@@ -1436,7 +1344,7 @@ let roadBoundaryCameraLead = 8;
 const roadBoundaryProbeVelocity = new THREE.Vector3();
 
 function isCameraCollisionDisabled() {
-  return !cameraCollisionUnlockedByBackspace || getTronNoclipEnabled() || getDroneIntroActive();
+  return !player.cameraCollisionUnlockedByBackspace || getTronNoclipEnabled() || getDroneIntroActive();
 }
 
 function roadHexBoundaryLimits() {
@@ -1490,18 +1398,18 @@ initDroneIntro(ctx, {
   setButtonFeedback,
   updateStartPositionLiveLabel,
   setTronNoclip,
-  getYaw: () => yaw,
-  setYaw: (v) => { yaw = v; },
-  getPitch: () => pitch,
-  setPitch: (v) => { pitch = v; },
-  getViewRoll: () => viewRoll,
-  setViewRoll: (v) => { viewRoll = v; },
+  getYaw: () => player.yaw,
+  setYaw: (v) => { player.yaw = v; },
+  getPitch: () => player.pitch,
+  setPitch: (v) => { player.pitch = v; },
+  getViewRoll: () => player.viewRoll,
+  setViewRoll: (v) => { player.viewRoll = v; },
   setHeadBobOffset,
   setSideSwayOffset,
   setMovementHorizontalSpeed,
   setMovementRunMix,
   getLast: () => last,
-  getDroneLandingPose: () => droneLandingPose,
+  getDroneLandingPose: () => player.droneLandingPose,
   getDefaultDroneLandingPose: () => DEFAULT_DRONE_LANDING_POSE,
   getSideBuildingRecords: () => sideBuildingRecords,
   getMainBuildingRecords: () => mainBuildingRecords,
@@ -1513,30 +1421,30 @@ initDroneIntro(ctx, {
 
 initMovement(ctx, {
   keys,
-  getSpeedBase: () => speedBase,
-  getSpeedSprint: () => speedSprint,
-  getBackwardSpeedScale: () => backwardSpeedScale,
-  getStrafeSpeedScale: () => strafeSpeedScale,
-  getDiagonalSpeedScale: () => diagonalSpeedScale,
-  getMovementAcceleration: () => movementAcceleration,
-  getMovementDeceleration: () => movementDeceleration,
+  getSpeedBase: () => player.speedBase,
+  getSpeedSprint: () => player.speedSprint,
+  getBackwardSpeedScale: () => player.backwardSpeedScale,
+  getStrafeSpeedScale: () => player.strafeSpeedScale,
+  getDiagonalSpeedScale: () => player.diagonalSpeedScale,
+  getMovementAcceleration: () => player.movementAcceleration,
+  getMovementDeceleration: () => player.movementDeceleration,
   resolveCameraBuildingCollision,
   resolveCameraCrowdCollision,
   resolveCameraRoadHexBoundaryCollision,
   resolveCameraWalkSurface,
-  getHeadMotionSmoothing: () => headMotionSmoothing,
-  getWalkBobAmount: () => walkBobAmount,
-  getRunBobAmount: () => runBobAmount,
-  getStrafeBobScale: () => strafeBobScale,
-  getBackwardBobScale: () => backwardBobScale,
-  getWalkStepRate: () => walkStepRate,
-  getRunStepRate: () => runStepRate,
-  getStepSnapAmount: () => stepSnapAmount,
-  getMovementSwayAmount: () => movementSwayAmount,
-  getMovementRollAmount: () => movementRollAmount,
-  getStrafeLeanAmount: () => strafeLeanAmount,
-  getViewRoll: () => viewRoll,
-  setViewRoll: (v) => { viewRoll = v; },
+  getHeadMotionSmoothing: () => player.headMotionSmoothing,
+  getWalkBobAmount: () => player.walkBobAmount,
+  getRunBobAmount: () => player.runBobAmount,
+  getStrafeBobScale: () => player.strafeBobScale,
+  getBackwardBobScale: () => player.backwardBobScale,
+  getWalkStepRate: () => player.walkStepRate,
+  getRunStepRate: () => player.runStepRate,
+  getStepSnapAmount: () => player.stepSnapAmount,
+  getMovementSwayAmount: () => player.movementSwayAmount,
+  getMovementRollAmount: () => player.movementRollAmount,
+  getStrafeLeanAmount: () => player.strafeLeanAmount,
+  getViewRoll: () => player.viewRoll,
+  setViewRoll: (v) => { player.viewRoll = v; },
   resetFootstepCadence,
   updateFootstepAudioFromWalk,
   setFixedCameraFov,
@@ -1550,7 +1458,7 @@ initKeyboard({
   triggerBackspaceDroneIntro,
   resetCameraHeightToDefault,
   captureLivePlayerSpawn,
-  getBackspaceIntroTriggered: () => backspaceIntroTriggered,
+  getBackspaceIntroTriggered: () => player.backspaceIntroTriggered,
   handleContactTerminalKeyDown: handleContactTerminalKeyDown,
 });
 
@@ -2002,8 +1910,8 @@ initCityDepartmentBoards({
   sideBuildingRecords,
   DEFAULT_DRONE_LANDING_POSE,
   TRON_RUNNER_REVEAL_ENABLED,
-  getDroneLandingPose: () => droneLandingPose,
-  getPlayerSpawn: () => playerSpawn,
+  getDroneLandingPose: () => player.droneLandingPose,
+  getPlayerSpawn: () => player.playerSpawn,
   getCityRevealComplete: () => cityRevealComplete,
   getRunnerReady: () => tronRunnerState.ready,
   getRevealComplete: tronRunnerRevealIsComplete,
@@ -2022,17 +1930,17 @@ initContactTerminal({
   addElStripRectFrame,
   sideBuildingRecords,
   getBottomY: cityDepartmentBoardBottomY,
-  getPlayerSpawn: () => playerSpawn,
+  getPlayerSpawn: () => player.playerSpawn,
   getRevealComplete: () => cityRevealComplete && tronRunnerRevealIsComplete(),
   getRevealFactor: cityDepartmentBoardRevealFactor,
   getEffectEnabled: () => fxEnabled('deptBoards'),
   getOtherCameraActive: () => getDroneIntroActive() || isCityRevealCompositeActive(),
-  getYaw: () => yaw,
-  setYaw: (value) => { yaw = value; },
-  getPitch: () => pitch,
-  setPitch: (value) => { pitch = value; },
-  getViewRoll: () => viewRoll,
-  setViewRoll: (value) => { viewRoll = value; },
+  getYaw: () => player.yaw,
+  setYaw: (value) => { player.yaw = value; },
+  getPitch: () => player.pitch,
+  setPitch: (value) => { player.pitch = value; },
+  getViewRoll: () => player.viewRoll,
+  setViewRoll: (value) => { player.viewRoll = value; },
   applyCameraLook,
   clearMovement: clearMovementKeys,
   clearViewMotion: () => {
@@ -2041,7 +1949,7 @@ initContactTerminal({
     setSideSwayOffset(0);
     setMovementHorizontalSpeed(0);
     setMovementRunMix(0);
-    viewRoll = 0;
+    player.viewRoll = 0;
     resetFootstepCadence();
   },
   stopMouseLook: stopMouseLookInput,
@@ -2090,8 +1998,8 @@ initLabEqualizer({
   TRON_SOUNDTRACK_URL,
   TRON_RUNNER_BEAT_PULSE_AUDIO_KICK_ENABLED,
   getCityRevealComplete: () => cityRevealComplete,
-  getDroneLandingPose: () => droneLandingPose,
-  getPlayerSpawn: () => playerSpawn,
+  getDroneLandingPose: () => player.droneLandingPose,
+  getPlayerSpawn: () => player.playerSpawn,
   getDynamicRoadCenter: () => boulevard.dynamicRoadCenter,
   getDynamicRoadLength: () => boulevard.dynamicRoadLength,
   getLatestMeasuredFps: () => latestMeasuredFps,
@@ -2113,8 +2021,8 @@ initRunnerWiring({
   lerpAngle,
   isCameraCollisionDisabled,
   roadHexBoundaryLimits,
-  getPlayerSpawn: () => playerSpawn,
-  getDroneLandingPose: () => droneLandingPose,
+  getPlayerSpawn: () => player.playerSpawn,
+  getDroneLandingPose: () => player.droneLandingPose,
   getCollisionPadding: () => collisionPadding,
   getMainBuildingCollisionPadding: () => mainBuildingCollisionPadding,
   getLatestMeasuredFps: () => latestMeasuredFps,
@@ -2171,7 +2079,7 @@ initSpeechBubbles({
 initCityRevealWireframe({
   camera,
   renderer,
-  getPlayerSpawn: () => playerSpawn,
+  getPlayerSpawn: () => player.playerSpawn,
   getDynamicRoadSurfaceWidth: () => dynamicRoadSurfaceWidth,
   getDynamicRoadLength: () => boulevard.dynamicRoadLength,
   getDynamicRoadCenter: () => boulevard.dynamicRoadCenter,
@@ -2417,10 +2325,10 @@ const controlSettingsRuntime = createControlSettingsRuntime({
   updatePlayerSpawnLabel,
   applyPlayerSpawn,
   setPlayerSpawn: (nextSpawn) => {
-    playerSpawn = nextSpawn;
+    player.playerSpawn = nextSpawn;
   },
   setDroneLandingPose: (nextLanding) => {
-    droneLandingPose = nextLanding;
+    player.droneLandingPose = nextLanding;
   },
 });
 
@@ -2429,7 +2337,7 @@ const {
   persistSettingsToProject,
 } = controlSettingsRuntime;
 
-function formatPlayerSpawn(spawn = playerSpawn) {
+function formatPlayerSpawn(spawn = player.playerSpawn) {
   return `${spawn.x.toFixed(1)}, ${spawn.y.toFixed(1)}, ${spawn.z.toFixed(1)} | yaw ${THREE.MathUtils.radToDeg(spawn.spawnYaw).toFixed(0)} pitch ${THREE.MathUtils.radToDeg(spawn.spawnPitch).toFixed(0)}`;
 }
 
@@ -2438,8 +2346,8 @@ function formatCurrentPlayerPose() {
     x: camera.position.x,
     y: camera.position.y,
     z: camera.position.z,
-    spawnYaw: yaw,
-    spawnPitch: pitch,
+    spawnYaw: player.yaw,
+    spawnPitch: player.pitch,
   });
 }
 
@@ -2478,8 +2386,8 @@ function isDefaultDroneLandingPose(spawn) {
 }
 
 function updatePlayerSpawnLabel() {
-  if (controlEls.playerSpawnVal) controlEls.playerSpawnVal.textContent = formatPlayerSpawn(playerSpawn);
-  if (controlEls.startPositionSavedVal) controlEls.startPositionSavedVal.textContent = formatPlayerSpawn(playerSpawn);
+  if (controlEls.playerSpawnVal) controlEls.playerSpawnVal.textContent = formatPlayerSpawn(player.playerSpawn);
+  if (controlEls.startPositionSavedVal) controlEls.startPositionSavedVal.textContent = formatPlayerSpawn(player.playerSpawn);
 }
 
 function updateStartPositionLiveLabel() {
@@ -2495,35 +2403,35 @@ function loadStoredPlayerSpawn() {
     const nextSpawn = sanitizePlayerSpawn(stored?.spawn ?? stored);
     if (nextSpawn) {
       if (isDefaultDroneLandingPose(nextSpawn)) {
-        droneLandingPose = sanitizeDroneLandingPose(stored?.spawn ?? stored) || nextSpawn;
-        localStorage.setItem(DRONE_LANDING_KEY, JSON.stringify({ savedAt: droneLandingPose.savedAt || new Date().toISOString(), landing: droneLandingPose }, null, 2));
+        player.droneLandingPose = sanitizeDroneLandingPose(stored?.spawn ?? stored) || nextSpawn;
+        localStorage.setItem(DRONE_LANDING_KEY, JSON.stringify({ savedAt: player.droneLandingPose.savedAt || new Date().toISOString(), landing: player.droneLandingPose }, null, 2));
       } else {
-        playerSpawn = nextSpawn;
+        player.playerSpawn = nextSpawn;
       }
     }
     const storedLanding = JSON.parse(localStorage.getItem(DRONE_LANDING_KEY) || 'null');
     const nextLanding = sanitizeDroneLandingPose(storedLanding?.landing ?? storedLanding);
-    if (nextLanding) droneLandingPose = nextLanding;
+    if (nextLanding) player.droneLandingPose = nextLanding;
   } catch (error) {
     console.warn('Invalid TRON boulevard player spawn', error);
   }
   updatePlayerSpawnLabel();
 }
 
-function applyPlayerSpawn(spawn = playerSpawn, showFeedback = true) {
+function applyPlayerSpawn(spawn = player.playerSpawn, showFeedback = true) {
   const nextSpawn = sanitizePlayerSpawn(spawn) || DEFAULT_PLAYER_SPAWN;
   removeViewMotionOffset();
   movementVelocity.set(0, 0, 0);
   camera.position.set(nextSpawn.x, nextSpawn.y, nextSpawn.z);
-  yaw = nextSpawn.spawnYaw;
-  pitch = nextSpawn.spawnPitch;
-  viewRoll = 0;
+  player.yaw = nextSpawn.spawnYaw;
+  player.pitch = nextSpawn.spawnPitch;
+  player.viewRoll = 0;
   setHeadBobOffset(0);
   setSideSwayOffset(0);
   applyCameraLook();
   resolveCameraBuildingCollision();
   resolveCameraRoadHexBoundaryCollision();
-  walkSurfaceLift = Math.max(0, cameraGroundHeightAt(camera.position.x, camera.position.z) - cameraMinHeight);
+  player.walkSurfaceLift = Math.max(0, cameraGroundHeightAt(camera.position.x, camera.position.z) - player.cameraMinHeight);
   if (showFeedback) setButtonFeedback(controlEls.resetPlayerSpawn, 'Spawn ripristinato');
   if (showFeedback) setButtonFeedback(controlEls.goStartPosition, 'Posizione ripristinata');
   updateStartPositionLiveLabel();
@@ -2532,25 +2440,25 @@ function applyPlayerSpawn(spawn = playerSpawn, showFeedback = true) {
 
 function captureLivePlayerSpawn() {
   removeViewMotionOffset();
-  playerSpawn = {
+  player.playerSpawn = {
     x: camera.position.x,
     y: camera.position.y,
     z: camera.position.z,
-    spawnYaw: yaw,
-    spawnPitch: pitch,
+    spawnYaw: player.yaw,
+    spawnPitch: player.pitch,
     savedAt: new Date().toISOString(),
   };
-  const payload = { savedAt: playerSpawn.savedAt, spawn: playerSpawn };
+  const payload = { savedAt: player.playerSpawn.savedAt, spawn: player.playerSpawn };
   localStorage.setItem(PLAYER_SPAWN_KEY, JSON.stringify(payload, null, 2));
   updatePlayerSpawnLabel();
   updateStartPositionLiveLabel();
   setButtonFeedback(controlEls.saveLiveSpawn, 'Spawn salvato');
   setButtonFeedback(controlEls.saveStartPosition, 'Inizio salvato');
-  persistSettingsToProject('player-spawn', playerSpawn, { savedAt: playerSpawn.savedAt }).then((result) => {
+  persistSettingsToProject('player-spawn', player.playerSpawn, { savedAt: player.playerSpawn.savedAt }).then((result) => {
     if (result) setButtonFeedback(controlEls.saveLiveSpawn, 'Spawn + JSON salvato');
     if (result) setButtonFeedback(controlEls.saveStartPosition, 'JSON salvato');
   });
-  return playerSpawn;
+  return player.playerSpawn;
 }
 
 function resetCameraHeightToDefault(showFeedback = true) {
@@ -2559,7 +2467,7 @@ function resetCameraHeightToDefault(showFeedback = true) {
   movementVelocity.y = 0;
   setHeadBobOffset(0);
   setSideSwayOffset(0);
-  viewRoll = 0;
+  player.viewRoll = 0;
   applyCameraLook();
   keys.KeyE = false;
   keys.Space = false;
@@ -2835,51 +2743,51 @@ function applyMovementControlsFromUI() {
   }
   collisionPadding = Number(controlEls.collisionPadding.value);
   mainBuildingCollisionPadding = Number(controlEls.mainBuildingCollisionPadding.value);
-  cameraMinHeight = Number(controlEls.cameraMinHeight.value);
-  speedBase = Number(controlEls.walkSpeed.value);
-  speedSprint = Number(controlEls.sprintSpeed.value);
-  backwardSpeedScale = Number(controlEls.backwardSpeedScale.value);
-  strafeSpeedScale = Number(controlEls.strafeSpeedScale.value);
-  diagonalSpeedScale = Number(controlEls.diagonalSpeedScale.value);
-  verticalSpeed = Number(controlEls.verticalSpeed.value);
-  movementAcceleration = Number(controlEls.movementAccel.value);
-  movementDeceleration = Number(controlEls.movementDecel.value);
-  walkBobAmount = Number(controlEls.walkBob.value);
-  runBobAmount = Number(controlEls.runBob.value);
-  strafeBobScale = Number(controlEls.strafeBobScale.value);
-  backwardBobScale = Number(controlEls.backwardBobScale.value);
-  walkStepRate = Number(controlEls.walkStepRate.value);
-  runStepRate = Number(controlEls.runStepRate.value);
-  stepSnapAmount = Number(controlEls.stepSnap.value);
-  movementSwayAmount = Number(controlEls.movementSway.value);
-  movementRollAmount = Number(controlEls.movementRoll.value);
-  strafeLeanAmount = Number(controlEls.strafeLean.value);
-  headMotionSmoothing = Number(controlEls.headMotionSmoothing.value);
-  mouseSensitivityScale = Number(controlEls.mouseSensitivity.value);
+  player.cameraMinHeight = Number(controlEls.cameraMinHeight.value);
+  player.speedBase = Number(controlEls.walkSpeed.value);
+  player.speedSprint = Number(controlEls.sprintSpeed.value);
+  player.backwardSpeedScale = Number(controlEls.backwardSpeedScale.value);
+  player.strafeSpeedScale = Number(controlEls.strafeSpeedScale.value);
+  player.diagonalSpeedScale = Number(controlEls.diagonalSpeedScale.value);
+  player.verticalSpeed = Number(controlEls.verticalSpeed.value);
+  player.movementAcceleration = Number(controlEls.movementAccel.value);
+  player.movementDeceleration = Number(controlEls.movementDecel.value);
+  player.walkBobAmount = Number(controlEls.walkBob.value);
+  player.runBobAmount = Number(controlEls.runBob.value);
+  player.strafeBobScale = Number(controlEls.strafeBobScale.value);
+  player.backwardBobScale = Number(controlEls.backwardBobScale.value);
+  player.walkStepRate = Number(controlEls.walkStepRate.value);
+  player.runStepRate = Number(controlEls.runStepRate.value);
+  player.stepSnapAmount = Number(controlEls.stepSnap.value);
+  player.movementSwayAmount = Number(controlEls.movementSway.value);
+  player.movementRollAmount = Number(controlEls.movementRoll.value);
+  player.strafeLeanAmount = Number(controlEls.strafeLean.value);
+  player.headMotionSmoothing = Number(controlEls.headMotionSmoothing.value);
+  player.mouseSensitivityScale = Number(controlEls.mouseSensitivity.value);
   setFixedCameraFov();
   controlEls.collisionPaddingVal.textContent = collisionPadding.toFixed(1);
   controlEls.mainBuildingCollisionPaddingVal.textContent = mainBuildingCollisionPadding.toFixed(1);
-  controlEls.cameraMinHeightVal.textContent = cameraMinHeight.toFixed(1);
-  controlEls.walkSpeedVal.textContent = speedBase.toFixed(0);
-  controlEls.sprintSpeedVal.textContent = speedSprint.toFixed(0);
-  controlEls.backwardSpeedScaleVal.textContent = backwardSpeedScale.toFixed(2);
-  controlEls.strafeSpeedScaleVal.textContent = strafeSpeedScale.toFixed(2);
-  controlEls.diagonalSpeedScaleVal.textContent = diagonalSpeedScale.toFixed(2);
-  controlEls.verticalSpeedVal.textContent = verticalSpeed.toFixed(0);
-  controlEls.movementAccelVal.textContent = movementAcceleration.toFixed(1);
-  controlEls.movementDecelVal.textContent = movementDeceleration.toFixed(1);
-  controlEls.walkBobVal.textContent = walkBobAmount.toFixed(2);
-  controlEls.runBobVal.textContent = runBobAmount.toFixed(2);
-  controlEls.strafeBobScaleVal.textContent = strafeBobScale.toFixed(2);
-  controlEls.backwardBobScaleVal.textContent = backwardBobScale.toFixed(2);
-  controlEls.walkStepRateVal.textContent = walkStepRate.toFixed(2);
-  controlEls.runStepRateVal.textContent = runStepRate.toFixed(2);
-  controlEls.stepSnapVal.textContent = stepSnapAmount.toFixed(2);
-  controlEls.movementSwayVal.textContent = movementSwayAmount.toFixed(2);
-  controlEls.movementRollVal.textContent = movementRollAmount.toFixed(3);
-  controlEls.strafeLeanVal.textContent = strafeLeanAmount.toFixed(3);
-  controlEls.headMotionSmoothingVal.textContent = headMotionSmoothing.toFixed(1);
-  controlEls.mouseSensitivityVal.textContent = mouseSensitivityScale.toFixed(2);
+  controlEls.cameraMinHeightVal.textContent = player.cameraMinHeight.toFixed(1);
+  controlEls.walkSpeedVal.textContent = player.speedBase.toFixed(0);
+  controlEls.sprintSpeedVal.textContent = player.speedSprint.toFixed(0);
+  controlEls.backwardSpeedScaleVal.textContent = player.backwardSpeedScale.toFixed(2);
+  controlEls.strafeSpeedScaleVal.textContent = player.strafeSpeedScale.toFixed(2);
+  controlEls.diagonalSpeedScaleVal.textContent = player.diagonalSpeedScale.toFixed(2);
+  controlEls.verticalSpeedVal.textContent = player.verticalSpeed.toFixed(0);
+  controlEls.movementAccelVal.textContent = player.movementAcceleration.toFixed(1);
+  controlEls.movementDecelVal.textContent = player.movementDeceleration.toFixed(1);
+  controlEls.walkBobVal.textContent = player.walkBobAmount.toFixed(2);
+  controlEls.runBobVal.textContent = player.runBobAmount.toFixed(2);
+  controlEls.strafeBobScaleVal.textContent = player.strafeBobScale.toFixed(2);
+  controlEls.backwardBobScaleVal.textContent = player.backwardBobScale.toFixed(2);
+  controlEls.walkStepRateVal.textContent = player.walkStepRate.toFixed(2);
+  controlEls.runStepRateVal.textContent = player.runStepRate.toFixed(2);
+  controlEls.stepSnapVal.textContent = player.stepSnapAmount.toFixed(2);
+  controlEls.movementSwayVal.textContent = player.movementSwayAmount.toFixed(2);
+  controlEls.movementRollVal.textContent = player.movementRollAmount.toFixed(3);
+  controlEls.strafeLeanVal.textContent = player.strafeLeanAmount.toFixed(3);
+  controlEls.headMotionSmoothingVal.textContent = player.headMotionSmoothing.toFixed(1);
+  controlEls.mouseSensitivityVal.textContent = player.mouseSensitivityScale.toFixed(2);
 }
 
 function applyLightControlsFromUI() {
@@ -3388,27 +3296,27 @@ function applyLiveControls() {
   updateStreetEdgeHexTileScale();
   collisionPadding = nextCollisionPadding;
   mainBuildingCollisionPadding = nextMainBuildingCollisionPadding;
-  cameraMinHeight = nextCameraMinHeight;
-  speedBase = nextWalkSpeed;
-  speedSprint = nextSprintSpeed;
-  backwardSpeedScale = nextBackwardSpeedScale;
-  strafeSpeedScale = nextStrafeSpeedScale;
-  diagonalSpeedScale = nextDiagonalSpeedScale;
-  verticalSpeed = nextVerticalSpeed;
-  movementAcceleration = nextMovementAccel;
-  movementDeceleration = nextMovementDecel;
-  walkBobAmount = nextWalkBob;
-  runBobAmount = nextRunBob;
-  strafeBobScale = nextStrafeBobScale;
-  backwardBobScale = nextBackwardBobScale;
-  walkStepRate = nextWalkStepRate;
-  runStepRate = nextRunStepRate;
-  stepSnapAmount = nextStepSnap;
-  movementSwayAmount = nextMovementSway;
-  movementRollAmount = nextMovementRoll;
-  strafeLeanAmount = nextStrafeLean;
-  headMotionSmoothing = nextHeadMotionSmoothing;
-  mouseSensitivityScale = nextMouseSensitivity;
+  player.cameraMinHeight = nextCameraMinHeight;
+  player.speedBase = nextWalkSpeed;
+  player.speedSprint = nextSprintSpeed;
+  player.backwardSpeedScale = nextBackwardSpeedScale;
+  player.strafeSpeedScale = nextStrafeSpeedScale;
+  player.diagonalSpeedScale = nextDiagonalSpeedScale;
+  player.verticalSpeed = nextVerticalSpeed;
+  player.movementAcceleration = nextMovementAccel;
+  player.movementDeceleration = nextMovementDecel;
+  player.walkBobAmount = nextWalkBob;
+  player.runBobAmount = nextRunBob;
+  player.strafeBobScale = nextStrafeBobScale;
+  player.backwardBobScale = nextBackwardBobScale;
+  player.walkStepRate = nextWalkStepRate;
+  player.runStepRate = nextRunStepRate;
+  player.stepSnapAmount = nextStepSnap;
+  player.movementSwayAmount = nextMovementSway;
+  player.movementRollAmount = nextMovementRoll;
+  player.strafeLeanAmount = nextStrafeLean;
+  player.headMotionSmoothing = nextHeadMotionSmoothing;
+  player.mouseSensitivityScale = nextMouseSensitivity;
 
   ambientLight.intensity = ambient;
   dirKey.intensity = key;
@@ -3749,9 +3657,9 @@ document.querySelectorAll(PRODUCTION_LIVE_CONTROL_SELECTOR).forEach((input) => {
 });
 controlEls.resetCameraHeight.addEventListener('click', resetCameraHeightToDefault);
 controlEls.saveLiveSpawn.addEventListener('click', captureLivePlayerSpawn);
-controlEls.resetPlayerSpawn.addEventListener('click', () => applyPlayerSpawn(playerSpawn, true));
+controlEls.resetPlayerSpawn.addEventListener('click', () => applyPlayerSpawn(player.playerSpawn, true));
 controlEls.saveStartPosition.addEventListener('click', captureLivePlayerSpawn);
-controlEls.goStartPosition.addEventListener('click', () => applyPlayerSpawn(playerSpawn, true));
+controlEls.goStartPosition.addEventListener('click', () => applyPlayerSpawn(player.playerSpawn, true));
 controlEls.droneIntroFlight?.addEventListener('click', () => startDroneIntroFlight('manual'));
 controlEls.runFsrBenchmark?.addEventListener('click', runFsrBenchmark);
 controlSettingsRuntime.bindSaveButtons();
@@ -4002,7 +3910,7 @@ async function bootSceneWithFinalDefaults() {
   applyLiveControls();
   buildLabEqualizer({ visible: false });
   setTronNoclip(false, { silent: true });
-  applyPlayerSpawn(playerSpawn, false);
+  applyPlayerSpawn(player.playerSpawn, false);
   await tronRunnerOrchestration.load();
   await tronRunnerCrowdRuntime.drainBuildQueue();
   // Each of these is a heavy synchronous block (bone-texture uploads, a full
@@ -4028,8 +3936,8 @@ window.__tronInspect = () => ({
   cameraX: camera.position.x,
   cameraY: camera.position.y,
   cameraZ: camera.position.z,
-  cameraPitch: pitch,
-  cameraYaw: yaw,
+  cameraPitch: player.pitch,
+  cameraYaw: player.yaw,
   noclip: getTronNoclipEnabled(),
   cameraCollisionDisabled: isCameraCollisionDisabled(),
   mouseLookEnabled: isMouseLookEnabled(),
@@ -4084,15 +3992,15 @@ window.__tronInspect = () => ({
   cityDepartmentBoards: cityDepartmentBoardInspect(),
   contactTerminal: contactTerminalInspect(),
   cityRoleBoard: cityRoleBoardInspect(),
-  backspaceIntroTriggered,
-  cameraCollisionUnlockedByBackspace,
+  backspaceIntroTriggered: player.backspaceIntroTriggered,
+  cameraCollisionUnlockedByBackspace: player.cameraCollisionUnlockedByBackspace,
   droneIntro: {
     ...droneIntroInspect(),
     heroShot: droneIntroHeroShotEnabled,
     landed: hasDroneIntroLanded(),
-    landingPose: { ...droneLandingPose },
+    landingPose: { ...player.droneLandingPose },
   },
-  playerSpawn: { ...playerSpawn },
+  playerSpawn: { ...player.playerSpawn },
   fps: fpsEl.textContent,
   pixelRatio: renderer.getPixelRatio(),
   antialiasMode: post.antialiasMode,
@@ -4115,7 +4023,7 @@ window.__tronInspect = () => ({
   cityRevealMainFacadeVerticalLed: { ...mainFacadeVerticalRevealState },
   cityRevealStarted: cityRevealStartedAt > 0,
   cityRevealComplete,
-  cityRevealWaitingForBackspace: cityRevealWireframeEnabled && !backspaceIntroTriggered && !cityRevealStartedAt && !cityRevealComplete,
+  cityRevealWaitingForBackspace: cityRevealWireframeEnabled && !player.backspaceIntroTriggered && !cityRevealStartedAt && !cityRevealComplete,
   cityRevealWaitingForVisibleFrame,
   cityRevealClipPlaneNormal: {
     x: cityRevealRealClipPlane.normal.x,
@@ -4533,10 +4441,10 @@ export const retroSceneReady = bootSceneWithFinalDefaults().then(() => {
     fpsAccum = 0;
     fpsFrames = 0;
     startCityRevealWireframe();
-    if (backspaceIntroTriggered) startCityRevealWireTimer();
+    if (player.backspaceIntroTriggered) startCityRevealWireTimer();
     tick(now);
     loader.classList.add('hidden');
-    sceneBootComplete = true;
+    player.sceneBootComplete = true;
     resolve();
   }));
 }).catch((error) => {
