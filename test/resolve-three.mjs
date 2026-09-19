@@ -11,7 +11,7 @@
 //
 // Va caricato con `node --import ./test/resolve-three.mjs`, gia' cablato in
 // `npm test`. Se cambia la importmap di index.html va aggiornata anche la tabella
-// qui sotto: il test in test/importmap.test.mjs fallisce se le due divergono.
+// qui sotto e i `paths` di jsconfig.json: src/importmap.test.mjs fallisce se divergono.
 import { registerHooks } from 'node:module';
 
 const REPO_ROOT = new URL('../', import.meta.url);
