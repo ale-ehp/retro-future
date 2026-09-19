@@ -57,7 +57,7 @@ export const GREETER_BUBBLE_LOGO_AI_GLITCH_SLICE_OPACITY = 1;
 // Sopra qualunque altra cosa della scena, come uno z-index alto: chi parla si legge sempre,
 // anche quando passa davanti al terminale contatti o ai cartelloni dei dipartimenti
 // (2026-09-18). Deve restare piu' alto di OGNI altro renderOrder del progetto, cupola del
-// cielo compresa (1000): src/cartelli-davanti.test.mjs li conta e fallisce se qualcuno
+// cielo compresa (1000): src/invarianti.test.mjs li conta e fallisce se qualcuno
 // aggiunge un pannello piu' in alto.
 export const CHARACTER_BUBBLE_RENDER_ORDER = 2000;
 

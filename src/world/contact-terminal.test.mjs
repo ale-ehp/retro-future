@@ -147,6 +147,7 @@ function createRuntimeFixture({
   });
   return {
     runtime,
+    scene,
     camera,
     actionButton,
     backButton,
@@ -384,4 +385,22 @@ test('mobile return keeps touch look gesture-driven', () => {
   runtime.handleKeyDown({ code: 'Escape', repeat: false, preventDefault() {} });
 
   assert.deepEqual(resumeMouseLookCalls, []);
+});
+
+// Stesso patto dei tabelloni (vedi city-boards.test.mjs): il terminale non scrive profondita'
+// e il suo gruppo sta sotto i cartelli dei personaggi, altrimenti li coprirebbe (2026-09-19).
+test('il terminale costruito non scrive profondita\' e sta sotto i cartelli', async () => {
+  const { CHARACTER_BUBBLE_RENDER_ORDER } = await import('../character/speech-bubbles.js');
+  const fixture = createRuntimeFixture();
+  fixture.runtime.update(0);
+  const gruppo = fixture.scene.getObjectByName('contact-terminal-2');
+  assert.ok(gruppo instanceof THREE.Group, 'manca il gruppo contact-terminal-2 nella scena');
+  assert.ok(gruppo.renderOrder < CHARACTER_BUBBLE_RENDER_ORDER, `il terminale disegna a ${gruppo.renderOrder}, sopra i cartelli`);
+  let mesh = 0;
+  gruppo.traverse((o) => {
+    if (!(o instanceof THREE.Mesh) || Array.isArray(o.material)) return;
+    mesh += 1;
+    assert.equal(o.material.depthWrite, false, `${o.name} scrive profondita'`);
+  });
+  assert.ok(mesh >= 2, `solo ${mesh} mesh nel terminale`);
 });
