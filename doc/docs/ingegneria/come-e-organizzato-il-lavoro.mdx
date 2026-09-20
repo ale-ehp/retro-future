@@ -6,7 +6,7 @@ sidebar_position: 1
 
 {/*
 FONTI
-- git log sul branch feat/retro-future-en, misurato il 2026-09-20: 459 commit sulla demo dal 2026-06-03; 19 commit il 18 settembre, 55 il 19, 25 il 20; tipi di commit: refactor 134, feat 115, perf 98, fix 79, docs 15, test 13.
+- git log sul branch feat/retro-future-en, misurato il 2026-09-20: 457 commit sulla demo dal 2026-06-03, esclusi i 12 del manuale (git log -- public/tecnologie/retro-future ':!.../doc'); 19 commit il 18 settembre, 55 il 19, 25 il 20; tipi di commit: refactor 134, feat 115, perf 98, fix 79, docs 15, test 13.
 - docs/retro-future-tappa5-opus.md (149 righe) e docs/retro-future-typecheck-opus.md (191 righe): i due documenti di consegna, con mappa del debito, ordine consigliato, criterio di arresto, trappole.
 - docs/manuale-retro-future/guida-stile.md (42 righe): le regole date a chi scrive i capitoli.
 - docs/manuale-retro-future/schede/ (8 schede di fatti) e verifiche/ (12 rapporti): la materia prima e la rilettura incrociata di questo manuale.
@@ -28,26 +28,24 @@ tecnico, anche senza scriverne una riga.
 
 ## Cosa vede l'utente
 
-Niente, di nuovo: questo è un capitolo di processo. Quello che si vede è il
-repository. Quattrocentocinquantanove commit dal 3 giugno, ognuno con un tipo davanti
-al titolo e un corpo che dice il problema visto e la causa vera. Un ramo per la demo,
-separato dal sito. Documenti di consegna scritti prima di iniziare ogni tappa grossa.
-E, accanto ai moduli, le prove che li verificano.
+Niente, di nuovo: è un capitolo di processo. Quello che si vede è il repository. 457
+commit dal 3 giugno in conventional commits, con un corpo che dice il problema visto e
+la causa vera. Un branch per la demo, in un git worktree separato dal sito. Documenti
+di consegna scritti prima di ogni tappa grossa. E, accanto ai moduli, i test.
 
 ## Il problema
 
-Il vincolo di partenza è questo: **sono una persona sola, e gli assistenti scrivono
+Il vincolo di partenza: **sono una persona sola, e gli agenti di coding scrivono
 codice più in fretta di quanto io possa leggerlo.**
 
-Nelle due giornate più intense di settembre sono entrati settantaquattro commit, e ho
-letto per intero solo una parte del codice che contengono. Un metodo che richieda a me
-di rileggere tutto non scala. Un metodo che si fidi e basta produce un sistema che
-nessuno controlla più.
+In 3 giorni di settembre sono entrati 66 commit sulla demo, e ne ho letto per
+intero solo una parte. Un metodo che mi chieda di rileggere tutto non scala; uno che si
+fidi e basta produce un sistema che nessuno controlla più.
 
-Ci sono altri tre vincoli, che chiunque coordini lavoro tecnico riconosce:
+Altri 3 vincoli, che chiunque coordini lavoro tecnico riconosce:
 
-- **Il lavoro non è verificabile a occhio.** Un riordino del codice può lasciare la
-  scena identica e romperla in un caso su dieci.
+- **Il lavoro non è verificabile a occhio.** Un refactor può lasciare la scena
+  identica e romperla in un caso su 10.
 - **Il contesto si perde.** Una decisione presa a giugno, senza il motivo scritto
   accanto, a settembre è indistinguibile da un errore.
 - **La qualità non regredisce da sola: regredisce se nessuno la misura.** Alla prima
@@ -57,26 +55,24 @@ Ci sono altri tre vincoli, che chiunque coordini lavoro tecnico riconosce:
 
 ### Il ciclo, chi fa cosa
 
-Questo diagramma usa tre fondamenti della notazione BPMN, che è il linguaggio con cui
-si disegnano i processi aziendali: le **corsie**, cioè chi esegue ogni passo; i
-**gateway**, cioè i punti in cui il processo si biforca; gli **eventi** di inizio e
-fine. Non è BPMN conforme, è un diagramma di flusso che ne prende la grammatica.
+Il diagramma prende da BPMN corsie, gateway ed eventi di inizio e fine. Non è BPMN
+conforme: è un flowchart Mermaid che ne usa la grammatica.
 
 ```mermaid
 flowchart TB
   subgraph IO["corsia: io, decido e giudico"]
     A([decido la tappa]) --> B[scrivo il documento<br/>di consegna]
-    B --> C[definisco il fatto:<br/>comandi e prove]
+    B --> C[definisco il fatto:<br/>comandi e test]
     G{il risultato<br/>mi convince?}
     H[boccio e riscrivo<br/>le istruzioni]
     I[commit: problema visto,<br/>causa vera]
   end
-  subgraph AG["corsia: assistente, esegue"]
+  subgraph AG["corsia: agente, esegue"]
     D[un dominio per volta] --> E[riporta le misure]
   end
   subgraph MA["corsia: macchina, misura"]
-    F[cinque controlli: prove,<br/>tipi, morto, build, gate]
-    L[integrazione continua:<br/>tre lavori, due sistemi]
+    F[5 gate: test, tipi,<br/>morto, build, visivo]
+    L[CI: 3 job,<br/>2 sistemi]
     M{tutti verdi?}
     N([tappa chiusa])
   end
@@ -92,124 +88,120 @@ flowchart TB
   M -->|sì| N
 ```
 
-La parte che conta è dove stanno i confini. Io decido e giudico. L'assistente esegue
-un dominio per volta. La macchina misura, e la sua risposta non è negoziabile.
+La parte che conta è dove stanno i confini. Io decido e giudico. L'agente esegue un
+dominio per volta. La macchina misura, e la sua risposta non è negoziabile.
 
 ### La tappa, e il documento che la apre
 
 Il lavoro grosso è diviso in tappe. Ogni tappa ha un documento scritto **prima** di
-cominciare, che contiene sempre le stesse sei cose:
+cominciare, sempre con le stesse 6 voci:
 
-1. **Dove sei**: il ramo, la cartella, i comandi.
+1. **Dove sei**: il git worktree, il branch, i comandi.
 2. **Cosa è già stato fatto**, con i numeri veri.
 3. **Il problema, misurato e non assunto.** Il documento della tappa sui tipi si apre
-   con una tabella: cinquecentoventiquattro errori, divisi per causa, con quanti ne
-   deve chiudere ognuna.
-4. **L'ordine consigliato, con le attese dichiarate come attese.** Non "farai
-   trecentocinquanta correzioni", ma "ci si aspetta un calo di circa trecentocinquanta:
-   se non arriva, la mappa è sbagliata".
+   con una tabella: 524 errori divisi per causa, con quanti ne chiude ognuna.
+4. **L'ordine consigliato, con le attese dichiarate come attese.** Non “farai 350
+   correzioni”, ma “ci si aspetta un calo di circa 350: se non arriva, la mappa è
+   sbagliata”.
 5. **Cosa non fare**, con i motivi.
 6. **Le trappole già costate care**, ognuna con la cicatrice.
 
-Sono centoquaranta e centonovanta righe, per lavori che poi hanno prodotto decine di
-commit. Il rapporto fra il tempo speso a scrivere le istruzioni e il tempo di
-esecuzione è basso, ed è il migliore investimento del metodo.
+Sono 149 e 191 righe, per lavori che hanno prodotto decine di commit: scrivere le
+istruzioni costa una frazione dell'esecuzione, ed è il miglior investimento del
+metodo.
 
 ### La definizione di fatto
 
 Ogni tappa dichiara in anticipo quando è finita, in termini eseguibili. Per la tappa
-sui tipi: il conteggio sotto una soglia, con la soglia allineata al valore vero, ogni
-errore rimasto guardato almeno una volta, zero codice morto, prove e build verdi a
-ogni commit intermedio, non solo all'ultimo.
+sui tipi: conteggio sotto soglia, soglia allineata al valore vero, ogni errore rimasto
+guardato almeno una volta, 0 codice morto, test e build verdi a ogni commit intermedio,
+non solo all'ultimo.
 
-Questo cambia una cosa sottile: la fine non è un giudizio, è una misura. Non decido io
-quando ho finito.
+La fine non è un giudizio, è una misura: non decido io quando ho finito.
 
 ### I cinque cancelli
 
-Prima di ogni commit girano cinque controlli. Sono descritti per esteso nel capitolo
-[Qualità e controlli](./qualita-e-controlli.mdx); qui conta la loro funzione
+Prima di ogni commit girano 5 gate bloccanti. [Qualità e
+controlli](./qualita-e-controlli.mdx) li descrive per esteso; qui conta la funzione
 organizzativa: **sono l'unico punto in cui il processo può dire di no a me.**
 
-Due di loro hanno una proprietà che vale la pena rubare per altri contesti: il
-controllo dei tipi e quello del codice morto hanno una soglia che **può solo
-scendere**. Il numero è scritto nel programma, il controllo fallisce se sale, e chiede
-di abbassarlo quando scende. Un debito con un cricchetto non torna indietro, e nessuno
-deve ricordarsi di controllarlo.
+Due hanno una proprietà che vale la pena rubare altrove: typecheck e codice morto
+hanno una soglia che **può solo scendere**. Il numero sta nello script, il gate
+fallisce se sale e chiede di abbassarlo quando scende: un debito a cricchetto non torna
+indietro, e nessuno deve ricordarsi di controllarlo.
 
 ### Delegare e verificare
 
-Gli assistenti ricevono istruzioni scritte, non richieste a voce. Per questo manuale la
-catena è stata questa:
+Gli agenti di coding ricevono istruzioni scritte, non richieste a voce. Per questo
+manuale la catena è stata questa:
 
 ```mermaid
 flowchart TB
   A([decido la struttura]) --> B[intervista all'autore:<br/>10 domande]
-  B --> C[8 agenti scavano nel codice:<br/>una scheda di fatti ciascuno]
+  B --> C[8 agenti scavano nel codice:<br/>una scheda ciascuno]
   C --> D{ogni riga<br/>ha una fonte?}
   D -->|no| E[va nelle domande aperte]
   D -->|sì| F[guida di stile:<br/>voce, forma, regole]
   E --> F
   F --> G[agenti scrivono i capitoli<br/>solo da quelle schede]
-  G --> H[revisori diversi rileggono<br/>frase per frase]
+  G --> H[revisione fra pari,<br/>frase per frase]
   H --> I{frase sostenuta<br/>da una fonte?}
   I -->|no| J[correggo o tolgo]
   I -->|sì| K([capitolo chiuso])
   J --> K
 ```
 
-Tre regole tengono in piedi questa catena:
+3 regole tengono in piedi la catena:
 
-- **Chi scava non scrive, chi scrive non verifica.** Le schede di fatti le producono
-  agenti diversi da quelli che scrivono i capitoli, e la rilettura la fa un terzo che
-  non ha scritto niente. Chi ha scritto una frase è la persona peggiore per accorgersi
-  che non ha una fonte.
-- **Le fonti prima della prosa.** Nessuno scrive una riga prima che esista la scheda
-  dei fatti, e nessun capitolo può contenere qualcosa che la scheda non dica.
+- **Chi scava non scrive, chi scrive non verifica.** Le schede le producono agenti
+  diversi da quelli che scrivono i capitoli; la revisione fra pari la fa un terzo che
+  non ha scritto niente. Chi ha scritto una frase è il peggior revisore di quella
+  frase.
+- **Le fonti prima della prosa.** Nessuno scrive una riga prima che esista la scheda,
+  e nessun capitolo può contenere qualcosa che la scheda non dica.
 - **Quello che non si sa resta scritto come non saputo.** Le schede hanno una sezione
-  apposta, centoquarantanove voci in tutto, e i capitoli le riportano invece di
+  apposta, 149 voci in tutto, e i capitoli le riportano invece di
   inventare una spiegazione plausibile.
 
-La rilettura ha trovato ventitré frasi senza fonte, comprese due didascalie che
-promettevano un'immagine diversa da quella mostrata. Tutte in capitoli che avevano già
+La revisione ha trovato 23 frasi senza fonte, comprese 2 didascalie che promettevano
+un'immagine diversa da quella mostrata. Tutte in capitoli che avevano già
 passato il mio controllo.
 
 ### Quando qualcosa va storto
 
-Il metodo prevede l'errore invece di sperare che non arrivi. Tre esempi veri,
-dichiarati anche nei capitoli tecnici:
+Il metodo prevede l'errore invece di sperare che non arrivi. 3 esempi veri, dichiarati
+anche nei capitoli tecnici:
 
-- **Un numero che scende troppo in fretta è un sospetto, non una vittoria.** Un tipo
-  troppo largo aveva fatto sparire trecentocinque errori in un colpo: sembrava un
-  miglioramento, erano tutti veri.
-- **Un controllo verde non dimostra di aver controllato.** Un lavoro di integrazione
-  continua filtrato sul ramo sbagliato non era mai partito, e per giorni il suo verde
-  non voleva dire niente.
-- **Ogni trappola diventa una prova.** Non basta correggere: si rimette in circolo il
-  difetto e si verifica che il controllo diventi rosso. Cinque trappole reintrodotte
-  una per volta, cinque prove accese.
+- **Un numero che scende troppo in fretta è un sospetto, non una vittoria.** Un `any`
+  aveva fatto sparire 305 errori in un colpo: sembrava un miglioramento, erano tutti
+  veri.
+- **Un controllo verde non dimostra di aver controllato.** Un job di CI filtrato sul
+  branch sbagliato non era mai partito, e per giorni il suo verde non voleva dire
+  niente.
+- **Ogni trappola diventa un test.** Non basta correggere: si rimette in circolo il
+  difetto e si verifica che il gate diventi rosso. 5 trappole reintrodotte una per
+  volta, 5 test accesi.
 
 ## Perché così e non altrimenti
 
 - **Un dominio per commit, non un commit per sessione.** Quando due cose cambiano
-  insieme e qualcosa si rompe, non si sa quale delle due. Il costo è più commit; il
-  guadagno è che ogni commit è annullabile da solo.
-- **Il messaggio dice il problema e la causa, non l'intervento.** Fra tre mesi il
+  insieme e qualcosa si rompe, non si sa quale delle due: il costo è più commit, il
+  guadagno è che ogni commit è revertibile da solo.
+- **Il messaggio dice il problema e la causa, non l'intervento.** Fra 3 mesi il
   codice si legge da sé; quello che non si ricostruisce è perché quel giorno sembrava
-  giusto così. I tipi di commit più frequenti qui sono riordino, funzionalità e
-  prestazioni, in quest'ordine: è la forma di un progetto che viene rifinito, non
-  scritto una volta sola.
-- **Le istruzioni sono scritte prima, non durante.** Un documento di consegna
-  costringe a misurare il problema prima di toccarlo, ed è quello che ha evitato di
-  correggere cinquecentoventiquattro errori uno per uno quando le cause erano cinque.
-- **Le attese sono dichiarate come attese.** "Ci si aspetta un calo di trecento; se non
-  arriva, fermati": è un criterio di arresto, e senza, un esecutore continua a
-  eseguire anche quando il piano è sbagliato.
-- **I controlli girano prima del commit, non prima del rilascio.** Un difetto trovato
-  dieci commit dopo costa la ricostruzione di dieci commit.
-- **I documenti di lavoro non vanno in produzione.** Il build della demo li esclude,
-  con un controllo che si ferma se ne trova uno: la trasparenza interna non deve
-  diventare superficie pubblica.
+  giusto così. I tipi più frequenti sono refactor, feat e perf, in quest'ordine: la
+  forma di un progetto rifinito, non scritto una volta sola.
+- **Le istruzioni sono scritte prima, non durante.** Il documento di consegna
+  costringe a misurare il problema prima di toccarlo: è quello che ha evitato di
+  correggere 524 errori uno per uno quando le cause erano 5.
+- **Le attese sono dichiarate come attese.** “Ci si aspetta un calo di 300; se non
+  arriva, fermati”: è un criterio di arresto, e senza, un esecutore continua a eseguire
+  anche quando il piano è sbagliato.
+- **I gate girano prima del commit, non prima del rilascio.** Un difetto trovato
+  10 commit dopo costa la ricostruzione di 10 commit.
+- **I documenti di lavoro non vanno in produzione.** Il build della demo li esclude e
+  si ferma se ne trova uno: la trasparenza interna non deve diventare superficie
+  pubblica.
 
 Cose che non so spiegare, e lo dico:
 
@@ -223,36 +215,35 @@ Cose che non so spiegare, e lo dico:
 
 | cosa | valore | fonte e data |
 |---|---|---|
-| commit sulla demo | 459, dal 3 giugno al 20 settembre 2026 | `git log`, 2026-09-20 |
-| commit nelle due giornate più intense | 19, 55 e 25 fra il 18 e il 20 settembre | `git log`, 2026-09-20 |
-| tipi di commit | riordino 134, funzionalità 115, prestazioni 98, correzioni 79 | `git log`, 2026-09-20 |
+| commit sulla demo | 457, dal 3 giugno al 20 settembre 2026 (il manuale ne ha 12 suoi) | `git log`, 2026-09-20 |
+| commit nei 3 giorni di risanamento | 15, 38 e 13 fra il 18 e il 20 settembre | `git log`, 2026-09-20 |
+| tipi di commit | refactor 134, feat 115, perf 98, fix 79 | `git log`, 2026-09-20 |
 | tappe del risanamento | 8, ognuna con la sua definizione di fatto | documenti di consegna |
 | documenti di consegna | 149 e 191 righe, scritti prima di iniziare | `wc -l`, 2026-09-20 |
-| controlli prima di ogni commit | 5 | `package.json` e il gate visivo |
-| lavori di integrazione continua | 3, su due sistemi operativi | `.github/workflows/retro-future.yml` |
+| gate prima di ogni commit | 5 | `package.json` e il gate visivo |
+| job di CI | 3, su 2 sistemi operativi | `.github/workflows/retro-future.yml` |
 | schede di fatti per questo manuale | 8, con 149 domande aperte dichiarate | `docs/manuale-retro-future/schede/` |
-| rapporti di rilettura | 12, circa 1.400 frasi controllate | `docs/manuale-retro-future/verifiche/` |
-| frasi senza fonte trovate dalla rilettura | 23 | stessi rapporti |
+| rapporti di revisione | 12, circa 1.400 frasi controllate | `docs/manuale-retro-future/verifiche/` |
+| frasi senza fonte trovate dalla revisione | 23 | stessi rapporti |
 
 ## Dove sta nel codice
 
 | file | ruolo |
 |---|---|
-| `docs/retro-future-tappa5-opus.md` | il documento di consegna della tappa che ha spezzato il file grande |
+| `docs/retro-future-tappa5-opus.md` | il documento di consegna della tappa che ha spezzato `main.js` |
 | `docs/retro-future-typecheck-opus.md` | quello della tappa sui tipi, con la mappa del debito e il criterio di arresto |
 | `docs/manuale-retro-future/guida-stile.md` | le regole date a chi scrive i capitoli |
-| `docs/manuale-retro-future/schede/` | la materia prima: otto schede di fatti con le fonti |
-| `docs/manuale-retro-future/verifiche/` | i rapporti di rilettura, uno per capitolo |
+| `docs/manuale-retro-future/schede/` | la materia prima: 8 schede di fatti con le fonti |
+| `docs/manuale-retro-future/verifiche/` | i rapporti di revisione, uno per capitolo |
 | `scripts/retro-future-typecheck.mjs` | la soglia a cricchetto |
-| `.github/workflows/retro-future.yml` | i tre lavori, con i filtri e le due baseline |
+| `.github/workflows/retro-future.yml` | i 3 job GitHub Actions, con i filtri e le 2 baseline |
 
 ## Per chi viene dal backend
 
-È un processo con controllo qualità in linea invece che a campione: i cancelli sono
-sincroni e bloccanti, e la soglia a cricchetto è un budget di errore che può solo
-migliorare, come un indicatore di servizio che non si abbassa mai. La separazione fra
-chi produce, chi verifica e chi decide è la stessa di una revisione fra pari, con la
-differenza che qui il produttore è una macchina e il revisore un'altra: il ruolo umano
-si sposta dal produrre al definire il fatto e al giudicare il risultato. E i documenti
-di consegna sono specifiche con criteri di accettazione, scritte prima, con il criterio
-di arresto incluso.
+È controllo qualità in linea invece che a campione: i gate sono sincroni e bloccanti,
+e la soglia a cricchetto è un error budget che può solo migliorare, come un SLO che non
+si abbassa mai. La separazione fra chi produce, chi verifica e chi decide è quella di
+una revisione fra pari, solo che il produttore è una macchina e il revisore un'altra:
+il ruolo umano si sposta dal produrre al definire il fatto e al giudicare il risultato.
+I documenti di consegna sono specifiche con criteri di accettazione, scritte prima,
+criterio di arresto incluso.

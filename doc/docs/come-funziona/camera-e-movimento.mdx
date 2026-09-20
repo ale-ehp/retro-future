@@ -25,47 +25,47 @@ Camminare in prima persona dentro un browser significa risolvere tre problemi ch
 
 ## Cosa vede l'utente
 
-La pagina si apre su una copertina nera con quattro schede e un bottone. Le teste 3D
-nelle schede non girano finché non ci avvicini il puntatore: fino a quel momento sono
-fotografie. Al click il bottone dice “Caricamento…”, poi la copertina si dissolve e la
-camera vola: parte da quasi seicento unità sopra la città e scende in strada con un arco,
-come un drone che atterra.
+La pagina si apre su una copertina nera con 4 schede e un bottone. Le teste 3D nelle
+schede non girano finché non ci avvicini il puntatore: fino a lì sono fotografie. Al
+click il bottone dice “Caricamento…”, la copertina si dissolve e la camera vola:
+parte da quasi 600 unità sopra la città e scende in strada con un arco, come un drone
+che atterra.
 
 ![Il volo del drone, con la città ancora in fil di ferro](/img/rivelo-in-corso.webp)
 
-Quando il rivelo finisce compare in basso a sinistra un indicatore con i tasti e il
-mouse, il cursore del sistema sparisce e al suo posto gira un disco luminoso, più
-veloce quanto più veloce muovi il mouse. Da lì in poi si cammina: WASD o frecce,
-Shift per correre, il mouse per guardare. Sul telefono in orizzontale compare invece
-un joystick circolare in basso a sinistra.
+Finito il rivelo compare in basso a sinistra un indicatore con i tasti e il mouse, il
+cursore del sistema sparisce e al suo posto gira un disco luminoso, tanto più veloce
+quanto più muovi il mouse. Da lì in poi si cammina: WASD o frecce, Shift per correre,
+il mouse per guardare. Sul telefono in orizzontale compare invece un joystick
+circolare in basso a sinistra.
 
 ## Il problema
 
-Un visore in prima persona dentro un browser ha tre difficoltà che non si vedono
-guardando il risultato.
+Un visore in prima persona dentro un browser ha 3 difficoltà che il risultato non
+mostra.
 
-**Il pointer lock arriva in ritardo.** Quando il browser blocca il puntatore, i primi
-eventi di movimento portano lo scarto accumulato fino a quel momento, e la camera fa
-un salto. Chi ha provato un visore web lo riconosce subito.
+**Il pointer lock arriva in ritardo.** Quando scatta, i primi eventi di movimento
+portano lo scarto accumulato fino a quel momento, e la camera fa un salto. Chi ha
+provato un visore web lo riconosce subito.
 
 **Il tocco combatte con il browser.** Un dito che trascina sul canvas, per il browser,
-è uno scorrimento della pagina o una pinzata di zoom. E un dito sul joystick più un
-dito sul canvas devono convivere: uno muove, l'altro guarda.
+è uno scroll o un pinch-zoom. E un dito sul joystick più un dito sul canvas devono
+convivere: uno muove, l'altro guarda.
 
-**L'ordine dentro il fotogramma è logica, non stile.** Prima si toglie dalla camera lo
-scarto del passo, poi si aggiorna il drone, poi il terminale dei contatti, poi il
-movimento, e solo alla fine si rimette lo scarto. Invertire due righe non dà un errore, e per questo una prova legge il sorgente
-e verifica che quell'ordine resti.
+**L'ordine dentro il frame è logica, non stile.** Prima si toglie dalla camera lo
+scarto del passo, poi si aggiornano il drone, il terminale dei contatti e il
+movimento, e solo alla fine si rimette lo scarto. Invertire 2 righe non dà errore:
+per questo un test legge il sorgente e verifica che l'ordine resti.
 
-C'era anche un problema di forma: il volo, il mouse, il cursore, la tastiera, il
-movimento e il joystick vivevano tutti nello stesso file e condividevano decine di
-variabili, una delle quali letta da ventuno punti diversi.
+C'era anche un problema di forma: volo, mouse, cursore, tastiera, movimento e
+joystick vivevano nello stesso file e condividevano decine di `let`, uno letto da 21
+punti diversi.
 
 ## Come funziona
 
 ```mermaid
 flowchart TB
-  A[inizio fotogramma] --> B[togli lo scarto del passo<br/>dalla camera]
+  A[inizio frame] --> B[togli lo scarto del passo]
   B --> C{il drone sta volando?}
   C -->|sì| D[aggiorna il volo]
   C -->|no| E{il terminale<br/>possiede la camera?}
@@ -79,105 +79,103 @@ flowchart TB
 
 ### Il volo di ingresso
 
-Cinque secondi e sei decimi, da una posizione fissa sopra la città fino al punto di
-atterraggio in strada, con un arco la cui altezza dipende dalla distanza. Con un parametro nell'indirizzo diventa un'orbita di sette secondi e mezzo
-attorno alla città prima di scendere.
+5.600 ms da una posizione fissa sopra la città al punto di atterraggio in
+strada, con un arco la cui altezza dipende dalla distanza. Un parametro
+nell'indirizzo lo trasforma in un'orbita di 7.600 ms attorno alla città prima
+della discesa.
 
 ### Guardare
 
-Il mouse gira la camera solo a due condizioni: che il rivelo sia finito e che il
-terminale dei contatti non abbia preso il controllo. Al click il browser chiede il
-blocco del puntatore; se non arriva, un trascinamento di almeno quattro pixel gira la
-camera lo stesso. La sensibilità è 0,0022 radianti per pixel con il blocco e 0,0035 senza; i due
-numeri stanno nel codice e nessun commit li motiva.
+Il mouse gira la camera solo a 2 condizioni: rivelo finito e terminale dei contatti
+che non ha preso il controllo. Al click parte la richiesta di pointer lock; se
+non arriva, un trascinamento di almeno 4 pixel gira la camera lo stesso. La
+sensibilità è 0,0022 rad/px con il pointer lock e 0,0035 senza; i 2 numeri stanno nel
+codice e nessun commit li motiva.
 
-Contro il salto iniziale ci sono tre difese: si scartano gli eventi per 220
-millisecondi dopo il blocco, per 420 dopo un click, e in ogni caso i primi otto
-movimenti. Il pitch si ferma poco sotto la verticale.
+Contro il salto iniziale ci sono 3 difese: si scartano gli eventi per 220 ms dopo il
+pointer lock, per 420 dopo un click, e in ogni caso i primi 8 movimenti. Il pitch si
+ferma poco sotto la verticale.
 
-Sul tocco, un dito gira la camera e due dita non fanno niente. Il gestore del tocco è
-registrato in modo da poter fermare il comportamento del browser, altrimenti la pagina
-scorre. I tocchi che partono dal joystick vengono esclusi dai candidati per la camera.
+Sul tocco, un dito gira la camera e 2 dita non fanno niente. Il gestore di
+`touchstart` è registrato con `passive: false`, altrimenti la pagina scorre. I tocchi
+che partono dal joystick sono esclusi dai candidati per la camera.
 
 ### Camminare
 
-Il movimento ha una velocità base e una di corsa, con accelerazione e decelerazione
-separate, e coefficienti diversi per indietro, di lato e in diagonale. Camminando la
+Il movimento ha velocità base e di corsa, accelerazione e decelerazione separate,
+coefficienti diversi per indietro, di lato e in diagonale. Camminando la
 vista oscilla in verticale, ondeggia di lato e rolla; andando di lato si inclina; in
-corsa oscillazione e cadenza crescono. I passi si sentono a ogni mezzo periodo
+corsa oscillazione e cadenza crescono. I passi scattano a ogni mezzo periodo
 dell'oscillazione, alternando destro e sinistro, con campioni diversi su strada e
 marciapiede.
 
-La camera è sempre agganciata al suolo: i tasti per salire e scendere sono stati tolti.
-Salendo sul marciapiede di un palazzo la camera si alza dell'altezza di quel
-marciapiede, e la ricerca di quale marciapiede si stia calpestando gira a ogni
-fotogramma su una lista tenuta in cache.
+La camera è sempre agganciata al suolo: i tasti per salire e scendere sono stati
+tolti. Sul marciapiede di un palazzo si alza della sua altezza, e la ricerca di quale
+marciapiede si stia calpestando gira a ogni frame su una lista in cache.
 
 ### Sbattere contro le cose
 
-Tre tipi di collisione: i palazzi, trattati come rettangoli con gli angoli arrotondati,
-con una distanza di sicurezza diversa per i laterali e per il principale; le persone
-della folla, con una distanza minima da centro a centro; il bordo della strada
-esagonale. Toccando il bordo mentre si spinge verso di esso partono un impulso
-luminoso sull'orlo e l'avviso di confine.
+3 tipi di collisione: i palazzi, rettangoli con gli angoli arrotondati, con una
+distanza di sicurezza diversa per i laterali e per il principale; la folla, con una
+distanza minima da centro a centro; il bordo della strada esagonale. Toccando il
+bordo mentre ci si spinge contro partono un impulso luminoso sull'orlo e l'avviso di
+confine.
 
 ### Sul telefono
 
 In verticale la demo non parte: compare un pannello che chiede di girare il
-dispositivo, perché il joystick e lo schermo intero hanno senso solo in orizzontale. Il
-joystick ha un raggio di 58 unità con una zona morta del 12%, e appare solo a rivelo
-finito, come l'indicatore dei tasti sul computer.
+dispositivo, perché joystick e schermo intero hanno senso solo in orizzontale. Il
+joystick ha raggio 58 unità e zona morta del 12%, e appare solo a rivelo finito, come
+l'indicatore dei tasti sul computer.
 
 ## Perché così e non altrimenti
 
 - **Il volo è stato il primo pezzo portato fuori dal file grande**, perché era la
-  foglia pulita a rischio più basso: yaw e pitch sono rimasti dov'erano e si
-  raggiungono con due funzioni, così lo spostamento non cambia nulla.
-- **Lo stato del mouse non è finito nello stato condiviso.** Quasi tutto è privato:
-  due campi soli avevano un lettore esterno, e promuoverli avrebbe allargato un
-  contratto per niente.
-- **Il vettore della velocità è un oggetto mutato sul posto**, letto e scritto da
-  collisioni, azzeramenti e avviso di confine. I parametri di regolazione, invece,
-  restano privati: ci finisce un nome solo se qualcuno fuori lo tocca.
-- **Il volo verticale è stato tolto** insieme al pannello: una camera che sale e scende
-  libera rende inutile tutto il lavoro sulla superficie di cammino.
-- **La pinzata sul tocco non fa niente.** Con più di un dito il codice ferma
-solo il comportamento del browser; il commit che l'ha decisa non dice perché.
-- **La città si precarica prima del click.** Il costo è che la libreria 3D si scarica
-  anche per chi non entra; il guadagno è che chi entra non aspetta. L'attesa al click
-  contava di più.
-- **Senza JavaScript c'è un blocco dedicato, non un testo alternativo sulle facce.** Le
-  facce sono decorative e accanto c'è già l'etichetta del reparto: un testo alternativo
-  non aggiungerebbe niente a uno screen reader.
+  foglia pulita a rischio più basso: yaw e pitch sono rimasti dov'erano, raggiunti con
+  2 funzioni, così lo spostamento non cambia nulla.
+- **Lo stato del mouse non è finito in `ctx.state`.** Quasi tutto è privato: 2 soli
+  campi avevano un lettore esterno, e promuoverli avrebbe allargato un contratto per
+  niente.
+- **`movementVelocity` è un oggetto mutato sul posto**, letto e scritto da
+  collisioni, azzeramenti e avviso di confine. I parametri di regolazione restano
+  privati: nello stato condiviso finisce un nome solo se qualcuno fuori lo tocca.
+- **Il volo verticale è stato tolto** insieme al pannello: una camera libera di salire
+  e scendere rende inutile il lavoro sulla superficie di cammino.
+- **Il pinch non fa niente.** Con più di un dito il codice ferma solo il
+  comportamento del browser; il commit che l'ha deciso non dice perché.
+- **La città si precarica prima del click.** three.js si scarica anche per chi non
+  entra, ma chi entra non aspetta: l'attesa al click contava di più.
+- **Senza JavaScript c'è un `noscript` dedicato, non un `alt` sulle facce.** Le facce
+  sono decorative e accanto c'è già l'etichetta del reparto: un `alt` non
+  aggiungerebbe niente a uno screen reader.
 
 Cose che non so spiegare, e lo dico:
 
-- Il mouse look “armato dopo il rivelo” è stato fatto, annullato e rifatto tre volte in
-  due giorni, a giugno, e i commit non dicono che cosa non andava.
-- L'avvio immersivo su telefono è stato aggiunto e annullato lo stesso giorno, senza un
+- Il mouse look “armato dopo il rivelo” è stato fatto, annullato e rifatto 3 volte in
+  2 giorni, a giugno, e i commit non dicono che cosa non andava.
+- L'avvio immersivo su telefono è stato aggiunto e annullato lo stesso giorno, senza
   motivo scritto.
-- La sensibilità del mouse vale 0,0022 radianti per pixel con il blocco del puntatore e
-  0,0035 senza. I due numeri stanno nel codice da sempre e nessun commit dice come sono
-  stati scelti.
-- I tre ritardi che difendono dal salto iniziale, 220 e 420 millisecondi e otto
-  movimenti scartati, sono nella stessa condizione: nessuna fonte li motiva.
+- La sensibilità del mouse vale 0,0022 rad/px con il pointer lock e 0,0035 senza. I 2
+  numeri stanno nel codice da sempre e nessun commit dice come sono stati scelti.
+- I 3 ritardi che difendono dal salto iniziale, 220 e 420 ms e 8 movimenti scartati,
+  sono nella stessa condizione: nessuna fonte li motiva.
 
 ## I numeri
 
 | cosa | valore | fonte e data |
 |---|---|---|
 | volo di ingresso | 5.600 ms, 7.600 ms con l'orbita | `drone-intro.js`, 2026-09-20 |
-| arco del volo | fra 24 e 90 unità, in proporzione alla distanza | `drone-intro.js` |
-| posizione di partenza della camera | 701, 591, 1111, campo visivo 70 gradi | `main.js`, `config.js` |
+| arco del volo | 24-90 unità, in proporzione alla distanza | `drone-intro.js` |
+| posizione di partenza della camera | 701, 591, 1111, FOV 70 gradi | `main.js`, `config.js` |
 | punto di atterraggio | 0, 4,1, 828,87 | `player-state.js` |
 | sensibilità del mouse | 0,0022 rad/px con blocco, 0,0035 senza | `mouse-look.js` |
 | difese contro il salto iniziale | 220 ms, 420 ms, 8 movimenti scartati | `costanti.js` |
-| soglia del trascinamento | 4 pixel | `costanti.js` |
+| soglia del trascinamento | 4 px | `costanti.js` |
 | velocità applicate al boot | cammino 30, corsa 180, accelerazione 9, decelerazione 8 | file canonico, 2026-09-20 |
 | oscillazione del passo | 0,31 camminando, 0,39 correndo | file canonico |
 | altezza minima della camera | 4,1 (1,8 nel codice, il file canonico vince) | `player-state.js`, file canonico |
 | distanza minima dalla folla | 1,6 unità | `costanti.js` |
-| disco del cursore | da 78 a 28.500 gradi al secondo | `disc-cursor.js` |
+| disco del cursore | da 78 a 28.500 gradi/s | `disc-cursor.js` |
 | joystick | raggio 58, zona morta 12% | `mobile-movement.js` |
 
 ## Dove sta nel codice
@@ -185,7 +183,7 @@ Cose che non so spiegare, e lo dico:
 | file | righe | ruolo |
 |---|---|---|
 | `src/camera/drone-intro.js` | 400 | il volo di ingresso e l'orbita |
-| `src/camera/mouse-look.js` | 363 | blocco del puntatore, trascinamento, tocco |
+| `src/camera/mouse-look.js` | 363 | pointer lock, trascinamento, tocco |
 | `src/camera/camera-collision.js` | 173 | palazzi, folla, bordo della strada |
 | `src/camera/disc-cursor.js` | 171 | il cursore a disco |
 | `src/camera/player-state.js` | 138 | posa, spawn, parametri, superficie di cammino |
@@ -193,15 +191,15 @@ Cose che non so spiegare, e lo dico:
 | `src/controls/mobile-movement.js` | 269 | joystick, schermo intero, profilo touch |
 | `src/controls/keyboard.js` | 101 | instradamento dei tasti |
 
-Le prove: due sul volo (accensione dell'orbita solo su richiesta), tre sul mouse (un
-dito che gira, due che non fanno niente, un dito sul joystick e uno sul canvas che
-convivono), dodici sulla copertina, tre sull'ordine del boot e del fotogramma.
+I test: 2 sul volo (orbita accesa solo su richiesta), 3 sul mouse (un dito che gira,
+2 che non fanno niente, un dito sul joystick e uno sul canvas che convivono), 12
+sulla copertina, 3 sull'ordine del boot e del frame.
 
 ## Per chi viene dal backend
 
-L'ordine dentro il fotogramma è una catena di middleware dove la posizione conta: chi
-possiede la camera, drone o terminale, corto-circuita il resto, esattamente come un
-handler che interrompe la catena. Le tre difese contro il salto del puntatore sono un
-debounce con finestra di guardia su un evento che arriva sporco. E la superficie di
-cammino è una query spaziale che gira a 60 Hz: per questo la lista su cui cerca è in
-cache e non viene allocata a ogni fotogramma.
+L'ordine dentro il frame è una catena di middleware dove la posizione conta: chi
+possiede la camera, drone o terminale, corto-circuita il resto, come un handler che
+interrompe la catena. Le 3 difese contro il salto del pointer lock sono un debounce
+con finestra di guardia su un evento che arriva sporco. E la superficie di cammino è
+una query spaziale che gira a 60 Hz: per questo la lista su cui cerca è in cache e non
+viene allocata a ogni frame.

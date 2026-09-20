@@ -26,75 +26,73 @@ che conosco, e cosa manca. Un manuale senza questa pagina sarebbe una brochure.
 
 ## Le rinunce, una per sottosistema
 
-Ognuna è raccontata per esteso nel suo capitolo; qui c'è la riga che la riassume.
+Ognuna ha il suo capitolo; qui c'è la riga che la riassume.
 
-- **Il cielo.** La cupola procedurale costa circa metà del fotogramma. Quella che si
-  vede è una fotografia a cubo della cupola, rifatta una faccia ogni due fotogrammi
-  (512 pixel su computer, 128 su telefono): le nuvole avanzano a scatti invece che in
-  modo continuo, e lo accetto.
-- **La scelta della cubemap.** Non esiste una mappa di riflessione della scena vera.
-  Palazzi e pavimento riflettono un'immagine disegnata su un canvas 2D (gradiente,
-  sagome dei palazzi, linee ciano) prefiltrata per la rugosità. Sul telefono il
-  pavimento perde anche quella e la sostituisce con un termine di Fresnel iniettato
-  nello shader: una scelta dichiarata, da giudicare a occhio.
-- **Le nuvole e i lampi.** I lampi esistono solo con la scelta del cielo usata in
-  produzione; con le altre cinque sono spenti. Vivono dentro il bake, quindi hanno il
-  ritmo del bake.
-- **La sincronizzazione dei fotogrammi.** Durante il rivelo della città il ciclo dei
-  fotogrammi sospende strada, folla, cartelli, equalizzatore e battito, salta il bloom
-  e limita il pixel ratio, perché quella è la finestra con meno margine. Il rivelo
-  parte sul colpo di batteria del brano, non su un timer.
-- **I personaggi e le animazioni.** Un solo modello sorgente clonato per trenta membri
-  della folla; la folla si aggiorna a 45 Hz e non a ogni fotogramma; il livello di
-  dettaglio salta fotogrammi con il passo 1, 2 o 4 secondo la distanza, e oltre le 900
-  unità i personaggi non si aggiornano. I riflessi dei personaggi sono cloni capovolti,
-  al massimo due alla volta, spenti sotto i 42 fotogrammi al secondo.
-- **L'equalizzatore.** Sedici colonne per ventidue segmenti che seguono lo spettro del
+- **Il cielo.** La cupola procedurale costa circa metà del frame. Quella che si vede è
+  un bake a cubemap della cupola, una faccia ogni 2 frame (512 px su desktop, 128 su
+  telefono): le nuvole avanzano a scatti, e lo accetto.
+- **Nessuna mappa di riflessione della scena.** Non esiste una env map della scena vera. Palazzi e
+  pavimento riflettono un'immagine disegnata su un canvas 2D (gradiente, sagome dei
+  palazzi, linee ciano) e prefiltrata per la roughness (PMREM). Sul telefono il
+  pavimento perde anche quella, sostituita da un termine di Fresnel iniettato nello
+  shader: scelta dichiarata, da giudicare a occhio.
+- **Le nuvole e i lampi.** I lampi esistono solo con il preset di cielo usato in
+  produzione; con gli altri 5 sono spenti. Vivono dentro il bake, quindi ne hanno il
+  ritmo.
+- **La sincronizzazione dei frame.** Durante il rivelo della città il frame loop
+  sospende strada, folla, cartelli, equalizzatore e battito, bypassa il bloom e limita
+  il pixel ratio: è la finestra con meno margine. Il rivelo parte sul beat drop del
+  brano, non su un timer.
+- **I personaggi e le animazioni.** Un solo modello sorgente clonato per 30 membri
+  della folla; la folla si aggiorna a 45 Hz, non a ogni frame; il LOD salta frame con
+  passo 1, 2 o 4 secondo la distanza, e oltre le 900 unità i personaggi non si
+  aggiornano più. I riflessi sono cloni capovolti, al massimo 2 alla volta, spenti
+  sotto i 42 fps.
+- **L'equalizzatore.** 16 colonne per 22 segmenti che seguono lo spettro del
   brano: si accende solo a rivelo concluso, come il battito dei LED e i passi.
-- **Le superfici.** Il bloom è leggero (tetto allo 0,28 della finestra, tre livelli):
-  la versione di qualità portava la demo a circa 20 fotogrammi al secondo.
+- **Le superfici.** Il bloom è leggero (tetto allo 0,28 della finestra, 3 livelli):
+  la versione di qualità portava la demo a circa 20 fps.
 - **Le collisioni.** La camera si ferma contro i palazzi con una soglia di 15,6 unità
-  (24,2 per il palazzo principale) e contro il bordo della strada. Sono raggi, non
+  (24,2 per il palazzo principale) e contro il bordo della strada. Sono raycast, non
   fisica.
-- **Il movimento e il dondolio.** Velocità 30, sprint 180, dondolio del passo 0,31 e
-  0,39: numeri scelti a occhio e scritti nel file canonico, che vince sul codice.
+- **Il movimento e il dondolio.** Velocità 30, sprint 180, bob del passo 0,31 e 0,39:
+  numeri scelti a occhio e scritti nel file canonico, che vince sul codice.
 - **La risoluzione.** Su telefono il pixel ratio è fisso a 1,7, e il budget automatico
-  che abbassa la qualità sotto i 45 fotogrammi al secondo esiste ma in produzione non
-  interviene, perché il profilo è “quality”. Su telefono l'anti-aliasing è FXAA, che
-  sfoca un po', perché il MSAA a quella risoluzione tremava in movimento.
+  che abbassa la qualità sotto i 45 fps esiste ma in produzione non interviene, perché
+  il profilo è “quality”. L'anti-aliasing è FXAA, che sfoca un po': il MSAA a quella
+  risoluzione tremava in movimento.
 
 ## Cosa non ho misurato
 
-L'obiettivo dei 30 fotogrammi al secondo su un telefono di sei o sette anni fa è un
-obiettivo, non una misura: nel repository non c'è un numero preso su un telefono di
-quella età. Le misure che esistono sono su un Mac M3 e su un iPhone di cui non è
-scritto il modello. Il capitolo Prestazioni le elenca tutte, con la data.
+I 30 fps su un telefono di 6-7 anni sono un obiettivo, non una misura: nel repository
+non c'è un numero preso su un telefono di quell'età. Le misure che esistono sono su un
+Mac M3 e su un iPhone di cui non è scritto il modello. Il capitolo Prestazioni le
+elenca tutte, con la data.
 
 ## Debiti che conosco
 
-Sono nel codice oggi, e li lascio scritti qui invece di far finta che non ci siano.
+Sono nel codice oggi, e li lascio scritti invece di far finta che non ci siano.
 
-- Il numero civico dei palazzi ha una costante di profondità esportata e provata, ma
-  il materiale ha il valore scritto a mano: la prova verifica un numero, non il
+- I numeri civici hanno una costante di `depthTest` esportata e testata, ma il
+  materiale ha il valore scritto a mano: il test verifica un numero, non il
   comportamento.
 - Il terzo ponte ha un'altezza nei dati e un'altra forzata nel codice.
 - Marciapiedi, strade laterali e bordi longitudinali sono codice vivo che lavora su
-  elenchi vuoti.
-- Un modello di testa è pubblicato ma nessun modulo lo carica; i passi audio dei
-  personaggi sono scritti ma non suonano mai, perché il modello sorgente è invisibile
-  e la folla non ne ha.
-- Fino a oggi due dipendenze venivano iniettate e mai lette; le ha trovate il
-  typecheck, e sono state tolte.
+  record vuoti.
+- Un GLB di testa è pubblicato ma nessun modulo lo carica; i passi audio dei personaggi
+  sono scritti ma non suonano mai, perché il modello sorgente è invisibile e la folla
+  non ne ha.
+- Fino a oggi 2 dipendenze venivano iniettate e mai lette: le ha trovate il typecheck,
+  e sono state tolte.
 
 ## Cosa manca
 
-Le cose che farei dopo, nell'ordine in cui le vorrei:
+Quello che farei dopo, nell'ordine:
 
 1. **I lampioni** lungo il boulevard.
-2. **Ridefinire l'intelligenza dei personaggi**: oggi sono macchine a stati su punti di
-   passaggio, e i percorsi li ho già rifatti una volta.
+2. **Ridefinire l'intelligenza dei personaggi**: oggi sono macchine a stati su
+   waypoint, e i percorsi li ho già rifatti una volta.
 3. **Mani e piedi del giocatore**, per dare un corpo alla camera.
 4. **L'interno del mio palazzo**.
 
-Il tempo è l'unico vincolo: sono da solo, e ogni voce di questa lista è una scelta
-contro un'altra.
+Il tempo è l'unico vincolo: sono da solo, e ogni voce è una scelta contro un'altra.

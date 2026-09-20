@@ -19,22 +19,20 @@ Blocco 7: ponte scritto dall'autore del manuale, senza affermazioni tecniche nuo
 
 :::info Se è la prima volta
 
-Una scena 3D è fluida se ogni fotogramma sta dentro un budget di tempo: sedici millesimi di secondo per averne sessanta al secondo. Questo capitolo dice dove va quel tempo, che cosa è stato misurato davvero e che cosa invece resta un obiettivo.
+Una scena 3D è fluida se ogni frame sta dentro un budget di tempo: 16 millesimi di secondo per averne sessanta al secondo. Questo capitolo dice dove va quel tempo, che cosa è stato misurato davvero e che cosa invece resta un obiettivo.
 
 :::
 
 ## Cosa vede l'utente
 
-Su un computer la città scorre; su un telefono l'immagine è un po' più
-morbida, perché si disegna a risoluzione più bassa con un anti-aliasing che
-sfuma i bordi. Prima di partire la
-demo chiede di girare lo schermo in orizzontale. I due punti dove ha scattato, in
-passato, sono il rivelo della città, con sei passaggi a schermo intero, e la prima
-apparizione di un personaggio con le risorse non ancora sulla scheda grafica. Di
-default nessun numero: il contatore dei fotogrammi è uno strumento di lavoro e resta
-spento. Con `?osd` nell'indirizzo compare in alto a sinistra un pannello di dieci
-righe, FPS in testa, aggiornato ogni 500 millisecondi. Su telefono resta nascosto
-anche con il parametro.
+Su un computer la città scorre; su un telefono l'immagine è più morbida, perché si
+disegna a risoluzione più bassa con FXAA. Prima di partire la demo chiede di girare lo
+schermo in orizzontale. I due punti dove ha scattato, in passato, sono il rivelo della
+città, 6 pass a schermo intero, e la prima apparizione di un personaggio con le risorse
+non ancora sulla GPU. Di default nessun numero: il contatore dei frame è uno strumento
+di lavoro e resta spento. Con `?osd` nell'URL compare in alto a sinistra un pannello di
+10 righe, FPS in testa, aggiornato ogni 500 ms. Su telefono resta nascosto anche con il
+parametro.
 
 ![La città a regime, dopo il rivelo: è qui che le misure hanno senso](/img/panoramica.webp)
 
@@ -42,35 +40,32 @@ anche con il parametro.
 
 Prima gli obiettivi, poi le misure, e non li mescolo.
 
-Gli obiettivi li ho dichiarati io: 30 fotogrammi al secondo su un telefono di sei o
-sette anni, cioè a fine ciclo di vita, e 60 stabili su un portatile o un desktop di
-fascia Apple M1 o un PC Windows simile. Lavoro con un pannello di numeri sotto gli
-occhi e cerco il giusto mix fra qualità e prestazioni, perché la demo deve girare su
-qualsiasi browser, telefoni compresi.
+Gli obiettivi li ho dichiarati io: 30 fps su un telefono di 6 o 7 anni, a fine ciclo
+di vita, e 60 stabili su un portatile o un desktop di fascia Apple M1 o un PC Windows
+simile. Lavoro con un pannello di numeri sotto gli occhi e cerco il mix fra qualità e
+prestazioni, perché la demo deve girare su qualsiasi browser, telefoni compresi.
 
 Le misure sono un'altra cosa. Nel repository non c'è nessuna misura di fps su un
-telefono di sei o sette anni, e nessuna su un M1. Quelle che esistono sono su un Mac
-M3, su una macchina di sviluppo non dichiarata, e su un iPhone “vero” del 9 luglio
-2026 di cui i commit non scrivono il modello. Nessuna fonte dice che i 30 fps sul
-telefono vecchio siano stati raggiunti o mancati. È un obiettivo, e qui resta tale.
+telefono di 6 o 7 anni, nessuna su M1. Quelle che esistono sono su un Mac M3, su una
+macchina di sviluppo non dichiarata, e su un iPhone “vero” del 9 luglio 2026 di cui i
+commit non scrivono il modello. Nessuna fonte dice che i 30 fps sul telefono vecchio
+siano stati raggiunti o mancati: è un obiettivo, e qui resta tale.
 
 Il problema tecnico ha una forma precisa:
 
-- **Su telefono la demo è fill-bound.** Il fotogramma costa in proporzione ai pixel da
-  colorare, area per costo dello shader (il programma che la GPU esegue per pixel),
-  non ai vertici né alle draw call, le chiamate di disegno alla scheda.
-- **Su computer è limitata dal render, non dal processore.** La CPU spende circa 1,2
-  millisecondi a fotogramma.
-- **Il rivelo non è la città a regime.** Sei pass a schermo intero, circa 20 fps al
-  percentile 1, e l'evento di fine rivelo scatta 1 o 2 secondi prima che il wireframe
-  smetta davvero. Un benchmark partito lì misura il rivelo.
+- **Su telefono la demo è fill-bound.** Il frame costa in proporzione ai pixel da
+  colorare, area per costo dello shader, non ai vertici né alle draw call.
+- **Su computer è render-bound, non CPU-bound.** La CPU spende circa 1,2 ms a frame.
+- **Il rivelo non è la città a regime.** 6 pass a schermo intero, circa 20 fps al p1,
+  il primo percentile, e l'evento di fine rivelo scatta 1 o 2 secondi prima che il
+  wireframe smetta davvero. Un benchmark partito lì misura il rivelo.
 - **Un A/B senza registro delle leve non vale.** Due run su iPhone non erano
   confrontabili perché il JSON non diceva quali leve avesse ciascuna, e il calore del
   telefono faceva sembrare peggiore la seconda.
-- **Il browser senza testa non misura la GPU del telefono.** Chromium headless usa
-  SwiftShader, un rasterizzatore software: i delta di fps possono perfino invertirsi.
-- **Il boot ha blocchi sincroni pesanti.** In fila, senza pause, sono centinaia di
-  millisecondi con input e disegno congelati su telefono.
+- **Chromium headless non misura la GPU del telefono.** Usa SwiftShader,
+  rasterizzatore software: i delta di fps possono perfino invertirsi.
+- **Il boot ha blocchi sincroni pesanti.** In fila, senza pause, sono centinaia di ms
+  con input e disegno congelati su telefono.
 - **La rete conta le richieste, non i byte.** Il grafo dei moduli (circa 89 file) è
   profondo, e le intestazioni live sono `cache-control: no-cache` con ETag: ogni
   visita rifà una richiesta condizionata per modulo.
@@ -79,41 +74,36 @@ Il problema tecnico ha una forma precisa:
 
 ### Le misure che esistono
 
-Su iPhone, il 9 luglio 2026, modello non scritto: spegnere la luce direzionale ha
-dato +3,7 fps (render da 8,26 a 6,87 ms); togliere la mappa d'ambiente (la texture che
-le superfici riflettono) da palazzi e marciapiedi +1,7; il cielo bilanciato +5,4,
-senza data; il primo MSAA andava a 34 fps, più lento di FXAA. Su Mac M3, il 7 luglio:
-il fast path dell'upscale ha portato il render medio da 4,27 a 3,86 ms. L'8 luglio, su
-una macchina non dichiarata: 60 fps con 295 draw e 287.919 triangoli, prima che il
-batch dei ponti portasse le draw a 248. Il commit che ha scelto MSAA su desktop parla
-di “60 fps vsync, circa 3x di margine”, senza dire su cosa.
+Su iPhone, il 9 luglio 2026, modello non scritto: spegnere la luce direzionale ha dato
++3,7 fps (render da 8,26 a 6,87 ms); togliere la envMap da palazzi e marciapiedi +1,7;
+il cielo bilanciato +5,4, senza data; il primo MSAA andava a 34 fps, più lento di FXAA.
+Su Mac M3, il 7 luglio: il fast path dell'upscale ha portato il render medio da 4,27 a
+3,86 ms. L'8 luglio, su una macchina non dichiarata: 60 fps con 295 draw e 287.919
+triangoli, prima che il batch dei ponti portasse le draw a 248. Il commit che ha scelto
+MSAA su desktop parla di “60 fps vsync, circa 3x di margine”, senza dire su cosa.
 
 ### Il profilo mobile
 
-Il profilo è attivo se vale una di quattro condizioni: la media query
+Il profilo è attivo se vale una di 4 condizioni: la media query
 `(max-width: 760px), (hover: none), (pointer: coarse)`, `navigator.maxTouchPoints > 0`,
-una finestra larga al massimo 760 pixel, oppure `?forceMobile=1`. Le tre funzioni di
-cap sono pure: `min(base, cap)` se attivo, `base` altrimenti, per la scala di render,
-il pixel ratio e la scala del bloom (l'alone attorno ai LED, ottenuto sfocando le
-parti sopra soglia a risoluzione ridotta). I cap valgono 1, 1 e 0,14. Una prova
-verifica che abbassino e non alzino mai: un errore di segno non si vede sul desktop
-dello sviluppatore.
+una finestra larga al massimo 760 pixel, `?forceMobile=1`. Le 3 funzioni di cap sono
+pure, `min(base, cap)` se attivo e `base` altrimenti, per scala di render, pixel ratio
+e scala del bloom. I cap valgono 1, 1 e 0,14. Un test verifica che abbassino e non
+alzino mai: un errore di segno non si vede sul desktop dello sviluppatore.
 
-Le leve decise per default su telefono, tutte con override dall'indirizzo: cielo
-`balanced`, pavimento leggero (anisotropia da 16 a 4, normal map tolta), riflesso del
-pavimento sostituito da un fresnel di Schlick (più riflettente ad angolo radente),
-riflesso dei palazzi leggero, luce direzionale spenta, FXAA invece di MSAA, bake del
-cielo su un cubo da 128. Sopra c'è un registro di 29 toggle `?fx.<nome>=0` che
-spengono un sottosistema alla volta, solo su mobile: su desktop il parametro viene
-registrato e non applicato.
+Le leve di default su telefono, tutte con override da URL: cielo `balanced`, pavimento
+leggero (anisotropia da 16 a 4, normal map tolta), riflesso del pavimento sostituito da
+un fresnel di Schlick, riflesso dei palazzi leggero, luce direzionale spenta, FXAA
+invece di MSAA, bake del cielo su un cubo da 128. Sopra, un registro di 29 toggle
+`?fx.<nome>=0` che spengono un sottosistema alla volta, solo su mobile: su desktop il
+parametro viene registrato e non applicato.
 
 ### La risoluzione, e il budget che non interviene
 
-Il pixel ratio attivo (pixel del buffer per pixel CSS; a 2x sono quattro volte quelli
-di 1x) è il minimo fra `devicePixelRatio`, il valore richiesto per la scala manuale per
-la scala dinamica (non sotto 0,25), il tetto di 2, il cap del rivelo (1,5, solo
-desktop) e il cap del bersaglio adattivo: 1920x1080 se lo schermo arriva al Full HD,
-altrimenti 1280x720. Su mobile tutto questo è scavalcato: il pixel ratio è forzato a
+Il pixel ratio attivo è il minimo fra `devicePixelRatio`, il valore richiesto per la
+scala manuale per la scala dinamica (non sotto 0,25), il tetto di 2, il cap del rivelo
+(1,5, solo desktop) e il cap del bersaglio adattivo: 1920x1080 se lo schermo arriva al
+Full HD, altrimenti 1280x720. Su mobile è tutto scavalcato: il pixel ratio è forzato a
 1,7, e un valore forzato salta i cap e spegne il downscaler automatico.
 
 Il budget automatico gira nella stessa finestra di 500 ms del contatore:
@@ -137,99 +127,91 @@ flowchart TB
 ```
 
 Il cooldown conta finestre, quindi 6 vale 3 secondi; la scala non scende sotto 0,25.
-Ora l'onestà: in produzione questo ciclo esce sempre al primo rombo. Il valore
-iniziale del profilo è `auto`, ma al boot i controlli lo sovrascrivono con il select,
-il cui default nel markup e nei valori canonici è `quality`; con `quality` la scala
-torna a 1 e il cooldown a 0. Su mobile lo spegne il pixel ratio forzato. Il budget
-esiste, e non agisce.
+Ora l'onestà: in produzione questo ciclo esce sempre al primo rombo. Il profilo parte da
+`auto`, ma al boot i controlli lo sovrascrivono con il `<select>`, il cui default nel
+markup e nel JSON canonico è `quality`; con `quality` la scala torna a 1 e il cooldown
+a 0. Su mobile lo spegne il pixel ratio forzato. Il budget esiste e non agisce.
 
-Gli altri budget per fotogramma: effetti secondari e tessere esagonali un fotogramma
+Gli altri budget per frame: effetti secondari e tessere esagonali un frame
 su due, la folla pensa a 45 Hz, i cartelli ricontrollano la posa ogni 250 ms, il bloom
-a camera ferma si ricalcola un fotogramma su due. I riflessi della folla sono al
+a camera ferma si ricalcola un frame su due. I riflessi della folla sono al
 massimo 2 entro 240 unità, 0 sotto i 42 fps.
 
 ### Il benchmark
 
-Con `?benchmark=1&benchmarkSeconds=N` compare un pannello con FPS medi, FPS al
-percentile 5 (il valore sotto cui cade il 5% dei campioni), fotogramma peggiore in
-ms, draw, triangoli e fotogrammi contati; la durata di default è 60 secondi, il
-pannello si aggiorna ogni 250 ms. Il JSON che esce fotografa l'ambiente: browser,
+Con `?benchmark=1&benchmarkSeconds=N` compare un pannello con FPS medi, FPS al p5,
+frame peggiore in ms, draw, triangoli e frame contati; durata di default 60 secondi,
+pannello aggiornato ogni 250 ms. Il JSON che esce fotografa l'ambiente: browser,
 schermo, viewport con pixel ratio, buffer, GPU dichiarata dal driver, il profilo di
 qualità (modo, pixel ratio, scale, antialias, bloom, FSR, TAA, profilo mobile), le
-leve (cielo, pavimento, riflessi, luce, i 29 toggle, i parametri dell'indirizzo) e il
-riassunto dell'OSD. Quando il benchmark parte da un indirizzo, il file si scarica da solo come
-`retro-benchmark-<data ISO>.json`, salvo chiedere il contrario; su iPhone può
-aprirsi il foglio di condivisione invece del download.
+leve (cielo, pavimento, riflessi, luce, i 29 toggle, i parametri dell'URL) e il
+riassunto dell'OSD. Quando parte da URL, il file si scarica da solo come
+`retro-benchmark-<data ISO>.json`, salvo chiedere il contrario; su iPhone può aprirsi
+il foglio di condivisione invece del download.
 
-L'avvio da indirizzo aspetta la scena ferma: rivelo completo, drone atterrato, nessun
-compositing, nessun overlay del LED principale, e questo stato che dura da almeno
-1.500 ms. Il documento del benchmark fissa le regole sul telefono: stesso dispositivo,
-modalità aereo, luminosità fissa, raffreddare fra un run e l'altro, una leva alla
-volta. E tre cose da non fare: tagliare draw call o fondere geometrie (il fill è area
-per shader, indipendente dai vertici), accendere l'upscale FSR su mobile (aggiunge un
-pass a piena risoluzione), rimettere la mappa d'ambiente sul pavimento. Una matrice
-headless (944x430, pixel ratio 2, 8 s a configurazione) serve solo a contare triangoli
-e draw: 9 toggle su 9 verificati, 29 leve su 29 nel JSON.
+L'avvio da URL aspetta la scena ferma: rivelo completo, drone atterrato, nessun
+compositing, nessun overlay del LED principale, stato tenuto per almeno 1.500 ms. Il
+documento del benchmark fissa le regole sul telefono: stesso dispositivo, modalità
+aereo, luminosità fissa, raffreddare fra un run e l'altro, una leva alla volta. E 3 cose
+da non fare: tagliare draw call o fondere geometrie (il fill è area per shader,
+indipendente dai vertici), accendere l'upscale FSR su mobile (aggiunge un pass a piena
+risoluzione), rimettere la envMap sul pavimento. Una matrice headless (944x430, pixel
+ratio 2, 8 s a configurazione) serve solo a contare triangoli e draw: 9 toggle su 9
+verificati, 29 leve su 29 nel JSON.
 
 ### Prewarm e tempi di boot
 
 Il boot della città parte in sottofondo appena la copertina ha caricato
 (`requestIdleCallback` con timeout 1.500 ms, altrimenti `setTimeout` 300 ms), dopo
-91 `<link rel="modulepreload">` (15 vendor, 76 src). Poi quattro blocchi di prewarm,
-cioè caricare e compilare prima che serva: le texture della scena (12 chiavi di
-materiale), le texture delle ossa (le matrici dello scheletro caricate in una texture
-per lo skinning, la deformazione della pelle sulla GPU), un render nascosto dei
-personaggi su un bersaglio 4x4 con `compileAsync`, e due render della catena di post.
-Fra un blocco e l'altro il controllo torna al browser; l'ordine è protetto da una
-prova che legge il sorgente.
+91 `<link rel="modulepreload">` (15 vendor, 76 src). Poi 4 blocchi di prewarm: le
+texture della scena (12 chiavi di materiale), le texture delle ossa (le matrici dello
+scheletro per lo skinning), un render nascosto dei personaggi su un bersaglio 4x4 con
+`compileAsync`, 2 render della catena di post. Fra un blocco e l'altro il controllo
+torna al browser; l'ordine è protetto da un test che legge il sorgente.
 
 I tempi, misurati il 19 settembre 2026: sul mio Mac con GPU vera il boot dura una
 ventina di secondi, il rivelo finisce di solito entro 40 e la foto fissa del gate
-visivo si scatta a 60.110,1 ms; sul runner Linux di GitHub, senza GPU, la prima foto
-arriva a 143.983 ms.
+visivo si scatta a 60.110,1 ms; sul runner Linux di GitHub Actions, senza GPU, la prima
+foto arriva a 143.983 ms.
 
 ### Culling statico e LOD
 
-Il frustum culling, cioè non disegnare quello che sta fuori dalla piramide di vista,
-è fatto a mano: gira per ultimo nel tick, subito prima del render, e testa una sfera
-per ogni palazzo, ponte e cartello, con un margine di 6 blocchi di griglia per palazzi
-e ponti, 3 per i cartelli. Nascondere un palazzo nasconde anche marciapiede, numero
-civico, porta e LED del marciapiede. Il LOD (level of detail: meno o niente oltre una
-distanza) delle tessere esagonali usa la distanza dal rettangolo del batch, con
-isteresi, cioè una soglia diversa per entrare e per uscire: 520 e 120 su desktop, 320
-e 80 su mobile. Ogni istanza nascosta risparmia 24 triangoli; il flush per fotogramma
+Il frustum culling è fatto a mano: gira per ultimo nel tick, subito prima del render,
+e testa una sfera per ogni palazzo, ponte e cartello, con un margine di 6 blocchi di
+griglia per palazzi e ponti, 3 per i cartelli. Nascondere un palazzo nasconde anche
+marciapiede, numero civico, porta e LED del marciapiede. Il LOD delle tessere esagonali
+usa la distanza dal rettangolo del batch, con isteresi: 520 e 120 su desktop, 320 e 80
+su mobile. Ogni istanza nascosta risparmia 24 triangoli; il flush per frame
 carica al massimo 10 batch sporchi. Con la semina su richiesta, l'8 luglio 2026, la
 capacità è passata da 189.263 a 33.155 tessere e l'heap da 119 a 67 MB; a regime 2
 batch visibili, 14.887 istanze nascoste, 21.637 attive.
 
 ### Memoria
 
-Le cache hanno un tetto, e quelle che tengono risorse della scheda grafica le
-smontano quando le espellono. I fumetti: LRU (esce la voce
-usata meno di recente) da 48 voci, canvas 896x360 a metà scala per la folla; era da
-12 contro circa 40 frasi, e 40 texture residenti erano circa 70 MB di GPU. I punti
-degli anelli LED: 64 voci, FIFO. I cartelli di ruolo a 512x256, i numeri civici a
-512x320. La mappa d'ambiente è prefiltrata con PMREM (versioni sfocate per livelli di
-ruvidità) a 6 livelli, riempiti su richiesta. Il composer smonta pass e bersagli
-quando viene ricostruito, e `renderer.info.memory` finisce nel benchmark e nell'OSD.
+Le cache hanno un tetto, e quelle che tengono risorse della GPU le smontano quando le
+espellono. I fumetti: LRU da 48 voci, canvas 896x360 a metà scala per la folla; era da
+12 contro circa 40 frasi, e 40 texture residenti erano circa 70 MB di GPU. I punti degli
+anelli LED: 64 voci, FIFO. I cartelli di ruolo a 512x256, i numeri civici a 512x320. La
+envMap è prefiltrata con PMREM a 6 livelli, riempiti su richiesta. Il composer smonta
+pass e bersagli quando viene ricostruito, e `renderer.info.memory` finisce nel benchmark
+e nell'OSD.
 
 ### Il peso sulla rete
 
-Niente bundler: `index.html` usa una importmap (la mappa dei nomi dei moduli ai
-percorsi) e i moduli sono serviti senza minificazione. Misurato il 20 settembre 2026:
-97 moduli in `src/` per 1.428.704 byte; compressi con brotli al livello 11,
-che è il comando con cui ho misurato io (Cloudflare comprime in brotli, ma il
-livello che usa non è dichiarato), la somma per file è 317.479 byte, e `main.js` passa da 47.778 a 11.909.
-La politica di cache è `no-cache` con ETag: il browser rifà la richiesta e il server
-risponde 304 se il file non è cambiato.
+Niente bundler: `index.html` usa una importmap e i moduli sono serviti senza
+minificazione. Misurato il 20 settembre 2026: 97 moduli in `src/` per 1.428.704 byte;
+con brotli al livello 11, il comando con cui ho misurato io (Cloudflare comprime in
+brotli, ma il livello non è dichiarato), la somma per file è 317.479 byte, e `main.js`
+passa da 47.778 a 11.909. La cache è `no-cache` con ETag: una richiesta condizionata
+per modulo a ogni visita, 304 se il file non è cambiato.
 
 ### L'OSD
 
 I tempi: `updateMs` da inizio tick a inizio render, `renderMs` la durata del render,
-`frameMs` la somma; le medie sono EMA, cioè `prev + (next - prev) x 0,12`. Il timer
-GPU (`EXT_disjoint_timer_query`) prende una query ogni 180 fotogrammi attorno al
-render, e il collo di bottiglia è `present`, `gpu`, `cpu` o `render`. I picchi
-(fotogramma da 22 ms o più, o sotto 50 fps) si registrano al massimo uno ogni 320 ms,
+`frameMs` la somma; le medie sono EMA con fattore 0,12. Il timer GPU
+(`EXT_disjoint_timer_query`) prende una query ogni 180 frame attorno al render, e il
+collo di bottiglia è `present`, `gpu`, `cpu` o `render`. I picchi
+(frame da 22 ms o più, o sotto 50 fps) si registrano al massimo uno ogni 320 ms,
 fino a 12, con il contesto: `texture-upload`, rivelo, bloom, equalizzatore, folla o
 scena. Dalla console, `__tronPerfInspect` restituisce diagnostica e statistiche dei
 prewarm; `__tronPerfIsolation` spegne bloom, equalizzatore, folla o riflessi per
@@ -244,30 +226,30 @@ isolarne il costo.
   decisione mia, e FXAA nasconde la morbidezza. Il valore forzato spegne il downscaler
   perché resti fermo durante un run.
 - **Il benchmark parte a scena ferma, non all'evento di fine rivelo.** Quell'evento
-  scatta 1 o 2 secondi prima della fine vera, con il compositor a sei pass; ora parte
-  sul compositor a tre pass, e i delta misurano la camminata, non il rivelo.
+  scatta 1 o 2 secondi prima della fine vera, con il compositor a 6 pass; ora parte sul
+  compositor a 3 pass, e i delta misurano la camminata, non il rivelo.
 - **Le leve dentro il JSON, tutte e 29.** Senza, un A/B non è attendibile. Un `&&` in
   testa faceva saltare la registrazione, e quei toggle mancavano dal JSON.
 - **I toggle fx solo su mobile.** Il desktop resta identico byte per byte anche con i
-  parametri nell'indirizzo. Il culling statico li riapplica perché gira per ultimo e
+  parametri nell'URL. Il culling statico li riapplica perché gira per ultimo e
   riscriveva la visibilità sopra i toggle.
 - **Cielo bilanciato su telefono.** Il ramo pieno fa circa 340 operazioni di seno e
   hash per pixel di cielo, 3,5 volte il costo del bilanciato, e il default `full`
   dell'interfaccia passava senza cancello mobile.
 - **Pavimento e riflesso leggeri.** La normal map veniva campionata per ogni pixel a
-  effetto zero. La mappa d'ambiente del pavimento era il costo per pixel più alto
-  sulla superficie più grande: al suo posto un fresnel, con metallicità da 0,88 a
-  0,32 e ruvidità da 0,16 a 0,5 perché il pavimento non diventi nero. Il pavimento
+  effetto zero. La envMap del pavimento era il costo per pixel più alto sulla superficie più
+  grande: al suo posto un fresnel, con metallicità da 0,88 a 0,32 e ruvidità da 0,16 a
+  0,5 perché il pavimento non diventi nero. Il pavimento
   perde i riflessi al neon dei palazzi.
 - **Luce direzionale spenta su telefono.** La sola luce puntuale eseguiva un BRDF per
   ogni pixel illuminato di pavimento e facciate; a intensità 0,18 l'atmosfera la
   fanno la luce d'ambiente e i LED emissivi, e gli screenshot prima e dopo non si
   distinguono.
 - **Cache dei fumetti a 48, non 12.** Con 12 voci contro circa 40 frasi l'espulsione
-  era continua, e ogni espulsione ricomprava un raster sincrono nel fotogramma in cui
+  era continua, e ogni espulsione ricomprava un raster sincrono nel frame in cui
   parlava il prossimo. A scala ridotta una texture pesa circa 0,32 MB.
-- **Prewarm a blocchi, con pause e `compileAsync`.** In fila sarebbero un solo lungo
-  task del thread principale. Il bersaglio fuori schermo resta legato durante la
+- **Prewarm a blocchi, con pause e `compileAsync`.** In fila sarebbero un solo long
+  task sul main thread. Il bersaglio fuori schermo resta legato durante la
   compilazione perché la variante compilata dipende dal bersaglio.
 - **Boot in sottofondo dopo la copertina.** Il click trova la scena pronta. Il costo è
   che three.js e la scena si scaricano anche per chi non entra: scelta presa apposta.
@@ -306,7 +288,7 @@ Cose che non so spiegare, e lo dico:
 | fast path dell'upscale | render medio 4,27 → 3,86 ms, peggiore 14,3 → 10,9 | commit 1902c65a, 2026-07-07, Mac M3 |
 | batch dei ponti | draw 295 → 248, geometrie 224 → 177, 287.919 triangoli, 60 fps | commit 3d877968, 2026-07-08, macchina non dichiarata |
 | margine desktop | “60 fps vsync, circa 3x” | commit 5ec6cec9, 2026-07-09, macchina non dichiarata |
-| CPU su desktop | circa 1,2 ms per fotogramma | commit 8cbaaaf1, 2026-06-17 |
+| CPU su desktop | circa 1,2 ms per frame | commit 8cbaaaf1, 2026-06-17 |
 | bloom pesante | circa 20 fps | commit 8cbaaaf1, 2026-06-17 |
 | semina delle tessere | capacità 189.263 → 33.155, batch 20 → 6, heap 119 → 67 MB | commit 37754726, 2026-07-08 |
 | LOD della strada a regime | 2 batch visibili, 14.887 istanze nascoste, 21.637 attive | commit 37754726, 2026-07-08 |
@@ -322,8 +304,8 @@ Cose che non so spiegare, e lo dico:
 | triangoli per tessera | 24 | `src/world/hex-tiles.js`, 2026-09-20 |
 | budget automatico | soglie 45 / 54 / 58 / 59,7 fps, passi -0,15 / -0,10 / -0,05 / +0,025, cooldown 6 / 7 / 6 / 8, minimo 0,25 | `src/engine/post-pipeline.js`, `src/world/config.js` |
 | pixel ratio | massimo 2, minimo 0,25, cap rivelo 1,5, mobile forzato 1,7, cap mobile 1 e bloom 0,14 | `src/world/config.js`, `src/config/costanti.js` |
-| benchmark e OSD | 60.000 ms, aggiornamento 250 ms, settle 1.500 ms; EMA 0,12, picco a 22 ms, timer GPU ogni 180 fotogrammi | `src/engine/retro-benchmark*.js`, `src/engine/performance-diagnostics.js` |
-| culling e LOD | margine 6 e 3 blocchi; 520/120 desktop, 320/80 mobile, 10 batch per fotogramma | `src/engine/static-city-culling.js`, `src/world/hex-tiles.js`; commit 4aef8dcc, 2026-06-28 |
+| benchmark e OSD | 60.000 ms, aggiornamento 250 ms, settle 1.500 ms; EMA 0,12, picco a 22 ms, timer GPU ogni 180 frame | `src/engine/retro-benchmark*.js`, `src/engine/performance-diagnostics.js` |
+| culling e LOD | margine 6 e 3 blocchi; 520/120 desktop, 320/80 mobile, 10 batch per frame | `src/engine/static-city-culling.js`, `src/world/hex-tiles.js`; commit 4aef8dcc, 2026-06-28 |
 | folla e cache | 30 membri, 45 Hz, LOD 190/520, cull 900, riflessi 2 entro 240; fumetti 48, anelli 64 | `src/character/characters.js`, `src/character/speech-bubbles.js`, `src/world/building-leds.js` |
 
 ## Dove sta nel codice
@@ -344,16 +326,15 @@ Cose che non so spiegare, e lo dico:
 | `src/world/config.js` | 50 | costanti di risoluzione, bloom, mobile |
 | `docs/retro-future-mobile-fill-benchmark.md` | 240 | il rapporto di misura del 9 luglio 2026 |
 
-Le prove: `performance-mobile.test.mjs` verifica che i cap abbassino e non alzino
-mai; `retro-benchmark.test.mjs` prova il riassunto su 10 campioni, il ritmo del
-pannello e il nome del file esportato; `hex-tiles.test.mjs` copre il LOD con quattro
-prove; `ordine-boot-frame.test.mjs` legge il sorgente e protegge l'ordine del boot e
-del tick.
+I test: `performance-mobile.test.mjs` verifica che i cap abbassino e non alzino mai;
+`retro-benchmark.test.mjs` verifica il riassunto su 10 campioni, il ritmo del pannello e
+il nome del file esportato; `hex-tiles.test.mjs` copre il LOD con 4 test;
+`ordine-boot-frame.test.mjs` legge il sorgente e protegge l'ordine del boot e del tick.
 
 ## Per chi viene dal backend
 
-Il budget della risoluzione è un autoscaler con soglie e periodo di attesa, configurato
-ma disattivato da un flag di produzione. Il JSON del benchmark è il log strutturato di
+Il budget della risoluzione è un autoscaler con soglie e cooldown, configurato ma
+disattivato da un flag di produzione. Il JSON del benchmark è il log strutturato di
 un load test che annota build e configurazione, perché un numero senza le sue leve non
 si confronta. Il prewarm è il warm-up dei worker prima di aprire il traffico. Le cache
 hanno una dimensione massima e un'espulsione, come un LRU in memoria; il `no-cache`

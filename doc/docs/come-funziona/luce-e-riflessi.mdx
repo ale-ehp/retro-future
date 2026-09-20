@@ -19,87 +19,79 @@ Blocco 7: ponte scritto dall'autore del manuale, senza affermazioni tecniche nuo
 
 :::info Se è la prima volta
 
-In una scena in tempo reale i riflessi quasi mai riflettono la scena vera: costerebbe disegnarla due volte. Si usano immagini preparate, copie capovolte e scorciatoie matematiche. Questo capitolo dice quali, e dove si vede la differenza.
+In una scena in tempo reale i riflessi quasi mai riflettono la scena vera: costerebbe disegnarla 2 volte. Si usano immagini preparate, copie capovolte e scorciatoie matematiche. Questo capitolo dice quali, e dove si vede la differenza.
 
 :::
 
 ## Cosa vede l'utente
 
 Una città quasi senza luce diretta: le facciate sono asfalto bagnato che specchia
-sagome di palazzi e linee ciano, il pavimento esagonale è un metallo lucido, e
-sotto il corridore e sotto un paio di persone della folla c'è un riflesso capovolto
-che sparisce quando un palazzo si mette in mezzo. I LED sui bordi dei palazzi, sugli
-anelli e lungo i marciapiedi sembrano sorgenti luminose, e lungo le strisce corre una
-banda di luce.
+sagome di palazzi e linee ciano, il pavimento esagonale è metallo lucido, e sotto il
+corridore e un paio di persone della folla c'è un riflesso capovolto che sparisce
+quando un palazzo si mette in mezzo. I LED sui bordi dei palazzi, sugli anelli e lungo
+i marciapiedi sembrano sorgenti luminose, e lungo le strisce corre una banda di luce.
 
 ![I LED di una facciata e il loro alone](/img/led-facciata.webp)
 
 ## Il problema
 
-Sul telefono la demo è limitata dal riempimento: conta il costo per pixel, non i
-triangoli. E in questa scena i costi per pixel stanno tutti qui: la env map (l'immagine
-panoramica che un materiale usa per riflettere), le luci valutate per frammento,
-l'overdraw dei trasparenti (pixel disegnati più volte). La riflessione a env map del
-pavimento era il costo per pixel più alto sulla superficie più grande. La sola luce
-direzionale faceva girare una BRDF per frammento, cioè il calcolo di come una
-superficie risponde a una luce, su ogni pixel illuminato del pavimento e delle
-facciate: il grosso del costo del pavimento.
+Su mobile la demo è fill-bound: conta il costo per pixel, non i triangoli. E i costi
+per pixel stanno tutti qui: la env map, le luci valutate per frammento, l'overdraw dei
+trasparenti. La riflessione a env map del pavimento era il costo per pixel più alto
+sulla superficie più grande, e la sola luce direzionale faceva girare una BRDF per
+frammento su ogni pixel illuminato di pavimento e facciate: il grosso del costo del
+pavimento.
 
 I riflessi dei personaggi hanno i loro problemi. Ogni riflesso attivo è un render in
-più di un personaggio con scheletro, specchiato. Sono finti: copie del modello
-con `depthTest: false` per non finire coperte dal pavimento, e per questo passavano
-anche attraverso i palazzi, un fantasma dentro il palazzo. E costruire il rig per tutti
-i membri della folla, con l'effetto spento, produceva circa 60 rig con scheletro che
-non avrebbero mai potuto disegnarsi.
+più di un personaggio con scheletro, specchiato. Sono finti: copie del modello con
+`depthTest: false` per non finire coperte dal pavimento, e per questo passavano anche
+attraverso i palazzi. E costruire il rig per tutti i membri della folla, a effetto
+spento, produceva circa 60 rig con scheletro che non avrebbero mai potuto disegnarsi.
 
-C'è poi una cosa che devo dire con onestà: i valori delle luci vivono a tre livelli.
-Nel codice la luce emisferica vale 0,10 e la direzionale 0,18, con l'esposizione a
-0,85. Nel markup 0,10, 0,18 e 0,81. Nel JSON canonico, che vince al boot, la luce
-ambientale è 0, la key light è 3 e l'esposizione è 0,51. I commenti nel codice
-ragionano su una key light a 0,18. La scena che vedete è quella del JSON.
+Una cosa da dire con onestà: i valori delle luci vivono a 3 livelli. Nel codice
+la luce emisferica vale 0,10 e la direzionale 0,18, con esposizione 0,85. Nel markup
+0,10, 0,18 e 0,81. Nel JSON canonico, che vince al boot, l'ambientale è 0, la key light
+3 e l'esposizione 0,51, mentre i commenti nel codice ragionano su una key light a 0,18.
+La scena che vedete è quella del JSON.
 
 ## Come funziona
 
 ### Renderer, esposizione e ordine del boot
 
-Il renderer nasce con tone mapping ACES Filmic (la compressione dell'intervallo di
-luminosità a un'immagine visibile), `toneMappingExposure = 0,85`, uscita sRGB,
-`antialias: false` e ombre spente. L'esposizione viene poi riscritta dal cursore
+Il renderer nasce con tone mapping ACES Filmic, `toneMappingExposure = 0,85`, uscita
+sRGB, `antialias: false` e ombre spente. L'esposizione la riscrive poi il cursore
 `exposure` a ogni passata dei controlli. Al boot `bootSceneWithFinalDefaults()` carica
-il JSON canonico con un fetch `cache: 'no-store'`, poi i default salvati, poi chiama
+il JSON canonico con un fetch `cache: 'no-store'`, poi i default salvati, poi
 `applyLiveControls()`. Se il fetch fallisce, restano i valori del markup.
 
 ### Le luci e la risposta della scena
 
-Due luci: una `HemisphereLight(0x182a32, 0x02050a, 0,10)`, un colore dal cielo e uno
-da terra senza direzione, e una `DirectionalLight(0x6ec8e6, 0,18)`, luce parallela da
-una direzione, in posizione (40, 220, 120). La visibilità dipende da `fx.hemiLight`,
-`fx.dirLight` e, per la direzionale, da `?dirLight=on|off` con default `!mobile`: sul
-telefono è spenta. I cursori scrivono `ambientLight.intensity` e `dirKey.intensity`.
+2 luci: una `HemisphereLight(0x182a32, 0x02050a, 0,10)` e una
+`DirectionalLight(0x6ec8e6, 0,18)` in posizione (40, 220, 120). La visibilità dipende
+da `fx.hemiLight`, `fx.dirLight` e, per la direzionale, da `?dirLight=on|off` con
+default `!mobile`: su mobile è spenta. I cursori scrivono `ambientLight.intensity` e
+`dirKey.intensity`.
 
-`sceneLightResponse(ambient, key)` traduce i due cursori in cinque fattori: `surface`,
+`sceneLightResponse(ambient, key)` traduce i 2 cursori in 5 fattori: `surface`,
 `reflection`, `emissive`, `floorFill`, `facadeFill`, combinazioni lineari degli
 scarti da 0,10 e 0,18, bloccate in intervalli. Con i valori canonici (0, 3) escono
 1,389, 1,538, 1,244, 0,036 e 0,024. I fattori moltiplicano colore, `envMapIntensity`
-(quanto pesa la env map nel materiale) ed emissiva di pavimento, piazzole e palazzi.
+ed emissiva di pavimento, piazzole e palazzi.
 
 ### La palette
 
-`PAL` ha cinque colori: `cyan 0x62f7ff`, `edgeLine 0x78d7de`,
-`buildingSkin 0x02090b`, `mainSkin 0x031116`, `tealLight 0xccffff`. Servono per la
-pelle e i bordi dei palazzi, il colore delle particelle, i bordi strada e i LED delle
-piazzole. Il cielo ha la sua `skyPalette` con sei colori scuri, da `0x01070a` a
-`0x111820`.
+`PAL` ha 5 colori: `cyan 0x62f7ff`, `edgeLine 0x78d7de`, `buildingSkin 0x02090b`,
+`mainSkin 0x031116`, `tealLight 0xccffff`. Servono per la pelle e i bordi dei palazzi,
+il colore delle particelle, i bordi strada e i LED delle piazzole. Il cielo ha la sua
+`skyPalette` con 6 colori scuri, da `0x01070a` a `0x111820`.
 
 ### L'asfalto bagnato
 
 La texture delle facciate è un canvas 256x256 generato per pixel (grana, onda,
-striature, graffi), ripetuto 8x24, in sRGB, con anisotropia (il filtraggio delle
-texture viste di sbieco) al massimo del renderer e limitata a 4 sul telefono. Sopra
-c'è un `MeshStandardMaterial`, il materiale PBR di three.js dove `metalness` e
-`roughness` regolano quanto e come riflette: metalness 0,94, roughness 0,10,
-`envMapIntensity` 1,3 per i palazzi laterali e 1,36 per il principale, emissiva
-`0x000202` a 0,035. Un solo materiale serve i dodici palazzi laterali, perché
+striature, graffi), ripetuto 8x24, in sRGB, con anisotropia al massimo del renderer e
+limitata a 4 su mobile. Sopra c'è un `MeshStandardMaterial`: metalness 0,94, roughness
+0,10, `envMapIntensity` 1,3 per i palazzi laterali e 1,36 per il principale, emissiva
+`0x000202` a 0,035. Un solo materiale serve i 12 palazzi laterali, perché
 `updateBuildingMaterials` scriveva già gli stessi valori a tutti.
 
 Il pavimento esagonale parte da metalness 0,88, roughness 0,16 e `envMapIntensity`
@@ -109,13 +101,13 @@ e metalness e roughness dai cursori. Le piazzole: 0,08, 0,18, 0,88.
 ### La env map: un disegno, non una foto
 
 La env map dei riflessi non è una cubemap fotografata dalla scena. È un canvas 2D di
-512x256 pixel: un gradiente verticale scuro a cinque stop fra `#01070a` e `#03181d`,
+512x256 pixel: un gradiente verticale scuro a 5 stop fra `#01070a` e `#03181d`,
 42 sagome di palazzi come rettangoli `rgba(0,8,12, 0,92 * alpha)` in modalità
-`lighter`, due linee verticali ciano per palazzo, righe orizzontali ogni 18 pixel
-sotto l'orizzonte. Diventa una `CanvasTexture` con `EquirectangularReflectionMapping`
-e `SRGBColorSpace`, e passa per `PMREMGenerator.fromEquirectangular`: PMREM è la env
-map pre-sfocata a più livelli di rugosità, così un materiale ruvido riflette sfocato
-senza costo extra. Compile, bake, dispose subito; la texture del target è la env map.
+`lighter`, 2 linee verticali ciano per palazzo, righe orizzontali ogni 18 pixel sotto
+l'orizzonte. Diventa una `CanvasTexture` con `EquirectangularReflectionMapping` e
+`SRGBColorSpace`, e passa per `PMREMGenerator.fromEquirectangular`, che la pre-sfoca
+per livelli di rugosità: un materiale ruvido riflette sfocato senza costo extra.
+Compile, bake, dispose subito; la texture del target è la env map.
 
 ```mermaid
 flowchart TB
@@ -130,7 +122,7 @@ flowchart TB
 ```
 
 `scene.environment` è `null`: nessuna illuminazione a immagine globale, la env map
-entra solo come `material.envMap`. Per la strada esistono sei livelli di “riflesso
+entra solo come `material.envMap`. Per la strada esistono 6 livelli di “riflesso
 palazzi”, `[0, 0,2, 0,35, 0,5, 0,7, 1]`; si sceglie il più vicino al cursore
 `road-building-reflect`, si cuoce a 256x128 solo alla prima richiesta e si tiene in
 una `Map`. Con livello 0 i rettangoli scuri non si disegnano, ma le linee ciano
@@ -138,32 +130,29 @@ restano; il canonico chiede 0.
 
 ### Il pavimento sul telefono
 
-Sul telefono, o con `?floorReflect=lite`, il pavimento perde la env map, passa a
-metalness 0,32 e roughness 0,5, e riceve via `onBeforeCompile` (il gancio di three.js
-per iniettare GLSL in un materiale standard) un termine di Fresnel:
-`pow(1 - |n·v|, 5)`, cioè un riflesso più forte a sguardo radente, per un colore
+Su mobile, o con `?floorReflect=lite`, il pavimento perde la env map, passa a
+metalness 0,32 e roughness 0,5, e riceve via `onBeforeCompile` un termine di Fresnel
+in GLSL: `pow(1 - |n·v|, 5)`, riflesso più forte a sguardo radente, per un colore
 `0x123f49` a forza 0,9 sommato a `totalEmissiveRadiance`. La chiave di programma è
 separata, così il desktop resta identico byte per byte. Lo stesso gancio inietta il
 bagliore per piastrella (`hexInstanceGlow`, il colore d'istanza meno il colore base).
-Sul telefono, o con `?buildingReflect=lite`, anche palazzi e piazzole hanno
+Su mobile, o con `?buildingReflect=lite`, anche palazzi e piazzole hanno
 `reflectionEnvMap` a `null`; la env map viene cotta lo stesso, e resta in VRAM.
 
 ### I riflessi dei personaggi: cloni capovolti
 
-Niente specchio della scena. Il riflesso è una copia del modello con scala Y
-negativa sotto il pavimento. Per il corridore: un `Group` a `y = 0,018` con
+Niente specchio della scena. Il riflesso è una copia del modello con scala Y negativa
+sotto il pavimento. Per il corridore: un `Group` a `y = 0,018` con
 `scale.set(1, -0,58, 1)`, dentro il modello ruotato di PI su Y e un secondo clone
-dello scheletro per lo strato dei LED, ciascuno con il suo `AnimationMixer` (il
-lettore delle animazioni); il gruppo è figlio di `runnerWalker`. Per la folla la stessa
-struttura per membro: due cloni dello scheletro, `renderOrder` 2 per il corpo e 3 per
-i LED, due mixer con offset di indice. Il rig si costruisce solo se
-`fxEnabled('crowdReflections')`.
+dello scheletro per lo strato dei LED, ciascuno con il suo `AnimationMixer`; il gruppo
+è figlio di `runnerWalker`. Per la folla la stessa struttura per membro: 2 cloni dello
+scheletro, `renderOrder` 2 per il corpo e 3 per i LED, 2 mixer con offset di indice.
+Il rig si costruisce solo se `fxEnabled('crowdReflections')`.
 
-I materiali sono `MeshBasicMaterial`, cioè senza luci. Corpo: colore `0x12343a` con
-la texture della tuta, `NormalBlending`, `depthTest: false`, `depthWrite: false`
-(non legge e non scrive la profondità), `DoubleSide`, `toneMapped: false`,
-trasparente, opacità iniziale 0. LED: colore `0xbaffff` con la maschera dei LED come
-`map` e `alphaMap`, in additivo.
+I materiali sono `MeshBasicMaterial`, senza luci. Corpo: colore `0x12343a` con la
+texture della tuta, `NormalBlending`, `depthTest: false`, `depthWrite: false`,
+`DoubleSide`, `toneMapped: false`, trasparente, opacità iniziale 0. LED: colore
+`0xbaffff` con la maschera dei LED come `map` e `alphaMap`, in additivo.
 
 L'opacità dipende dalla superficie: `reflect / limite` (3,5 sul marciapiede, 2,5
 sulla strada) per `(1 - roughness)` per `lerp(0,86, 1,04, metalness)` per 0,34; il
@@ -172,29 +161,26 @@ strada canonica (reflect 1,5, roughness 0,05, metalness 0) la base è 0,167, il 
 0,078, i LED 0,054. Le scritture sotto 0,002 di differenza si saltano: l'opacità è
 una uniform.
 
-Il budget per fotogramma è di 2 riflessi della folla. Sotto 50 fps misurati scende di
-uno; sotto 42 va a 0. Dopo il rivelo cresce in 2.400 millisecondi
-(`floor(progress * (max + 1))`). I candidati sono i membri entro 240 unità, ordinati
-per distanza con inserimento ordinato; solo loro aggiornano i mixer del riflesso. Per
-ciascuno un test 2D: il segmento camera-membro contro le scatole dei collisori dei
-palazzi (slab test su X e Z); se un palazzo sta in mezzo, opacità 0 e nascosto. I
-sottoalberi non visibili smettono di aggiornare le matrici. Il riflesso del corridore
-sorgente non si vede: il personaggio sorgente è dichiarato invisibile da una costante, e quel valore
-entra nella
-condizione. Le strisce LED dei marciapiedi si disegnano dopo, così il riflesso non può
-sedersi sopra.
+Il budget per frame è 2 riflessi della folla. Sotto 50 fps misurati scende di 1; sotto
+42 va a 0. Dopo il rivelo cresce in 2.400 ms (`floor(progress * (max + 1))`). I
+candidati sono i membri entro 240 unità, ordinati per distanza con inserimento
+ordinato; solo loro aggiornano i mixer. Per ciascuno un test 2D: il segmento
+camera-membro contro i collisori dei palazzi (slab test su X e Z); se un palazzo sta
+in mezzo, opacità 0 e nascosto. I sottoalberi non visibili smettono di aggiornare le
+matrici. Il riflesso del corridore sorgente non si vede: quel personaggio è dichiarato
+invisibile da una costante che entra nella condizione. Le strisce LED dei marciapiedi
+si disegnano dopo, così il riflesso non può sedersi sopra.
 
 ### I LED e il bloom
 
 I LED sono `MeshBasicMaterial` con `toneMapped: false`: saltano il tone mapping e
-restano al colore pieno. Non emettono luce. È il bloom, il post-processo che sfoca i
-pixel sopra una soglia e li somma, a farli sembrare sorgenti luminose. Il pass è il
-fork in `vendor/`, costruito con forza 0,58, raggio 0,56 e soglia 0,68, tre mip attivi
-e stride 2; i cursori riscrivono i tre valori, e il canonico chiede 0,09, 0 e 0,79.
-È attivo solo con forza sopra 0,015, e per fotogramma
+restano al colore pieno. Non emettono luce, è il bloom a farli sembrare sorgenti
+luminose. Il pass è il fork di UnrealBloomPass in `vendor/`, costruito con forza 0,58,
+raggio 0,56 e soglia 0,68, 3 mip attivi e stride 2; i cursori riscrivono i 3 valori, e
+il canonico chiede 0,09, 0 e 0,79. È attivo solo con forza sopra 0,015, e per frame
 `enabled = bloomEnabled && isolamento && !bypassRivelo && fx.bloom`. Quando la catena
-è bloom e poi look, senza altri pass, la somma avviene dentro lo shader del look. Sul
-telefono la risoluzione del bloom è limitata a 0,14.
+è bloom e poi look, senza altri pass, la somma avviene dentro lo shader del look. Su
+mobile la risoluzione del bloom è limitata a 0,14.
 
 Lungo le strisce corre l'impulso di energia. `applyEdgePulseShader` inietta nel
 `MeshBasicMaterial` una `varying vEdgeAlong` (la posizione lungo la striscia, scalata
@@ -206,46 +192,45 @@ corrente che scorre.
 
 ## Perché così e non altrimenti
 
-- **Luce direzionale spenta sul telefono.** +3,7 fps, render da 8,26 a 6,87
-  millisecondi. A intensità 0,18 l'atmosfera la reggono il riempimento emisferico e i
-  LED emissivi: gli screenshot prima e dopo sono indistinguibili.
-- **Env map tolta a palazzi e piazzole sul telefono.** +1,7 fps senza perdita di
-  qualità: il pavimento bagnato resta (con il suo Fresnel), si perde solo una lucentezza
+- **Luce direzionale spenta su mobile.** +3,7 fps, render da 8,26 a 6,87 ms. A
+  intensità 0,18 l'atmosfera la reggono il riempimento emisferico e i LED emissivi:
+  gli screenshot prima e dopo sono indistinguibili.
+- **Env map tolta a palazzi e piazzole su mobile.** +1,7 fps senza perdita di
+  qualità: il pavimento bagnato resta col suo Fresnel, si perde solo una lucentezza
   sottile su facciate e marciapiedi.
 - **Il pavimento lite con Fresnel, non nero.** Metalness da 0,88 a 0,32 e roughness da
   0,16 a 0,5, così il pavimento resta illuminato invece di andare al nero. Chiave di
   programma separata perché il desktop resti identico byte per byte. Il compromesso è
-  dichiarato deliberato, da giudicare a occhio.
+  deliberato, da giudicare a occhio.
 - **I tagli mobile classificati.** Il piano dei tagli mette la env map di palazzi e
   piazzole fra i tagli neutri (A1) e la direzionale in A3; il cielo “ultra economico”
   (B5) sta fra quelli che cambiano il look.
 - **Le varianti della strada cotte su richiesta.** Cambiare livello costa qualche
-  millisecondo una volta, al movimento del cursore, invece di sei rasterizzazioni, sei
-  catene di prefiltro e sei cubi residenti a ogni avvio.
+  millisecondo al movimento del cursore, invece di 6 rasterizzazioni, 6 catene di
+  prefiltro e 6 cubi residenti a ogni avvio.
 - **Il rig dei riflessi solo con l'effetto acceso.** L'interruttore non ricostruisce
   la folla: costruirlo a effetto spento dava circa 60 rig con scheletro che non
   potevano disegnarsi.
-- **Budget da 3 a 2, folla da 60 a 30.** Per recuperare fotogrammi, il 17 giugno
-  2026; il 3 risaliva al 8 giugno.
+- **Budget da 3 a 2, folla da 60 a 30.** Per recuperare frame, il 17 giugno
+  2026; il 3 risaliva all'8 giugno.
 - **L'occlusione solo per i riflessi nel budget.** Il test gira per i pochi riflessi
   attivi, non per tutta la folla.
-- **Scritture idempotenti saltate.** Invece di riscrivere visibilità, scala e
-  azzerare l'opacità di ogni materiale a ogni tick della folla, lavoro
-  O(membri x mesh) senza effetto.
-- **Bloom leggero.** Ho alzato la qualità una volta (tetto 0,45, cinque mip, stride
-  1) e la demo è scesa a circa 20 fps; rimessa indietro lo stesso giorno.
-- **Bloom sommato nel look.** Evita un disegno a schermo intero che, con MSAA
-  acceso, rasterizza al tasso di campioni della scena senza guadagnare anti-aliasing.
+- **Scritture idempotenti saltate.** Riscrivere visibilità, scala e opacità di ogni
+  materiale a ogni tick della folla era lavoro O(membri x mesh) senza effetto.
+- **Bloom leggero.** Ho alzato la qualità una volta (tetto 0,45, 5 mip, stride 1) e la
+  demo è scesa a circa 20 fps; rimessa indietro lo stesso giorno.
+- **Bloom sommato nel look.** Evita un pass a schermo intero che, con MSAA acceso,
+  rasterizza al tasso di campioni della scena senza guadagnare anti-aliasing.
 - **Un materiale per i palazzi laterali.** I loro valori erano già scritti in
   lockstep, mai per palazzo.
-- **Anisotropia a 4 sul telefono.** Impercettibile: nitido sotto i piedi, un po' più
+- **Anisotropia a 4 su mobile.** Impercettibile: nitido sotto i piedi, un po' più
   morbido lontano.
 
 Cose che non so spiegare, e lo dico:
 
 - I commenti del codice e il piano dei tagli mobile ragionano su una key light a
   0,18 e un'ambientale a 0,10; il JSON canonico applicato al boot chiede 3 e 0.
-- L'esposizione vale 0,85 nel codice, 0,81 nel markup e 0,51 nel canonico: tre numeri,
+- L'esposizione vale 0,85 nel codice, 0,81 nel markup e 0,51 nel canonico: 3 numeri,
   nessuna fonte che dica l'intenzione.
 - Il JSON canonico chiede metalness 0 e roughness 0,05 per la strada, contro 0,88 e
   0,16 nel codice e nel markup, e riflesso palazzi 0, cioè la variante senza sagome.
@@ -273,14 +258,14 @@ Cose che non so spiegare, e lo dico:
 | bloom | costruttore 0,58 / 0,56 / 0,68; canonico 0,09 / 0 / 0,79; bypass sotto 0,015; cap mobile 0,14 | `src/engine/post-pipeline.js`; `src/world/config.js`; `boulevard-canonical-settings.json` |
 | impulso di energia | velocità 30, periodo 42, intensità 2,0, un giro ogni 1,4 s | `src/world/energy-pulse.js`, calcolo del 2026-09-20 |
 | texture | asfalto 256x256 ripetuto 8x24; normal map strada 256 ripetuta 18x42; piazzole 512 | `src/world/material-textures.js` |
-| anisotropia | massimo del renderer su desktop, 4 sul telefono (da 16) | `src/main.js`; commit 9ffc449c, 2026-07-09 |
+| anisotropia | massimo del renderer su desktop, 4 su mobile (da 16) | `src/main.js`; commit 9ffc449c, 2026-07-09 |
 
 ## Dove sta nel codice
 
 | file | righe | ruolo |
 |---|---|---|
 | `src/main.js` | 1280 | palette, renderer e tone mapping, luci, decisione mobile per env map e pavimento |
-| `src/engine/reflection-env.js` | 114 | env map procedurale, PMREM, sei livelli strada |
+| `src/engine/reflection-env.js` | 114 | env map procedurale, PMREM, 6 livelli strada |
 | `src/world/buildings.js` | 275 | materiale delle facciate, `updateBuildingMaterials` |
 | `src/world/material-textures.js` | 112 | texture procedurali di asfalto, normal map strada, piazzole |
 | `src/world/hex-tiles.js` | 1010 | materiale del pavimento, variante lite con Fresnel, bagliore per piastrella |
@@ -294,22 +279,22 @@ Cose che non so spiegare, e lo dico:
 | `src/character/runner-reflection-rig.js` | 125 | materiali e opacità del riflesso del corridore |
 | `src/character/character-materials.js` | 68 | materiali dei riflessi (corpo e LED) |
 | `src/character/characters.js` | 142 | costanti dei riflessi |
-| `src/character/runner-orchestration.js` | | il gruppo riflesso del corridore |
+| `src/character/runner-orchestration.js` | 630 | il gruppo riflesso del corridore |
 | `src/character/runner-crowd-runtime.js` | 1352 | rig condizionato e aggiornamento per membro |
 | `src/character/runner-wiring.js` | 1128 | tuta con env map, getter sui cursori strada |
 | `boulevard-canonical-settings.json` | 371 | i valori applicati al boot |
 
-Le prove: `bloom-fork.test.mjs` costruisce il pass senza GPU e verifica che il fork
-esponga le sue leve. Il budget dei riflessi della folla è stato estratto in funzioni
-pure con i parametri iniettati, pensate per girare senza scena.
+I test: `bloom-fork.test.mjs` costruisce il pass senza GPU e verifica che il fork
+esponga le sue leve. Il budget dei riflessi della folla è estratto in funzioni pure
+con i parametri iniettati, che girano senza scena.
 
 ## Per chi viene dal backend
 
 La env map è una tabella precalcolata, costruita una volta al boot e letta da tutti i
 materiali; PMREM sono i rollup pre-aggregati a diverse granularità, così una query
-“ruvida” non ricalcola nulla. Le sei varianti della strada sono una cache lazy con la
-chiave sul livello. Il budget dei riflessi è un rate limiter con circuit breaker:
-due richieste per fotogramma, zero sotto 42 fps, e una rampa dopo il rivelo come
-un warm-up. Il test di occlusione è il pre-check economico prima del percorso costoso.
-E i tre livelli dei valori, codice, markup, JSON canonico, sono la precedenza fra
-default compilati, file di configurazione e variabili d'ambiente: vince l'ultimo.
+“ruvida” non ricalcola nulla. Le 6 varianti della strada sono una cache lazy con
+chiave sul livello. Il budget dei riflessi è un rate limiter con circuit breaker: 2
+richieste per frame, zero sotto 42 fps, e una rampa dopo il rivelo come warm-up. Il
+test di occlusione è il pre-check economico prima del percorso costoso. E i 3 livelli
+dei valori, codice, markup, JSON canonico, sono la precedenza fra default compilati,
+file di configurazione e variabili d'ambiente: vince l'ultimo.

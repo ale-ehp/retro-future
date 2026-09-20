@@ -1,6 +1,6 @@
 ---
 title: Deploy e infrastruttura
-description: "Un programma al bordo della rete che serve la demo: rotte, intestazioni, politica di cache, e il deploy separato che evita di pubblicare il sito per cambiare una texture."
+description: "Un Worker al bordo che serve la demo: rotte, intestazioni, politica di cache, e il deploy separato che evita di pubblicare il sito per cambiare una texture."
 sidebar_position: 3
 ---
 
@@ -19,7 +19,7 @@ FONTI
 
 :::info Se è la prima volta
 
-Un sito statico si può servire in due modi: da un magazzino di file, oppure da un
+Un sito statico si può servire in due modi: da un asset binding, oppure da un
 piccolo programma che sta davanti a quel magazzino e decide cosa rispondere. Qui si usa
 il secondo, e il programma gira sui server di frontiera di Cloudflare, cioè vicino a
 chi apre la pagina invece che in un data center solo. Questo capitolo spiega che cosa
@@ -29,30 +29,29 @@ fa quel programma e perché.
 
 ## Cosa vede l'utente
 
-Un indirizzo che funziona: `avstudio.ai/chi-siamo/retro-future/`. Anche scritto senza
-la barra finale, anche con il vecchio indirizzo di giugno, anche nella versione
-inglese sotto `/en/`. E una pagina che, dopo un rilascio, non si rompe mai a metà.
+Un URL che funziona: `avstudio.ai/chi-siamo/retro-future/`. Anche senza barra finale,
+anche con il vecchio indirizzo di giugno, anche nella versione inglese sotto `/en/`. E
+una pagina che, dopo un deploy, non si rompe mai a metà.
 
 ![La demo servita in produzione](/img/panoramica.webp)
 
 ## Il problema
 
-Servire una demo 3D senza bundler pone tre problemi che un sito normale non ha.
+Servire una demo 3D senza bundler pone 3 problemi che un sito normale non ha.
 
-**Il primo: i moduli sono accoppiati fra loro.** La pagina e i novantasette moduli
-formano una sola applicazione. Se il browser prende la pagina nuova e i moduli vecchi
-dalla propria cache, il risultato non è una pagina un po' vecchia: è uno schermo nero.
-È successo: la pagina era senza cache, i moduli avevano cinque minuti di validità, e
-subito dopo un rilascio una pagina fresca caricava moduli il cui elenco di funzioni era
-cambiato.
+**Il primo: i moduli sono accoppiati fra loro.** La pagina e i 97 moduli ESM sono una
+sola applicazione. Se il browser prende la pagina nuova e i moduli vecchi dalla cache,
+il risultato non è una pagina un po' vecchia: è uno schermo nero. È successo: pagina
+senza cache, moduli con 5 minuti di validità, e subito dopo un deploy una pagina fresca
+caricava moduli con un altro elenco di export.
 
 **Il secondo: il deploy non deve essere tutto o niente.** La demo vive dentro un sito
 più grande. Pubblicare il sito intero per cambiare una texture significa rischiare il
 sito intero per una texture.
 
-**Il terzo: i file di lavoro non devono finire online.** Accanto ai moduli ci sono le
-prove, i documenti, la configurazione del controllo dei tipi. Senza un filtro, una
-richiesta al percorso giusto li restituisce a chiunque.
+**Il terzo: i file di lavoro non devono finire online.** Accanto ai moduli ci sono i
+test, i documenti, la configurazione del typecheck: senza un filtro, una richiesta al
+percorso giusto li restituisce a chiunque.
 
 ## Come funziona
 
@@ -63,47 +62,43 @@ flowchart TB
   A([richiesta al bordo]) --> B{l'indirizzo<br/>è sotto /en/?}
   B -->|sì| C[riscrivi sulla copia unica<br/>e chiedi la pagina inglese]
   B -->|no| D{è il vecchio<br/>indirizzo?}
-  D -->|sì| E[redirect permanente 308]
+  D -->|sì| E[redirect 308]
   D -->|no| F{è sotto il prefisso<br/>della demo?}
   F -->|no| G([404])
   F -->|sì| H{manca la barra<br/>finale?}
   H -->|sì| E
-  H -->|no| I[chiedi il file<br/>al magazzino]
-  C --> J[aggiungi le intestazioni comuni]
+  H -->|no| I[chiedi il file<br/>all'asset binding]
+  C --> J[intestazioni comuni]
   I --> J
   J --> K{che tipo<br/>di file è?}
-  K -->|pagina| L[regole di sicurezza<br/>+ nessuna cache]
+  K -->|pagina| L[CSP<br/>+ no-cache]
   K -->|audio o immagine| M[cache una settimana]
-  K -->|modulo, stile, dato| N[nessuna cache]
+  K -->|modulo, stile, dato| N[no-cache + ETag]
   L --> O([risposta])
   M --> O
   N --> O
 ```
 
-Centoventi righe in tutto. Fanno quattro cose.
+120 righe in tutto. Fanno 4 cose.
 
 ### Le rotte, e la versione inglese
 
-Il programma risponde su sei rotte: l'indirizzo attuale, quello vecchio di giugno,
-quello inglese, ognuno con e senza il sottodominio `www`. Il vecchio indirizzo e le
-richieste senza barra finale ricevono un reindirizzamento permanente, cioè il tipo che
-dice ai motori di ricerca che l'indirizzo si è spostato per sempre.
+Il Worker risponde su 6 rotte: indirizzo attuale, vecchio di giugno, inglese, ognuno
+con e senza `www`. Il vecchio indirizzo e le richieste senza barra finale ricevono un
+redirect 308.
 
 La versione inglese è la parte interessante: **non esiste una seconda copia della
-demo**. La pagina inglese è generata al momento della costruzione da un dizionario di
-frasi, e i suoi moduli sono gli stessi. Quando arriva una richiesta sotto `/en/`, il
-programma la riscrive sulla copia unica prima di andare a prendere il file. Senza
-questo, servirebbero due copie di un megabyte e mezzo che divergono alla prima
-modifica.
+demo**. La pagina inglese è generata al build da un dizionario di frasi, e i moduli
+sono gli stessi. Una richiesta sotto `/en/` viene riscritta sulla copia unica prima del
+fetch all'asset binding. Senza, servirebbero 2 copie da un megabyte e mezzo che
+divergono alla prima modifica.
 
 ### Le intestazioni
 
-Ogni risposta esce con trasporto cifrato obbligatorio per due anni, divieto di
-indovinare il tipo di contenuto, e una politica di provenienza per i riferimenti. Le
-pagine ricevono in più una politica di sicurezza dei contenuti che elenca da dove
-possono arrivare script, stili, caratteri, immagini, contenuti multimediali e
-connessioni: tutto dal proprio dominio, più i caratteri e il servizio di statistiche,
-niente altro.
+Ogni risposta esce con HSTS per 2 anni, `nosniff` e una `Referrer-Policy`. Le pagine
+ricevono in più una CSP che elenca le origini ammesse per script, stili, font,
+immagini, media e connessioni: tutto dal proprio dominio, più i font e il servizio di
+statistiche, niente altro.
 
 ### La politica di cache, e perché è così
 
@@ -111,83 +106,80 @@ Qui sta la decisione che vale il capitolo.
 
 | tipo di file | cache | perché |
 |---|---|---|
-| pagina | nessuna, con etichetta di versione | è il punto di ingresso, deve essere sempre quella nuova |
-| moduli, stili, dati, modelli | nessuna, con etichetta di versione | sono accoppiati alla pagina: una coppia disallineata non degrada, si rompe |
+| pagina | no-cache + ETag | è il punto di ingresso, deve essere sempre quella nuova |
+| moduli, stili, dati, modelli | no-cache + ETag | sono accoppiati alla pagina: una coppia disallineata non degrada, si rompe |
 | audio e immagini | una settimana | non sono accoppiati a niente: un file audio vecchio resta un file audio |
 
-"Nessuna cache" non significa riscaricare tutto. Significa che il browser rifà la
-domanda, e il server risponde “non è cambiato” senza rimandare il contenuto. Il costo
-della seconda visita non sono i byte: sono novantasette domande. È un costo che
-conosco e che ho scelto, e la leva per cambiarlo è proprio questo programma.
+“Nessuna cache” non vuol dire riscaricare tutto: il browser rifà la richiesta e
+l'ETag gli fa tornare un 304 senza corpo. Il costo della seconda visita non sono i
+byte, sono 97 richieste. È un costo che conosco e che ho scelto, e la leva per
+cambiarlo è il Worker.
 
 ### Il deploy separato
 
-La demo ha il suo comando di pubblicazione, che costruisce l'artefatto e lo manda al
-suo programma. Il sito ha il suo. Questo manuale, dal 20 settembre, ne ha un terzo, con
-una rotta più specifica che vince su quella della demo senza toccarla.
+La demo ha il suo comando di deploy: costruisce l'artefatto e lo pubblica con wrangler
+sul proprio Worker. Il sito ha il suo. Questo manuale, dal 20 settembre, ne ha un
+terzo, su una rotta più specifica che vince su quella della demo senza toccarla.
 
-La costruzione dell'artefatto non è una copia e basta: filtra quello che non deve
-essere pubblico, e si ferma se qualcosa non torna. Tre controlli bloccanti: che non
-esista una pagina nella posizione sbagliata, che esista in quella giusta, e che nessun
-file escluso sia finito nell'artefatto. Se uno solo fallisce, non si pubblica niente.
+Il build non è una copia: filtra quello che non deve essere pubblico e si ferma se
+qualcosa non torna. 3 gate bloccanti: che non esista una pagina nella posizione
+sbagliata, che esista in quella giusta, e che nessun file della denylist sia finito
+nell'artefatto. Se uno fallisce, non si pubblica niente.
 
 ## Perché così e non altrimenti
 
-- **Un programma al bordo invece di file statici.** Serve per riscrivere la versione
-  inglese sulla copia unica, per decidere la cache per tipo di file, e per aggiungere
-  le intestazioni di sicurezza. Con il solo magazzino di file servirebbero due copie
-  della demo e una politica di cache sola per tutti.
+- **Un Worker invece di file statici.** Serve a riscrivere la versione inglese sulla
+  copia unica, a decidere la cache per tipo di file, a mettere le intestazioni di
+  sicurezza. Con il solo asset binding servirebbero 2 copie della demo e una cache sola
+  per tutti.
 - **Nessuna cache sui moduli, una settimana sui media.** La distinzione non è fra file
   grandi e piccoli: è fra file accoppiati alla pagina e file indipendenti. Il criterio
-  è venuto da uno schermo nero dopo un rilascio, non da un principio astratto.
-- **Reindirizzamenti permanenti, non temporanei.** L'indirizzo è cambiato una volta a
-  giugno e non tornerà indietro: dirlo in modo permanente evita che i motori di
-  ricerca tengano vivo il vecchio.
+  è venuto da uno schermo nero dopo un deploy, non da un principio astratto.
+- **308 e non 302.** L'indirizzo è cambiato una volta a giugno e non tornerà indietro:
+  dirlo permanente evita che i motori di ricerca tengano vivo il vecchio.
 - **Deploy isolato.** La demo si pubblica senza pubblicare il sito, e questo manuale
-  senza pubblicare la demo. Ogni rilascio ha il suo raggio di esplosione.
-- **La costruzione si ferma invece di pubblicare a metà.** I tre controlli bloccanti
-  costano tre righe e hanno impedito che le prove e i documenti di lavoro finissero
-  raggiungibili da chiunque.
+  senza pubblicare la demo. Ogni deploy ha il suo raggio di esplosione.
+- **Il build si ferma invece di pubblicare a metà.** I 3 gate costano 3 righe e hanno
+  impedito che test e documenti di lavoro finissero raggiungibili da chiunque.
 
 Cose che non so spiegare, e lo dico:
 
 - La politica di cache attuale è corretta ma non ottimale: con i nomi dei file
   versionati si potrebbero cachare i moduli per sempre e cambiare solo la pagina.
-  Richiede un passo di costruzione che oggi non c'è, ed è una scelta di prodotto che
-  non ho ancora fatto.
-- Il programma dichiara l'osservabilità attiva, ma non ho costruito nessuna soglia di
-  allarme sopra i suoi dati: li guardo quando ho un dubbio, non mi avvisano loro.
+  Richiede un passo di build che oggi non c'è, ed è una scelta di prodotto che non ho
+  ancora fatto.
+- Il Worker dichiara l'observability attiva, ma non ho nessuna soglia di allarme sopra
+  quei dati: li guardo quando ho un dubbio, non mi avvisano loro.
 
 ## I numeri
 
 | cosa | valore | fonte e data |
 |---|---|---|
-| righe del programma al bordo | 120 | `wc -l`, 2026-09-20 |
-| rotte servite | 6, fra indirizzo attuale, vecchio, inglese, con e senza www | `wrangler.toml` |
+| righe del Worker | 120 | `wc -l`, 2026-09-20 |
+| rotte servite | 6: indirizzo attuale, vecchio, inglese, con e senza www | `wrangler.toml` |
 | moduli serviti | 97, per 1.428.704 byte | `find` e `wc -c`, 2026-09-20 |
 | stessi moduli compressi | 317.479 byte | `brotli -q 11`, 2026-09-20 |
 | pagina | 114.216 byte, 16.402 compressa | stesso comando |
-| cache dei media | una settimana, con rivalidazione in background di un giorno | `index.ts` |
-| controlli bloccanti alla costruzione | 3 | `build-retro-future.mjs` |
+| cache dei media | una settimana, con `stale-while-revalidate` di 1 giorno | `index.ts` |
+| gate bloccanti al build | 3 | `build-retro-future.mjs` |
 | deploy indipendenti | 3: sito, demo, manuale | `package.json` |
 
 ## Dove sta nel codice
 
 | file | ruolo |
 |---|---|
-| `apps/retro-future/src/index.ts` | il programma al bordo: rotte, riscritture, intestazioni, cache |
-| `apps/retro-future/wrangler.toml` | rotte, collegamento al magazzino di file, osservabilità |
+| `apps/retro-future/src/index.ts` | il Worker: rotte, riscritture, intestazioni, cache |
+| `apps/retro-future/wrangler.toml` | rotte, asset binding su `dist-retro`, observability |
 | `apps/retro-future-doc/wrangler.toml` | lo stesso per questo manuale, su una rotta più specifica |
-| `scripts/build-retro-future.mjs` | filtro di pubblicazione, pagina inglese, i tre controlli bloccanti |
+| `scripts/build-retro-future.mjs` | denylist di pubblicazione, pagina inglese, i 3 gate bloccanti |
 | `scripts/retro-future-en.mjs` | il dizionario che genera la pagina inglese |
 
 ## Per chi viene dal backend
 
-È un reverse proxy scritto a mano che gira al bordo, con instradamento, riscrittura
-dei percorsi, intestazioni di sicurezza e politica di cache per tipo di contenuto:
-quello che altrove si configura in un file di un server web, qui è codice, con i tipi
-controllati e il motivo di ogni scelta nel commit accanto. La differenza che conta
-rispetto a un'origine sola è che gira in ogni punto di presenza, e che il deploy è
-una pubblicazione atomica del programma insieme ai suoi file. Chi arriva da un altro
-cloud riconosce la forma: funzione senza stato davanti a uno storage di oggetti, con le
-rotte dichiarate nella configurazione.
+È un reverse proxy scritto a mano che gira al bordo: routing, rewrite dei percorsi,
+intestazioni di sicurezza e cache per tipo di contenuto. Quello che altrove sta in un
+`nginx.conf`, qui è codice TypeScript, con i tipi controllati e il motivo di ogni
+scelta nel commit accanto. Rispetto a un'origine sola cambiano due cose: gira in ogni
+PoP, e il deploy è atomico, Worker e asset insieme. Chi arriva da un altro cloud
+riconosce la forma: funzione senza stato davanti a uno storage di oggetti, con le rotte
+dichiarate in `wrangler.toml`.

@@ -25,8 +25,8 @@ Un oggetto dentro la scena che si usa davvero: ci si avvicina, si preme un tasto
 
 ## Cosa vede l'utente
 
-Davanti al palazzo con il numero civico 2 c'è un tabellone: “AVSTUDIO CONTACT
-TERMINAL”, sotto “SECURE DIRECT CHANNELS”, a destra “NODE 02 / ONLINE”, e due righe,
+Davanti al palazzo con civico 2 c'è un tabellone: “AVSTUDIO CONTACT
+TERMINAL”, sotto “SECURE DIRECT CHANNELS”, a destra “NODE 02 / ONLINE”, e 2 righe,
 l'email e il telefono. Avvicinandosi e guardandolo compare in basso il bottone
 “[E] INTERAGISCI”.
 
@@ -35,7 +35,7 @@ l'email e il telefono. Avvicinandosi e guardandolo compare in basso il bottone
 Premendo E la camera scivola davanti al tabellone in poco più di mezzo secondo e lo
 inquadra frontalmente. Sparisce tutto il resto: joystick, indicatore dei tasti,
 pannello dei tempi, cursore a disco. Resta una freccia in alto a sinistra per tornare
-indietro. Le frecce scorrono le due righe, la riga scelta si accende in ambra, Invio
+indietro. Le frecce scorrono le 2 righe, la riga scelta si accende in ambra, Invio
 apre il client di posta o il telefono.
 
 ![Il terminale a fuoco, con la riga dell'email selezionata](/img/terminale-attivo.webp)
@@ -44,18 +44,17 @@ apre il client di posta o il telefono.
 
 Il terminale deve **possedere la camera**. Mentre lo leggi, il movimento non deve
 girare, l'oscillazione del passo non deve muovere la vista, il mouse non deve
-ruotarla. Se anche solo lo scarto del passo restasse attivo, il testo tremerebbe
-mentre lo leggi.
+ruotarla: basterebbe lo scarto del passo ancora attivo e il testo tremerebbe.
 
 Deve anche **prendersi i tasti prima degli altri**. Se E o le frecce finissero prima
 nella mappa dei tasti premuti, il personaggio camminerebbe mentre scorri i contatti.
 
 E deve **restituire la camera dove l'ha presa**. La posa salvata all'ingresso deve
-essere quella pulita, senza lo scarto del passo: salvandola con lo scarto, al ritorno
-la camera resterebbe alzata di qualche centimetro, ogni volta.
+essere pulita, senza lo scarto del passo: con lo scarto, al ritorno la camera
+resterebbe alzata di qualche centimetro, ogni volta.
 
-Un'ultima insidia: il tabellone è un pannello trasparente. Se scrivesse nel buffer di
-profondità, coprirebbe i fumetti dei personaggi che gli passano davanti.
+Un'ultima insidia: il tabellone è un pannello trasparente. Con `depthWrite` acceso
+coprirebbe i fumetti dei personaggi che gli passano davanti.
 
 ## Come funziona
 
@@ -74,71 +73,70 @@ stateDiagram-v2
     inRitorno --> nascosto: non lo stai guardando
 ```
 
-Il passaggio da nascosto a disponibile ha due condizioni: distanza orizzontale non
-oltre 42 unità e allineamento dello sguardo almeno 0,45. Sono provate al confine:
-42,001 e 0,449 non bastano. La camera è “posseduta” nei tre stati centrali, ed è
-esattamente lì che il ciclo del fotogramma salta movimento e oscillazione.
+Il passaggio da nascosto a disponibile ha 2 condizioni: distanza orizzontale non
+oltre 42 unità e allineamento dello sguardo almeno 0,45, provate al confine (42,001 e
+0,449 non bastano). La camera è “posseduta” nei 3 stati centrali, ed è lì che il ciclo
+del frame salta movimento e oscillazione.
 
 ### La transizione
 
 Entrando, la camera interpola posizione e rotazione fino a un punto a 24 unità dalla
-superficie del tabellone, in 680 millisecondi; uscendo, rifà il percorso al contrario
-in 540. Con la preferenza di sistema per il movimento ridotto le due transizioni sono
-istantanee. Su computer, al ritorno, il mouse si riaggancia da solo e richiede il
-blocco del puntatore se prima era attivo.
+superficie del tabellone, in 680 ms; uscendo, rifà il percorso al contrario in 540.
+Con `prefers-reduced-motion` le 2 transizioni sono istantanee. Su computer, al
+ritorno il mouse si riaggancia e richiede il pointer lock se prima era attivo.
 
 ### Il testo è una texture
 
-Il contenuto del tabellone è disegnato su un canvas da 1024 per 512 pixel e caricato
-come texture: titolo, sottotitolo, le due righe, il segno di selezione, e la riga di
-stato in basso che passa da “DIRECT ROUTING READY” a “SELECT CHANNEL / ENTER TO
-CONNECT”. Si ridisegna solo quando qualcosa cambia.
+Il contenuto del tabellone è disegnato su un canvas 1024x512 e caricato come texture:
+titolo, sottotitolo, le 2 righe, il segno di selezione, e la riga di stato in basso
+che passa da “DIRECT ROUTING READY” a “SELECT CHANNEL / ENTER TO CONNECT”. Si
+ridisegna solo quando qualcosa cambia.
 
 ### Il puntatore
 
-Due rettangoli invisibili davanti alle righe fanno da bersaglio per il raggio del
-puntatore: passandoci sopra si seleziona, cliccando si attiva. Il movimento del
-puntatore non è garantito una volta per fotogramma, i mouse ad alta frequenza ne
-mandano diversi: il gestore registra solo l'ultima posizione e il controllo vero si fa
-una volta per fotogramma. Il rettangolo del canvas viene misurato una volta e tenuto
-fino al ridimensionamento, invece che a ogni evento.
+2 rettangoli invisibili davanti alle righe fanno da bersaglio per il raycast:
+passandoci sopra si seleziona, cliccando si attiva. `pointermove` non arriva una volta
+per frame, i mouse ad alta frequenza ne mandano diversi: il gestore registra solo
+l'ultima posizione e il raycast si fa una volta per frame. Il
+`getBoundingClientRect` del canvas resta in cache fino al resize, invece di rifarsi a
+ogni evento.
 
 ### Tastiera, telefono, accessibilità
 
 I tasti passano dal terminale prima di finire nella mappa dei tasti premuti: E e
-Escape entrano ed escono, le frecce scorrono, Invio apre il collegamento. Sul telefono,
-entrare aggiunge una voce alla cronologia del browser, così il tasto indietro chiude il
-terminale invece di uscire dalla pagina. Per gli screen reader ci sono i due
-collegamenti veri in un gruppo etichettato e una regione che annuncia i cambi di stato.
-I bersagli tattili sono almeno 44 pixel, 48 sul telefono.
+Escape entrano ed escono, le frecce scorrono, Invio apre il collegamento. Sul
+telefono, entrare fa un `pushState`, così il tasto indietro arriva come `popstate` e
+chiude il terminale invece di uscire dalla pagina. Per gli screen reader ci sono i 2
+collegamenti veri in un gruppo etichettato e una live region ARIA per i cambi di
+stato. I bersagli tattili sono almeno 44 px, 48 sul telefono.
 
 ## Perché così e non altrimenti
 
-- **Il tipo delle dipendenze è scritto per intero, non lasciato libero.** Il terminale
-  riceve scena, camera, renderer, bottoni ed elenco dei palazzi da chi lo monta, e il
-  controllo dei tipi li deduceva dai soli valori di riserva: per lui non esistevano.
-  Dove le prove passano un oggetto finto, il tipo dice il minimo che il codice tocca,
-  non un elemento del DOM intero.
-- **Gli accessori esistono per non allocare.** Una fotografia dello stato costruisce un
-  oggetto con sei campi ogni volta che la chiedi, e i percorsi che girano a ogni
-  fotogramma ne leggono uno solo.
-- **La media query per il movimento ridotto è costruita una volta.** Costruirla a ogni
-  richiesta alloca un oggetto nuovo, e viene letta a ogni fotogramma durante la
+- **Il tipo delle dipendenze è scritto per intero, non `any`.** Il terminale riceve
+  scena, camera, renderer, bottoni ed elenco dei palazzi da chi lo monta, e `tsc` li
+  deduceva dai soli valori di riserva: per lui non esistevano. Dove i test passano un
+  oggetto finto, il tipo dice il minimo che il codice tocca, non un `HTMLElement`
+  intero.
+- **I getter esistono per non allocare.** Uno snapshot dello stato costruisce un
+  oggetto di 6 campi a ogni chiamata, e i percorsi che girano a ogni frame ne leggono
+  uno solo.
+- **Il `matchMedia` per `prefers-reduced-motion` è costruito una volta.** Costruirlo a
+  ogni richiesta alloca un oggetto nuovo, e viene letto a ogni frame durante la
   transizione.
-- **La prova legge il materiale, non il testo del codice.** A decidere se il pannello
-  scrive nel buffer di profondità non è il valore scritto alla costruzione, ma la
-  visita che lo riassegna dopo: una prova che cercava quel valore nel sorgente passava
-  mentre il comportamento era l'opposto.
-- **L'oggetto finto delle prove è un bersaglio di eventi decorato**, non un elemento
-  del DOM finto: elenca solo quello che il codice tocca davvero, e così la prova resta
-  onesta senza allargare i tipi.
+- **Il test legge il materiale, non il testo del codice.** A decidere il `depthWrite`
+  del pannello non è il valore scritto alla costruzione, ma il `traverse` che lo
+  riassegna dopo: un test che cercava quel valore nel sorgente passava mentre il
+  comportamento era l'opposto.
+- **L'oggetto finto dei test è un `EventTarget` decorato**, non un finto elemento del
+  DOM: elenca solo quello che il codice tocca davvero, e il test resta onesto senza
+  allargare i tipi.
 
 Cose che non so spiegare, e lo dico:
 
 - Il cartello di chi accoglie l'ho spostato più a destra perché finiva sopra il
-  terminale. Il valore di partenza era così dalla prima versione, e non ha una ragione
+  terminale. Il valore di partenza era così dalla prima versione, senza una ragione
   scritta da nessuna parte.
-- Le due soglie che rendono il terminale disponibile, 42 unità di distanza e 0,45 di
+- Le 2 soglie che rendono il terminale disponibile, 42 unità di distanza e 0,45 di
   allineamento, sono provate al confine ma non motivate: non so perché siano proprio
   quelle.
 
@@ -146,35 +144,35 @@ Cose che non so spiegare, e lo dico:
 
 | cosa | valore | fonte e data |
 |---|---|---|
-| tabellone | 31,5 x 15,75 unità, texture 1024 x 512 | `contact-terminal.js`, 2026-09-20 |
-| soglia di disponibilità | distanza 42, allineamento 0,45 | stesso file, con prove al confine |
+| tabellone | 31,5 x 15,75 unità, texture 1024x512 | `contact-terminal.js`, 2026-09-20 |
+| soglia di disponibilità | distanza 42, allineamento 0,45 | stesso file, con test al confine |
 | distanza di lettura | 24 unità dalla superficie | stesso file |
 | transizioni | 680 ms all'andata, 540 ms al ritorno | stesso file |
 | opacità del pannello | 0,322; del testo 0,84 | stesso file |
-| ordine di disegno | gruppo 30, pannello 28, testo 32, bersagli 34 | stesso file |
+| `renderOrder` | gruppo 30, pannello 28, testo 32, bersagli 34 | stesso file |
 | bersagli del puntatore | 86% della larghezza, 24,5% dell'altezza | stesso file |
 | bottoni | almeno 188 x 44 px, 154 x 48 sul touch | foglio di stile |
-| errori di tipo chiusi qui | 23 + 4, poi 13 + 5 + 1, poi 10 nella prova | commit del 2026-09-20 |
+| errori di tipo chiusi qui | 23 + 4, poi 13 + 5 + 1, poi 10 nel test | commit del 2026-09-20 |
 
 ## Dove sta nel codice
 
 | file | righe | ruolo |
 |---|---|---|
 | `src/world/contact-terminal.js` | 939 | tutto: stati, transizione, canvas, puntatore, cronologia |
-| `src/world/board-perimeter-pose.js` | 78 | dove si posa il tabellone rispetto al palazzo |
-| `src/world/contact-terminal.test.mjs` | 424 | quattordici prove, con oggetti finti |
-| `src/controls/contact-terminal-input.test.mjs` | 86 | quattro prove sull'instradamento dei tasti |
+| `src/world/board-perimeter-pose.js` | 78 | posa del tabellone rispetto al palazzo |
+| `src/world/contact-terminal.test.mjs` | 424 | 14 test, con oggetti finti |
+| `src/controls/contact-terminal-input.test.mjs` | 86 | 4 test sull'instradamento dei tasti |
 
-La prova sull'instradamento prima controllava l'ordine delle righe nel file; ora preme
-un tasto su una finestra finta e guarda dove arriva. La controprova, cioè scrivere nella
-mappa dei tasti prima di interpellare il terminale, la fa diventare rossa.
+Il test sull'instradamento prima controllava l'ordine delle righe nel file; ora preme
+un tasto su una finestra finta e guarda dove arriva. La controprova, scrivere nella
+mappa dei tasti prima di interpellare il terminale, lo fa diventare rosso.
 
 ## Per chi viene dal backend
 
 È una macchina a stati che prende un lock esclusivo su una risorsa condivisa, la
 camera, e deve rilasciarlo esattamente nello stato in cui l'ha preso: per questo la
 posa si salva pulita, prima che gli altri sottosistemi ci scrivano sopra. L'ordine dei
-gestori dei tasti è una catena di handler dove il primo che consuma l'evento
-interrompe la catena. E il controllo del puntatore una volta per fotogramma, invece che
-a ogni evento, è la stessa cosa che si fa con un flusso di eventi troppo fitto: si
-tiene l'ultimo e si elabora al ritmo del consumatore.
+gestori dei tasti è una catena di handler dove il primo che consuma l'evento la
+interrompe. E il raycast una volta per frame, invece che a ogni evento, è quello che
+si fa con un flusso troppo fitto: si tiene l'ultimo e si elabora al ritmo del
+consumatore.

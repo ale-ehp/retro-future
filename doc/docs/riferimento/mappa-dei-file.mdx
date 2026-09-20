@@ -12,7 +12,7 @@ La divisione per cartelle e i ruoli dei moduli principali: public/tecnologie/ret
 # Mappa dei file
 
 La demo è `index.html` più la cartella `src/`, servita senza bundler: 97 moduli
-JavaScript, 35 file di prova accanto ai moduli che provano, un file di dichiarazioni
+JavaScript, 35 file di test accanto ai moduli che provano, un file di dichiarazioni
 (`globali.d.ts`) e la libreria three.js copiata in `vendor/`. Le righe sono contate il
 20 settembre 2026; cambiano a ogni commit, e questa pagina non insegue il numero
 esatto ma la forma: quali cartelle esistono, cosa ci sta dentro, quanto pesa ognuna.
@@ -21,8 +21,8 @@ Le cartelle:
 
 | cartella | cosa tiene |
 |---|---|
-| `src/` (radice) | `main.js`, che apre i sottosistemi nell'ordine giusto e li lega; `ctx.js`; `lingua.js`; le prove trasversali (invarianti, ordine di boot e frame, importmap, scorciatoie di console) |
-| `src/engine/` | post-processing, ciclo dei fotogrammi, prewarm, diagnostica, benchmark, shader, ispezione |
+| `src/` (radice) | `main.js`, che apre i sottosistemi nell'ordine giusto e li lega; `ctx.js`; `lingua.js`; i test trasversali (invarianti, ordine di boot e frame, importmap, scorciatoie di console) |
+| `src/engine/` | post-processing, ciclo dei frame, prewarm, diagnostica, benchmark, shader, ispezione |
 | `src/world/` | boulevard, palazzi, ponti, LED, tabelloni, pavimento a esagoni, cielo, rivelo, terminale |
 | `src/character/` | modelli, animazione, folla, percorsi, chi accoglie, fumetti, passi, riflessi |
 | `src/camera/` | stato del giocatore, mouse look, volo del drone, cursore, collisioni della camera |
@@ -33,28 +33,28 @@ Le cartelle:
 
 ### `(radice)` (2452 righe)
 
-| file | righe | prova |
+| file | righe | test |
 |---|---:|---|
-| `audio-contesto-unico.test.mjs` | 36 | prova |
-| `cartelli-apparizione.test.mjs` | 72 | prova |
-| `cartelli-collisioni.test.mjs` | 83 | prova |
+| `audio-contesto-unico.test.mjs` | 36 | test |
+| `cartelli-apparizione.test.mjs` | 72 | test |
+| `cartelli-collisioni.test.mjs` | 83 | test |
 | `ctx.js` | 27 |  |
 | `globali.d.ts` | 99 |  |
-| `greeter-posto.test.mjs` | 91 | prova |
-| `importmap.test.mjs` | 48 | prova |
-| `invarianti.test.mjs` | 209 | prova |
+| `greeter-posto.test.mjs` | 91 | test |
+| `importmap.test.mjs` | 48 | test |
+| `invarianti.test.mjs` | 209 | test |
 | `lingua.js` | 24 |  |
-| `luminosita.test.mjs` | 72 | prova |
+| `luminosita.test.mjs` | 72 | test |
 | `main.js` | 1280 |  |
-| `ordine-boot-frame.test.mjs` | 66 | prova |
-| `pagina-cover.test.mjs` | 224 | prova |
-| `scorciatoie-console.test.mjs` | 62 | prova |
+| `ordine-boot-frame.test.mjs` | 66 | test |
+| `pagina-cover.test.mjs` | 224 | test |
+| `scorciatoie-console.test.mjs` | 62 | test |
 | `sign-opacity.js` | 18 |  |
-| `sign-opacity.test.mjs` | 41 | prova |
+| `sign-opacity.test.mjs` | 41 | test |
 
 ### `audio` (1058 righe)
 
-| file | righe | prova |
+| file | righe | test |
 |---|---:|---|
 | `audio.js` | 465 |  |
 | `footstep-audio.js` | 36 |  |
@@ -63,21 +63,21 @@ Le cartelle:
 
 ### `camera` (1354 righe)
 
-| file | righe | prova |
+| file | righe | test |
 |---|---:|---|
 | `camera-collision.js` | 173 |  |
 | `disc-cursor.js` | 171 |  |
 | `drone-intro.js` | 400 |  |
-| `drone-intro.test.mjs` | 18 | prova |
+| `drone-intro.test.mjs` | 18 | test |
 | `mouse-look.js` | 363 |  |
-| `mouse-look.test.mjs` | 91 | prova |
+| `mouse-look.test.mjs` | 91 | test |
 | `player-state.js` | 138 |  |
 
 ### `character` (9476 righe)
 
-| file | righe | prova |
+| file | righe | test |
 |---|---:|---|
-| `cartelli-scena.test.mjs` | 143 | prova |
+| `cartelli-scena.test.mjs` | 143 | test |
 | `character-build.js` | 158 |  |
 | `character-collision.js` | 116 |  |
 | `character-colors.js` | 96 |  |
@@ -98,35 +98,35 @@ Le cartelle:
 | `runner-crowd-materials.js` | 44 |  |
 | `runner-crowd-routes.js` | 223 |  |
 | `runner-crowd-runtime.js` | 1352 |  |
-| `runner-crowd-runtime.test.mjs` | 81 | prova |
+| `runner-crowd-runtime.test.mjs` | 81 | test |
 | `runner-footsteps.js` | 135 |  |
 | `runner-greeter.js` | 172 |  |
 | `runner-idle-character.js` | 291 |  |
 | `runner-orchestration.js` | 630 |  |
 | `runner-reflection-rig.js` | 125 |  |
 | `runner-reveal.js` | 497 |  |
-| `runner-reveal.test.mjs` | 158 | prova |
+| `runner-reveal.test.mjs` | 158 | test |
 | `runner-state.js` | 356 |  |
 | `runner-visual-controls.js` | 221 |  |
-| `runner-visual-controls.test.mjs` | 43 | prova |
+| `runner-visual-controls.test.mjs` | 43 | test |
 | `runner-wiring.js` | 1128 |  |
 | `speech-bubbles.js` | 804 |  |
-| `speech-bubbles.test.mjs` | 100 | prova |
+| `speech-bubbles.test.mjs` | 100 | test |
 
 ### `config` (109 righe)
 
-| file | righe | prova |
+| file | righe | test |
 |---|---:|---|
 | `costanti.js` | 109 |  |
 
 ### `controls` (5752 righe)
 
-| file | righe | prova |
+| file | righe | test |
 |---|---:|---|
 | `bridge-controls.js` | 108 |  |
 | `building-live-controls.js` | 105 |  |
-| `contact-terminal-input.test.mjs` | 86 | prova |
-| `control-defaults.test.mjs` | 171 | prova |
+| `contact-terminal-input.test.mjs` | 86 | test |
+| `control-defaults.test.mjs` | 171 | test |
 | `control-panel.js` | 880 |  |
 | `control-settings-runtime.js` | 315 |  |
 | `controls.js` | 762 |  |
@@ -136,57 +136,57 @@ Le cartelle:
 | `fx-panels.js` | 156 |  |
 | `keyboard.js` | 101 |  |
 | `live-controls.js` | 906 |  |
-| `live-controls.test.mjs` | 135 | prova |
+| `live-controls.test.mjs` | 135 | test |
 | `mobile-movement.js` | 269 |  |
 | `movement.js` | 267 |  |
 | `welcome-ui.js` | 68 |  |
 
 ### `engine` (5104 righe)
 
-| file | righe | prova |
+| file | righe | test |
 |---|---:|---|
-| `bloom-fork.test.mjs` | 19 | prova |
+| `bloom-fork.test.mjs` | 19 | test |
 | `boot-prewarm.js` | 313 |  |
-| `cinematic-look.test.mjs` | 46 | prova |
+| `cinematic-look.test.mjs` | 46 | test |
 | `city-reveal-profiler.js` | 351 |  |
 | `frame-loop.js` | 289 |  |
 | `fx-debug-toggles.js` | 108 |  |
 | `inspect-hooks.js` | 468 |  |
 | `performance-diagnostics.js` | 701 |  |
 | `performance-mobile.js` | 51 |  |
-| `performance-mobile.test.mjs` | 42 | prova |
+| `performance-mobile.test.mjs` | 42 | test |
 | `post-pipeline.js` | 788 |  |
 | `reflection-env.js` | 114 |  |
 | `retro-benchmark-runtime.js` | 336 |  |
 | `retro-benchmark.js` | 272 |  |
-| `retro-benchmark.test.mjs` | 134 | prova |
+| `retro-benchmark.test.mjs` | 134 | test |
 | `shaders.js` | 246 |  |
 | `static-city-culling.js` | 251 |  |
 | `tech-breakdown-overlay.js` | 118 |  |
-| `tech-breakdown-overlay.test.mjs` | 41 | prova |
+| `tech-breakdown-overlay.test.mjs` | 41 | test |
 | `temporal-aa-pass.js` | 341 |  |
-| `temporal-aa-pass.test.mjs` | 75 | prova |
+| `temporal-aa-pass.test.mjs` | 75 | test |
 
 ### `world` (12665 righe)
 
-| file | righe | prova |
+| file | righe | test |
 |---|---:|---|
 | `atmosphere-particles.js` | 91 |  |
 | `base-pads.js` | 681 |  |
 | `board-perimeter-pose.js` | 78 |  |
-| `board-perimeter-pose.test.mjs` | 79 | prova |
+| `board-perimeter-pose.test.mjs` | 79 | test |
 | `boulevard-constants.js` | 33 |  |
-| `boulevard-constants.test.mjs` | 77 | prova |
+| `boulevard-constants.test.mjs` | 77 | test |
 | `boulevard-layout.js` | 371 |  |
 | `boundary-error.js` | 925 |  |
-| `boundary-error.test.mjs` | 31 | prova |
+| `boundary-error.test.mjs` | 31 | test |
 | `bridges.js` | 126 |  |
 | `building-doors.js` | 548 |  |
-| `building-doors.test.mjs` | 62 | prova |
+| `building-doors.test.mjs` | 62 | test |
 | `building-leds.js` | 913 |  |
 | `buildings.js` | 275 |  |
 | `city-boards.js` | 1200 |  |
-| `city-boards.test.mjs` | 104 | prova |
+| `city-boards.test.mjs` | 104 | test |
 | `city-reveal-main-led.js` | 439 |  |
 | `city-reveal-render-runtime.js` | 257 |  |
 | `city-reveal-scan-glow.js` | 160 |  |
@@ -194,12 +194,12 @@ Le cartelle:
 | `city-wiring.js` | 782 |  |
 | `config.js` | 50 |  |
 | `contact-terminal.js` | 939 |  |
-| `contact-terminal.test.mjs` | 424 | prova |
+| `contact-terminal.test.mjs` | 424 | test |
 | `energy-pulse.js` | 63 |  |
 | `facade-led-treatment.js` | 690 |  |
 | `ground-geometry.js` | 51 |  |
 | `hex-tiles.js` | 1010 |  |
-| `hex-tiles.test.mjs` | 74 | prova |
+| `hex-tiles.test.mjs` | 74 | test |
 | `material-textures.js` | 112 |  |
 | `sky-dome.js` | 730 |  |
-| `sky-dome.test.mjs` | 55 | prova |
+| `sky-dome.test.mjs` | 55 | test |

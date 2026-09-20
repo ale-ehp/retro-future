@@ -19,37 +19,36 @@ Blocco 7: analogia scritta qui.
 
 :::info Se è la prima volta
 
-È la sequenza di apertura: dieci secondi in cui la città passa dal fil di ferro alla forma vera, a tempo di musica. È anche il momento in cui la demo ha meno margine di tutti, e quasi tutto il resto viene messo in pausa.
+È la sequenza di apertura: 10 secondi in cui la città passa dal fil di ferro alla forma vera, a tempo di musica. È anche il momento in cui la demo ha meno margine di tutti, e quasi tutto il resto viene messo in pausa.
 
 :::
 
 ## Cosa vede l'utente
 
 Dopo il click la città non c'è: c'è il suo scheletro, linee ciano su fondo cielo,
-mentre il cursore mostra un anello di attesa e in un angolo pulsa la scritta
-“Attendi…”. Il drone intanto scende. Poi il brano arriva al colpo di basso, e un
-fronte inclinato a quarantacinque gradi parte da dove sei e corre verso il fondo del
-viale: davanti resta lo scheletro, dietro appare la città vera, con un bagliore a
-strisce che accompagna il passaggio.
+mentre il cursore mostra un anello di attesa e in un angolo pulsa “Attendi…”. Il
+drone intanto scende. Poi il brano arriva al colpo di basso, e un fronte inclinato a
+45 gradi parte da dove sei e corre verso il fondo del viale: davanti lo scheletro,
+dietro la città vera, con un bagliore a strisce che accompagna il passaggio.
 
 ![La città in fil di ferro, in attesa che il fronte parta](/img/rivelo-in-corso.webp)
 
 Un secondo dopo i personaggi si materializzano dal basso, ognuno con un anello di luce
-che sale dai piedi alla testa. Da quel momento compaiono i comandi, il mouse si arma,
-l'equalizzatore si accende e i LED cominciano a battere a tempo.
+che sale dai piedi alla testa. Da lì compaiono i comandi, il mouse si arma,
+l'equalizzatore si accende e i LED battono a tempo.
 
 ## Il problema
 
 Il rivelo è la finestra con **meno margine di prestazioni di tutta la demo**. Il
-compositore arriva a sei passate a schermo intero, cielo, scheletro, griglia della
-strada, città vera, anti-aliasing, upscale, e i picchi di scatto cadono tutti lì. Su un
-iPhone vero il primo percentile scendeva intorno ai venti fotogrammi al secondo.
+compositore arriva a 6 passate a schermo intero (cielo, scheletro, griglia della
+strada, città vera, anti-aliasing, upscale) e i picchi di scatto cadono tutti lì. Su
+un iPhone vero il primo percentile scendeva intorno ai 20 fps.
 
 E c'è un problema di lettura, non di prestazioni: i personaggi comparivano come una
 finestra di dialogo. Una dissolvenza dell'opacità su tutto il corpo, il gruppo della
-folla nascosto per un secondo mentre la materializzazione era già al settantuno per
-cento, un anello di scansione appeso a un personaggio ancora invisibile. Si leggeva
-come un popup, non come un arrivo.
+folla nascosto per 1 secondo mentre la materializzazione era già al 71%, un anello di
+scansione appeso a un personaggio ancora invisibile. Si leggeva come un popup, non
+come un arrivo.
 
 ## Come funziona
 
@@ -57,7 +56,7 @@ come un popup, non come un arrivo.
 sequenceDiagram
     participant M as brano
     participant R as rivelo
-    participant F as ciclo dei fotogrammi
+    participant F as frame loop
     M->>R: orologio a 9,15 s
     R->>R: fronte a 45 gradi, 1,5 s
     F->>F: strada, folla, cartelli,<br/>particelle: congelati
@@ -70,73 +69,69 @@ sequenceDiagram
 
 ### Il fronte
 
-Un piano inclinato a quarantacinque gradi che avanza. Davanti a lui la scena è
-disegnata come scheletro; dietro, la città vera viene disegnata con un piano di taglio
-installato, così i pixel oltre il fronte non esistono. La corsa dura un secondo e
-mezzo con un'andatura addolcita agli estremi, e con la preferenza di sistema per il
-movimento ridotto si riduce a un millesimo. Sul palazzo principale il fronte rallenta alla metà della velocità; il motivo
-non è scritto in nessun commit.
+Un piano inclinato a 45 gradi che avanza. Davanti a lui la scena è disegnata come
+scheletro; dietro, la città vera viene disegnata con un clipping plane installato,
+così i pixel oltre il fronte non esistono. La corsa dura 1,5 s con uno smoothstep agli
+estremi, e con `prefers-reduced-motion` scende a 1 ms. Sul palazzo principale il
+fronte rallenta a metà velocità; il motivo non è scritto in nessun commit.
 
-Il bagliore che lo accompagna è largo quanto la città e alto quanto i palazzi, e pulsa
+Il bagliore che lo accompagna è largo quanto la città, alto quanto i palazzi, e pulsa
 a metà corsa.
 
 ### Che cosa viene congelato
 
-Mentre il fronte corre, il ciclo dei fotogrammi sospende la strada esagonale, la folla,
-i cartelli, le particelle e i fumetti. Il bloom viene saltato e la risoluzione limitata.
-Il profiler che campiona la scena, che per farlo deve attraversare tutto l'albero, si
-accende solo su richiesta: girare dentro la finestra che tutto il resto protegge
-sarebbe una contraddizione.
+Mentre il fronte corre, il ciclo dei frame sospende strada esagonale, folla,
+cartelli, particelle e fumetti. Il bloom viene saltato e il pixel ratio limitato. Il
+profiler che campiona la scena, e per farlo attraversa tutto l'albero, si accende solo
+su richiesta: girare dentro la finestra che tutto il resto protegge sarebbe una
+contraddizione.
 
 ### La materializzazione dei personaggi
 
-Un secondo dopo la fine, ogni personaggio viene rivelato dal basso con un piano di
-taglio che sale, non con una dissolvenza: quello che è già arrivato sembra materia.
+Un secondo dopo la fine, ogni personaggio viene rivelato dal basso da un clipping
+plane che sale, non da una dissolvenza: quello che è già arrivato sembra materia.
 L'anello di luce che accompagna il taglio si ferma all'altezza della testa di **quel**
-personaggio, non a un'altezza nominale: la folla è più bassa del corridore, e l'anello arrivava quasi tre unità sopra
-le teste. Tutti gli anelli sono un oggetto solo
-disegnato molte volte, perché sono decine e ognuno durerebbe un secondo e mezzo.
+personaggio, non a un'altezza nominale: la folla è più bassa del corridore, e l'anello
+arrivava quasi 3 unità sopra le teste. Gli anelli stanno tutti in un `InstancedMesh`,
+perché sono decine e ognuno durerebbe 1,5 s.
 
 ### Chi aspetta la fine
 
-Un segnale booleano sulla finestra dice quando il rivelo è finito. Lo leggono il
-gate visivo, il benchmark, i comandi, l'equalizzatore, il battito e i passi. Prima era
-una richiesta ripetuta ogni quattro decimi che ricostruiva l'intera fotografia
-diagnostica, dentro la finestra protetta.
+Un flag sulla finestra dice quando il rivelo è finito. Lo leggono gate visivo,
+benchmark, comandi, equalizzatore, battito e passi. Prima era un polling ogni 400 ms
+che ricostruiva l'intera fotografia diagnostica, dentro la finestra protetta.
 
 ## Perché così e non altrimenti
 
 - **Il rivelo dal basso invece della dissolvenza.** La dissolvenza si leggeva come un
-  popup. Il taglio che sale si legge come un arrivo, e l'ho verificato rallentandolo a
-  otto secondi per guardarlo bene.
+  popup; il taglio che sale si legge come un arrivo, e l'ho verificato rallentandolo a
+  8 secondi.
 - **L'attesa è all'inizio della materializzazione, non prima del gruppo.** Nascondere
-  il gruppo della folla per un secondo significava mostrarla quando era già al
-  settantuno per cento: sembrava che apparisse mezza fatta.
-- **L'anello si ferma alla testa di chi arriva.** Con un'altezza nominale unica, la
-  folla, più bassa, aveva l'anello che le passava sopra la testa.
-- **Tutti gli anelli sono un oggetto disegnato più volte.** Decine di chiamate di
-  disegno separate per un lampo di un secondo e mezzo sarebbero uno spreco proprio
-  dove il margine manca.
-- **La compilazione preventiva avviene con il piano di taglio già installato.** La
-  variante di shader compilata dipende da quello: senza, si sarebbero compilate le
-  varianti sbagliate e quelle giuste sarebbero nate durante il rivelo, cioè nel
-  momento peggiore.
+  il gruppo della folla per 1 secondo significava mostrarla quando era già al 71%:
+  sembrava che apparisse mezza fatta.
+- **L'anello si ferma alla testa di chi arriva.** Con un'altezza nominale unica la
+  folla, più bassa, aveva l'anello sopra la testa.
+- **Tutti gli anelli in un `InstancedMesh`.** Decine di chiamate di disegno separate
+  per un lampo di 1,5 s sarebbero uno spreco proprio dove il margine manca.
+- **La compilazione preventiva degli shader avviene con il clipping plane già
+  installato.** La variante compilata dipende da quello: senza, si sarebbero compilate
+  le varianti sbagliate e quelle giuste sarebbero nate durante il rivelo, nel momento
+  peggiore.
 - **Le geometrie dello scheletro vengono distrutte alla fine.** È un effetto che
-  succede una volta: i percorsi di disegno escono subito dopo, e tenerle occuperebbe
+  succede una volta, i percorsi di disegno escono subito dopo: tenerle occuperebbe
   memoria per niente.
 - **Gli oggetti temporanei si riusano.** La versione precedente allocava un array e un
-  oggetto per ogni palazzo e ponte, fra venticinque e quarantacinque, a ogni fotogramma
-  del rivelo.
-- **La prova guarda il comportamento a runtime.** Quella precedente verificava la forma
+  oggetto per ogni palazzo e ponte, fra 25 e 45, a ogni frame del rivelo.
+- **Il test guarda il comportamento a runtime.** Quello precedente verificava la forma
   del testo del codice, non che il taglio salisse davvero dai piedi alla testa.
 
 Cose che non so spiegare, e lo dico:
 
-- I tempi del rivelo sono cambiati cinque volte fra il 13 e il 15 giugno, e nessuno di
-  quei commit ha un corpo che spieghi perché.
-- Le costanti del codice sovrascrivono al boot i valori dei cursori, ed è questo che
-  decide la durata vera. Il motivo non è scritto da nessuna parte.
-- Il segnale di completamento scatta uno o due secondi prima che le passate si spengano
+- I tempi del rivelo sono cambiati 5 volte fra il 13 e il 15 giugno, e nessuno di
+  quei commit ha un corpo che lo spieghi.
+- Le costanti del codice sovrascrivono al boot i valori dei cursori, ed è questo a
+  decidere la durata vera. Il motivo non è scritto da nessuna parte.
+- Il segnale di completamento scatta 1 o 2 secondi prima che le passate si spengano
   davvero. Il benchmark lo sa e aspetta; il resto del codice no.
 
 ## I numeri
@@ -144,7 +139,7 @@ Cose che non so spiegare, e lo dico:
 | cosa | valore | fonte e data |
 |---|---|---|
 | attesa prima del fronte | 8.800 ms, o l'orologio del brano se c'è musica | `config.js` |
-| durata della corsa | 1.500 ms (1 ms con movimento ridotto) | `config.js` |
+| durata della corsa | 1.500 ms (1 ms con `prefers-reduced-motion`) | `config.js` |
 | anticipo sul colpo di basso | 200 ms | `config.js` |
 | tetto di attesa della musica | 6.000 ms | `config.js` |
 | momenti in tempo di brano | intro aperta a 9,03 s, fronte a 9,15 s | `city-reveal-wireframe.js` |
@@ -154,26 +149,25 @@ Cose che non so spiegare, e lo dico:
 | prestazione nel rivelo su iPhone | primo percentile intorno a 20 fps | commit 8139be8d |
 | materializzazione dei personaggi | attesa 1.000 ms, durata 1.400 ms | `runner-reveal.js` |
 | anelli accesi insieme | 18 | commit a8c3c23d |
-| limite della risoluzione nel rivelo | pixel ratio 1,5 | `config.js` |
+| limite di risoluzione nel rivelo | pixel ratio 1,5 | `config.js` |
 | assestamento atteso dal gate | 2.500 ms dopo il completamento | `retro-future-visual-gate.mjs` |
 
 ## Dove sta nel codice
 
 | file | ruolo |
 |---|---|
-| `src/world/city-reveal-wireframe.js` | lo scheletro, il fronte, l'orologio, la zona lenta |
-| `src/world/city-reveal-scan-glow.js` | il bagliore che accompagna il fronte |
-| `src/world/city-reveal-main-led.js` | l'overlay verticale dei LED del palazzo principale |
-| `src/world/city-reveal-render-runtime.js` | le passate, il fotogramma composito, la compilazione preventiva |
-| `src/engine/city-reveal-profiler.js` | il campionamento, acceso solo su richiesta |
-| `src/character/runner-reveal.js` | la materializzazione dei personaggi e gli anelli |
+| `src/world/city-reveal-wireframe.js` | scheletro, fronte, orologio, zona lenta |
+| `src/world/city-reveal-scan-glow.js` | bagliore che accompagna il fronte |
+| `src/world/city-reveal-main-led.js` | overlay verticale dei LED del palazzo principale |
+| `src/world/city-reveal-render-runtime.js` | passate, frame composito, compilazione preventiva |
+| `src/engine/city-reveal-profiler.js` | campionamento, acceso solo su richiesta |
+| `src/character/runner-reveal.js` | materializzazione dei personaggi e anelli |
 
 ## Per chi viene dal backend
 
-È una migrazione con finestra di manutenzione: per un secondo e mezzo il sistema
-sospende tutto il lavoro non essenziale, perché la banda serve altrove, e riprende
-quando il fronte è passato. La compilazione preventiva con il piano di taglio
-installato è il riscaldamento della cache con le stesse chiavi che userà il traffico
-vero, non con chiavi simili. E il segnale di completamento che scatta prima dello stop
+È una migrazione con finestra di manutenzione: per 1,5 s il sistema sospende tutto il
+lavoro non essenziale, perché la banda serve altrove, e riprende quando il fronte è
+passato. La compilazione preventiva con il clipping plane installato è il warm-up
+della cache con le stesse chiavi che userà il traffico vero, non con chiavi simili. E il segnale di completamento che scatta prima dello stop
 reale è un readiness probe che dice “pronto” mentre qualcosa sta ancora chiudendo:
 chi misura deve saperlo.

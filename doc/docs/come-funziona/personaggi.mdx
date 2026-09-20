@@ -19,110 +19,104 @@ Blocco 7: ponte scritto dall'autore del manuale, senza affermazioni tecniche nuo
 
 :::info Se è la prima volta
 
-Un personaggio animato è una maglia di triangoli deformata da uno scheletro di ossa. Trenta personaggi che camminano, si evitano e parlano sono trenta scheletri da aggiornare a ogni fotogramma: questo capitolo racconta come si fa senza pagarli tutti.
+Un personaggio animato è una maglia di triangoli deformata da uno scheletro di ossa. Trenta personaggi che camminano, si evitano e parlano sono trenta scheletri da aggiornare a ogni frame: questo capitolo racconta come si fa senza pagarli tutti.
 
 :::
 
 ## Cosa vede l'utente
 
-Dopo che i palazzi si sono rivelati, trenta figure in tuta nera con linee LED
-colorate si materializzano dal basso, un anello di luce ciano che sale dai piedi
-alla testa, e si mettono a camminare sui marciapiedi. Una, verde, viene incontro a
-chi arriva, si ferma, mostra un cartello “Benvenuto in avstudio.ai”, poi “Seguimi”,
-e corre al tabellone dei reparti. Un'altra, arancione, sta appoggiata al palazzo con
-civico 2 e, se ci si avvicina, dice “Mi godo la pausa”. Volevo che la città avesse
-una parvenza viva: il boulevard è la mia azienda, o la mia testa, i palazzi sono i dipartimenti, i personaggi sono colleghi IA.
+Finito il rivelo dei palazzi, 30 figure in tuta nera con linee LED colorate si
+materializzano dal basso, un anello di luce ciano che sale dai piedi alla testa, e
+si mettono a camminare sui marciapiedi. Una, verde, viene incontro a chi arriva, si
+ferma, mostra un cartello “Benvenuto in avstudio.ai”, poi “Seguimi”, e corre al
+tabellone dei reparti. Un'altra, arancione, sta appoggiata al palazzo con civico 2
+e, se ci si avvicina, dice “Mi godo la pausa”. Volevo che la città avesse una
+parvenza viva: il boulevard è la mia azienda, o la mia testa, i palazzi sono i
+dipartimenti, i personaggi sono colleghi IA.
 
 ![La folla sui marciapiedi e chi accoglie in arrivo](/img/folla-e-accoglienza.webp)
 
 ## Il problema
 
-Un solo modello con scheletro (49 ossa) deve diventare trenta personaggi animati
-più uno fermo, senza trenta caricamenti. E la folla è il lavoro per fotogramma più
-denso della demo: membri per sottopassi di movimento, ogni fotogramma. Nel codice
-caldo non si alloca niente: oggetti di appoggio riusati, chiavi numeriche al posto
-delle stringhe.
+Un solo modello con scheletro (49 ossa) deve diventare 30 personaggi animati più
+uno fermo, senza 30 caricamenti. E la folla è il lavoro per frame più denso della
+demo: membri per sottopassi di movimento, ogni frame. Nel codice caldo non si
+alloca niente: oggetti di appoggio riusati, chiavi numeriche al posto delle
+stringhe.
 
-Poi ci sono i dettagli che si vedono subito, se sbagliati:
+Poi i dettagli che si vedono subito, se sbagliati:
 
 - **Le gambe devono piantarsi a terra.** Con l'animazione guidata dal tempo, un
   personaggio che rallenta o si ferma scivola sui piedi: il “moonwalk”.
-- **I riflessi a pavimento passano attraverso i palazzi.** Sono cloni specchiati
-  disegnati senza test di profondità, e dipingevano anche dove un palazzo stava
-  fra il personaggio e la camera.
-- **I cartelli finivano sotto i pannelli della città** anche con un ordine di
-  disegno altissimo, perché three.js confronta prima l'ordine del gruppo, e i
-  cartelli erano appesi alla scena.
+- **I riflessi a pavimento passano attraverso i palazzi.** Cloni specchiati
+  disegnati senza test di profondità: dipingevano anche dove un palazzo stava fra
+  il personaggio e la camera.
+- **I cartelli finivano sotto i pannelli della città** anche con un `renderOrder`
+  altissimo, perché three.js confronta prima quello del gruppo, e i cartelli erano
+  appesi alla scena.
 - **Il logo animato nel cartello di benvenuto** ridisegnato a 60 Hz rifaceva un
-  canvas 896x360 con tre passaggi di ombra sfocata per fotogramma; e la cache delle
-  texture, senza sfratto, arrivava a circa 40 texture residenti, circa 70 MB di GPU.
+  canvas 896x360 con 3 passaggi di ombra sfocata per frame; e la cache delle
+  texture, senza sfratto, teneva residenti circa 40 texture, circa 70 MB di GPU.
 - **La materializzazione era già scritta ma nessuno la vedeva:** la folla restava
   nascosta per 1.000 ms mentre l'effetto da 1.400 ms era già al 71%.
 
 ## Come funziona
 
-### Un modello, trentuno corpi
+### Un modello, 31 corpi
 
-Il modello sorgente è un GLB (il contenitore binario di glTF: un'intestazione JSON
-più i buffer) da 1.229.812 byte, con due mesh (corpo 7.325 vertici, visiera 109),
-49 giunti e quattro clip: `Idle`, `Run`, `TPose`, `Walk`. La base è un modello
-rigato con scheletro Mixamo, lo stesso che three.js distribuisce fra i suoi esempi;
-l'ho adattato e alleggerito. Non contiene texture: le due JPEG da 931 KB che portava
-non venivano mai mostrate, perché ogni consumatore sostituisce il materiale con la
-tuta procedurale, e toglierle ha portato il file da 2,16 a 1,23 MB, il 43% in meno
-sull'asset vivo più grande, con due decodifiche JPEG in meno all'avvio. Verificato
-con due primi piani di chi accoglie, prima e dopo: identici.
+Il modello sorgente è un GLB da 1.229.812 byte: 2 mesh (corpo 7.325 vertici,
+visiera 109), 49 giunti, 4 clip (`Idle`, `Run`, `TPose`, `Walk`). La base è un
+modello Mixamo già riggato, lo stesso che three.js distribuisce fra i suoi esempi;
+l'ho adattato e alleggerito. Non porta texture: le 2 JPEG da 931 KB non venivano mai
+mostrate, perché ogni consumatore sostituisce il materiale con la tuta procedurale.
+Toglierle ha portato il file da 2,16 a 1,23 MB, il 43% in meno sull'asset vivo più
+grande, con 2 decodifiche JPEG in meno all'avvio. Verificato con due primi piani di
+chi accoglie, prima e dopo: identici.
 
-Il loader glTF e `SkeletonUtils` di three.js arrivano in parallelo ai moduli di
-post-produzione, così le richieste di rete si sovrappongono; se l'import fallisce,
-i personaggi restano spenti con un avviso. Caricato una volta, il modello viene
+Il loader glTF e `SkeletonUtils` arrivano in parallelo ai moduli di
+post-produzione, così le richieste si sovrappongono; se l'import fallisce, i
+personaggi restano spenti con un avviso. Caricato una volta, il modello viene
 ruotato di 180 gradi, portato a 8,66 unità di altezza, stretto a 0,74 in X e 0,70
-in Z, e ricentrato con i piedi a y=0. Questo sorgente non si vede mai: è il padre
-dei cloni e porta la scala, 0,55 nel file canonico, che dà una folla alta circa 4,76.
+in Z, ricentrato con i piedi a y=0. Non si vede mai: è il padre dei cloni e porta la
+scala, 0,55 nel file canonico, che dà una folla alta circa 4,76.
 
-Ogni membro della folla è `SkeletonUtils.clone` del sorgente. Una mesh con
-scheletro (skinned mesh: ogni vertice segue alcune ossa con dei pesi) non si copia
-con il `clone()` normale, perché le ossa resterebbero quelle dell'originale; la
-funzione crea ossa nuove e le rimappa sul clone, mentre geometria e materiali
-restano condivisi per riferimento. Ogni membro riceve poi un materiale suo, clone di
-quello della tuta con il proprio colore, condiviso dalle sue due mesh. La folla si
-costruisce un membro per fotogramma: la coda fa un lavoro e restituisce il
-controllo, e al boot un ciclo la svuota aspettando il fotogramma successivo, prima
-dei prewarm pesanti. Il personaggio fermo è un altro clone, costruito subito dopo la
-folla. I riflessi a pavimento di un membro sono altri due cloni, corpo e LED, con
-riproduttori di animazione propri: si costruiscono solo se l'effetto è acceso,
-perché costruirli spenti dava una sessantina di scheletri che non potevano mai
-disegnarsi.
+Ogni membro della folla è `SkeletonUtils.clone` del sorgente. Una skinned mesh non
+si copia con `clone()`: le ossa resterebbero dell'originale. `SkeletonUtils` ne crea
+di nuove e le rimappa sul clone, geometria e materiali restano condivisi per
+riferimento. Ogni membro riceve un materiale
+suo, clone di quello della tuta con il proprio colore, condiviso dalle sue 2 mesh. La folla si costruisce un membro per frame: la coda fa un lavoro e restituisce il
+controllo, e al boot un ciclo la svuota un frame alla volta, prima dei prewarm
+pesanti. Il personaggio fermo è un altro clone, costruito subito dopo la
+folla. I riflessi a pavimento di un membro sono altri 2 cloni, corpo e LED, con
+`AnimationMixer` propri: si costruiscono solo se l'effetto è acceso, perché
+costruirli spenti dava circa 60 scheletri che non potevano mai disegnarsi.
 
-La tuta è disegnata su canvas: 512x512, gradiente scuro, 1.400 puntini, cinque
-pannelli, quattro linee diagonali; una seconda texture emissiva (la luce propria, che il bloom trasforma in
-alone) ripete lo stesso impianto e ci aggiunge le nove linee ciano. Il colore segue un piano
-di 15 voci ciclico sull'indice, con due eccezioni fisse: l'indice 0 ciano e
-l'indice 1 verde, i due sulla strada di partenza.
+La tuta è disegnata su canvas: 512x512, gradiente scuro, 1.400 puntini, 5 pannelli,
+4 linee diagonali; una seconda texture emissiva ripete lo stesso impianto e ci
+aggiunge le 9 linee ciano. Il colore segue un piano di 15 voci ciclico sull'indice,
+con 2 eccezioni fisse: indice 0 ciano e indice 1 verde, i due sulla strada di
+partenza.
 
 ### La folla a 45 Hz
 
-Il runtime della folla gira a ogni fotogramma ma aggiorna la simulazione a 45 Hz:
-accumula il tempo (al massimo 0,12 s) e lavora solo quando ha raggiunto 1/45 di
-secondo. Poi, in ordine: il culling (nascondere chi è fuori dal cono di vista), il
-budget dei riflessi, le matrici, la griglia spaziale, e per ogni membro il trigger
-delle battute, la velocità, il passo del LOD, l'animazione e l'avanzamento in
+Il runtime gira a ogni frame ma aggiorna la simulazione a 45 Hz: accumula il tempo
+(al massimo 0,12 s) e lavora quando ha raggiunto 1/45 di secondo. Poi, in ordine: culling, budget dei riflessi, matrici, griglia spaziale, e per ogni
+membro trigger delle battute, velocità, passo del LOD, animazione e avanzamento in
 sottopassi da 0,035 s.
 
-Il LOD (livello di dettaglio) qui è uno stride: entro 190 unità un membro si
-aggiorna ogni fotogramma, entro 520 uno su due, oltre uno su quattro; un membro
-nascosto dal culling passa a uno su dodici. Il culling usa una sfera di raggio 24 a
-mezza altezza: fuori dal frustum o oltre 900 unità il gruppo diventa invisibile e le
-sue matrici si congelano. La griglia spaziale è una `Map` con celle da 9,5 unità e
-chiave numerica, non stringa: la versione con le stringhe allocava fra 5.000 e
-13.000 stringhe al secondo. I vicini si cercano nelle nove celle intorno, in un
-array di appoggio. Il giocatore, infine, urta contro i membri e non li attraversa:
-entro 1,6 unità la camera viene spinta fuori.
+Il LOD qui è uno stride: entro 190 unità un membro si aggiorna ogni frame, entro
+520 uno su 2, oltre uno su 4; nascosto dal culling, uno su 12. Il
+culling usa una sfera di raggio 24 a mezza altezza: fuori dal frustum o oltre 900
+unità il gruppo diventa invisibile e le sue matrici si congelano. La griglia
+spaziale è una `Map` con celle da 9,5 unità e chiave numerica, non stringa: la
+versione con le stringhe allocava fra 5.000 e 13.000 stringhe al secondo. I vicini
+si cercano nelle 9 celle intorno, in un array di appoggio. Il giocatore urta contro
+i membri e non li attraversa: entro 1,6 unità la camera viene spinta fuori.
 
 ### La macchina a stati di un membro
 
-Ogni membro segue una rotta di waypoint (i punti della rotta: raggiunto uno, entro
-0,85 unità, punta al successivo) e sta in uno di cinque stati:
+Ogni membro segue una rotta di waypoint, raggiunto uno entro 0,85 unità punta al
+successivo, e sta in uno di 5 stati:
 
 ```mermaid
 stateDiagram-v2
@@ -138,84 +132,82 @@ stateDiagram-v2
 ```
 
 Ogni stato ha una scadenza e una scala di velocità: `pause` 0, `turn` 0,56, `yield`
-0,34. L'avoidance (la separazione: una spinta che allontana chi è troppo vicino)
-somma le spinte dei vicini entro 5,2 unità, pesate con la distanza. Se un altro è
-davanti, chi ha l'indice minore ha la precedenza: rallenta a 0,82 e si sposta di
-lato; l'altro rallenta a 0,18 e cede per 260 ms. Il lato di sorpasso dipende dalla
-parità dell'indice. Il giocatore è un repulsore a parte: entro 3,6 unità spinge con
-forza 12, contro 7,5 dei vicini. Contro i palazzi vale un collisore a pianta
-rettangolare con gli angoli smussati, che spinge fuori dal lato più vicino; la
-correzione è annullata se porterebbe fuori dal poligono della rotta. Se un membro è
-lontano dal suo waypoint e fermo da 850 ms con vicini attorno o una collisione,
-prova uno spostamento laterale di 3,4 e salta al waypoint successivo.
+0,34. L'avoidance somma le spinte dei vicini entro 5,2 unità, pesate con la
+distanza. Se un altro è davanti, chi ha l'indice minore ha la precedenza: rallenta a
+0,82 e si sposta di lato; l'altro rallenta a 0,18 e cede per 260 ms. Il lato di
+sorpasso dipende dalla parità dell'indice. Il giocatore è un repulsore a parte:
+entro 3,6 unità spinge con forza 12, contro 7,5 dei vicini. Contro i palazzi vale un
+collisore a pianta rettangolare con gli angoli smussati che spinge fuori dal lato più
+vicino; la correzione è annullata se porterebbe fuori dal poligono della rotta.
+Se un membro è lontano dal suo waypoint e fermo da 850 ms con vicini attorno o una
+collisione, tenta uno spostamento laterale di 3,4 e salta al waypoint successivo.
 
 ### Le rotte
 
-Le rotte nascono dai palazzi laterali. Le prime vanno una per ogni stradina fra due
-palazzi con un varco di almeno 5,5 unità; poi si ripete un ciclo di tre rotte: un anello davanti a una facciata sola, un
-segmento lungo il marciapiede, un altro anello. L'anello davanti alla facciata sta
-al 62% verso il bordo della strada, mai più vicino al muro di una guardia di 2,4 più il raggio di collisione
-moltiplicato per 1,35: il collisore può essere più stretto del palazzo disegnato.
-Gli indici 0 e 1 hanno una rotta a parte, due punti sulla strada intorno al punto di
-atterraggio. Il civico 2 è escluso, perché lì c'è chi sta in pausa. Ogni membro
-parte da un punto sfalsato (0,18, 0,38, 0,62 o 0,82 del segmento) e cammina a 0,72
-della velocità del giocatore, con una variazione per indice fra 0,86 e 1.
+Le rotte nascono dai palazzi laterali: una per ogni stradina fra 2 palazzi con un
+varco di almeno 5,5 unità, poi un ciclo di 3 che si ripete, anello davanti a una
+facciata sola, segmento lungo il marciapiede, un altro anello. L'anello
+davanti alla facciata sta al 62% verso il bordo della strada, mai più vicino al muro
+di una guardia di 2,4 più il raggio di collisione moltiplicato per 1,35: il
+collisore può essere più stretto del palazzo disegnato. Gli indici 0 e 1 hanno una
+rotta a parte, 2 punti sulla strada intorno al punto di atterraggio. Il civico 2 è
+escluso, perché lì c'è chi sta in pausa. Ogni membro parte da un punto sfalsato
+(0,18, 0,38, 0,62 o 0,82 del segmento) e cammina a 0,72 della velocità del
+giocatore, con una variazione per indice fra 0,86 e 1.
 
 ### Il passo guidato dalla distanza
 
 La clip `Walk` non avanza con il tempo. La fase del ciclo è la distanza percorsa
 divisa per 3,225, più uno sfasamento per membro (`indice × 0,173` mod 1, così non
-marciano all'unisono); il tempo della clip viene fissato a quella fase e il mixer
-(il riproduttore di animazioni di three.js) viene aggiornato con delta zero. Un
-ciclo, cioè due passi, vale 3,225 unità; per la corsa di chi accoglie 4,999. Chi è
-in pausa ha scala di velocità zero, la distanza non cresce e le gambe restano ferme.
-Se la posa è identica alla precedente (stessa azione, stesso tempo a 1e-4), il
-ricampionamento dello scheletro viene saltato.
+marciano all'unisono); il tempo della clip viene fissato a quella fase e
+l'`AnimationMixer` aggiornato con delta zero. Un ciclo, 2 passi, vale 3,225 unità;
+per la corsa di chi accoglie 4,999. Chi è in pausa ha scala di velocità zero, la
+distanza non cresce e le gambe restano ferme. Se la posa è identica alla precedente
+(stessa azione, stesso tempo a 1e-4), lo scheletro non viene ricampionato.
 
 ### Chi accoglie
 
 È il membro di indice 1, il verde. Parte 16 unità dietro il punto di atterraggio e
-2,8 di lato, e cammina verso la camera a 1,155 volte il passo della folla: la prova
-pretende che si vedano circa sei passi prima del saluto, (16 − 7,4) / (3,225 / 2) =
-5,33. A 7,4 unità si ferma, passa dalla camminata alla clip `Idle` con una
+2,8 di lato, e cammina verso la camera a 1,155 volte il passo della folla: il test
+pretende circa 6 passi prima del saluto, (16 − 7,4) / (3,225 / 2) = 5,33. A 7,4 unità si ferma, passa dalla camminata alla clip `Idle` con una
 dissolvenza di 0,45 s, si gira verso il giocatore e mostra “Benvenuto in
-avstudio.ai” per 3.600 ms. Poi “Seguimi” per 8.000 ms; dopo 1.500 ms parte di corsa verso il tabellone dei reparti, con il passo
-moltiplicato per altre 3,064 volte, con un cambio secco da
-`Idle` a `Run` e non una dissolvenza: la corsa è guidata dalla distanza a terra, e
-una dissolvenza non avanzerebbe. Al tabellone, entro 0,8 unità dall'ancora (il bordo
-destro del tabellone, più 5,2 di lato e 1,4 verso il giocatore), si mette a 45 gradi
-fra il giocatore e il tabellone e dice “Qui puoi vedere i nostri reparti” a chiunque
+avstudio.ai” per 3.600 ms. Poi “Seguimi” per 8.000 ms; dopo 1.500 ms parte di corsa
+verso il tabellone dei reparti, con il passo moltiplicato per altre 3,064 volte e un
+cambio secco da `Idle` a `Run`, non una dissolvenza: la corsa è guidata dalla
+distanza a terra, e una dissolvenza non avanzerebbe. Al tabellone, entro 0,8 unità
+dall'ancora (bordo destro, più 5,2 di lato e 1,4 verso il giocatore), si mette a 45
+gradi fra giocatore e tabellone e dice “Qui puoi vedere i nostri reparti” a chiunque
 sia entro 32 unità.
 
 ![Chi accoglie mostra il cartello di benvenuto](/img/accoglienza-benvenuto.webp)
 
 Solo la testa segue il giocatore: l'osso `head` ruota verso la camera, limitato a
-più o meno 80 gradi perché il collo non si torca, interpolato con `dt × 4`, e la
-stessa rotazione si copia sull'osso del riflesso. Chi accoglie si aggiorna sempre,
-anche fuori schermo, con stride 1; non subisce avoidance né collisioni e non
-partecipa alle battute della folla.
+±80 gradi perché il collo non si torca, interpolato con `dt × 4`, e la stessa
+rotazione si copia sull'osso del riflesso. Si aggiorna sempre, anche fuori schermo,
+con stride 1; non subisce avoidance né collisioni e non partecipa alle battute della
+folla.
 
 ### Chi sta in pausa
 
 Al palazzo con civico 2, sul muro lato strada dalla parte dello spawn, un clone con
 il preset arancione e l'emissiva a 1,6 volte, inclinato di 5 gradi, a braccia
-conserte: non ha mixer, le sette ossa di spina, braccia, avambracci e mani vengono
-ruotate una volta, cercate per nome. La sua battuta è una sola, “Mi godo la pausa”,
-con lo stesso trigger della folla. Il suo cartello resta orientato come lui e non
-insegue la camera.
+conserte: niente `AnimationMixer`, le 7 ossa di spina, braccia, avambracci e mani
+sono cercate per nome e ruotate una volta sola. Ha una battuta sola, “Mi godo la
+pausa”, con lo stesso trigger della folla, e il suo cartello resta orientato come lui
+invece di inseguire la camera.
 
 ### I cartelli
 
-Un cartello è un piano `1x1` con un materiale non illuminato, trasparente, senza
-scrittura di profondità ma con il test acceso: chi parla sta davanti al proprio
-cartello. Non è uno `Sprite`, perché lo sprite di three.js è un billboard sferico
-che si inclina a guardare la camera dall'alto; qui il piano ruota solo intorno a Y.
-Tutti i cartelli stanno in un gruppo con `renderOrder` 2000 sul gruppo, e una prova
-pretende che nessun altro ordine del progetto lo superi.
+Un cartello è un piano `1x1`, materiale non illuminato e trasparente, `depthWrite`
+spento e `depthTest` acceso: chi parla sta davanti al proprio cartello. Non è uno
+`Sprite`: quello di three.js è un billboard sferico che si inclina a guardare la
+camera dall'alto, qui il piano ruota solo intorno a Y. Stanno tutti in un gruppo, ed
+è il gruppo a portare il `renderOrder` 2000, che un test tiene come massimo del
+progetto.
 
 La texture è un canvas 896x360: pannello squadrato con doppio bordo ciano, sfondo
-quasi nero, testo bianco monospace con ombra ciano, font che parte da 84 px e scende
-a passi di 2 finché la riga più larga entra. La riga `avstudio.ai` è riconosciuta e
+quasi nero, testo bianco monospace con ombra ciano, font da 84 px che scende a passi
+di 2 finché la riga più larga entra. La riga `avstudio.ai` è riconosciuta e
 disegnata a parte: `av` arancione con un tratteggio che scorre, `/studio` bianco,
 `.ai` con un anaglifo ciano e rosso e un burst di 360 ms ogni 2.200 ms; per questo
 la seconda riga del benvenuto resta `avstudio.ai` in entrambe le lingue. La texture
@@ -223,109 +215,103 @@ animata si ridisegna a 15 Hz, non a 60. Le battute della folla usano un canvas a
 metà scala, 448x180: da lontano non si distingue, e raster e upload costano un
 quarto.
 
-Le texture vivono in una cache LRU (sfratta l'elemento usato meno di recente) con
-tetto 48: un tetto di 12 contro una quarantina di battute sfrattava di continuo, e
-ogni sfratto ricomprava un raster sincrono nel fotogramma in cui il prossimo
-parlava. Nei tempi morti del browser un prewarm rasterizza una battuta alla volta e
-la carica sulla GPU. Il cartello si ancora alla posizione del gruppo più
-`8,66 × scala + 1,1`, non all'osso della testa, che oscilla con l'animazione. Si
-monta dal basso in 420 ms a orologio, bordo inferiore fermo, opaco al 40% del
-tempo; a orologio e non a fotogrammi perché il primo fotogramma, che genera la
-texture, è lungo e faceva finire l'apertura in 30 ms. I cartelli non entrano nei
+Le texture vivono in una cache LRU con tetto 48: a 12, contro una quarantina di
+battute, sfrattava di continuo, e ogni sfratto ricomprava un raster
+sincrono nel frame in cui il prossimo parlava. In `requestIdleCallback` un prewarm
+rasterizza una battuta alla volta e la carica sulla GPU. Il cartello si ancora alla
+posizione del gruppo più `8,66 × scala + 1,1`, non all'osso della testa, che oscilla
+con l'animazione. Si monta dal basso in 420 ms a orologio, bordo inferiore fermo,
+opaco al 40% del tempo; a orologio e non a frame perché il primo frame, quello che
+genera la texture, è lungo: l'apertura finiva in 30 ms. I cartelli non entrano nei
 palazzi né nei pannelli sospesi: per i palazzi si riusa il collisore smussato, per
 tabelloni e terminale si prende l'ingombro 3D e si spinge il cartello verso la
 camera a passi di un quarto di larghezza.
 
 ### Le battute
 
-Quarantuno frasi in italiano e quarantuno in inglese, in un solo file, scelte dalla
-lingua della pagina. Le ho scritte io, come se fossero colleghi di un ufficio che
-salutano e si confidano: “Hei, un viso nuovo!”, “Oggi ho dimenticato il pranzo.”,
-“Mi servirebbe un caffè.”, “Ho i piedi a pezzi.”, “Qui costruiamo cose che
-funzionano.”, “Dietro ogni schermo c'è una persona.”, “Le torri non dormono mai.”.
-Quattro categorie: saluti, quotidiano, mondo avstudio, fantascienza. Ogni membro ne
-riceve tre, senza ripetizioni, da un generatore lineare congruenziale seminato
-dall'indice: la stessa persona dice sempre le stesse cose. Entro 15 unità dice la
-prossima del suo ciclo per 4.000 ms e si riarma quando il giocatore supera le 18:
-un'isteresi, perché sulla soglia non parli a raffica. Quattro cartelli in un pool
-servono i parlanti più vicini alla camera.
+41 frasi in italiano e 41 in inglese, in un solo file, scelte dalla lingua della
+pagina. Le ho scritte io, come se fossero colleghi di un ufficio che salutano e si
+confidano: “Hei, un viso nuovo!”, “Oggi ho dimenticato il pranzo.”, “Mi servirebbe
+un caffè.”, “Ho i piedi a pezzi.”, “Qui costruiamo cose che funzionano.”, “Dietro
+ogni schermo c'è una persona.”, “Le torri non dormono mai.”. 4 categorie: saluti,
+quotidiano, mondo avstudio, fantascienza. Ogni membro ne riceve 3, senza
+ripetizioni, da un generatore lineare congruenziale seminato dall'indice: la stessa
+persona dice sempre le stesse cose. Entro 15 unità dice la prossima del suo ciclo
+per 4.000 ms e si riarma quando il giocatore supera le 18, un'isteresi contro il
+parlato a raffica sulla soglia. 4 cartelli in un pool servono i parlanti più vicini
+alla camera.
 
 ### L'intelligenza
 
-Va detto con chiarezza: non c'è apprendimento e non c'è pianificazione.
-L'ispezione la dichiara `waypoint-state-machine`. Un membro segue punti fissi,
-cambia stato a scadenze, si scansa con spinte pesate e si sblocca con una regola a
-tempo. Basta per una parvenza viva, e resta fra le cose che vorrei ridefinire.
+Non c'è apprendimento e non c'è pianificazione: l'ispezione la dichiara
+`waypoint-state-machine`. Un membro segue punti fissi, cambia stato a scadenze, si
+scansa con spinte pesate e si sblocca con una regola a tempo. Basta per una parvenza
+viva, e resta fra le cose che vorrei ridefinire.
 
 ### Il rivelo
 
-Finita la rivelazione della città, il runtime aspetta 1.000 ms e poi fa partire
-1.400 ms di materializzazione. Ogni gruppo ha un piano di taglio (clipping plane:
-oltre il piano i frammenti non si disegnano) con normale verso il basso, attaccato
-ai materiali solo quando cambia. L'altezza di ciascuno è misurata una volta; la
-quota del taglio sale dal 6% al 100% dell'altezza, e il piano sta un 4% più su
-della luce, così il corpo si forma dietro l'anello. Durante il rivelo il corpo è
-opaco, non un fantasma che si solidifica, e l'emissiva sale da 0,2 a 1 della base, e sopra si somma una pulsazione
-moltiplicata per 2,3. Gli anelli sono un solo `InstancedMesh` di tori (una geometria
-disegnata N volte in una sola chiamata di disegno), raggio 2,7, additivi (i colori
-si sommano), un'istanza per soggetto alla quota del suo taglio, con opacità
-`sin(π × avanzamento)`. La misura in Chromium: 18 anelli accesi sui personaggi in
-vista, opacità 0,07 all'inizio e 1,00 a metà corsa.
+Finito il rivelo della città, il runtime aspetta 1.000 ms e fa partire 1.400 ms di
+materializzazione. Ogni gruppo ha un clipping plane con normale verso il basso,
+attaccato ai materiali solo quando cambia. L'altezza di ciascuno è misurata una
+volta; la quota del taglio sale dal 6% al 100% dell'altezza, e il piano sta un 4%
+più su della luce, così il corpo si forma dietro l'anello. Durante il rivelo il
+corpo è opaco, non un fantasma che si solidifica, e l'emissiva sale da 0,2 a 1 della
+base, con sopra una pulsazione moltiplicata per 2,3. Gli anelli sono un solo
+`InstancedMesh` di tori, raggio 2,7, additivi, un'istanza per soggetto alla quota
+del suo taglio, con opacità `sin(π × avanzamento)`. La misura in Chromium: 18 anelli
+accesi sui personaggi in vista, opacità 0,07 all'inizio e 1,00 a metà corsa.
 
 ### Il battito
 
-Il tempo viene dall'elemento audio della colonna sonora, prodotta dall'autore con
-Suno (piano Pro): 128 bpm. Le battute sono `tempo × 128/60`; la fase è la parte
+Il tempo viene dall'elemento audio della colonna sonora, che ho prodotto con Suno
+(piano Pro): 128 bpm. Le battute sono `tempo × 128/60`; la fase è la parte
 frazionaria; il valore è `exp(−fase × decadimento)`, e il moltiplicatore
-`1 + valore × 3` tagliato a 4. A ogni fotogramma l'emissiva di tutti i materiali
-della folla e del sorgente diventa `base × moltiplicatore`, con un tetto a 24 che
-una prova tiene sopra 3 × 1,6 × 4 = 19,2, il caso di chi sta in pausa a piena
-battuta. Le scritture sotto 0,0005 si saltano, e l'intero passaggio si salta se
-niente è cambiato. Un percorso alternativo dal kick dell'equalizzatore esiste, ma è
-spento.
+`1 + valore × 3` tagliato a 4. A ogni frame l'emissiva di tutti i materiali della
+folla e del sorgente diventa `base × moltiplicatore`, con un tetto a 24 che un test
+tiene sopra 3 × 1,6 × 4 = 19,2, il caso di chi sta in pausa a piena battuta. Le
+scritture sotto 0,0005 si saltano, e l'intero passaggio si salta se niente è
+cambiato. Un percorso alternativo dal kick dell'equalizzatore esiste, spento.
 
 L'intensità dei LED nasce da una costante moltiplicata per i cursori del pannello,
-e il risultato passa per un tetto. Chi sta in pausa parte da 1,6 volte la base,
-perché non cammina e senza il movimento a segnalarlo si perdeva nel fondo. Questa
-catena di moltiplicazioni e tetti è la famiglia di problemi che le prove sulle
-invarianti tengono sotto controllo: un valore che ne annulla un altro non si vede a
-schermo, si vede solo mettendo la relazione sotto prova.
+poi passa per un tetto. Chi sta in pausa parte da 1,6 volte la base, perché
+non cammina e senza il movimento a segnalarlo si perdeva nel fondo. Catene di
+moltiplicazioni e tetti come questa sono quello che i test sulle invarianti tengono
+sotto controllo: un valore che ne annulla un altro non si vede a schermo, si vede
+solo mettendo la relazione sotto test.
 
 ### I passi
 
 Nel ciclo del passo i contatti sono a fase 0,18 (sinistro) e 0,68 (destro),
 rilevati anche quando la fase riparte da 0, e un passo scatta solo se la distanza
-percorsa supera 0,001. Il suono userebbe un bus spaziale con HRTF (la funzione di
-trasferimento della testa, per sentire da dove arriva), intervallo minimo 105 ms,
-passa-basso a 1.900 Hz sul marciapiede e 1.550 sulla strada. Ma l'aggiornamento
-esce subito se il personaggio sorgente è invisibile, e lo è: nessun passo viene mai
-suonato, e la folla non chiama funzioni di passi.
+percorsa supera 0,001. Il suono userebbe un bus spaziale con HRTF, intervallo minimo
+105 ms, passa-basso a 1.900 Hz sul marciapiede e 1.550 sulla strada. Ma
+l'aggiornamento esce subito se il personaggio sorgente è invisibile, e lo è: nessun
+passo viene mai suonato, e la folla non chiama funzioni di passi.
 
 ### I riflessi a pavimento
 
-Un riflesso è il gruppo dei due cloni scalato `(1, −0,58, 1)` a quota 0,018, senza
+Un riflesso è il gruppo dei 2 cloni scalato `(1, −0,58, 1)` a quota 0,018, senza
 test di profondità. Il budget è di 2 riflessi attivi entro 240 unità, i più vicini;
-sotto 50 fps uno in meno, sotto 42 nessuno, con una rampa di 2.400 ms dopo la
-rivelazione. Se un palazzo sta fra la camera e il membro (un test segmento contro
+sotto 50 fps uno in meno, sotto 42 nessuno, con una rampa di 2.400 ms dopo il
+rivelo. Se un palazzo sta fra la camera e il membro (test segmento contro
 rettangolo, in pianta), il riflesso si spegne.
 
 ## Perché così e non altrimenti
 
-- **Il passo guidato dalla distanza, non dal tempo.** L'alternativa era il mixer a
-  tempo: i piedi scivolavano in corsa e durante la pausa. Con la distanza si
-  piantano, e in pausa restano fermi.
-- **Cambio secco da idle a corsa per chi accoglie.** La dissolvenza non può
-  avanzare quando la sincronizzazione chiama il mixer con delta zero.
-- **Trenta membri e non sessanta.** Da 29 a 40 per una prima passata “più viva”,
-  poi 60 per un boulevard più affollato contando su culling, LOD e budget dei
-  riflessi; lo stesso giorno 30 e budget dei riflessi da 3 a 2, per recuperare
-  fotogrammi.
-- **Due soli sulla strada di partenza, colori fissi.** Prima il gruppo era passato
-  da 3 a 5 per spostare la folla sul boulevard; poi 2, un ciano e un verde ai
-  fianchi del giocatore.
+- **Il passo guidato dalla distanza, non dal tempo.** Con l'`AnimationMixer` a tempo
+  i piedi scivolavano in corsa e in pausa; con la distanza si piantano, e in pausa
+  restano fermi.
+- **Cambio secco da `Idle` a `Run` per chi accoglie.** La dissolvenza non può
+  avanzare quando la sincronizzazione chiama l'`AnimationMixer` con delta zero.
+- **30 membri e non 60.** Da 29 a 40 per una prima passata “più viva”, poi 60 per un
+  boulevard più affollato contando su culling, LOD e budget dei riflessi; lo stesso
+  giorno 30 e budget dei riflessi da 3 a 2, per recuperare frame.
+- **2 soli sulla strada di partenza, colori fissi.** Prima il gruppo era passato da
+  3 a 5 per spostare la folla sul boulevard; poi 2, un ciano e un verde ai fianchi
+  del giocatore.
 - **Chi accoglie salta la ressa ed è esente dal culling.** Deve arrivare sempre;
   solo la testa si gira, entro 80 gradi.
-- **Cartello come piano a un asse, ancorato al corpo.** Lo sprite si inclinava
+- **Cartello come piano a un asse, ancorato al corpo.** Lo `Sprite` si inclinava
   guardando in alto o in basso; l'osso della testa oscilla di 80 gradi e faceva
   dondolare il cartello.
 - **Cartello di benvenuto dimezzato, quello dei reparti pure.** Il primo riempiva
@@ -356,8 +342,8 @@ Cose che non so spiegare, e lo dico:
   questo branch: la parola `corridor` non compare in `src/` e nessun commit ha quel
   soggetto. Se esiste altrove, è da riconciliare.
 - I passi audio sono scritti (135 righe, bus spaziale, HRTF) e non suonano mai,
-  perché il sorgente è invisibile; la folla cammina in silenzio. Nessuna fonte
-  dice se è voluto.
+  perché il sorgente è invisibile: la folla cammina in silenzio, e nessuna fonte dice
+  se è voluto.
 - Il sorgente resta invisibile come padre dei cloni e portatore della scala, con
   rotta, ombra e riflesso propri. Nessun commit spiega perché non è un membro della
   folla.
@@ -365,21 +351,21 @@ Cose che non so spiegare, e lo dico:
   giugno che sincronizzano ai bassi e poi bloccano il bpm non hanno corpo.
 - Il decadimento del battito vale 8 nelle costanti e 3 nel file canonico dei
   cursori.
-- Lo stile di rotta che attraversa la strada fra due palazzi è implementato e mai
+- Lo stile di rotta che attraversa la strada fra 2 palazzi è implementato e mai
   prodotto.
-- Un secondo modello per chi accoglie è esistito quattro giorni a giugno; il commit
+- Un secondo modello per chi accoglie è esistito 4 giorni a giugno; il commit
   che lo toglie non lo dice.
 - Il GLB del sorgente non porta metadati d'autore, a differenza dei modelli della
-  copertina che li hanno dentro il file: la provenienza si ricostruisce dai nomi delle
-  ossa e dei materiali, che sono quelli della base Mixamo.
+  copertina che li hanno dentro il file: la provenienza si ricostruisce dai nomi di
+  ossa e materiali, quelli della base Mixamo.
 
 ## I numeri
 
 | cosa | valore | fonte e data |
 |---|---|---|
-| membri della folla | 30, di cui 2 sulla strada di partenza | `src/character/characters.js`, letto il 2026-09-20 |
-| modello sorgente | 1.229.812 byte, 49 giunti, 4 clip da 156 canali | intestazione del GLB, letta il 2026-09-20 |
-| dieta del modello | 2,16 MB → 1,23 MB, due JPEG mai mostrate | commit c84edc8c, 2026-07-08 |
+| membri della folla | 30, di cui 2 sulla strada di partenza | `src/character/characters.js`, 2026-09-20 |
+| modello sorgente | 1.229.812 byte, 49 giunti, 4 clip da 156 canali | intestazione del GLB, 2026-09-20 |
+| dieta del modello | 2,16 MB → 1,23 MB, 2 JPEG mai mostrate | commit c84edc8c, 2026-07-08 |
 | altezza | sorgente 8,66, scala canonica 0,55, folla circa 4,76 | `src/character/characters.js`; `boulevard-canonical-settings.json` |
 | aggiornamento folla | 45 Hz, accumulo massimo 0,12 s, sottopassi 0,035 s | `src/character/characters.js` |
 | LOD e culling | stride 1 / 2 / 4 a 190 / 520 / oltre; culling a 900, sfera 24 | `src/character/characters.js` |
@@ -387,10 +373,10 @@ Cose che non so spiegare, e lo dico:
 | pausa al waypoint | 28%, 900-2.800 ms | `src/config/costanti.js` |
 | avoidance | vicini raggio 5,2 forza 7,5; giocatore raggio 3,6 forza 12 | `src/character/characters.js` |
 | chi accoglie | parte a 16 dietro e 2,8 di lato; saluta a 7,4; benvenuto 3.600 ms; Seguimi 8.000 ms | `src/character/runner-greeter.js`; `src/character/runner-crowd-runtime.js` |
-| battute | 41 per lingua, 3 a testa, entro 15, riarmo a 18, 4.000 ms | `src/character/runner-crowd-lines.js`, conteggio del 2026-09-20 |
+| battute | 41 per lingua, 3 a testa, entro 15, riarmo a 18, 4.000 ms | `src/character/runner-crowd-lines.js`, 2026-09-20 |
 | cartelli | canvas 896x360, folla 448x180, cache 48, logo a 15 Hz, apertura 420 ms | `src/character/speech-bubbles.js` |
 | cache prima del tetto | circa 40 texture, circa 70 MB di GPU | commit 8666e535, 2026-07-08 |
-| LED dei personaggi | intensità di base moltiplicata dal battito fino a quattro volte, con un tetto | `src/character/runner-crowd-leds.js`, letto il 2026-09-20 |
+| LED dei personaggi | base moltiplicata dal battito fino a 4 volte, con un tetto | `src/character/runner-crowd-leds.js`, 2026-09-20 |
 | rivelo | attesa 1.000 ms, durata 1.400 ms, 18 anelli in vista | `src/character/runner-reveal.js`; commit a8c3c23d, 2026-09-18 |
 | battito | 128 bpm, decadimento 3 nel file canonico | `src/character/characters.js`; `boulevard-canonical-settings.json` |
 | folla ridotta | 60 → 30, riflessi 3 → 2 | commit b03119f5, 2026-06-17 |
@@ -418,23 +404,22 @@ Cose che non so spiegare, e lo dico:
 | `src/character/runner-wiring.js` | 1128 | cablaggio del dominio e lettura dei cursori |
 | `vendor/SkeletonUtils.js` | | il clone dello scheletro |
 
-Le prove: `runner-crowd-runtime.test.mjs` verifica la partenza di chi accoglie a 16
-unità con circa sei passi, i testi bilingue e i tempi; `runner-reveal.test.mjs` fa
-il rivelo su tre personaggi finti di altezza diversa e controlla che il taglio si
-fermi alla testa; `speech-bubbles.test.mjs` e `cartelli-scena.test.mjs` provano la
-riga del logo, l'opacità piena e l'orientamento del cartello di chi sta in pausa;
-`cartelli-apparizione.test.mjs` e `cartelli-collisioni.test.mjs` provano il
-montaggio dal basso e lo scansamento; `invarianti.test.mjs` tiene il `renderOrder`
-massimo e il tetto del battito.
+I test, con `node:test`: `runner-crowd-runtime.test.mjs` verifica la partenza di chi
+accoglie a 16 unità con circa 6 passi, i testi bilingue e i tempi;
+`runner-reveal.test.mjs` fa il rivelo su 3 personaggi finti di altezza diversa e
+controlla che il taglio si fermi alla testa; `speech-bubbles.test.mjs` e
+`cartelli-scena.test.mjs` provano la riga del logo, l'opacità piena e l'orientamento
+del cartello di chi sta in pausa; `cartelli-apparizione.test.mjs` e
+`cartelli-collisioni.test.mjs` il montaggio dal basso e lo scansamento;
+`invarianti.test.mjs` tiene il `renderOrder` massimo e il tetto del battito.
 
 ## Per chi viene dal backend
 
-Un membro della folla è un worker con una macchina a stati e una scadenza per
-stato; la griglia spaziale è un indice spaziale, come un geohash, per non
-confrontare tutti con tutti. L'aggiornamento a 45 Hz con accumulatore è uno
-scheduler a tick fisso che assorbe le irregolarità dei fotogrammi; la coda che
-costruisce un membro per fotogramma è un batch spezzato in job piccoli per non
-bloccare il thread. La cache LRU delle texture è una cache con sfratto, il prewarm
-nei tempi morti è il warm-up prima di aprire il traffico, e il clone dello
-scheletro è il pattern degli asset immutabili condivisi per riferimento, con solo lo
-stato mutabile copiato per istanza.
+Un membro della folla è un worker con macchina a stati e scadenza per stato; la
+griglia spaziale è un indice tipo geohash, per non confrontare tutti con tutti.
+L'aggiornamento a 45 Hz con accumulatore è uno scheduler a tick fisso che assorbe le
+irregolarità dei frame; la coda che costruisce un membro per frame è un batch
+spezzato in job piccoli per non bloccare il thread. Il prewarm in
+`requestIdleCallback` è il warm-up prima di aprire il traffico, e
+`SkeletonUtils.clone` è il pattern degli asset immutabili condivisi per riferimento,
+con il solo stato mutabile copiato per istanza.

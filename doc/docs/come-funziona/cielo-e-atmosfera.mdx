@@ -18,7 +18,7 @@ L'eccezione nota del cursore della luminosità è omessa per decisione dell'auto
 
 :::info Se è la prima volta
 
-Il cielo non è una fotografia: è calcolato, nuvola per nuvola, da un programma che gira sulla scheda grafica. Calcolarlo a ogni fotogramma costerebbe metà del tempo disponibile, e questo capitolo spiega il compromesso che lo rende sostenibile.
+Il cielo non è una fotografia: è calcolato, nuvola per nuvola, da un programma che gira sulla GPU. Calcolarlo a ogni frame costerebbe metà del tempo disponibile, e questo capitolo spiega il compromesso che lo rende sostenibile.
 
 :::
 
@@ -27,32 +27,28 @@ Il cielo non è una fotografia: è calcolato, nuvola per nuvola, da un programma
 Sopra la città c'è un cielo di nuvole scure con i bordi verde acqua, che scorrono
 piano e non finiscono mai. Con il cielo scelto dal file canonico, dentro le nuvole
 passano lampi: scintille locali e raffiche a glitch, in una fascia sopra l'orizzonte.
-Nell'aria salgono e derivano 400 punti ciano, polvere o braci, che il bloom ammorbidisce.
-Nella scena non c'è nebbia: nessun effetto di foschia è dichiarato, e i materiali la
-escludono esplicitamente.
+Nell'aria salgono e derivano 400 punti ciano, polvere o braci, che il bloom
+ammorbidisce. Nella scena non c'è nebbia.
 
 ![Il cielo procedurale sopra il boulevard](/img/cielo.webp)
 
 ## Il problema
 
-Il cielo non è una texture: è calcolato per pixel, ogni fotogramma, da uno shader
-procedurale, cioè una formula che gira sulla scheda grafica per ogni pixel, senza
-immagini. Nel ramo `full`, quello di serie sul computer, ogni pixel di cielo valuta
+Il cielo non è una texture: è calcolato per pixel, ogni frame, da uno shader
+procedurale. Nel ramo `full`, quello di serie su desktop, ogni pixel di cielo valuta
 circa 11 campi di rumore 3D a più ottave, circa 340 operazioni fra seni e hash. Il
-cielo copre più o meno la metà del fotogramma a livello strada. Metà del frame, ogni
-frame, per sempre.
+cielo copre circa metà del frame a livello strada. Metà del frame, ogni frame, per
+sempre.
 
-Il ramo `balanced` costa circa 3,5 volte meno. Sul telefono il cielo è comunque il
-primo costo di riempimento: spegnendolo con `?fx.sky=0` ho misurato 5,4 fotogrammi al
-secondo in più. Ridurre le ottave, gli strati di rumore sommati, non ha pagato: il
-resto dello shader gira lo stesso.
+Il ramo `balanced` costa circa 3,5 volte meno. Su mobile il cielo resta comunque il
+primo costo di fill: spegnendolo con `?fx.sky=0` ho misurato 5,4 fps in più. Ridurre
+le ottave non ha pagato: il resto dello shader gira lo stesso.
 
-C'è un secondo problema, meno visibile. Nuvole e luci vanno a tempo di
-`performance.now()`, l'orologio del browser in millisecondi dall'apertura della
-pagina. Una scena “ferma” non è mai ferma: due fotogrammi a 3 secondi di distanza
-differiscono del 2,3%, e la baseline della mattina batteva quelle del pomeriggio del
-3,7% a codice identico. Bloccare quell'orologio non si può senza toccare molti moduli:
-il README della baseline ne conta quindici.
+C'è un secondo problema, meno visibile: nuvole e luci vanno a tempo di
+`performance.now()`, e una scena “ferma” non è mai ferma. 2 frame a 3 secondi di
+distanza differiscono del 2,3%, e la baseline della mattina batteva quelle del
+pomeriggio del 3,7% a codice identico. Bloccare quell'orologio non si può senza
+toccare molti moduli: il README della baseline ne conta 15.
 
 ## Come funziona
 
@@ -60,25 +56,23 @@ il README della baseline ne conta quindici.
 
 `createSkyDome` costruisce una sfera di raggio 8.500 unità, 32 per 18 segmenti,
 disegnata dall'interno (`side: BackSide`), con `renderOrder = 1000` e
-`frustumCulled = false`, cioè senza il salto che di norma esclude gli oggetti fuori
-dal cono della camera. A ogni fotogramma `update(now)` copia la posizione della
-camera sulla sfera, così il cielo sembra all'infinito. Il vertex shader passa solo la direzione normalizzata del vertice.
+`frustumCulled = false`. A ogni frame `update(now)` copia la posizione della camera
+sulla sfera, così il cielo sembra all'infinito. Il vertex shader passa solo la
+direzione normalizzata del vertice.
 
 ### Lo shader delle nuvole
 
 Il colore parte da un gradiente scuro fra `low` e `top`. Poi entra il campo delle
-nuvole, che è rumore: hash a seno, value noise 2D e 3D (un rumore continuo ottenuto
-interpolando una funzione hash), somme `fbm` a 4 ottave (strati a scale crescenti e
-ampiezze decrescenti) e `ridge` a 3 (il rumore ripiegato, `1 - |2n - 1|`, che produce
-creste). Varianti a 2 ottave servono i livelli economici del telefono.
+nuvole, che è rumore: hash a seno, value noise 2D e 3D, `fbm` a 4 ottave e `ridge` a
+3 (`1 - |2n - 1|`). Varianti a 2 ottave servono i livelli economici su mobile.
 
-Il punto di campionamento è `cloudP = dir * 1,45 + deriva`. Un domain warp a tre
-componenti lo deforma con altro rumore prima di campionare, e da `warpedP` escono
-quattro campi: `broad`, `detail`, `rolling`, `under`. Il ramo `full`
-(`uSkyQuality > 0,5`) spende tre `fbm3` di warp, due più due `fbm3`/`ridge3` per
-`broad` e `detail`, quattro `fbm3` per `rolling` e `under`, con un morphing fra
-coppie; `aggressive` e `conservative` (`uSkyCheap` sopra 1,5 o 0,5) usano le
-varianti a 2 ottave; `balanced` un `fbm3`, un `ridge3` e due `noise3`, 7 ottave in tutto.
+Il punto di campionamento è `cloudP = dir * 1,45 + deriva`. Un domain warp a 3
+componenti lo deforma con altro rumore prima di campionare, e da `warpedP` escono 4
+campi: `broad`, `detail`, `rolling`, `under`. Il ramo `full` (`uSkyQuality > 0,5`)
+spende 3 `fbm3` di warp, 2 più 2 `fbm3`/`ridge3` per `broad` e `detail`, 4 `fbm3` per
+`rolling` e `under`, con un morphing fra coppie; `aggressive` e `conservative`
+(`uSkyCheap` sopra 1,5 o 0,5) usano le varianti a 2 ottave; `balanced` 1 `fbm3`, 1
+`ridge3` e 2 `noise3`, 7 ottave in tutto.
 
 La composizione è `cloudRaw = broad * 0,68 + detail * 0,18 + rolling * 0,24`. Un
 contrasto `uCloudContrast` (fra 0 e 5) stringe il campo intorno a 0,5, una maschera
@@ -94,20 +88,19 @@ rotazione di tonalità `hueShift` e la moltiplicazione per `uBrightness`.
 `applySkyPreset(choice, brightness, hueDeg, quality)` prende il colore base da
 `skyPalette` e lo passa a `tunedColor`, che lavora in HSL: somma la tonalità in
 gradi, scala saturazione e luminosità, blocca fra 0 e 1. Quel colore,
-`skyDisplayColor`, finisce in `scene.background`, nella uniform `uSkyTint` (una
-uniform è un valore che la CPU passa allo shader, uguale per tutti i pixel) e nella
+`skyDisplayColor`, finisce in `scene.background`, nella uniform `uSkyTint` e nella
 forza della tinta: 0,08 per `void`, 0,26 per `steel`, 0,42 per gli altri. La qualità
-viene da `?skyQuality=` se c'è, altrimenti è `balanced` sul telefono, altrimenti dal
+viene da `?skyQuality=` se c'è, altrimenti è `balanced` su mobile, altrimenti dal
 pannello. `uSkyCheap` viene da `?skyCheap=` o da `SKY_CHEAP_MOBILE_DEFAULT = 0`. I
-sei cursori del temporale scrivono direttamente le uniform `uStorm*`.
+6 cursori del temporale scrivono direttamente le uniform `uStorm*`.
 
 ### I lampi
 
-Si accendono solo con `uLightningMode > 0,5`, cioè con la scelta di cielo del JSON
-canonico; con le altre cinque (`storm`, `void`, `grid`, `teal`, `steel`) restano
-spenti. Un `lightningThread` (ridge a scala 7,8 nel `full`, `noise3` nel `balanced`)
-è confinato in una fascia regolata da `uStormBand` e da un `cloudGate` sulla soglia
-`uStormCloudThreshold`. Sopra corrono due orologi: le raffiche `glitchBurst` a celle
+Si accendono solo con `uLightningMode > 0,5`, la scelta di cielo del JSON canonico;
+con le altre 5 (`storm`, `void`, `grid`, `teal`, `steel`) restano spenti. Un
+`lightningThread` (ridge a scala 7,8 nel `full`, `noise3` nel `balanced`) è confinato
+in una fascia regolata da `uStormBand` e da un `cloudGate` sulla soglia
+`uStormCloudThreshold`. Sopra corrono 2 orologi: le raffiche `glitchBurst` a celle
 temporali (`floor(t * 1,86)`) e le scintille, una per cella di
 `sparkClock = uTime * 5,234375 * frequenza`, con centro pseudo-casuale e decadimento
 `1 - d² / (0,01171875 * uStormSize)`. `uStormVeil` vela. Il colore è
@@ -115,54 +108,51 @@ temporali (`floor(t * 1,86)`) e le scintille, una per cella di
 
 ### Il bake a cubo
 
-Qui sta il fatto centrale: il cielo che vedete non è la cupola, è una fotografia
-della cupola. Una `CubeCamera(1, 20000)` la fotografa in un `WebGLCubeRenderTarget`,
-sei immagini quadrate che coprono tutte le direzioni, e quel cubo diventa
-`scene.background`, che three.js disegna con un campionamento economico. La cupola
-vera, `domeMesh`, si nasconde.
+Il fatto centrale: il cielo che vedete non è la cupola, è una fotografia della
+cupola. Una `CubeCamera(1, 20000)` la fotografa in un `WebGLCubeRenderTarget`,
+6 facce che coprono tutte le direzioni, e quel cubo diventa `scene.background`, che
+three.js campiona a buon mercato. La cupola vera, `domeMesh`, si nasconde.
 
-Il bake è acceso di default su computer e telefono, con cubo di 512 pixel per faccia
-sul primo e 128 sul secondo; `?skyBake=0|1` forza. È “spread”: rifaccio una faccia
-ogni `SKY_BAKE_FACE_STRIDE = round(12 / 6) = 2` fotogrammi, e il ciclo delle sei
-facce dura 12 fotogrammi. `?skyBakeSpread=0` torna al bake intero ogni 12.
+Il bake è acceso di default su desktop e mobile, con cubo di 512 pixel per faccia sul
+primo e 128 sul secondo; `?skyBake=0|1` forza. È “spread”: rifaccio una faccia
+ogni `SKY_BAKE_FACE_STRIDE = round(12 / 6) = 2` frame, e il ciclo delle 6 facce dura
+12 frame. `?skyBakeSpread=0` torna al bake intero ogni 12.
 
 ```mermaid
 flowchart TB
   A[Rivelo finito<br/>stato stazionario] --> B[Faccia 0<br/>cattura cycleNow]
   B --> C[Render faccia n<br/>camera figlia n]
   C --> D{sesta faccia?}
-  D -- no --> E[2 fotogrammi] --> C
+  D -- no --> E[2 frame] --> C
   D -- sì --> F[mipmap<br/>needsPMREMUpdate]
   F --> G[cubo = scene.background<br/>cupola nascosta]
-  G --> H[2 fotogrammi] --> B
+  G --> H[2 frame] --> B
   G -. rivelo o composito attivo .-> I[bake azzerato<br/>cupola visibile]
 ```
 
-Le sei facce di un ciclo condividono lo stesso istante, `cycleNow`, catturato sulla
+Le 6 facce di un ciclo condividono lo stesso istante, `cycleNow`, catturato sulla
 faccia 0. Ogni faccia usa la camera figlia `cubeCam.children[faceIndex]` e
-`renderer.setRenderTarget(cubeRT, faceIndex, 0)`; le mipmap (le copie a risoluzione
-decrescente della texture) si generano solo sull'ultima, si alza `needsPMREMUpdate`,
-e si ripristinano target, faccia attiva, mip e `xr.enabled`. La sorgente è la scena
-cielo del rivelo con `background = null`: la cupola copre tutte le direzioni, una
-tinta piatta di clear non serve.
+`renderer.setRenderTarget(cubeRT, faceIndex, 0)`; le mip si generano solo
+sull'ultima, si alza `needsPMREMUpdate`, e si ripristinano target, faccia attiva, mip
+e `xr.enabled`. La sorgente è la scena cielo del rivelo con `background = null`: la
+cupola copre tutte le direzioni, una tinta piatta di clear non serve.
 
 Il bake vale solo in stato stazionario:
 `syncSkyBackgroundBake(now, cityRevealComplete && !isCityRevealCompositeActive())`.
-Fuori da quello stato il bake si azzera e la cupola torna visibile con
+Fuori di lì si azzera e la cupola torna visibile con
 `scene.background = skyDisplayColor`. Se il profilo cambia a metà sessione, il cubo
-viene ricostruito alla dimensione giusta.
+si ricostruisce alla dimensione giusta.
 
-Una conseguenza da dire: con il bake attivo la cupola è nascosta, e `update(now)`
-avanza `uTime` solo se la cupola è visibile. Il tempo del cielo avanza ai bake, e le
-nuvole procedono a scatti di 12 fotogrammi.
+Una conseguenza: la cupola nascosta non avanza `uTime`, che `update(now)` muove solo
+quando è visibile; il tempo del cielo procede ai bake, a scatti di 12 frame.
 
 ### Il cielo del rivelo
 
 Il rivelo della città ha una sua scena cielo, `cityRevealSkyScene`, con un clone della
 cupola (`domeMat.clone()`) sincronizzato uniform per uniform. Mentre il budget del
 rivelo è attivo (wireframe acceso, rivelo non completo) la qualità del clone è forzata
-a 0. Quella scena è il primo pass del composer (`RenderPass` con `clear = true`) o il
-primo render diretto.
+a 0. Quella scena è il primo pass dell'EffectComposer (`RenderPass` con `clear = true`)
+o il primo render diretto.
 
 ### Le particelle
 
@@ -172,17 +162,16 @@ Nel vertex shader la deriva è
 `cell + mod(position + drift - cell, uBox)` con `cell = cameraPosition - uBox / 2`: la
 scatola è agganciata alla camera e i punti ricircolano dentro, sfumati verso i bordi
 da uno `smoothstep` (0,7..1,0 in X e Z, 0,6..1,0 in Y) così il ricircolo non si vede.
-Il fragment disegna un disco morbido, scarta fuori dal raggio e somma in additivo
-(luce su luce) con `depthWrite: false`, `renderOrder = 22`, `boundingSphere` di raggio
-1e9 e `frustumCulled = false`. L'orologio è `uTime = now * 0,001`, lo stesso degli
-impulsi sui LED. Si vedono solo a rivelo completato.
+Il fragment shader disegna un disco morbido, scarta fuori dal raggio e somma in
+additivo con `depthWrite: false`, `renderOrder = 22`, `boundingSphere` di raggio 1e9 e
+`frustumCulled = false`. L'orologio è `uTime = now * 0,001`, lo stesso degli impulsi
+sui LED. Si vedono solo a rivelo completato.
 
 ### La nebbia che non c'è
 
-Nel progetto non esiste `scene.fog`, e i materiali portano `fog: false`. Quello che
-riempie l'aria sono le particelle atmosferiche, descritte qui sopra; nessuna fonte
-dice che cosa, esattamente, produca l'impressione di foschia che resta guardando in
-fondo al viale.
+Nel progetto non esiste `scene.fog`, e i materiali portano `fog: false`. A riempire
+l'aria sono le particelle atmosferiche; nessuna fonte dice che cosa produca
+l'impressione di foschia che resta guardando in fondo al viale.
 
 ### L'orologio
 
@@ -192,43 +181,42 @@ tick è fisso: movimento e folla, `skyDome.update(now)`, `syncSkyBackgroundBake`
 tabelloni, `updateEdgePulse`, `updateAtmosphereParticles`, le abilitazioni di bloom,
 look, TAA e merge, il culling statico, il render composito.
 
-Per il gate visivo questo conta: la fotografia si scatta a
-`performance.now() >= 60000`, l'orologio da cui dipendono luci e nuvole, così le fasi
-coincidono fra sessioni, con una raffica di 40 fotogrammi. A istante fisso due
-sessioni differiscono dello 0,22%.
+Per il gate visivo conta: la fotografia si scatta a `performance.now() >= 60000`, così
+le fasi di luci e nuvole coincidono fra sessioni, con una raffica di 40 frame. A
+istante fisso 2 sessioni differiscono dello 0,22%.
 
 ### Interruttori e ispezione
 
-`?fx.sky=0` e `?fx.particles=0` spengono i due sottosistemi, solo sul profilo mobile
-o con `?forceMobile=1`. Dalla console il gancio di ispezione espone `.storm` (le
+`?fx.sky=0` e `?fx.particles=0` spengono i 2 sottosistemi, solo sul profilo mobile
+o con `?forceMobile=1`. Dalla console `window.__tronInspect()` espone `.storm` (le
 uniform del temporale) e `.skyBake` (lo stato del bake). Il benchmark registra
 `skyQuality`, `skyBakeSpread` e `skyBakeFaceStride` in ogni cattura.
 
 ## Perché così e non altrimenti
 
 - **Il bake, non la riduzione delle ottave.** Ridurre le ottave non pagava, il resto
-  dello shader gira comunque. Ho preferito fotografare il cielo in un cubo da 128
-  pixel ogni 12 fotogrammi e riusarlo come `scene.background`. Vale perché il cielo è
-  uno sfondo liscio all'infinito: il cubo resta valido mentre la camera si muove, solo
-  la deriva lenta si aggiorna al bake successivo.
+  dello shader gira comunque; meglio fotografare il cielo in un cubo da 128 pixel ogni
+  12 frame e riusarlo come `scene.background`. Vale perché il cielo è uno sfondo
+  liscio all'infinito: il cubo resta valido mentre la camera si muove, e solo la
+  deriva lenta si aggiorna al bake successivo.
 - **Partito spento, promosso dopo un A/B sul dispositivo.** Il default mobile è
-  rimasto `false` finché un confronto sul telefono non ha confermato che il guadagno di
-  riempimento batteva il picco periodico del bake.
-- **Acceso anche sul computer, con cubo da 512.** Il ramo `full` è il default sul
-  desktop e valuta circa 11 campi di rumore per pixel; il cubo più grande tiene il
-  dettaglio per cui quel ramo esiste.
-- **Un istante solo per le sei facce.** Senza `cycleNow` ogni faccia era un paio di
-  fotogrammi più avanti della precedente: cuciture lungo gli spigoli del cubo.
+  rimasto `false` finché il confronto non ha confermato che il guadagno di fill
+  batteva il picco periodico del bake.
+- **Acceso anche su desktop, con cubo da 512.** Il ramo `full` è il default lì e
+  valuta circa 11 campi di rumore per pixel; il cubo più grande tiene il dettaglio per
+  cui quel ramo esiste.
+- **Un istante solo per le 6 facce.** Senza `cycleNow` ogni faccia era un paio di
+  frame più avanti della precedente: cuciture lungo gli spigoli del cubo.
 - **Il bake solo dopo il rivelo.** Il percorso del cielo durante il rivelo resta intatto.
 - **Mobile forzato a `balanced`.** Il default `full` del pannello passava da
-  `applySkyPreset` senza un cancello per il telefono, e gli screenshot `full` e
+  `applySkyPreset` senza un cancello per il mobile, e gli screenshot `full` e
   `balanced` in prima persona sono indistinguibili.
 - **Le nuvole più veloci del 50%.** `SKY_ANIMATION_SPEED` da 0,3 a 0,45, il solo
   numero in gioco: misurato 0,300 al secondo prima, 0,450 dopo.
 - **Particelle additive e sfumate ai bordi.** Il bloom le trasforma in braci morbide,
   e il ricircolo nella scatola non si vede.
 - **Il gate fotografa a 60 secondi di orologio.** Le fasi di luci e nuvole coincidono
-  fra sessioni; la raffica di 40 fotogrammi fa il resto.
+  fra sessioni; la raffica di 40 frame fa il resto.
 
 Cose che non so spiegare, e lo dico:
 
@@ -238,9 +226,9 @@ Cose che non so spiegare, e lo dico:
   non ha corpo.
 - Un modulo “cinematic atmosphere”, 229 righe, è stato aggiunto e ritirato lo stesso
   giorno di agosto 2026, con un revert senza motivazione.
-- Con il bake attivo le nuvole avanzano a scatti di 12 fotogrammi; nessun documento
+- Con il bake attivo le nuvole avanzano a scatti di 12 frame; nessun documento
   dice se è stato accettato o misurato.
-- Il README della baseline conta quindici file con `performance.now()`; il conteggio
+- Il README della baseline conta 15 file con `performance.now()`; il conteggio
   del 2026-09-20 ne dà 28 in `src/`.
 
 ## I numeri
@@ -249,14 +237,14 @@ Cose che non so spiegare, e lo dico:
 |---|---|---|
 | cupola | raggio 8.500, 32x18 segmenti, `CubeCamera(1, 20000)` | `src/world/sky-dome.js`, letto il 2026-09-20 |
 | velocità delle nuvole | 0,45 (era 0,3) | `src/world/sky-dome.js`; commit 481daf57, 2026-09-19 |
-| cubo del bake | 512 desktop, 128 mobile; ciclo 12 fotogrammi; una faccia ogni 2 | `src/world/sky-dome.js`; `src/world/sky-dome.test.mjs` |
+| cubo del bake | 512 desktop, 128 mobile; ciclo 12 frame; una faccia ogni 2 | `src/world/sky-dome.js`; `src/world/sky-dome.test.mjs` |
 | texel per ciclo desktop | 6 x 512 x 512 = 1.572.864 | calcolo dalle costanti di `src/world/sky-dome.js`, 2026-09-20 |
 | costo `full` contro `balanced` | circa 3,5x; circa 340 operazioni seno/hash per pixel | `src/world/sky-dome.js`; commit 36266d52, 2026-07-09 |
 | ramo `balanced` | 7 ottave di rumore 3D per pixel | commit 78247e3f, 2026-07-09 |
-| cielo spento sul telefono | +5,4 fps | commit 78247e3f, 2026-07-09 |
+| cielo spento su mobile | +5,4 fps | commit 78247e3f, 2026-07-09 |
 | particelle | 400 (nate a circa 600), scatola 240x95x240, dimensione 2,4, opacità 0,35, salita 2,2 unità/s | `src/world/atmosphere-particles.js`; commit 42e9ad75 e 695b44ba, 2026-06-17 |
 | ordine di disegno | cupola 1000, particelle 22 | `src/world/sky-dome.js`; `src/world/atmosphere-particles.js` |
-| deriva fra fotogrammi | 2,3% a 3 s, 0,4% a 11 s, 0,22% a istante fisso, 3,7% mattina contro pomeriggio | `test/retro-future-baseline/README.md`, misure del 2026-09-19 |
+| deriva fra frame | 2,3% a 3 s, 0,4% a 11 s, 0,22% a istante fisso, 3,7% mattina contro pomeriggio | `test/retro-future-baseline/README.md`, misure del 2026-09-19 |
 | temporale canonico | frequenza 1,6, intensità 4, dimensione 5, soglia nuvole 0,91, fascia 2,5, velatura 0, tonalità 11 | `boulevard-canonical-settings.json`, letto il 2026-09-20 |
 | file con `performance.now()` | 15 secondo il README della baseline; 28 in `src/` | `test/retro-future-baseline/README.md`, 2026-09-19; grep del 2026-09-20 |
 
@@ -276,18 +264,18 @@ Cose che non so spiegare, e lo dico:
 | `src/engine/retro-benchmark-runtime.js` | 336 | registra le leve del cielo nel JSON del benchmark |
 | `index.html` | 1389 | i cursori del cielo e del temporale |
 
-Le prove: `sky-dome.test.mjs` prima leggeva il sorgente, ora costruisce la cupola,
-applica la luminosità, e verifica che un rebake completo si distribuisca sulla
-finestra di stride originale. `src/invarianti.test.mjs` fissa l'ordine di disegno (i
+I test: `sky-dome.test.mjs` prima leggeva il sorgente, ora costruisce la cupola,
+applica la luminosità e verifica che un rebake completo si distribuisca sulla finestra
+di stride originale. `src/invarianti.test.mjs` fissa l'ordine di disegno (i
 cartelli dei personaggi a 2000, il massimo). Il protocollo della cattura a istante
 fisso sta in `test/retro-future-baseline/README.md`.
 
 ## Per chi viene dal backend
 
-Il bake del cielo è una cache con scadenza di 12 fotogrammi, aggiornata a rotazione
-(una faccia ogni due) invece che tutta insieme, e `cycleNow` è la lettura coerente:
-le sei facce vedono lo stesso istante, come una transazione che legge uno snapshot.
-`scene.background` è la risposta servita dalla cache; la cupola nascosta è l'origine
+Il bake del cielo è una cache con scadenza di 12 frame, aggiornata a rotazione
+(una faccia ogni 2) invece che tutta insieme, e `cycleNow` è la lettura coerente: le
+6 facce vedono lo stesso istante, come una transazione su uno snapshot.
+`scene.background` è la risposta servita dalla cache; la cupola nascosta è l'origin
 che si interroga solo per rinfrescare. `performance.now()` è il wall clock che rende
 i test non deterministici, e il gate che scatta a 60 secondi è il seme fisso che li
 rende ripetibili. Gli interruttori `?fx.*` sono feature flag validi solo

@@ -19,47 +19,46 @@ Blocco 7: ponte scritto senza affermazioni tecniche nuove.
 
 :::info Se è la prima volta
 
-Di solito il codice di un sito viene impacchettato da un programma che lo comprime e lo unisce in pochi file. Qui non succede: i file arrivano al browser come sono scritti. Questo capitolo spiega perché, e come si tiene in ordine un sistema di novantasette pezzi senza quel programma.
+Di solito il codice di un sito viene impacchettato da un programma che lo comprime e lo unisce in pochi file. Qui non succede: i file arrivano al browser come sono scritti. Questo capitolo spiega perché, e come si tiene in ordine un sistema di 97 pezzi senza quel programma.
 
 :::
 
 ## Cosa vede l'utente
 
 Una pagina che si apre su una copertina: il titolo “Ti aspettavi una pagina con reparti e
-foto.”, quattro schede con una faccia ciascuna, il bottone “Esplora i reparti” e il link per
-tornare alla home. Mentre l'utente legge, la città si sta già costruendo in sottofondo. Al
-click il bottone diventa “Caricamento…”, la scena aspetta di essere pronta e poi parte; se il
-boot fallisce il bottone diventa “Ricarica la demo” e il secondo click ricarica la pagina.
+foto.”, 4 schede con una faccia ciascuna, il bottone “Esplora i reparti” e il link alla home.
+Mentre l'utente legge, la città si costruisce già in sottofondo. Al click il bottone diventa
+“Caricamento…” e la scena parte appena è pronta; se il boot fallisce diventa “Ricarica la
+demo”, e il secondo click ricarica la pagina.
 
 ![La città vista dal boulevard](/img/panoramica.webp)
 
 ## Il problema
 
-Questa demo non ha un bundler, cioè lo strumento che unisce i moduli in pochi file e che, nel
-farlo, segnala gli import rotti. Senza, firme sbagliate, refusi nei nomi e import di export
-inesistenti si scoprivano solo aprendo la pagina. Il browser carica i 97 moduli così come
-stanno su disco, senza minificazione, uno per richiesta.
+Questa demo non ha un bundler, e con lui è saltata la diagnostica che il bundling dà gratis:
+firme sbagliate, refusi nei nomi e import di export inesistenti si scoprivano solo aprendo la
+pagina. Il browser carica i 97 moduli ESM così come stanno su disco, senza minificazione, uno
+per richiesta.
 
 Il 19 settembre 2026, quando l'ho mappato per spezzarlo, `main.js` teneva
 6.824 righe, 153 `let` di modulo mutati fuori
 dalla dichiarazione e 220 funzioni. Quei `let` erano condivisi fra domini: la sola
 post-produzione ne aveva 35, letti o scritti da controlli, boot, ispezione e ciclo dei frame.
-Spostare un dominio fuori da quel file voleva dire decidere come i domini si dividono lo
-stato. Non c'era scorciatoia.
+Spostare un dominio fuori voleva dire decidere come i domini si dividono lo stato: nessuna
+scorciatoia.
 
-Ci sono poi vincoli che vengono dal browser e dalla rete:
+Poi i vincoli di browser e rete:
 
 - **I moduli vengono importati prima che la scena esista.** `main.js` importa tutto in cima,
   quando scena, camera e renderer non ci sono ancora: un modulo che chiama `scene.add()`
   all'import non può farlo.
 - **Un effetto collaterale all'import rompe la demo in produzione.** Il 18 settembre
-  precaricare `main.js` prima del click ha spento la scena: il modulo fotografava il contesto
-  audio all'import, quando ancora non esiste, e al click ne nasceva un secondo. Collegare nodi
-  di contesti diversi alzava un `InvalidAccessError` a ogni fotogramma: scena senza personaggi
-  né cartelli, comandi morti.
+  precaricare `main.js` prima del click ha spento la scena: il modulo fotografava
+  l'`AudioContext` all'import, quando ancora non esiste, e al click ne nasceva un secondo.
+  Collegare nodi di contesti diversi alzava un `InvalidAccessError` a ogni frame: scena senza
+  personaggi né cartelli, comandi morti.
 - **La seconda visita costa richieste, non byte.** I moduli sono serviti con
-  `cache-control: no-cache` più ETag: il browser rifà ogni richiesta e il server risponde 304
-  senza corpo se il file non è cambiato. 97 moduli, 97 richieste condizionate.
+  `cache-control: no-cache` più ETag: 97 moduli, 97 richieste condizionate per visita.
 - **Una copia inglese di `index.html` divergerebbe alla prima modifica.** Il file pesa 114.216 byte fra markup, importmap e script inline, e cambia a ogni intervento.
 - **Il build copiava tutto.** Il 7 agosto erano pubblici sul sito due documenti di lavoro e
   tutti e 23 i file di test, verificato con GET 200.
@@ -68,57 +67,52 @@ Ci sono poi vincoli che vengono dal browser e dalla rete:
 
 ### Niente bundler: importmap e vendor
 
-`index.html` contiene una importmap, un blocco JSON in `<script type="importmap">` che dice al
-browser su quale file risolvere uno specifier nudo come `three` (un nome di modulo senza `./`
-né URL). Ha 8 voci: `three` va su `./vendor/three.module.min.js`, sette `three/addons/...`
-vanno su `./vendor/<nome>.js`. La cartella `vendor/` contiene three.js r184 e i suoi addon
-copiati in locale: 16 file, 1,0 MB. Due file non sono identici a upstream: `UnrealBloomPass.js`,
-che è un fork, e `GLTFLoader.js`, solo nei percorsi degli import.
+`index.html` porta una importmap di 8 voci: `three` risolve su
+`./vendor/three.module.min.js`, 7 `three/addons/...` su `./vendor/<nome>.js`. La cartella
+`vendor/` contiene three.js r184 e i suoi addon copiati in locale: 16 file, 1,0 MB. 2 file non
+sono identici a upstream: `UnrealBloomPass.js`, che è un fork, e `GLTFLoader.js`, solo nei
+percorsi degli import.
 
 I 97 moduli stanno sotto `src/`, divisi in `audio/`, `camera/`, `character/`, `config/`,
-`controls/`, `engine/`, `world/`. Nessun file supera le 1.500 righe; il più grande, il runtime
-della folla, ne ha 1.352. Sulla rete viaggiano compressi in brotli da Cloudflare: `main.js`
-passa da 46 KB a 11, il totale compresso è 303 KB.
+`controls/`, `engine/`, `world/`. Nessun file supera le 1.500 righe; il più grande,
+`character/runner-crowd-runtime.js`, ne ha 1.352. Sulla rete viaggiano in brotli da
+Cloudflare: `main.js` passa da 46 KB a 11, il totale compresso è 303 KB.
 
-Le prove in node non leggono la importmap, quindi `test/resolve-three.mjs` registra un hook di
-risoluzione che mappa gli stessi specifier sugli stessi file di `vendor/`. Le tre copie della
-mappa (importmap, hook di node, `paths` di `jsconfig.json`) devono coincidere, e una prova lo
-verifica.
+node:test non legge la importmap, quindi `test/resolve-three.mjs` registra un resolve hook che
+mappa gli stessi specifier sugli stessi file di `vendor/`. Le 3 copie della mappa (importmap,
+hook, `paths` di `jsconfig.json`) devono coincidere, e un test lo verifica.
 
 ### La copertina precarica la città
 
-Lo script inline della copertina importa subito solo il runtime della colonna sonora e tiene
-una lista di 91 moduli (15 di `vendor/`, 76 di `src/`) che trasforma in
-`<link rel="modulepreload">`, il tag che fa scaricare e compilare un modulo prima che venga
-importato. Al `load` della pagina parte `precaricaCitta()` via `requestIdleCallback` (il
-browser la esegue quando è inattivo, con un timeout di 1.500 ms) o, in mancanza, un
-`setTimeout` di 300 ms.
+Lo script inline della copertina importa subito solo il runtime della colonna sonora e
+trasforma una lista di 91 moduli (15 di `vendor/`, 76 di `src/`) in altrettanti
+`<link rel="modulepreload">`. Al `load` della pagina parte `precaricaCitta()` via
+`requestIdleCallback`, timeout 1.500 ms, o `setTimeout` di 300 ms dove non c'è.
 
 `scheduleRetroFutureCityBoot()` tiene una sola promessa: `requestAnimationFrame`, poi il
-preload, poi `import('./src/main.js')`. Un secondo click si aggancia alla stessa promessa. Il
-contesto audio nasce qui, nella copertina, e viene pubblicato su `window.__retroAudio`;
+preload, poi `import('./src/main.js')`. Un secondo click si aggancia alla stessa promessa.
+L'`AudioContext` nasce qui, nella copertina, e viene pubblicato su `window.__retroAudio`;
 `main.js` lo riusa invece di crearne uno suo. Misurato in Chromium con 25 secondi di attesa
 prima del click: la copertina se ne va dopo 0,1 s invece di 1,4.
 
 ### main.js apre i sottosistemi
 
-`main.js` è un modulo ES con `await` di primo livello, cioè un `await` fuori da qualunque
-funzione. Lancia due gruppi di `import()` (cinque addon di post-processing; il loader dei
-modelli e SkeletonUtils) prima di aspettare l'uno o l'altro, così le richieste si
-sovrappongono. Se il primo gruppo fallisce si va avanti senza post-processing, se fallisce il
-secondo senza personaggi.
+`main.js` è un modulo ESM con top-level `await`. Lancia 2 gruppi di `import()` dinamici (5
+addon di post-processing; `GLTFLoader` e `SkeletonUtils`) prima di aspettare l'uno o l'altro,
+così le richieste si sovrappongono. Se il primo gruppo fallisce si va avanti senza
+post-processing, se fallisce il secondo senza personaggi.
 
-Poi costruisce, in quest'ordine: i valori fissi dei controlli e la lettura del pannello; il
-renderer WebGL (antialias spento, tone mapping ACES, esposizione 0,85, sRGB, ombre spente); la
-diagnostica e il benchmark; scena e camera (FOV fisso, near 0,1, far 10.000) raccolte in
-`ctx`; lo stato del giocatore; la copertina e il bottone; il cursore a disco, il mouse-look,
-il movimento da telefono, i passi, la colonna sonora; il cielo, le mappe di riflessione, le
-texture dei materiali; la strada e gli esagoni; le collisioni; il confine, il volo del drone,
-il movimento, la tastiera; i marciapiedi, e dentro quel blocco la mappa del
-boulevard; le luci; il cablaggio della
-città; la catena di post-processing; i controlli live e il pannello; il prewarm; le
-scorciatoie di ispezione; il ciclo dei frame; le particelle. Ogni sottosistema viene aperto da
-una `initX(deps)` chiamata dove stava il codice, non in cima.
+Poi costruisce, in quest'ordine: i valori fissi dei controlli e la lettura del pannello;
+il renderer WebGL (antialias spento, tone mapping ACES, esposizione 0,85, sRGB, ombre
+spente); la diagnostica e il benchmark; scena e camera (FOV fisso, near 0,1, far 10.000)
+raccolte in `ctx`; lo stato del giocatore; la copertina e il bottone; il cursore a
+disco, il mouse-look, il movimento da telefono, i passi, la colonna sonora; il cielo, le
+mappe di riflessione, le texture dei materiali; la strada e gli esagoni; le collisioni;
+il confine, il volo del drone, il movimento, la tastiera; i marciapiedi, con dentro la
+mappa del boulevard; le luci; il cablaggio della città; la catena di post-processing; i
+controlli live e il pannello; il prewarm; le scorciatoie di ispezione; il ciclo dei
+frame; le particelle. Ogni sottosistema si apre con una `initX(deps)` chiamata dove
+stava il codice, non in cima.
 
 ```mermaid
 flowchart TB
@@ -132,16 +126,16 @@ flowchart TB
   H --> I["primo tick, loader via"]
 ```
 
-`retroSceneReady` è la promessa che la copertina aspetta: esegue il boot con i valori
-definitivi, toglie il pannello dal DOM, poi in un `requestAnimationFrame` azzera i contatori,
-avvia il rivelo in wireframe, chiama il primo `tick(now)`, nasconde il loader e segna
-`player.sceneBootComplete`. Un `catch` logga con il prefisso `[retro-future]` e rilancia. La
-funzione che parte al click è esportata come `startRetroFuture`.
+`retroSceneReady` è la promessa che la copertina aspetta: boot con i valori definitivi,
+pannello via dal DOM, poi dentro un `requestAnimationFrame` contatori azzerati, rivelo in
+wireframe, primo `tick(now)`, loader nascosto, `player.sceneBootComplete`. Un `catch` logga
+con il prefisso `[retro-future]` e rilancia; la funzione che parte al click è esportata come
+`startRetroFuture`.
 
 ### Lo stato condiviso: un oggetto per dominio
 
 Regola 1: lo stato che più moduli toccano è un oggetto mutabile esportato dal dominio che lo
-possiede. Ce ne sono cinque:
+possiede. Ce ne sono 5:
 
 - `post`, 30 chiavi: composer, pass, risoluzione, bloom, upscale, TAA, modo prestazioni.
 - `boulevard`, 28 chiavi: scale dei palazzi, piazzole, larghezze, lunghezza della strada.
@@ -152,57 +146,57 @@ possiede. Ce ne sono cinque:
 
 Fuori dal file si scrive `post.bloomEnabled` e basta. Nell'oggetto ci finisce un nome solo se
 qualcuno fuori dal file lo legge o lo scrive; il resto resta `let` privato. I 30 nomi di
-`post` li ho misurati sull'albero sintattico prima di tagliare: i quattordici che servivano
-solo lì dentro sono rimasti variabili normali. Oggi `main.js` ha 4 `let` di modulo, da 153.
-Altri oggetti condivisi dello stesso tipo: `keys` per la tastiera, `movementVelocity`, lo
-stato dell'equalizer.
+`post` li ho misurati sull'AST prima di tagliare: i 14 che servivano solo lì dentro sono
+rimasti variabili normali. Oggi `main.js` ha 4 `let` di modulo, da 153. Altri oggetti
+condivisi dello stesso tipo: `keys` per la tastiera, `movementVelocity`, lo stato
+dell'equalizer.
 
 `ctx` è un'altra cosa: porta solo `scene`, `camera`, `renderer`, un getter `composer` (creato
-più tardi, quindi legato in ritardo) e uno `state` che parte vuoto. Il solo campo trasversale
-oggi è `state.boundaryError`. Sette moduli ricevono `ctx`; gli altri ricevono un oggetto
-`deps` con quello che serve, spesso come getter.
+più tardi, legato in ritardo) e uno `state` che parte vuoto. Il solo campo trasversale oggi è
+`state.boundaryError`. 7 moduli ricevono `ctx`; gli altri un oggetto `deps` con quello che
+serve, spesso come getter.
 
 Regola 2: chi costruisce lo fa dentro `initX(deps)`. I binding sono `let` dichiarati in cima
-al file, con il tipo in JSDoc, e assegnati per destrutturazione dentro la funzione. Tre moduli
-che scrivevano su `window` all'import ora controllano `typeof window !== 'undefined'`, così si
+al file, tipati in JSDoc, assegnati per destrutturazione dentro la funzione. 3 moduli che
+scrivevano su `window` all'import ora controllano `typeof window !== 'undefined'`, così si
 importano anche fuori dal browser.
 
-### L'ordine del boot e del frame, protetto da una prova
+### L'ordine del boot e del frame, protetto da un test
 
 `bootSceneWithFinalDefaults()` applica il JSON canonico dei controlli, poi quello che sta in
-localStorage, poi i tempi del rivelo, che vengono dalle costanti, e l'upscale forzato a
-risoluzione piena, i valori fissi dei
-ponti, lo spawn salvato; rilegge tutti i cursori con `applyLiveControls()`; costruisce
-l'equalizer nascosto; applica lo spawn; carica i personaggi e svuota la coda di costruzione;
-poi i prewarm (ossa, texture, un render nascosto dei personaggi, i pass di post-processing),
-con un `waitForNextFrame()` fra un blocco e l'altro per non congelare il thread; infine
-l'audio dei passi, un pass reale e il volo automatico del drone.
+localStorage, poi i tempi del rivelo presi dalle costanti, l'upscale forzato a risoluzione
+piena, i valori fissi dei ponti, lo spawn salvato; rilegge tutti i cursori con
+`applyLiveControls()`; costruisce l'equalizer nascosto; applica lo spawn; carica i personaggi
+e svuota la coda di costruzione; poi i prewarm (ossa, texture, un render nascosto dei
+personaggi, i pass di post-processing), con un `waitForNextFrame()` fra un blocco e l'altro
+per non bloccare il main thread; infine l'audio dei passi, un pass reale e il volo automatico
+del drone.
 
 Il ciclo `tick(now)` si riprenota subito con `requestAnimationFrame`, taglia `dt` a 0,05 s,
 aggiorna il cursore a disco, ogni 500 ms ricalcola gli FPS e ritocca il budget, muove il
 drone, chiede al terminale dei contatti se possiede la camera e applica il movimento solo se
-né drone né terminale la possiedono; poi il LOD della strada; poi, se il rivelo non è in fase
+né lui né il drone la tengono; poi il LOD della strada; poi, se il rivelo non è in fase
 critica, esagoni, confine, effetti secondari a passo ridotto, camminata, personaggi, folla;
 l'etichetta della posizione ogni 180 ms; cielo, tabelloni, particelle, fumetti; il profilo
 prestazioni; i pass del composer; equalizer e LED; il culling statico; il render con timer
 GPU; i tempi alla diagnostica. Un solo `requestAnimationFrame` per evento di `resize`.
 
-L'ordine è logica, non stile. Una prova lo legge dal sorgente e pretende che la coda della
-folla sia svuotata prima delle texture e che il post-processing sia scaldato per ultimo; che
-il LOD della strada venga prima del controllo del rivelo critico; che il terminale decida se
-possiede la camera prima di camminata e dondolio.
+L'ordine è logica, non stile. Un test lo legge dal sorgente e pretende che la coda della folla
+sia svuotata prima delle texture, il post-processing scaldato per ultimo, il LOD della strada
+prima del controllo del rivelo critico, il terminale a decidere se possiede la camera prima di
+camminata e dondolio.
 
 ### La pagina inglese e il build
 
-La stessa demo esiste su `/en/chi-siamo/retro-future/`: il Worker Cloudflare, cioè il
-programma che risponde alle richieste sul dominio, instrada sei pattern di rotta sugli stessi
-asset. La pagina inglese non è una copia: `scripts/retro-future-en.mjs` tiene un dizionario di
-40 coppie italiano-inglese (2 con modo “tutte”), e ogni coppia deve comparire esattamente una
-volta nel sorgente, altrimenti il build lancia un errore. Il canonical viene riscritto su
-`/en/` e vengono aggiunti tre `hreflang` (it-IT, en, x-default); gli stessi `hreflang` vanno
-sull'italiano, in modo idempotente. Il pannello dei controlli resta in italiano di proposito.
+La stessa demo esiste su `/en/chi-siamo/retro-future/`: il Worker Cloudflare instrada 6
+pattern di rotta sugli stessi asset. La pagina inglese non è una copia:
+`scripts/retro-future-en.mjs` tiene un dizionario di 40 coppie italiano-inglese (2 con modo
+“tutte”), e ogni coppia deve comparire esattamente una volta nel sorgente, altrimenti il build
+fallisce. Il canonical viene riscritto su `/en/` e vengono aggiunti 3 `hreflang` (it-IT, en,
+x-default); gli stessi `hreflang` vanno sull'italiano, in modo idempotente. Il pannello dei
+controlli resta in italiano di proposito.
 
-Il build copia la cartella della demo in `dist-retro/` filtrando una denylist di sei pattern
+Il build copia la cartella della demo in `dist-retro/` filtrando una denylist di 6 pattern
 (`.md`, `.d.ts`, `.test.mjs`, `.DS_Store`, `jsconfig.json`, `doc/`), scrive `index.en.html`,
 riscrive `index.html` con gli `hreflang` e verifica che nessun file non pubblicabile sia
 passato: 137 file. Il deploy è build più `wrangler deploy --strict`. Il Worker manda l'HTML con
@@ -211,54 +205,51 @@ CSP e `no-cache`; `.opus` e `.webp` con cache pubblica di una settimana e
 
 Senza JavaScript la copertina si vede intera: foto statiche nei canvas, titolo, link alla
 home. Un `<noscript>` nasconde il bottone e mostra la frase “Questa demo è una scena 3D e ha
-bisogno di JavaScript, che qui è spento.” Le quattro facce sono canvas con `aria-hidden`, e
-accanto hanno l'etichetta visibile del reparto.
+bisogno di JavaScript, che qui è spento.” Le 4 facce sono canvas con `aria-hidden`, con
+accanto l'etichetta visibile del reparto.
 
 ## Perché così e non altrimenti
 
 - **Niente bundler.** Il prodotto è un link dentro un sito, ed è nato così. La ragione
-  misurata: è il numero di richieste, non i byte, a decidere il costo della seconda visita.
-  Minificare non lo cambierebbe; cambiare la politica di cache del Worker sì. Nessuna delle
-  due è stata fatta: sono scelte di prodotto.
+  misurata: il costo della seconda visita lo decidono le richieste, non i byte. Minificare
+  non lo cambierebbe; cambiare la politica di cache del Worker sì. Nessuna delle due è stata
+  fatta: scelte di prodotto.
 - **`no-cache` sui moduli, non `max-age`.** Prima i moduli avevano `max-age=300` mentre
   `index.html` era `no-cache`: a ogni deploy un `index.html` fresco poteva caricare moduli
-  stantii con export cambiati, e il boot si rompeva con lo schermo nero. Ora si rivalidano
-  tutti a ogni caricamento.
+  stantii con export cambiati, e il boot moriva con lo schermo nero. Ora si rivalida tutto a
+  ogni caricamento.
 - **Un oggetto di stato per dominio, non getter e setter.** L'alternativa era passare a ogni
-  modulo decine di getter e setter per ogni `let`: è lo stile di `initMouseLook` e
-  `initKeyboard`, che regge per 5-10 dipendenze, non per 35.
+  modulo decine di getter e setter per ogni `let`: lo stile di `initMouseLook` e
+  `initKeyboard`, che regge 5-10 dipendenze, non 35.
 - **Non `ctx.state`.** Quello resta per i pochi campi davvero trasversali, e il suo commento
   avverte di non farlo diventare il prossimo `controlEls`, un contenitore di tutto.
-  Dichiarava tre fette (`reveal`, `runner`, `perf`) e dei `flags` che nessun modulo leggeva,
+  Dichiarava 3 fette (`reveal`, `runner`, `perf`) e dei `flags` che nessun modulo leggeva,
   zero occorrenze in tutto `src/`: ora parte vuoto.
 - **`composer` come getter.** Viene creato più tardi ed è riassegnabile; scena, camera e
   renderer sono `const` create prima e passano per valore.
 - **`initX` chiamata dove stava il codice.** Alcune dipendono da variabili dichiarate poche
-  righe prima (`initPlayerFootsteps` è un esempio): cambiare l'ordine non era gratis.
-- **Il ciclo dei frame è uscito per ultimo.** L'ordine in cui `tick` aggiorna i sottosistemi
-  è logica, e finché gli altri domini stavano in `main.js` muoverlo avrebbe mescolato due
-  cambiamenti.
+  righe prima, `initPlayerFootsteps` per esempio: cambiare l'ordine non era gratis.
+- **Il ciclo dei frame è uscito per ultimo.** Finché gli altri domini stavano in `main.js`,
+  muoverlo avrebbe mescolato due cambiamenti.
 - **`postModulesPromise` resta in `main.js`.** Portarla nel modulo avrebbe anticipato le
   richieste di rete degli addon.
 - **La città si costruisce prima del click.** Il costo è che three.js e la scena si
   scaricano anche per chi non entra: l'attesa al click contava di più. Il precarico era stato
-  spento e riacceso il 18 settembre: la causa non era lui ma il contesto audio fotografato
+  spento e riacceso il 18 settembre: la causa non era lui ma l'`AudioContext` fotografato
   all'import, e ora chi lo crea per primo lo pubblica su `window.__retroAudio.context`.
 - **Pagina inglese generata, non copiata.** Se il testo italiano cambia e la traduzione non
-  lo trova più, il build si ferma invece di pubblicare una pagina inglese a metà. Le tre
+  lo trova più, il build si ferma invece di pubblicare una pagina inglese a metà. Le 3
   etichette del bottone d'ingresso stanno nel dizionario perché senza la pagina inglese
   tornava in italiano appena partiva il caricamento.
-- **Una denylist nel build.** I `.md` e le prove perché erano online; `jsconfig.json` e i
+- **Una denylist nel build.** I `.md` e i test perché erano online; `jsconfig.json` e i
   `.d.ts` perché servono a tsc, non al browser; `doc/` perché con i suoi `node_modules` la
   copia integrale avrebbe pubblicato 714 MB, e lo pubblica un Worker suo.
-- **I nomi di `vendor/` sono allineati alla vetrina pubblica.** Prima ogni
-correzione andava
-  portato a mano da una parte all'altra traducendo i percorsi.
+- **I nomi di `vendor/` sono allineati alla vetrina pubblica.** Prima ogni correzione andava
+  portata a mano da una parte all'altra traducendo i percorsi.
 - **`<noscript>` invece di un bottone morto.** Senza JavaScript il bottone non potrebbe
   fare niente.
 - **Un `catch` su `retroSceneReady`.** Senza, un boot che fallisce è una unhandled rejection:
-  il loader resta appeso per sempre e in console non compare niente di riconducibile alla
-  demo.
+  il loader resta appeso e in console non compare niente di riconducibile alla demo.
 - **Niente effetti collaterali all'import.** Un import che scrive su un globale del browser
   rende il modulo caricabile solo dentro una pagina.
 
@@ -267,7 +258,7 @@ Cose che non so spiegare, e lo dico:
 - Il README elenca `pannello` fra gli oggetti di stato, ma il commit che ha tolto il codice
   morto dice che l'oggetto sparisce, e oggi nessun modulo lo esporta.
 - Il README e un commit dicono 84 moduli prima della tappa 5; `git ls-tree` a quel commit ne
-  conta 83 non di prova.
+  conta 83 non di test.
 - La politica di cache del Worker, 97 richieste condizionate a ogni visita, è dichiarata
   scelta di prodotto e resta aperta.
 - Al boot l'upscale viene forzato spento e la scala a 1 dopo il JSON canonico e il
@@ -277,13 +268,11 @@ Cose che non so spiegare, e lo dico:
 
 | cosa | valore | fonte e data |
 |---|---|---|
-| moduli sotto `src/` | 97 (più 35 file di prova e 1 `.d.ts`) | `find`, misurato il 2026-09-20; `README.md` |
+| moduli sotto `src/` | 97 (più 35 file di test e 1 `.d.ts`) | `find`, misurato il 2026-09-20; `README.md` |
 | peso dei moduli | 1.428.704 byte su disco; 303 KB compressi in brotli | `wc -c` 2026-09-20; `README.md` e commit ba2ec5b7, 2026-09-19 |
 | `main.js` | 1.280 righe, 46 KB, 11 KB in brotli | `wc` 2026-09-20; `README.md` 2026-09-19 |
-| `main.js` all'inizio della tappa 5 | 7.135 righe | commit a05e8e47,
-2026-09-19 | | `main.js` a metà tappa, quando è stato mappato | 6.824 righe,
-153 `let` di modulo, 220 funzioni | `docs/retro-future-tappa5-opus.md`,
-2026-09-19 |
+| `main.js` all'inizio della tappa 5 | 7.135 righe | commit a05e8e47, 2026-09-19 |
+| `main.js` a metà tappa, quando è stato mappato | 6.824 righe, 153 `let` di modulo, 220 funzioni | `docs/retro-future-tappa5-opus.md`, 2026-09-19 |
 | `let` di modulo in `main.js` oggi | 4 | `grep`, misurato il 2026-09-20 |
 | file più grande di `src/` | `character/runner-crowd-runtime.js`, 1.352 righe | `wc -l`, misurato il 2026-09-20 |
 | importmap / modulepreload | 8 voci / 91 voci | `index.html`, misurato il 2026-09-20 |
@@ -319,21 +308,21 @@ Cose che non so spiegare, e lo dico:
 | `scripts/build-retro-future.mjs` | 61 | build in `dist-retro/` con denylist e verifiche |
 | `apps/retro-future/src/index.ts` | 120 | Worker Cloudflare, intestazioni, rotte inglesi |
 | `apps/retro-future/wrangler.toml` | 28 | rotte e binding degli asset |
-| `vendor/README.md` | 42 | three r184, i due file modificati rispetto a upstream |
-| `README.md` | 126 | comandi, regole delle prove, divisione di `src/`, peso sulla rete |
+| `vendor/README.md` | 42 | three r184, i 2 file modificati rispetto a upstream |
+| `README.md` | 126 | comandi, regole dei test, divisione di `src/`, peso sulla rete |
 
-Le prove: `ordine-boot-frame.test.mjs` legge dal sorgente l'ordine del boot e del frame;
-`importmap.test.mjs` verifica che le tre copie della mappa di `three` coincidano; la prova sul
-contesto audio verifica che `main.js` non lo fotografi all'import; `pagina-cover.test.mjs`
-misura la copertina nel browser, con e senza JavaScript.
+I test: `ordine-boot-frame.test.mjs` legge dal sorgente l'ordine del boot e del frame;
+`importmap.test.mjs` verifica che le 3 copie della mappa di `three` coincidano; il test
+sull'`AudioContext` verifica che `main.js` non lo fotografi all'import; `pagina-cover.test.mjs`
+misura la copertina in Chromium, con e senza JavaScript.
 
 ## Per chi viene dal backend
 
 `main.js` è il punto di composizione del servizio: istanzia i componenti e li collega
-nell'ordine delle dipendenze, e la prova sull'ordine è il test che protegge quel cablaggio.
-Gli oggetti di stato per dominio sono tabelle possedute da un servizio, con una regola di
-visibilità: espone solo le colonne che un altro servizio legge. Il precarico della città è il
-warm-up del pool prima di aprire il traffico. `no-cache` più ETag è una cache con
-revalidazione, e legare i moduli all'`index.html` è la stessa scelta di versionare il client
-insieme all'API. La pagina inglese è un template compilato al build: se una chiave manca,
-fallisce il build, non la richiesta.
+nell'ordine delle dipendenze, e il test sull'ordine protegge quel cablaggio. Gli oggetti di
+stato per dominio sono tabelle possedute da un servizio, con una regola di visibilità:
+espongono solo le colonne che un altro servizio legge. Il precarico della città è il warm-up
+del pool prima di aprire il traffico. `no-cache` più ETag è una cache con revalidazione, e
+legare i moduli all'`index.html` è la stessa scelta di versionare il client insieme all'API.
+La pagina inglese è un template compilato al build: se una chiave manca, fallisce il build,
+non la richiesta.
