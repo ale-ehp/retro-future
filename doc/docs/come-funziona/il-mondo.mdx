@@ -21,8 +21,9 @@ Blocco 7: ponte scritto dall'autore del manuale, senza affermazioni tecniche nuo
 
 Un viale rettilineo di notte, sei palazzi per lato e un tredicesimo, più alto, in
 fondo; quattro ponti, e strisce LED ciano lungo cui corre una testa luminosa, come
-corrente in un filo. Ogni palazzo ha una porta, un civico gigante e un tabellone
-accanto. Sotto i piedi un tappeto di esagoni: dove il giocatore cammina, le piastrelle
+corrente in un filo. Ogni palazzo laterale ha una porta, un civico gigante e un tabellone dei ruoli
+accanto; sul primo c'è anche il tabellone dei reparti. Il tredicesimo, in
+fondo, non ha né porta né civico. Sotto i piedi un tappeto di esagoni: dove il giocatore cammina, le piastrelle
 intorno si abbassano e si accendono, poi risalgono.
 
 ![Il pavimento a esagoni che reagisce ai passi](/img/pavimento-esagoni.webp)
@@ -98,9 +99,9 @@ pari a destra, 1 e 2 sulla corsia più vicina alla partenza: civico = (5 - corsi
 ### LED di spigolo, di facciata, e l'impulso
 
 `elStrip` decide per ruolo: strisce dei laterali in un batch istanziato, quelle dei
-ponti in un altro, quelle del principale mesh veri perché partecipano al rivelo. Ogni
-palazzo ha quattro strisce verticali e due anelli, alto e basso; un ponte otto strisce
-orizzontali. Sulla facciata verso la strada c'è un disegno di nastri: tre colonne a
+ponti in un altro, quelle del principale mesh veri perché partecipano al rivelo. Ogni elemento, palazzi e ponti, ha quattro strisce verticali agli spigoli e
+due anelli, alto e basso; i ponti ne hanno altre otto orizzontali, dodici in
+tutto, che per quattro ponti fanno quarantotto. Sulla facciata verso la strada c'è un disegno di nastri: tre colonne a
 -0,30, 0,02 e 0,28 della base, tre quote a 0,12, 0,48 e 0,88 dell'altezza di
 riferimento (132); sei segmenti e sei slot per i laterali, due polilinee e otto slot
 per il principale, con un rivelo verticale scritto in `onBeforeCompile` (il gancio di
@@ -124,8 +125,9 @@ cambia in 1.100 ms, e ridisegna a 8 Hz solo durante il cambio, carattere per car
 con caratteri di scramble, come un tabellone a palette. I materiali sono trasparenti
 con depthTest e senza depthWrite (depthTest: viene coperto da ciò che sta davanti;
 depthWrite: lascia traccia nel buffer di profondità), in un gruppo a renderOrder 30.
-I tabelloni dei ruoli sono dodici, 18 x 9, texture 512 x 256; la posa viene dal
-poligono della piazzola, non dal civico animato, e si ricontrolla ogni 250 ms.
+I tabelloni dei ruoli sono dodici, 18 x 9, texture 512 x 256; la loro posa
+viene dalla porta del palazzo, mentre quella del tabellone dei reparti viene
+dal poligono della piazzola. Entrambe si ricontrollano ogni 250 ms.
 
 ![Il tabellone dei ruoli accanto a una porta](/img/tabellone-ruoli.webp)
 
@@ -191,8 +193,10 @@ flowchart TB
   I --> J((buffer GPU))
 ```
 
-Riga per riga. Tre passi per fotogramma: il ritardo in secondi, `dropStep = min(1,
-discesa x dt)`, `recoveryStep = min(1, recupero x dt)`. Il raggio di aggiornamento è
+Riga per riga. Tre parametri per fotogramma: il ritardo, che è una soglia di
+tempo in secondi, e i due passi veri dell'inseguimento, `dropStep = min(1,
+discesa x dt)` in discesa e `recoveryStep = min(1, recupero x dt)` in
+risalita. Il raggio di aggiornamento è
 il raggio di influenza più il modulo dell'offset più due raggi di esagono. I
 candidati: si svuota la lista, si incrementa un contatore di fotogramma, si scorrono i
 bucket intorno alla camera (raggio in bucket ceil(raggio / 64) + 1) e si aggiungono le
@@ -297,8 +301,9 @@ rettangolo, in un InstancedMesh con tre materiali.
 - **Configurazione come dati.** I 72 input nascosti di LED e ponti erano configurazione
   travestita da DOM (5317daa0); i 28 numeri della mappa stanno in `boulevard` perché
   tutti si leggono o scrivono da fuori (bfda3982).
-- **Cursori sul passo.** Due cursori del pavimento erano fuori passo dalla v1.0 e il
-  browser li correggeva in silenzio: -2,65 e 50,5, con una prova (00b3c82e).
+- **Cursori sul passo.** Due cursori del pavimento avevano dalla prima versione un valore che non era
+  multiplo del proprio passo, e il browser lo correggeva in silenzio; ora
+  portano i valori giusti, con una prova che li tiene (00b3c82e).
 
 Cose che non so spiegare, e lo dico:
 

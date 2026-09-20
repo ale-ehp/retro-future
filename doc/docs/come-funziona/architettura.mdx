@@ -34,7 +34,8 @@ farlo, segnala gli import rotti. Senza, firme sbagliate, refusi nei nomi e impor
 inesistenti si scoprivano solo aprendo la pagina. Il browser carica i 97 moduli così come
 stanno su disco, senza minificazione, uno per richiesta.
 
-Fino al 19 settembre 2026 `main.js` teneva 6.824 righe, 153 `let` di modulo mutati fuori
+Il 19 settembre 2026, quando l'ho mappato per spezzarlo, `main.js` teneva
+6.824 righe, 153 `let` di modulo mutati fuori
 dalla dichiarazione e 220 funzioni. Quei `let` erano condivisi fra domini: la sola
 post-produzione ne aveva 35, letti o scritti da controlli, boot, ispezione e ciclo dei frame.
 Spostare un dominio fuori da quel file voleva dire decidere come i domini si dividono lo
@@ -53,8 +54,7 @@ Ci sono poi vincoli che vengono dal browser e dalla rete:
 - **La seconda visita costa richieste, non byte.** I moduli sono serviti con
   `cache-control: no-cache` più ETag: il browser rifà ogni richiesta e il server risponde 304
   senza corpo se il file non è cambiato. 97 moduli, 97 richieste condizionate.
-- **Una copia inglese di `index.html` divergerebbe alla prima modifica.** Il file pesa 100 KB
-  fra markup, importmap e script inline, e cambia a ogni intervento.
+- **Una copia inglese di `index.html` divergerebbe alla prima modifica.** Il file pesa 114.216 byte fra markup, importmap e script inline, e cambia a ogni intervento.
 - **Il build copiava tutto.** Il 7 agosto erano pubblici sul sito due documenti di lavoro e
   tutti e 23 i file di test, verificato con GET 200.
 
@@ -108,7 +108,8 @@ diagnostica e il benchmark; scena e camera (FOV fisso, near 0,1, far 10.000) rac
 `ctx`; lo stato del giocatore; la copertina e il bottone; il cursore a disco, il mouse-look,
 il movimento da telefono, i passi, la colonna sonora; il cielo, le mappe di riflessione, le
 texture dei materiali; la strada e gli esagoni; le collisioni; il confine, il volo del drone,
-il movimento, la tastiera; marciapiedi e luci; la mappa del boulevard e il cablaggio della
+il movimento, la tastiera; i marciapiedi, e dentro quel blocco la mappa del
+boulevard; le luci; il cablaggio della
 città; la catena di post-processing; i controlli live e il pannello; il prewarm; le
 scorciatoie di ispezione; il ciclo dei frame; le particelle. Ogni sottosistema viene aperto da
 una `initX(deps)` chiamata dove stava il codice, non in cima.
@@ -163,7 +164,8 @@ importano anche fuori dal browser.
 ### L'ordine del boot e del frame, protetto da una prova
 
 `bootSceneWithFinalDefaults()` applica il JSON canonico dei controlli, poi quello che sta in
-localStorage, poi i tempi del rivelo e l'upscale spento dalle costanti, i valori fissi dei
+localStorage, poi i tempi del rivelo, che vengono dalle costanti, e l'upscale forzato a
+risoluzione piena, i valori fissi dei
 ponti, lo spawn salvato; rilegge tutti i cursori con `applyLiveControls()`; costruisce
 l'equalizer nascosto; applica lo spawn; carica i personaggi e svuota la coda di costruzione;
 poi i prewarm (ossa, texture, un render nascosto dei personaggi, i pass di post-processing),
@@ -243,7 +245,8 @@ accanto hanno l'etichetta visibile del reparto.
 - **Una denylist nel build.** I `.md` e le prove perché erano online; `jsconfig.json` e i
   `.d.ts` perché servono a tsc, non al browser; `doc/` perché con i suoi `node_modules` la
   copia integrale avrebbe pubblicato 714 MB, e lo pubblica un Worker suo.
-- **`vendor/` in locale, con i nomi allineati alla vetrina pubblica.** Prima ogni fix andava
+- **I nomi di `vendor/` sono allineati alla vetrina pubblica.** Prima ogni
+correzione andava
   portato a mano da una parte all'altra traducendo i percorsi.
 - **`<noscript>` invece di un bottone morto.** Senza JavaScript il bottone non potrebbe
   fare niente.
@@ -271,7 +274,10 @@ Cose che non so spiegare, e lo dico:
 | moduli sotto `src/` | 97 (più 35 file di prova e 1 `.d.ts`) | `find`, misurato il 2026-09-20; `README.md` |
 | peso dei moduli | 1.428.704 byte su disco; 303 KB compressi in brotli | `wc -c` 2026-09-20; `README.md` e commit ba2ec5b7, 2026-09-19 |
 | `main.js` | 1.280 righe, 46 KB, 11 KB in brotli | `wc` 2026-09-20; `README.md` 2026-09-19 |
-| `main.js` prima della tappa 5 | 7.135 righe, 153 `let` di modulo, 220 funzioni | commit a05e8e47, 2026-09-19; `docs/retro-future-tappa5-opus.md` |
+| `main.js` all'inizio della tappa 5 | 7.135 righe | commit a05e8e47,
+2026-09-19 | | `main.js` a metà tappa, quando è stato mappato | 6.824 righe,
+153 `let` di modulo, 220 funzioni | `docs/retro-future-tappa5-opus.md`,
+2026-09-19 |
 | `let` di modulo in `main.js` oggi | 4 | `grep`, misurato il 2026-09-20 |
 | file più grande di `src/` | `character/runner-crowd-runtime.js`, 1.352 righe | `wc -l`, misurato il 2026-09-20 |
 | importmap / modulepreload | 8 voci / 91 voci | `index.html`, misurato il 2026-09-20 |
