@@ -17,9 +17,9 @@ Blocco 7: ponte scritto senza affermazioni tecniche nuove.
 
 # Architettura
 
-:::info Se è la prima volta
+:::note In breve
 
-Di solito il codice di un sito viene impacchettato da un programma che lo comprime e lo unisce in pochi file. Qui non succede: i file arrivano al browser come sono scritti. Questo capitolo spiega perché, e come si tiene in ordine un sistema di 97 pezzi senza quel programma.
+97 moduli ESM serviti senza bundler, risolti da una importmap. `main.js` monta i sottosistemi in un ordine che una prova verifica sul sorgente; lo stato condiviso è un oggetto mutabile per dominio, e chi costruisce lo fa dentro `initX(deps)` perché gli import girano prima di scena, camera e renderer.
 
 :::
 

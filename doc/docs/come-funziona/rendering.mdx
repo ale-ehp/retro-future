@@ -17,9 +17,9 @@ Blocco 7: ponte scritto dall'autore del manuale, senza affermazioni tecniche nuo
 
 # Rendering
 
-:::info Se è la prima volta
+:::note In breve
 
-Disegnare una scena 3D non finisce quando gli oggetti sono a posto: l'immagine passa per una catena di ritocchi, come i filtri di una foto ma calcolati sessanta volte al secondo. Questo capitolo segue quella catena, dal primo disegno all'ultimo pixel.
+WebGLRenderer con tone mapping ACES e uscita sRGB; catena di post con UnrealBloomPass in fork, FXAA o MSAA 2x, TAA opzionale, upscale in shader e grade finale. L'encode di output sta in un pass solo, l'ultimo. Risoluzione adattiva con budget a soglie, spento in produzione.
 
 :::
 

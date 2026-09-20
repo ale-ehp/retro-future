@@ -44,6 +44,6 @@ e [Personaggi](./come-funziona/personaggi.mdx).
 
 I capitoli tecnici hanno tutti la stessa forma, si salta al blocco che serve: cosa
 vede l'utente, il problema, come funziona, perché così e non altrimenti, i numeri,
-dove sta nel codice, e un ponte per chi viene dal backend. Dove un concetto è denso, un
-riquadro lo spiega in 3 righe a chi lo incontra per la prima volta; il
-[glossario](./riferimento/glossario.mdx) tiene 86 voci.
+dove sta nel codice, e un ponte per chi viene dal backend. Ogni capitolo si apre con un sommario tecnico di 3 righe; il
+[glossario](./riferimento/glossario.mdx) tiene 86 voci per i termini di
+dominio.

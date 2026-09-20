@@ -18,9 +18,9 @@ Colonna sonora: prodotta dall'autore con Suno, piano Pro (intervista, risposta 8
 
 # Audio
 
-:::info Se è la prima volta
+:::note In breve
 
-Il browser dà a ogni pagina un solo impianto audio, e non lo accende finché non clicchi. Da lì passano la musica, i passi e l'analisi dello spettro che muove l'equalizzatore. Questo capitolo segue quel percorso, e il motivo per cui la musica fa da orologio.
+Un solo `AudioContext`, risolto all'uso e pubblicato su `window`, condiviso fra colonna sonora, passi e AnalyserNode. Il clock del brano fa da orologio maestro: il rivelo parte sul beat drop misurato con RMS filtrato a 150 Hz, non su un timer.
 
 :::
 

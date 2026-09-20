@@ -16,9 +16,9 @@ L'eccezione nota del cursore della luminosità è omessa per decisione dell'auto
 
 # Cielo e atmosfera
 
-:::info Se è la prima volta
+:::note In breve
 
-Il cielo non è una fotografia: è calcolato, nuvola per nuvola, da un programma che gira sulla GPU. Calcolarlo a ogni frame costerebbe metà del tempo disponibile, e questo capitolo spiega il compromesso che lo rende sostenibile.
+Cupola procedurale in GLSL con rumore multi-ottava, troppo cara per frame: viene cotta in un WebGLCubeRenderTarget, una faccia ogni 2 frame, e usata come `scene.background`. Da qui il moto a scatti delle nuvole e il bake a 512 su desktop, 128 su mobile.
 
 :::
 

@@ -17,9 +17,9 @@ Blocco 7: ponte scritto dall'autore del manuale, senza affermazioni tecniche nuo
 
 # Luce e riflessi
 
-:::info Se è la prima volta
+:::note In breve
 
-In una scena in tempo reale i riflessi quasi mai riflettono la scena vera: costerebbe disegnarla 2 volte. Si usano immagini preparate, copie capovolte e scorciatoie matematiche. Questo capitolo dice quali, e dove si vede la differenza.
+Nessuna riflessione planare e nessuna cubemap della scena vera: env map disegnata su canvas 2D e prefiltrata con PMREMGenerator, cloni capovolti per i personaggi con budget di 2, e un termine di Fresnel iniettato via `onBeforeCompile` al posto della env map sul pavimento mobile.
 
 :::
 

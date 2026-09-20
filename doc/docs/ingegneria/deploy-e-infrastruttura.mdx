@@ -17,13 +17,9 @@ FONTI
 
 # Deploy e infrastruttura
 
-:::info Se è la prima volta
+:::note In breve
 
-Un sito statico si può servire in due modi: da un asset binding, oppure da un
-piccolo programma che sta davanti a quel magazzino e decide cosa rispondere. Qui si usa
-il secondo, e il programma gira sui server di frontiera di Cloudflare, cioè vicino a
-chi apre la pagina invece che in un data center solo. Questo capitolo spiega che cosa
-fa quel programma e perché.
+Cloudflare Worker davanti a un asset binding: 6 rotte, riscrittura della variante inglese sulla copia unica, intestazioni di sicurezza e cache decisa per tipo di file. I moduli ESM sono accoppiati a `index.html`, quindi `no-cache` con ETag: una coppia disallineata non degrada, si rompe.
 
 :::
 
