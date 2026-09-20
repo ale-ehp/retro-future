@@ -173,7 +173,8 @@ per distanza con inserimento ordinato; solo loro aggiornano i mixer del riflesso
 ciascuno un test 2D: il segmento camera-membro contro le scatole dei collisori dei
 palazzi (slab test su X e Z); se un palazzo sta in mezzo, opacità 0 e nascosto. I
 sottoalberi non visibili smettono di aggiornare le matrici. Il riflesso del corridore
-sorgente non si vede: `TRON_RUNNER_SOURCE_CHARACTER_VISIBLE = false` entra nella
+sorgente non si vede: il personaggio sorgente è dichiarato invisibile da una costante, e quel valore
+entra nella
 condizione. Le strisce LED dei marciapiedi si disegnano dopo, così il riflesso non può
 sedersi sopra.
 

@@ -25,8 +25,7 @@ alla testa, e si mettono a camminare sui marciapiedi. Una, verde, viene incontro
 chi arriva, si ferma, mostra un cartello “Benvenuto in avstudio.ai”, poi “Seguimi”,
 e corre al tabellone dei reparti. Un'altra, arancione, sta appoggiata al palazzo con
 civico 2 e, se ci si avvicina, dice “Mi godo la pausa”. Volevo che la città avesse
-una parvenza viva: il boulevard è la mia azienda, o la mia testa, i palazzi sono i
-reparti, i personaggi sono colleghi IA.
+una parvenza viva: il boulevard è la mia azienda, o la mia testa, i palazzi sono i dipartimenti, i personaggi sono colleghi IA.
 
 ![La folla sui marciapiedi e chi accoglie in arrivo](/img/folla-e-accoglienza.webp)
 
@@ -90,8 +89,8 @@ perché costruirli spenti dava una sessantina di scheletri che non potevano mai
 disegnarsi.
 
 La tuta è disegnata su canvas: 512x512, gradiente scuro, 1.400 puntini, cinque
-pannelli, quattro linee diagonali; una seconda texture emissiva (la luce propria,
-che il bloom trasforma in alone) porta solo le linee ciano. Il colore segue un piano
+pannelli, quattro linee diagonali; una seconda texture emissiva (la luce propria, che il bloom trasforma in
+alone) ripete lo stesso impianto e ci aggiunge le nove linee ciano. Il colore segue un piano
 di 15 voci ciclico sull'indice, con due eccezioni fisse: l'indice 0 ciano e
 l'indice 1 verde, i due sulla strada di partenza.
 
@@ -147,10 +146,10 @@ prova uno spostamento laterale di 3,4 e salta al waypoint successivo.
 ### Le rotte
 
 Le rotte nascono dai palazzi laterali. Le prime vanno una per ogni stradina fra due
-palazzi con un varco di almeno 5,5 unità; poi si alterna un anello davanti a una
-facciata sola e un segmento lungo il marciapiede. L'anello davanti alla facciata sta
-al 62% verso il bordo della strada, mai più vicino al muro di una guardia di 2,4 più
-il raggio di collisione: il collisore può essere più stretto del palazzo disegnato.
+palazzi con un varco di almeno 5,5 unità; poi si ripete un ciclo di tre rotte: un anello davanti a una facciata sola, un
+segmento lungo il marciapiede, un altro anello. L'anello davanti alla facciata sta
+al 62% verso il bordo della strada, mai più vicino al muro di una guardia di 2,4 più il raggio di collisione
+moltiplicato per 1,35: il collisore può essere più stretto del palazzo disegnato.
 Gli indici 0 e 1 hanno una rotta a parte, due punti sulla strada intorno al punto di
 atterraggio. Il civico 2 è escluso, perché lì c'è chi sta in pausa. Ogni membro
 parte da un punto sfalsato (0,18, 0,38, 0,62 o 0,82 del segmento) e cammina a 0,72
@@ -174,8 +173,8 @@ ricampionamento dello scheletro viene saltato.
 pretende che si vedano circa sei passi prima del saluto, (16 − 7,4) / (3,225 / 2) =
 5,33. A 7,4 unità si ferma, passa dalla camminata alla clip `Idle` con una
 dissolvenza di 0,45 s, si gira verso il giocatore e mostra “Benvenuto in
-avstudio.ai” per 3.600 ms. Poi “Seguimi” per 8.000 ms; dopo 1.500 ms parte di corsa
-verso il tabellone dei reparti, a 3,064 volte il passo, con un cambio secco da
+avstudio.ai” per 3.600 ms. Poi “Seguimi” per 8.000 ms; dopo 1.500 ms parte di corsa verso il tabellone dei reparti, con il passo
+moltiplicato per altre 3,064 volte, con un cambio secco da
 `Idle` a `Run` e non una dissolvenza: la corsa è guidata dalla distanza a terra, e
 una dissolvenza non avanzerebbe. Al tabellone, entro 0,8 unità dall'ancora (il bordo
 destro del tabellone, più 5,2 di lato e 1,4 verso il giocatore), si mette a 45 gradi
@@ -260,8 +259,8 @@ oltre il piano i frammenti non si disegnano) con normale verso il basso, attacca
 ai materiali solo quando cambia. L'altezza di ciascuno è misurata una volta; la
 quota del taglio sale dal 6% al 100% dell'altezza, e il piano sta un 4% più su
 della luce, così il corpo si forma dietro l'anello. Durante il rivelo il corpo è
-opaco, non un fantasma che si solidifica, e l'emissiva sale da 0,2 a 1 della base
-con un boost di 2,3. Gli anelli sono un solo `InstancedMesh` di tori (una geometria
+opaco, non un fantasma che si solidifica, e l'emissiva sale da 0,2 a 1 della base, e sopra si somma una pulsazione
+moltiplicata per 2,3. Gli anelli sono un solo `InstancedMesh` di tori (una geometria
 disegnata N volte in una sola chiamata di disegno), raggio 2,7, additivi (i colori
 si sommano), un'istanza per soggetto alla quota del suo taglio, con opacità
 `sin(π × avanzamento)`. La misura in Chromium: 18 anelli accesi sui personaggi in

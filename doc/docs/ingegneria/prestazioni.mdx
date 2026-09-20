@@ -19,7 +19,9 @@ Blocco 7: ponte scritto dall'autore del manuale, senza affermazioni tecniche nuo
 
 ## Cosa vede l'utente
 
-Su un computer la città scorre; su un telefono va più morbida, e prima di partire la
+Su un computer la città scorre; su un telefono l'immagine è un po' più
+morbida, perché si disegna a risoluzione più bassa con un anti-aliasing che
+sfuma i bordi. Prima di partire la
 demo chiede di girare lo schermo in orizzontale. I due punti dove ha scattato, in
 passato, sono il rivelo della città, con sei passaggi a schermo intero, e la prima
 apparizione di un personaggio con le risorse non ancora sulla scheda grafica. Di
@@ -149,7 +151,9 @@ pannello si aggiorna ogni 250 ms. Il JSON che esce fotografa l'ambiente: browser
 schermo, viewport con pixel ratio, buffer, GPU dichiarata dal driver, il profilo di
 qualità (modo, pixel ratio, scale, antialias, bloom, FSR, TAA, profilo mobile), le
 leve (cielo, pavimento, riflessi, luce, i 29 toggle, i parametri dell'indirizzo) e il
-riassunto dell'OSD. Si scarica da solo come `retro-benchmark-<data ISO>.json`.
+riassunto dell'OSD. Quando il benchmark parte da un indirizzo, il file si scarica da solo come
+`retro-benchmark-<data ISO>.json`, salvo chiedere il contrario; su iPhone può
+aprirsi il foglio di condivisione invece del download.
 
 L'avvio da indirizzo aspetta la scena ferma: rivelo completo, drone atterrato, nessun
 compositing, nessun overlay del LED principale, e questo stato che dura da almeno
@@ -194,7 +198,8 @@ batch visibili, 14.887 istanze nascoste, 21.637 attive.
 
 ### Memoria
 
-Le cache hanno un tetto e smontano quello che espellono. I fumetti: LRU (esce la voce
+Le cache hanno un tetto, e quelle che tengono risorse della scheda grafica le
+smontano quando le espellono. I fumetti: LRU (esce la voce
 usata meno di recente) da 48 voci, canvas 896x360 a metà scala per la folla; era da
 12 contro circa 40 frasi, e 40 texture residenti erano circa 70 MB di GPU. I punti
 degli anelli LED: 64 voci, FIFO. I cartelli di ruolo a 512x256, i numeri civici a
@@ -206,8 +211,9 @@ quando viene ricostruito, e `renderer.info.memory` finisce nel benchmark e nell'
 
 Niente bundler: `index.html` usa una importmap (la mappa dei nomi dei moduli ai
 percorsi) e i moduli sono serviti senza minificazione. Misurato il 20 settembre 2026:
-97 moduli in `src/` per 1.428.704 byte; compressi in brotli a livello 11, come fa
-Cloudflare, la somma per file è 317.479 byte, e `main.js` passa da 47.778 a 11.909.
+97 moduli in `src/` per 1.428.704 byte; compressi con brotli al livello 11,
+che è il comando con cui ho misurato io (Cloudflare comprime in brotli, ma il
+livello che usa non è dichiarato), la somma per file è 317.479 byte, e `main.js` passa da 47.778 a 11.909.
 La politica di cache è `no-cache` con ETag: il browser rifà la richiesta e il server
 risponde 304 se il file non è cambiato.
 
