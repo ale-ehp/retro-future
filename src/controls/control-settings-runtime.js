@@ -135,7 +135,9 @@ export function createControlSettingsRuntime(deps) {
 
   function collectAllControlSettings() {
     const settings = {};
-    document.querySelectorAll('#hud-controls input[type="range"], #hud-controls input[type="checkbox"], #hud-controls select').forEach((input) => {
+    // querySelectorAll dichiara Element, che non ha ne' .type ne' .dataset: il cast dice che
+    // cosa seleziona davvero il selettore (2026-09-20).
+    /** @type {NodeListOf<HTMLInputElement | HTMLSelectElement>} */ (document.querySelectorAll('#hud-controls input[type="range"], #hud-controls input[type="checkbox"], #hud-controls select')).forEach((input) => {
       settings[input.id] = input.type === 'checkbox' ? input.checked : (input.tagName === 'SELECT' ? input.value : Number(input.value));
     });
     return settings;
@@ -192,7 +194,7 @@ export function createControlSettingsRuntime(deps) {
       console.warn('Invalid TRON boulevard global defaults', error);
     }
 
-    document.querySelectorAll('#hud-controls .control-panel').forEach((panel) => {
+    /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#hud-controls .control-panel')).forEach((panel) => {
       try {
         const payload = JSON.parse(localStorage.getItem(`${TAB_STORAGE_PREFIX}${panel.dataset.panel}`) || 'null');
         if (payload?.settings) Object.assign(settings, payload.settings);
@@ -288,7 +290,7 @@ export function createControlSettingsRuntime(deps) {
   }
 
   function bindSaveButtons() {
-    document.querySelectorAll('#hud-controls .save-tab-settings').forEach((button) => {
+    /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#hud-controls .save-tab-settings')).forEach((button) => {
       button.dataset.defaultText = button.textContent;
       button.addEventListener('click', () => saveTabSettings(button.dataset.saveTab, button));
     });

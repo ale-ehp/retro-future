@@ -29,8 +29,22 @@ function createClassList() {
   };
 }
 
+/**
+ * Un elemento finto: un EventTarget con sopra il poco che il terminale tocca (hidden, focus,
+ * setAttribute; textContent e getBoundingClientRect li aggiunge chi ne ha bisogno). Il cast
+ * dice a tsc che lo stiamo decorando, senza fingere un HTMLElement intero (2026-09-20).
+ * @typedef {EventTarget & {
+ *   hidden: boolean,
+ *   classList: ReturnType<typeof createClassList>,
+ *   focused: boolean,
+ *   focus: () => void,
+ *   setAttribute: () => void,
+ *   textContent?: string,
+ *   getBoundingClientRect?: () => { left: number, top: number, width: number, height: number },
+ * }} ElementoFinto
+ */
 function createElementStub() {
-  const element = new EventTarget();
+  const element = /** @type {ElementoFinto} */ (new EventTarget());
   element.hidden = true;
   element.classList = createClassList();
   element.focused = false;

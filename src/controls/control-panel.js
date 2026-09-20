@@ -188,7 +188,9 @@ export function initControlPanel(deps) {
   performanceDiagnosticsEl = null;
   mountFxCategoryPanels({ setPerformanceDiagnosticsEl: (el) => { performanceDiagnosticsEl = el; } });
   mountSideFacadeLedControls();
-  document.querySelectorAll(PRODUCTION_LIVE_CONTROL_SELECTOR).forEach((input) => {
+  // querySelectorAll dichiara Element, che non ha ne' .type ne' .dataset: il cast dice che
+  // cosa seleziona davvero il selettore (2026-09-20).
+  /** @type {NodeListOf<HTMLInputElement | HTMLSelectElement>} */ (document.querySelectorAll(PRODUCTION_LIVE_CONTROL_SELECTOR)).forEach((input) => {
     input.addEventListener(input.tagName === 'SELECT' || input.type === 'checkbox' ? 'change' : 'input', scheduleLiveControls);
   });
   // Agganciata nuda al click, resetCameraHeightToDefault riceveva il PointerEvent al
@@ -268,8 +270,8 @@ export function updateGroundLedMaterials(roadEdgeBrightness, medianBrightness, h
 
 
 function updateControlTabs() {
-  const tabs = document.querySelectorAll('#hud-controls .control-tab');
-  const panels = document.querySelectorAll('#hud-controls .control-panel');
+  /** @type {NodeListOf<HTMLElement>} */ const tabs = document.querySelectorAll('#hud-controls .control-tab');
+  /** @type {NodeListOf<HTMLElement>} */ const panels = document.querySelectorAll('#hud-controls .control-panel');
   tabs.forEach((tab) => {
     tab.addEventListener('click', () => {
       const target = tab.dataset.tab;
