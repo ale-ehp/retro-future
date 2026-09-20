@@ -21,9 +21,9 @@ Nota: lo screenshot del pannello esiste perché l'harness del manuale tiene gli 
 ## Cosa vede l'utente
 
 In produzione, niente: il pannello viene tolto dal DOM subito dopo il boot. Mentre
-costruivo la demo, invece, era la cosa che guardavo di più: dieci schede, oltre
-duecento cursori, venti menù a tendina e sette bottoni, che cambiano la scena mentre è
-in movimento. Larghezza del boulevard, altezza dei palazzi, colore e intensità di ogni
+costruivo la demo, invece, era la cosa che guardavo di più: una ventina di schede, più di duecento
+cursori e una ventina di menù a tendina, che cambiano la scena mentre è in
+movimento. Larghezza del boulevard, altezza dei palazzi, colore e intensità di ogni
 famiglia di LED, esposizione, nuvole, velocità del passo, soglie di collisione.
 
 ![Il pannello aperto sulla scheda del movimento](/img/pannello-di-regia.webp)
@@ -139,35 +139,37 @@ ognuno per diciotto fotogrammi.
   lo costruisce il codice.
 - **Il pannello è ritirato, ma i valori restano.** In produzione spariscono il bottone
   e il pannello; gli elementi staccati continuano a essere letti, perché sono la forma
-  che il resto del codice si aspetta. Togliere anche quelli vorrebbe dire riscrivere
-  la lettura di 537 valori per un guadagno nullo.
+  che il resto del codice si aspetta. Sono la forma che il resto del codice si aspetta, e continuano a essere letti
+da lì.
 - **Quattro aiutanti che fanno il cast, non un tipo “qualunque cosa”.** Il secondo
   avrebbe fatto sparire gli errori veri insieme a quelli falsi, ed era già successo. Il
   cast sta dove nasce il valore, una volta sola.
 - **Il servizio di salvataggio risponde solo da locale.** È uno strumento per chi
-  costruisce, con un server di appoggio in ascolto; in produzione il ramo restava
+  costruisce, con un servizio in ascolto su una porta locale che non vive in
+  questo repository; in produzione il ramo restava
   raggiungibile e un tasto faceva partire una richiesta verso una porta del dominio
   pubblico, che falliva lasciando un avviso in console. Ora l'indirizzo esiste solo
   quando la pagina gira in locale.
-- **Una riapplicazione per fotogramma.** Trascinare un cursore genera decine di eventi
-  al secondo, e riapplicare sei domini a ognuno significa perdere il fotogramma proprio
-  mentre stai giudicando l'effetto.
+- **Una riapplicazione per fotogramma.** Le modifiche vengono raggruppate e applicate
+  una volta per fotogramma, agganciate al ciclo di disegno invece che a ogni evento.
 - **Le quattro coppie della prova sono quelle e non altre**, perché il loro effetto si
   legge da una scorciatoia di ispezione ed è stabile fra un fotogramma e l'altro: la
   folla si muove da sola e quasi tutti gli altri campi cambiano comunque.
-- **Il parametro che nasconde il pannello è applicato da uno script nel markup**, non
-  dal modulo principale: il pannello è nel markup e il modulo arriva dopo, quindi si
-  vedrebbe comparire e sparire.
+- **Il parametro che accende il pannello dei tempi è applicato da uno script nel
+  markup**, non dal modulo principale: quel pannello sta nel markup e il modulo arriva
+  dopo, quindi si vedrebbe comparire e sparire.
 
 Cose che non so spiegare, e lo dico:
 
 - Due cursori avevano dalla prima versione un valore che non è un multiplo del proprio
   passo, e il browser li correggeva da solo senza dirlo. Ora una prova lo intercetta,
   ma non so quando e perché quei due numeri siano stati scritti così.
-- Tredici chiavi del file canonico configuravano uno strumento di posizionamento che
-  non esiste più, e restavano inerti perché la funzione che applica salta le chiavi
-  senza controllo. Le ho tolte; diciotto chiavi di un'altra famiglia restano, e una
-  prova le fissa, così se cambiano è deliberato.
+- Trentuno valori dei LED del palazzo principale sono bloccati, con l'input
+  disabilitato. Nessuna fonte dice perché siano proprio quei trentuno, né da quando.
+- L'upscale viene forzato a risoluzione piena al boot da una funzione apposta, anche se
+  il file canonico dice già la stessa cosa. Il doppione non è spiegato da nessuna parte.
+- Il servizio che riceve i salvataggi in locale non sta in questo repository: so che
+  ascolta su una porta, non dove viva il suo codice.
 - Sei etichette di lettura non hanno un cursore corrispondente. Le ho verificate una
   per una e sono display scritti dal codice, ma il fatto che servisse una verifica dice
   che la struttura non lo rende ovvio.

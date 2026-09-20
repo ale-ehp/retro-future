@@ -22,7 +22,7 @@ Blocco 7: analogia scritta qui.
 La pagina si apre su una copertina nera con quattro schede e un bottone. Le teste 3D
 nelle schede non girano finché non ci avvicini il puntatore: fino a quel momento sono
 fotografie. Al click il bottone dice “Caricamento…”, poi la copertina si dissolve e la
-camera vola: parte da settecento unità sopra la città e scende in strada con un arco,
+camera vola: parte da quasi seicento unità sopra la città e scende in strada con un arco,
 come un drone che atterra.
 
 ![Il volo del drone, con la città ancora in fil di ferro](/img/rivelo-in-corso.webp)
@@ -48,8 +48,8 @@ dito sul canvas devono convivere: uno muove, l'altro guarda.
 
 **L'ordine dentro il fotogramma è logica, non stile.** Prima si toglie dalla camera lo
 scarto del passo, poi si aggiorna il drone, poi il terminale dei contatti, poi il
-movimento, e solo alla fine si rimette lo scarto. Invertire due righe non dà un errore:
-dà una camera che trema, o una posizione salvata sbagliata.
+movimento, e solo alla fine si rimette lo scarto. Invertire due righe non dà un errore, e per questo una prova legge il sorgente
+e verifica che quell'ordine resti.
 
 C'era anche un problema di forma: il volo, il mouse, il cursore, la tastiera, il
 movimento e il joystick vivevano tutti nello stesso file e condividevano decine di
@@ -74,17 +74,16 @@ flowchart TB
 ### Il volo di ingresso
 
 Cinque secondi e sei decimi, da una posizione fissa sopra la città fino al punto di
-atterraggio in strada, con un arco la cui altezza dipende dalla distanza. Con un
-parametro nell'indirizzo diventa un'orbita di sette secondi e mezzo attorno alla
-città prima di scendere, pensata per registrare un video di presentazione.
+atterraggio in strada, con un arco la cui altezza dipende dalla distanza. Con un parametro nell'indirizzo diventa un'orbita di sette secondi e mezzo
+attorno alla città prima di scendere.
 
 ### Guardare
 
 Il mouse gira la camera solo a due condizioni: che il rivelo sia finito e che il
 terminale dei contatti non abbia preso il controllo. Al click il browser chiede il
 blocco del puntatore; se non arriva, un trascinamento di almeno quattro pixel gira la
-camera lo stesso. La sensibilità è 0,0022 radianti per pixel con il blocco e 0,0035
-senza, perché senza blocco il movimento utile è limitato dai bordi dello schermo.
+camera lo stesso. La sensibilità è 0,0022 radianti per pixel con il blocco e 0,0035 senza; i due
+numeri stanno nel codice e nessun commit li motiva.
 
 Contro il salto iniziale ci sono tre difese: si scartano gli eventi per 220
 millisecondi dopo il blocco, per 420 dopo un click, e in ogni caso i primi otto
@@ -136,8 +135,8 @@ finito, come l'indicatore dei tasti sul computer.
   restano privati: ci finisce un nome solo se qualcuno fuori lo tocca.
 - **Il volo verticale è stato tolto** insieme al pannello: una camera che sale e scende
   libera rende inutile tutto il lavoro sulla superficie di cammino.
-- **La pinzata sul tocco non fa niente.** Con due dita si finiva per ruotare la camera
-  mentre si cercava di zoomare, che in una scena in prima persona non ha senso.
+- **La pinzata sul tocco non fa niente.** Con più di un dito il codice ferma
+solo il comportamento del browser; il commit che l'ha decisa non dice perché.
 - **La città si precarica prima del click.** Il costo è che la libreria 3D si scarica
   anche per chi non entra; il guadagno è che chi entra non aspetta. L'attesa al click
   contava di più.
@@ -151,9 +150,11 @@ Cose che non so spiegare, e lo dico:
   due giorni, a giugno, e i commit non dicono che cosa non andava.
 - L'avvio immersivo su telefono è stato aggiunto e annullato lo stesso giorno, senza un
   motivo scritto.
-- Il precaricamento della città è stato spento e riacceso a settembre per il problema
-  dei due contesti audio; risolto quello, è tornato acceso, ma la sequenza esatta degli
-  eventi non è documentata da nessuna parte.
+- La sensibilità del mouse vale 0,0022 radianti per pixel con il blocco del puntatore e
+  0,0035 senza. I due numeri stanno nel codice da sempre e nessun commit dice come sono
+  stati scelti.
+- I tre ritardi che difendono dal salto iniziale, 220 e 420 millisecondi e otto
+  movimenti scartati, sono nella stessa condizione: nessuna fonte li motiva.
 
 ## I numeri
 

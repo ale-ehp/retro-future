@@ -49,8 +49,9 @@ volta. Filtrava il ramo principale, dove la demo non c'è più da agosto.
 E infine la famiglia dei bug. Tutti quelli trovati fino a quel momento erano lo stesso
 difetto: un valore che ne annulla un altro in silenzio. Un cursore che sovrascrive una
 costante, un tetto che taglia ogni aumento, un ritardo che si mangia un'animazione, un
-ordine di disegno mai confrontato con gli altri. Nessuno di questi si vede guardando
-lo schermo, e nessuno rompe una prova che legge il sorgente.
+ordine di disegno mai confrontato con gli altri. Nessuno di questi si vede guardando lo schermo: l'immagine resta quasi uguale,
+e anche l'impronta strutturale non cambia. Per intercettarli serve una prova
+che confronti fra loro valori che stanno in file diversi.
 
 ## Come funziona
 
@@ -193,10 +194,12 @@ gate visivo; e il build di questo manuale, dove un link rotto ferma tutto.
 
 Cose che non so spiegare, e lo dico:
 
-- Il parser del codice morto è arrivato in produzione come dipendenza indiretta:
-  funzionava in locale e il primo lavoro in CI è morto perché non era dichiarato.
-- Il filtro dei percorsi della CI non include il file delle dipendenze: un cambio lì
-  non fa partire niente, e serve l'avvio a mano.
+- Il controllo dei tipi gira senza la modalità severa, e nessuna fonte dice se sia una
+  scelta o solo il punto di partenza di allora.
+- Il numero degli elementi del pannello non torna fra i documenti e il codice: 529 in
+  un posto, 537 chiamate e 538 chiavi nell'altro.
+- Il file che spiega la baseline dice che il gate lascia il server acceso a fine corsa;
+  il codice lo chiude. Uno dei due è rimasto indietro, e non so quale.
 
 ## I numeri
 
