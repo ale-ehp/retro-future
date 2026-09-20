@@ -1,0 +1,70 @@
+---
+title: Visione
+description: Cosa è Retro Future, cosa vuole dimostrare, e da dove viene.
+sidebar_position: 1
+---
+
+{/*
+FONTI (per il verificatore; non renderizzate)
+[1] intervista 2026-09-20, risposta 1 ("e' iniziato come un esperimento...")
+[2] git log --reverse -- public/tecnologie/retro-future: primo commit 2026-06-03 "feat(tecnologie): add retro-future v1.0"; 459 commit al 2026-09-20
+[3] https://avstudio.ai/chi-siamo/retro-future/ risponde 200 (curl, 2026-09-20)
+[4] screenshot copertina.webp (2026-09-20); index.html copertina; README "Senza JavaScript"
+[5] intervista, risposta 7 (boulevard = azienda/testa, palazzi = dipartimenti, personaggi = colleghi AI, frasi scritte dall'autore)
+[6] window.__tronInspect() dopo il rivelo (inspect-dopo-rivelo.json, 2026-09-20): sideBuildingCivicNumbers 1..12; cityDepartmentBoards.items; cityRoleBoard.targetCivics; contactTerminal.civicNumberValue = 2
+[7] screenshot accoglienza-benvenuto.webp e folla-e-accoglienza.webp (fumetti "Benvenuto in av/studio.ai", "Seguimi")
+[8] intervista, risposta 8 (colonna sonora prodotta dall'autore con Suno Pro; i personaggi rispondono al bpm); src/character/runner-beat-pulse.js esiste
+[9] intervista, risposta 6 (obiettivi: 30 fps su telefoni di 6-7 anni, 60 fps stabili su M1 e pari). Sono obiettivi dichiarati, non misure: vedi Prestazioni.
+[10] intervista, risposta 10 (da solo, priorita' e MVP; cosa manca)
+*/}
+
+# Visione
+
+Retro Future è una città notturna che si esplora nel browser, dentro il mio sito.
+Nessuna installazione, nessun plugin: un link, e la pagina diventa un boulevard con
+dodici palazzi, un cielo che si muove, persone che camminano e ti vengono incontro.
+È online da giugno 2026 e ci lavoro da allora, un commit alla volta: quattrocento
+e passa quando scrivo queste righe.
+
+## Da dove viene
+
+È iniziata come un esperimento: volevo vedere fin dove riuscivo ad arrivare con le
+competenze che avevo in quel momento. Non c'era un piano di prodotto, c'era una
+domanda: quanto si può spingere una pagina web prima che smetta di essere una pagina
+web. La risposta è diventata la sezione "chi siamo" del sito.
+
+La copertina lo dice subito: "Ti aspettavi una pagina con reparti e foto." Sotto ci
+sono quattro riquadri con le teste dei dipartimenti e un bottone, "Esplora i reparti".
+Chi non ha JavaScript vede comunque la copertina intera; chi ce l'ha entra nella
+città.
+
+![La copertina della demo](/img/copertina.webp)
+
+## Cosa rappresenta
+
+Il boulevard è la mia azienda, o la mia testa, a seconda dei giorni. I palazzi
+sono i dipartimenti: dodici numeri civici, e sul primo un tabellone che elenca le
+aree (Tech Engineering, AI / ML, Product & Design, Strategy & Business, Sales,
+Marketing); su ognuno un tabellone più piccolo con i ruoli di quel reparto. Sul
+civico 2 c'è il terminale dei contatti, con email e telefono, che si usa da dentro
+la scena.
+
+I personaggi sono colleghi. Chi ti accoglie ti viene incontro, ti dice "Benvenuto in
+av/studio.ai" e poi "Seguimi", e ti porta al tabellone. Le frasi le ho scritte io,
+come le direbbero colleghi di un ufficio che salutano e si confidano.
+
+![Chi accoglie, con il fumetto di benvenuto](/img/accoglienza-benvenuto.webp)
+
+La colonna sonora l'ho prodotta io: volevo movimento, e infatti i personaggi
+rispondono al ritmo.
+
+## Cosa vuole dimostrare
+
+Che una scena 3D con folla, riflessi, post-processing e audio sincronizzato può
+stare in una pagina web e girare su hardware comune. L'obiettivo che mi sono dato è
+30 fotogrammi al secondo su telefoni di sei o sette anni fa, e 60 stabili su un
+portatile con Apple M1 o un PC equivalente. Nel capitolo Prestazioni dico cosa è
+misurato e cosa è ancora un obiettivo: non sono la stessa cosa.
+
+E che tutto questo può essere fatto da una persona sola, se decide per priorità e
+si tiene un MVP in mano invece di un sogno. Il resto del manuale racconta come.

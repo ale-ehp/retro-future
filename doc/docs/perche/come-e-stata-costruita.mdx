@@ -1,0 +1,116 @@
+---
+title: Come è stata costruita
+description: Il metodo, le tappe, i cancelli che tengono il codice in riga.
+sidebar_position: 2
+---
+
+{/*
+FONTI
+[1] intervista 2026-09-20, risposta 5 (strumenti: Codex, Claude Code, pi e altri modelli; lavori fermati)
+[2] intervista, risposta 4 (wireframe all'inizio; poi bloom, AA, risoluzione, fps cap, upscaling; test visivi + OSD numerico; mix qualita'/prestazioni; deve girare ovunque)
+[3] git log --since=2026-09-18 -- public/tecnologie/retro-future e scripts/retro-future-*.mjs; docs/retro-future-tappa5-opus.md; docs/retro-future-typecheck-opus.md; README "Come e' diviso src/" e "Come si scrivono i tipi"
+[4] npm run test:retro-future (2026-09-20): tests 160, pass 160; 46 file *.test.mjs
+[5] scripts/retro-future-typecheck.mjs SOGLIA = 0 (2026-09-20); commit 9a0fe894..374542b2 (524 -> 0)
+[6] scripts/retro-future-codice-morto.mjs: "0 nomi morti, 0 import inutili in 132 file"
+[7] test/retro-future-baseline/README.md (gate welcome 0.05%, scena statica 1.5%, impronta strutturale); scripts/retro-future-visual-gate.mjs
+[8] .github/workflows/retro-future.yml: job prove, gate-visivo, manuale
+[9] test/retro-future-baseline-linux/README.md (MASK_PADDING 6 -> 16; istante fisso chiesto 300.000 ms, arrivato 316.076)
+[10] docs/retro-future-typecheck-opus.md sezione "Le trappole gia' costate care" (any che nasconde 305 errori; hook mai chiamato dal gate; regex ingenua sui `...nome`; workflow con branches: [main] mai partito)
+[11] src/main.js: 1.280 righe al 2026-09-20 (wc -l); docs/retro-future-tappa5-opus.md: 6.824 righe prima della tappa 5
+[12] git log --oneline -- public/tecnologie/retro-future | wc -l = 459 (2026-09-20)
+*/}
+
+# Come è stata costruita
+
+Questa pagina racconta il metodo, perché è la parte che un altro sviluppatore
+può riusare anche senza fare una città 3D.
+
+## Chi ha scritto cosa
+
+L'ho progettata e diretta io. Il codice l'hanno prodotto agenti di programmazione
+(Codex, Claude Code e altri, con modelli diversi nel tempo) sulle mie istruzioni.
+Il mio lavoro è stato decidere cosa fare e in che ordine, guardare il risultato,
+bocciare e rifare quando non era quello che volevo, e mettere in piedi i controlli
+che dicono se qualcosa si è rotto anche quando io non lo vedo.
+
+Come controllo un risultato: con gli occhi, aprendo la scena e confrontando con
+quello che voglio ottenere, e con i numeri, da un pannello a schermo che mostra le
+prestazioni in tempo reale. Le due cose insieme: se la scena è bella e i numeri
+sono peggiorati, non passa.
+
+## Come è cresciuta
+
+All'inizio c'era solo il fil di ferro. Pensavo che il browser non reggesse una
+città piena, quindi i palazzi erano linee. Poi ho aggiunto una cosa alla volta,
+sempre misurando: il bagliore dei LED (bloom), la scelta del tipo di anti-aliasing,
+la risoluzione di resa e come adattarla, un tetto ai fotogrammi al secondo, un
+ricampionamento che ricorda i sistemi tipo DLSS delle schede video ma gira in uno
+shader, e infine i personaggi come li volevo.
+
+Ho fermato più di un lavoro. Le volte che ho provato tecnologie che non davano il
+prodotto che avevo in testa, le ho lasciate. La logica dei percorsi dei personaggi
+l'ho rifatta.
+
+## Le tappe del risanamento
+
+Dopo tre mesi di crescita il codice era vivo ma fragile: un file da 6.824 righe che
+faceva tutto, prove che nessuno lanciava, nessun controllo automatico. Fra il 18 e
+il 20 settembre 2026 l'ho messo in riga in otto tappe, ognuna con un cancello che
+da quel momento non si può più riaprire:
+
+1. **La rete di sicurezza.** Le prove esistenti tornano a girare, e girano in CI a
+   ogni push.
+2. **Il typecheck a cricchetto.** Un controllo dei tipi sui file JavaScript, con
+   una soglia che può solo scendere: il giorno in cui è nato contava 524 errori.
+3. **Prove di comportamento.** Ogni prova costruisce la scena e misura dove
+   finiscono le cose, invece di leggere il sorgente con espressioni regolari.
+4. **Le invarianti.** Un file di prove tiene le relazioni fra valori che si
+   annullano in silenzio: è la famiglia di tutti i bug trovati finora.
+5. **Spezzare il file grande.** Da 6.824 a 1.280 righe, tredici moduli con una
+   regola sola per lo stato condiviso.
+6. **Il gate visivo in CI.** Tre fotografie della scena confrontate pixel per pixel
+   con una baseline, più un'impronta strutturale.
+7. **Rifiniture.**
+8. **Pagare il debito dei tipi.** Da 524 errori a zero, in quindici commit, senza
+   mai usare la scorciatoia che li fa sparire senza correggerli.
+
+## I cancelli, oggi
+
+Prima di ogni commit girano cinque controlli, e devono essere tutti verdi:
+
+| controllo | cosa fa | stato |
+|---|---|---|
+| prove | 160 prove che costruiscono la scena o aprono la pagina in Chromium | 160 su 160 |
+| typecheck | tsc sui `.js`, soglia a cricchetto | 0 errori, soglia 0 |
+| codice morto | nomi dichiarati che nessuno usa, import che nessuno legge | 0 |
+| build | costruisce la pagina italiana e genera quella inglese da un dizionario; si ferma se un testo non si trova più | ok |
+| gate visivo | fotografa copertina e scena e le confronta con la baseline: 0,05% di pixel diversi ammessi sulla copertina, 1,5% sulla scena | nessuna regressione |
+
+Su GitHub tre job ripetono tutto a ogni push: le prove, il gate visivo su un runner
+Linux con la sua baseline, e il build di questo manuale.
+
+## Le cicatrici
+
+Ogni cancello è nato da un errore preciso, e lo dico perché è la parte utile.
+
+- Un tipo dichiarato "qualunque cosa" (`any`) sulle dipendenze del pannello ha fatto
+  sparire 305 errori in un colpo. Sembrava un miglioramento: erano tutti veri. Da
+  allora, se un conteggio crolla più del previsto, il primo sospetto sono io.
+- Il gate visivo era verde mentre una funzione di ispezione aveva quattro nomi non
+  definiti: nessuna prova la chiamava. Ora una prova chiama tutte e undici le
+  scorciatoie di console.
+- Il bottone di avvio pulsa e sborda dal proprio rettangolo di 14 pixel: la maschera
+  del gate copriva 6 pixel di margine e una copertina identica sforava la soglia
+  dello 0,0516%. Prima di alzare una soglia si guarda dove stanno i pixel diversi.
+- Sul runner di GitHub, senza GPU, non si riesce a fotografare la scena all'istante
+  fisso: chiesti 300.000 millisecondi, arrivata a 316.076, e in sedici secondi le
+  nuvole si spostano. Lì fanno da cancello la copertina e l'impronta strutturale.
+- Un workflow filtrato su un branch dove la demo non esiste non è mai partito
+  nemmeno una volta, e nessuno se n'era accorto.
+
+## Cosa questo manuale non racconta
+
+Il manuale descrive il codice com'è oggi. Ogni frase tecnica viene da un file, un
+commit o una prova, e i numeri portano la data e il comando che li produce. Dove
+una scelta non ha una ragione scritta da nessuna parte, lo dico, invece di
+inventarne una a posteriori.

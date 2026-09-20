@@ -6,11 +6,10 @@ import type { Config } from "@docusaurus/types";
 
 const config: Config = {
   title: "Retro Future",
-  tagline: "Come funziona la demo, e perche' e' fatta cosi'",
+  tagline: "Come funziona la demo, e perché è fatta così",
   favicon: "favicon.svg",
   url: process.env.DOCS_URL ?? "https://avstudio.ai",
   baseUrl: process.env.DOCS_BASE_URL ?? "/chi-siamo/retro-future/doc/",
-  trailingSlash: true,
   onBrokenLinks: "throw",
   onBrokenAnchors: "throw",
   markdown: { mermaid: true, hooks: { onBrokenMarkdownLinks: "throw" } },
