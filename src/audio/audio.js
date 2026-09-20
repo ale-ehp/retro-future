@@ -211,7 +211,7 @@ export function createTronSoundtrackElement(soundtrack) {
   const audio = new Audio(TRON_SOUNDTRACK_URL);
   audio.preload = 'auto';
   audio.loop = false;
-  audio.playsInline = true;
+  // Niente `playsInline`: e' un attributo dei <video>, su un Audio non fa nulla (2026-09-20).
   audio.addEventListener('loadedmetadata', () => {
     if (Number.isFinite(audio.duration)) soundtrack.duration = audio.duration;
   });

@@ -258,7 +258,7 @@ export const cityRevealRoadGridShaderMat = registerCityRevealWireMaterial(new TH
   depthTest: true,
   blending: THREE.AdditiveBlending,
   toneMapped: false,
-  extensions: { derivatives: true },
+  // Niente `extensions: { derivatives }`: three r184 (WebGL 2) non lo legge piu' (2026-09-20).
 }), CITY_REVEAL_ROAD_GRID_BASE_OPACITY);
 cityRevealRoadGridShaderMat.userData.cityRevealRoadGridMaterial = true;
 cityRevealRoadGridShaderMat.userData.cityRevealRoadGridShaderMaterial = true;

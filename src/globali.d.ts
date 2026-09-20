@@ -81,3 +81,19 @@ interface Window {
   /** Safari vecchi: AudioContext col prefisso. */
   webkitAudioContext?: typeof AudioContext;
 }
+
+// ---------- quello che il browser ha e lib.dom non dichiara (2026-09-20) ----------
+// Sono letture difensive gia' guardate dal codice (`?? null`, `||`): i tipi le
+// dichiarano opzionali, come sono davvero.
+interface Navigator {
+  /** Chrome e derivati: GB di RAM arrotondati. Firefox e Safari non ce l'hanno. */
+  deviceMemory?: number;
+}
+interface Document {
+  /** Safari fino alla 16.4: fullscreen col prefisso. */
+  webkitFullscreenElement?: Element | null;
+}
+interface HTMLElement {
+  /** Safari fino alla 16.4: fullscreen col prefisso. */
+  webkitRequestFullscreen?: (options?: FullscreenOptions) => Promise<void> | void;
+}
