@@ -598,7 +598,8 @@ function isEventInsideWelcomeStartButton(event) {
 welcomeStartButton?.addEventListener('click', triggerWelcomeButtonStart);
 welcomeWindowOverlay?.addEventListener('click', (event) => {
   if (!welcomeWindowVisible()) return;
-  if (event.target === welcomeStartButton || welcomeStartButton?.contains?.(event.target)) return;
+  // event.target e' dichiarato EventTarget; per un click nell'overlay e' sempre un nodo (2026-09-20).
+  if (event.target === welcomeStartButton || welcomeStartButton?.contains?.(/** @type {Node} */ (event.target))) return;
   if (!isEventInsideWelcomeStartButton(event)) return;
   triggerWelcomeButtonStart(event);
 });

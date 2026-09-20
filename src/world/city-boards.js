@@ -662,6 +662,11 @@ export const CITY_ROLE_BOARD_PANEL_BASE_OPACITY = retroFutureSignOpacity(CITY_RO
 export const CITY_ROLE_BOARD_TEXT_BASE_OPACITY = retroFutureSignTextOpacity(CITY_ROLE_BOARD_RAW_TEXT_BASE_OPACITY);
 const CITY_ROLE_BOARD_SLOT_COUNT = 6;
 const CITY_ROLE_BOARD_REVEAL_EPS = 0.0015;
+/**
+ * Non tutti i settori hanno `note`: senza dichiararla opzionale tsc la dava per inesistente
+ * sull'unione dei quattro letterali (2026-09-20).
+ * @type {ReadonlyArray<Readonly<{ civicNumberValue: number, label: string, roles: readonly string[], note?: string }>>}
+ */
 const CITY_ROLE_BOARD_SECTORS = Object.freeze([
   Object.freeze({
     civicNumberValue: 1,

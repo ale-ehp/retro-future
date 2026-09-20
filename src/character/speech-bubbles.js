@@ -406,6 +406,14 @@ const CROWD_BUBBLE_CANVAS_SCALE = 0.5;
 // shadowBlur passes 60 times a second. 15Hz is plenty for a shimmer and a glitch.
 const GREETER_BUBBLE_ANIMATION_INTERVAL_MS = 1000 / 15;
 
+/**
+ * La texture di un fumetto porta appesi quattro campi propri (proporzioni, se anima, ultimo
+ * disegno, funzione di ridisegno): senza dichiararli tsc li dava per inesistenti su
+ * CanvasTexture (2026-09-20).
+ * @typedef {THREE.CanvasTexture & { __aspect?: number, __animated?: boolean, __lastDrawMs?: number, __draw?: ((nowMs: number) => void) | null }} TexturaFumetto
+ */
+
+/** @returns {TexturaFumetto} */
 function makeGreeterBubbleTexture(html, options = {}) {
   const lines = String(html).split(/<br\s*\/?>/i).map((s) => s.trim());
   const animated = lines.some(isGreeterBubbleLogoLine);
@@ -420,7 +428,7 @@ function makeGreeterBubbleTexture(html, options = {}) {
   const metrics = { fontPx: 0, textW: 0 };
   drawGreeterBubbleCanvas(canvas, ctx, lines, performance.now(), panelFillStyle, metrics);
 
-  const texture = new THREE.CanvasTexture(canvas);
+  const texture = /** @type {TexturaFumetto} */ (new THREE.CanvasTexture(canvas));
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = Math.min(8, deps.getRenderer().capabilities.getMaxAnisotropy?.() || 1);
   if (animated) {
@@ -448,6 +456,7 @@ function makeGreeterBubbleTexture(html, options = {}) {
 const GREETER_BUBBLE_TEXTURE_CACHE_MAX = 48;
 let greeterBubbleTextureCacheNewestKey = '';
 
+/** @returns {TexturaFumetto} */
 function getGreeterBubbleTexture(html, options = {}) {
   const cacheKey = `${options.greeter ? 'greeter' : 'crowd'}:${html}`;
   let tex = greeterBubbleTextureCache.get(cacheKey);
