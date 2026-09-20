@@ -25,6 +25,16 @@ export const CONTACT_TERMINAL_STATES = Object.freeze({
   RETURNING: 'returning',
 });
 
+/**
+ * Uno dei cinque stati qui sopra. Da `let state = CONTACT_TERMINAL_STATES.HIDDEN` tsc
+ * deduceva il letterale 'hidden' e ogni confronto con gli altri quattro era un TS2367
+ * "comparison appears to be unintentional" (13), piu' 5 TS2322 sulle assegnazioni.
+ * Verificato prima di annotare: tutti e quattro gli altri stati vengono assegnati
+ * davvero dal controller (beginFocus, completeFocus, beginReturn, completeReturn,
+ * setAvailable), nessun ramo morto (2026-09-20).
+ * @typedef {typeof CONTACT_TERMINAL_STATES[keyof typeof CONTACT_TERMINAL_STATES]} StatoTerminale
+ */
+
 export const CONTACT_TERMINAL_CONTACTS = Object.freeze([
   Object.freeze({
     label: 'EMAIL',
@@ -79,6 +89,10 @@ export function contactTerminalUri(index) {
   return CONTACT_TERMINAL_CONTACTS[index]?.uri ?? null;
 }
 
+/**
+ * @param {{ code?: string, repeat?: boolean }} event
+ * @param {{ state?: StatoTerminale }} [snapshot] la fotografia del controller
+ */
 export function contactTerminalKeyCommand(event, { state } = {}) {
   if (event?.repeat) return { handled: false, command: null };
   const code = event?.code;
@@ -107,6 +121,7 @@ export function contactTerminalKeyCommand(event, { state } = {}) {
 }
 
 export function createContactTerminalStateController() {
+  /** @type {StatoTerminale} */
   let state = CONTACT_TERMINAL_STATES.HIDDEN;
   let available = false;
   let selection = 0;
