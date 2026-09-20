@@ -547,6 +547,13 @@ export function applyAntialiasControls(mode = post.antialiasMode) {
   resizeFxaaTargets();
 }
 
+/**
+ * Accende o spegne il bloom. Il pannello passa la stringa del <select> ('on'/'off'),
+ * il boot passa il booleano di post.bloomEnabled: la funzione accettava entrambi da
+ * sempre, ma la firma dedotta dal default diceva solo boolean (2026-09-20: era uno
+ * dei tre errori usciti allo scoperto tipizzando createControlEls). Tipi, non un bug.
+ * @param {boolean | string} [value] true/false dal boot, 'on'/'off' dal select: conta solo 'off'
+ */
 export function applyBloomEnabled(value = post.bloomEnabled) {
   post.bloomEnabled = value !== false && value !== 'off';
   if (post.bloomPass) {

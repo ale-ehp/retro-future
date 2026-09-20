@@ -191,7 +191,9 @@ export function initControlPanel(deps) {
   document.querySelectorAll(PRODUCTION_LIVE_CONTROL_SELECTOR).forEach((input) => {
     input.addEventListener(input.tagName === 'SELECT' || input.type === 'checkbox' ? 'change' : 'input', scheduleLiveControls);
   });
-  controlEls.resetCameraHeight.addEventListener('click', resetCameraHeightToDefault);
+  // Agganciata nuda al click, resetCameraHeightToDefault riceveva il PointerEvent al
+  // posto di showFeedback: funzionava solo perche' un evento e' truthy (2026-09-20).
+  controlEls.resetCameraHeight.addEventListener('click', () => resetCameraHeightToDefault(true));
   controlEls.saveLiveSpawn.addEventListener('click', captureLivePlayerSpawn);
   controlEls.resetPlayerSpawn.addEventListener('click', () => applyPlayerSpawn(player.playerSpawn, true));
   controlEls.saveStartPosition.addEventListener('click', captureLivePlayerSpawn);
