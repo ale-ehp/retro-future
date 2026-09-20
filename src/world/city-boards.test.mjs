@@ -8,9 +8,16 @@ function assertNear(actual, expected) {
   );
 }
 
+// city-boards.js all'import legge solo `location.search` e controlla che `window` esista:
+// la prova gli da' quel minimo. Il doppio cast dice a tsc che e' una finta dichiarata,
+// non una Window vera (2026-09-20).
+function fingiFinestra() {
+  globalThis.window = /** @type {Window & typeof globalThis} */ (/** @type {unknown} */ ({}));
+  globalThis.location = /** @type {Location} */ (/** @type {unknown} */ ({ search: '' }));
+}
+
 test('city board signs use the shared 30 percent opacity reduction', async () => {
-  globalThis.window = {};
-  globalThis.location = { search: '' };
+  fingiFinestra();
   const cityBoards = await import(`./city-boards.js?opacity-test=${Date.now()}`);
 
   assertNear(cityBoards.CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY, 0.46 * 0.7);
@@ -20,8 +27,7 @@ test('city board signs use the shared 30 percent opacity reduction', async () =>
 });
 
 test('city board signs are 50 percent larger in world space', async () => {
-  globalThis.window = {};
-  globalThis.location = { search: '' };
+  fingiFinestra();
   const cityBoards = await import(`./city-boards.js?size-test=${Date.now()}`);
 
   assert.equal(cityBoards.CITY_DEPARTMENT_BOARD_WIDTH, 31.5);
@@ -31,8 +37,7 @@ test('city board signs are 50 percent larger in world space', async () => {
 });
 
 test('city board signs respect foreground character depth', async () => {
-  globalThis.window = {};
-  globalThis.location = { search: '' };
+  fingiFinestra();
   const cityBoards = await import(`./city-boards.js?depth-test=${Date.now()}`);
 
   assert.equal(cityBoards.CITY_DEPARTMENT_BOARD_DEPTH_TEST, true);

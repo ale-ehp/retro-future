@@ -10,6 +10,8 @@ import {
   effectiveRenderScaleForDevice,
 } from './performance-mobile.js';
 
+// Senza il tipo tsc vede una lista di `string | funzione` e non sa chiamare il secondo elemento (2026-09-20).
+/** @type {Array<[string, (attivo: boolean, base: number, tetto: number) => number]>} */
 const CAPS = [
   ['render scale', effectiveRenderScaleForDevice],
   ['pixel ratio', effectivePixelRatioForDevice],
