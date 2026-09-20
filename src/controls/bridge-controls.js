@@ -22,8 +22,14 @@ function bridgeControlId(index, key) {
   return `bridge-${index}-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
 }
 
+/**
+ * L'<input> di un controllo del ponte (hidden o checkbox, li crea fixed-control-defaults).
+ * getElementById dichiara HTMLElement, che non ha .value ne' .checked: e' la stessa radice
+ * di createControlEls, corretta qui per gli id costruiti al volo (2026-09-20).
+ * @returns {HTMLInputElement | null}
+ */
 function getBridgeControl(index, key) {
-  return document.getElementById(bridgeControlId(index, key));
+  return /** @type {HTMLInputElement} */ (document.getElementById(bridgeControlId(index, key)));
 }
 
 /**

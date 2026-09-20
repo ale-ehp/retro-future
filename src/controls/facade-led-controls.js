@@ -1,6 +1,7 @@
 export function mountSideFacadeLedControls(controlEls) {
+  // getElementById dichiara HTMLElement: qui gli id sono cursori (<input>), e il cast lo dice (2026-09-20).
   function mountExistingRange(target, inputId, outputId, label, min, max, step) {
-    const input = document.getElementById(inputId);
+    const input = /** @type {HTMLInputElement} */ (document.getElementById(inputId));
     const output = document.getElementById(outputId);
     if (!target || !input || !output) return null;
     const storedValue = input.value;
@@ -23,7 +24,7 @@ export function mountSideFacadeLedControls(controlEls) {
 
   function createRange(target, inputId, outputId, label, min, max, step, value = 0) {
     if (!target) return null;
-    let input = document.getElementById(inputId);
+    let input = /** @type {HTMLInputElement} */ (document.getElementById(inputId));
     let output = document.getElementById(outputId);
     if (!input) {
       input = document.createElement('input');

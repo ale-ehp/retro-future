@@ -25,7 +25,8 @@ export function mountFxCategoryPanels(deps) {
 
   const mountHiddenRange = (targetId, inputId, outputId, label, min, max, step, formatter = (value) => value.toFixed(2)) => {
     const target = document.getElementById(targetId);
-    const input = document.getElementById(inputId);
+    // getElementById dichiara HTMLElement: l'id e' un cursore (<input>), e il cast lo dice (2026-09-20).
+    const input = /** @type {HTMLInputElement} */ (document.getElementById(inputId));
     const output = document.getElementById(outputId);
     if (!target || !input || !output) return;
     const storedValue = input.value;

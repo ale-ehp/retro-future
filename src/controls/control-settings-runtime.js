@@ -145,7 +145,7 @@ export function createControlSettingsRuntime(deps) {
 
   function applyLockedLedPositionControls() {
     for (const [id, value] of Object.entries(LOCKED_LED_POSITION_VALUES)) {
-      const input = document.getElementById(id);
+      const input = /** @type {HTMLInputElement} */ (document.getElementById(id));
       if (!input) continue;
       input.value = String(value);
       input.defaultValue = String(value);
@@ -156,16 +156,20 @@ export function createControlSettingsRuntime(deps) {
 
   function applyControlSettings(settings, asDefault = false) {
     for (const [id, rawValue] of Object.entries(settings)) {
-      const input = document.getElementById(id);
-      if (!input) continue;
-      if (input.tagName === 'SELECT') {
+      const element = document.getElementById(id);
+      if (!element) continue;
+      // Gli id salvati sono <select> o <input>: tsc non restringe sul tagName, quindi il
+      // ramo del select fa il suo cast e il resto della funzione lavora sull'<input> (2026-09-20).
+      if (element.tagName === 'SELECT') {
+        const select = /** @type {HTMLSelectElement} */ (element);
         const value = String(rawValue);
-        const optionExists = Array.from(input.options).some((option) => option.value === value);
+        const optionExists = Array.from(select.options).some((option) => option.value === value);
         if (!optionExists) continue;
-        input.value = value;
-        if (asDefault) input.dataset.defaultValue = value;
+        select.value = value;
+        if (asDefault) select.dataset.defaultValue = value;
         continue;
       }
+      const input = /** @type {HTMLInputElement} */ (element);
       if (input.type === 'checkbox') {
         input.checked = Boolean(rawValue);
         if (asDefault) input.defaultChecked = input.checked;
