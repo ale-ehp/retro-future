@@ -7,7 +7,8 @@ segue e' stato misurato il 2026-09-19, non assunto.
 
 ```
 npm run test:retro-future        # prove node (browser Chromium di Playwright per quelle di pagina)
-npm run typecheck:retro-future   # tsc sui .js, soglia a cricchetto: gli errori possono solo scendere
+npm run typecheck:retro-future   # tsc sui .js, soglia a cricchetto: zero dal 2026-09-20, e resta zero
+npm run morto:retro-future       # nomi mai usati e import inutili: zero, devono restare zero
 npm run build:retro-future       # dist-retro/ + la pagina inglese generata dal dizionario
 node scripts/retro-future-visual-gate.mjs /tmp/rf --port 8811
 python3 scripts/retro-future-visual-compare.py test/retro-future-baseline /tmp/rf
@@ -69,6 +70,48 @@ Due regole che tengono in piedi la divisione:
    creare scena, camera e renderer, quindi un modulo che chiama `scene.add()` o legge il
    renderer non puo' farlo al momento dell'import: i binding sono dichiarati in cima al
    file e assegnati dentro la funzione, che `main.js` chiama dove stava il codice.
+
+## Come si scrivono i tipi (senza bundler, senza TypeScript)
+
+Il typecheck legge i `.js` con `checkJs` e i tipi stanno nei commenti JSDoc. Il debito
+di partenza (524 errori il 2026-09-19) e' andato a zero il 2026-09-20 in quindici
+commit, e le convenzioni che ne sono uscite valgono per chi scrive codice nuovo:
+
+- **Mai `any` per far sparire un errore.** E' gia' successo: tipizzare `any` le
+  dipendenze del pannello aveva nascosto 305 errori veri. Se un conteggio crolla piu'
+  del previsto, sospetta di te stesso.
+- **Il cast sta dove nasce il valore, una volta sola.** `document.getElementById`
+  dichiara `HTMLElement`: in `controls/controls.js` quattro aiutanti (`cursore`,
+  `scelta`, `bottone`, `etichetta`) fanno il cast per i 529 elementi del pannello, e
+  chi li usa non deve saperne niente. Stesso principio per `querySelectorAll` (cast
+  del `NodeListOf` sul selettore) e per i pochi `getElementById` locali.
+- **I segnaposto delle dipendenze portano la firma vera.** `let refresh = () => {}`
+  fa dedurre `() => void` e ogni chiamata con argomenti e' un errore. Dove la funzione
+  vera e' esportata il segnaposto ne prende il tipo con `typeof import('./x.js').f`,
+  cosi' non puo' scollarsi; altrimenti la firma e' scritta a mano dopo averla aperta.
+- **Un oggetto di dipendenze ha un typedef intero** (`DipendenzeTerminale` in
+  `world/contact-terminal.js`): i default coprono una parte, i campi iniettati sono
+  opzionali. Dove le prove passano uno stub, il tipo dice il minimo che il runtime
+  tocca, non `HTMLElement` o `WebGLRenderer` interi.
+- **`traverse()` passa anche gruppi e luci**: il nodo e' `THREE.Object3D &
+  Partial<THREE.Mesh>` (`NodoForseMesh`), non un cast a `Mesh`, che sui gruppi
+  sarebbe una bugia.
+- **Le opzioni destrutturate con campi senza default** (`{ x, z, enabled = ... } = {}`)
+  vogliono un `@param` con il tipo intero: tsc deduce solo i campi con default. Per
+  un parametro che non si vuole tipizzare basta `@param nome` senza tipo, che serve
+  solo a far combaciare la posizione.
+- **Una `let` con un letterale** (`let state = STATI.HIDDEN`) diventa quel solo
+  letterale: annota l'unione, ma prima verifica che gli altri valori vengano
+  assegnati davvero, altrimenti hai trovato un ramo morto da togliere.
+- **Quello che il browser ha e lib.dom no** (`navigator.deviceMemory`,
+  `webkitRequestFullscreen`) si dichiara in `src/globali.d.ts`, opzionale com'e'.
+- **I doppi di prova si dichiarano come tali**: un cast doppio (`unknown` poi il tipo)
+  con un commento che dice cosa finge, non un `any`.
+
+Quattro cose che i tipi hanno scovato e che non erano tipi: `elStrip` e
+`sideDoorFaceOffset` iniettati e mai letti, `createTronRunnerParts({})` con un
+argomento ignorato, `audio.playsInline` (attributo dei video) ed
+`extensions.derivatives` (WebGL 1) che non facevano niente. Tolti, gate visivo uguale.
 
 ## Quanto pesa `src/` sulla rete
 
