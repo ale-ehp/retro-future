@@ -50,8 +50,8 @@ Tre cose lo rendono difficile:
 
 E c'è una quarta, meno visibile: l'ordine dei passaggi decide se i colori sono
 corretti. Sfocare, sommare e regolare il contrasto sono operazioni giuste solo su
-valori lineari, prima della conversione per lo schermo. Farle dopo dà un'immagine
-diversa, e non in meglio.
+valori lineari, prima della conversione per lo schermo. Farle dopo dà un'immagine diversa, e il look della demo era stato tarato
+proprio sulla catena sbagliata.
 
 ## Come funziona
 
@@ -93,8 +93,8 @@ Il pass di bloom è una copia modificata di quello di three.js. Lavora a metà
 risoluzione, con un tetto ulteriore allo 0,28 della finestra, e usa tre dei cinque
 livelli di sfocatura invece di tutti. Quando la camera è ferma, ricalcola il bloom un
 fotogramma sì e uno no e riusa quello in cache; appena la camera si muove torna a
-ogni fotogramma. Durante il rivelo della città, su telefono, il bloom viene saltato
-del tutto finché il drone non è atterrato.
+ogni fotogramma. Durante il rivelo della città il bloom viene saltato del tutto: su telefono
+per tutta la fase critica, su computer finché il drone non è atterrato.
 
 C'è un secondo risparmio: quando FXAA, TAA e upscale sono spenti, il bloom non si
 somma nel proprio buffer ma viene passato come texture al pass del look, che lo somma
@@ -106,8 +106,9 @@ Su computer: MSAA hardware a 2 campioni, con un accorgimento. Il composer di thr
 clona il buffer multisample anche per il secondo buffer di scambio, e così ogni pass
 di post disegnava a 2 campioni per niente. Il secondo buffer è sostituito con uno a
 un campione: la scena si risolve una volta, il resto gira a 1x. Su telefono: FXAA.
-Il TAA esiste, con jitter di Halton su 8 campioni, clamp del vicinato e history a
-16 bit, ma si accende solo con `?taa=1`.
+Il TAA esiste, con jitter di Halton su 8 campioni e clamp del vicinato, e si
+accende con `?taa=1` o `?aa=taa`. Nella catena di default tiene la sua memoria
+a 16 bit; nella catena storica no.
 
 ### L'upscale “FSR-like”
 
@@ -123,12 +124,12 @@ identico pixel per pixel confrontando l'hash di due fotogrammi congelati.
 
 ### Risoluzione adattiva e budget
 
-Il pixel ratio massimo è 2, con un budget per lo schermo fisico: 1280x720 sotto il
-Full HD, 1920x1080 sopra. Ogni 500 millisecondi il ciclo misura i fotogrammi al
+Il pixel ratio massimo è 2, con un budget per lo schermo fisico: 1920x1080 se
+lo schermo arriva almeno al Full HD, 1280x720 sotto. Ogni 500 millisecondi il ciclo misura i fotogrammi al
 secondo e, se il profilo è “auto”, toglie qualità a gradini (0,15 sotto i 45, 0,10
 sotto i 54, 0,05 sotto i 58) e la restituisce piano sopra i 59,7, con un tempo di
 attesa fra un ritocco e l'altro. In produzione, però, il profilo è “quality”: il
-budget automatico esiste, è provato, e non interviene. Su telefono il pixel ratio è
+budget automatico esiste e non interviene. Su telefono il pixel ratio è
 fisso a 1,7, che è il 72% dei pixel di un 2x.
 
 ### Il prewarm al boot
@@ -165,8 +166,7 @@ catena dei pass, draw, triangoli e texture.
   pixel ratio 1,7 il MSAA non ha una componente temporale e la sfocatura di FXAA
   nasconde il tremolio.
 - **1,7 e non 2 su telefono.** Da 1 sono passato a 2 fisso, poi a 1,8 (19% di pixel
-  in meno), poi a 1,7 (28% in meno). Decisioni mie, guardando il telefono, con FXAA
-  che nasconde la leggera morbidezza.
+  in meno), poi a 1,7 (28% in meno). Decisioni mie, con FXAA che nasconde la leggera morbidezza.
 - **La catena colore corretta prima come opzione, poi come default.** Correggere
   l'ordine cambia l'immagine: il 31,7% dei pixel diverso e la luminosità media da
   15,74 a 19,97. Non era una decisione tecnica ma di direzione artistica, quindi
@@ -187,7 +187,9 @@ Tre cose che non so spiegare, e lo dico:
 - Il budget automatico della risoluzione è spento in produzione (profilo “quality”),
   e nessun commit dice da quando o perché.
 - Nel ciclo dei fotogrammi non c'è un tetto agli fps: il ciclo si riprenota al
-  refresh dello schermo. Il “cap” che avevo in mente è il budget a 60 di cui sopra.
+  refresh dello schermo. Fra le scelte che ricordo c'è un “tetto agli fps”, e nel codice non c'è: o è
+  stato tolto senza lasciare traccia, o intendevo il budget automatico qui
+  sopra.
 
 ## I numeri
 
@@ -197,7 +199,8 @@ Tre cose che non so spiegare, e lo dico:
 | MSAA | 2 campioni | `src/engine/post-pipeline.js` |
 | pixel ratio su telefono | 1,7 fisso (72% dei pixel di un 2x) | `src/config/costanti.js`; commit d6c737d3 |
 | budget automatico | soglie 45 / 54 / 58 / 59,7 fps, passi 0,15 / 0,10 / 0,05 / +0,025 | `src/engine/post-pipeline.js` |
-| upscale FSR-like | scala interna 0,65..1, nitidezza 0..1,25, 11 letture | `src/engine/shaders.js` |
+| upscale FSR-like | 11 letture in `shaders.js`, scala 0,65..1 e nitidezza
+fino a 1,25 in `post-pipeline.js` | letti il 2026-09-20 |
 | fast path dell'upscale | render medio da 4,27 a 3,86 ms su M3 | commit 1902c65a, 2026-07-07 |
 | bloom di qualità | circa 20 fps | commit 8cbaaaf1, 2026-06-17 |
 | primo MSAA su iPhone | 34 fps | commit eb57f0c9, 2026-07-09 |

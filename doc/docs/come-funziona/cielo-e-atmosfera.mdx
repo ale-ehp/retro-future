@@ -22,7 +22,8 @@ Sopra la città c'è un cielo di nuvole scure con i bordi verde acqua, che scorr
 piano e non finiscono mai. Con il cielo scelto dal file canonico, dentro le nuvole
 passano lampi: scintille locali e raffiche a glitch, in una fascia sopra l'orizzonte.
 Nell'aria salgono e derivano 400 punti ciano, polvere o braci, che il bloom ammorbidisce.
-Non c'è nebbia: quello che sembra nebbia è il buio della scena e la luce dei LED.
+Nella scena non c'è nebbia: nessun effetto di foschia è dichiarato, e i materiali la
+escludono esplicitamente.
 
 ![Il cielo procedurale sopra il boulevard](/img/cielo.webp)
 
@@ -53,10 +54,9 @@ il README della baseline ne conta quindici.
 
 `createSkyDome` costruisce una sfera di raggio 8.500 unità, 32 per 18 segmenti,
 disegnata dall'interno (`side: BackSide`), con `renderOrder = 1000` e
-`frustumCulled = false`. Il frustum culling è il salto degli oggetti fuori dal cono
-della camera; qui è spento perché la cupola segue la camera: a ogni fotogramma
-`update(now)` copia la posizione della camera sulla sfera, e il cielo sembra
-all'infinito. Il vertex shader passa solo la direzione normalizzata del vertice.
+`frustumCulled = false`, cioè senza il salto che di norma esclude gli oggetti fuori
+dal cono della camera. A ogni fotogramma `update(now)` copia la posizione della
+camera sulla sfera, così il cielo sembra all'infinito. Il vertex shader passa solo la direzione normalizzata del vertice.
 
 ### Lo shader delle nuvole
 
@@ -173,8 +173,10 @@ impulsi sui LED. Si vedono solo a rivelo completato.
 
 ### La nebbia che non c'è
 
-Nel progetto non esiste `scene.fog`. I materiali portano `fog: false`. L'aria la
-danno le particelle, il bloom e il buio.
+Nel progetto non esiste `scene.fog`, e i materiali portano `fog: false`. Quello che
+riempie l'aria sono le particelle atmosferiche, descritte qui sopra; nessuna fonte
+dice che cosa, esattamente, produca l'impressione di foschia che resta guardando in
+fondo al viale.
 
 ### L'orologio
 
