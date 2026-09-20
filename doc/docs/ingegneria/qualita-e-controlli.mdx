@@ -1,0 +1,242 @@
+---
+title: Qualità e controlli
+description: Le prove, il typecheck a cricchetto, il rilevatore di codice morto e il gate visivo che tengono la demo in riga.
+sidebar_position: 2
+---
+
+{/*
+FONTI: docs/manuale-retro-future/schede/01-architettura-qualita-pannello.md, sottosezioni "Qualità" delle sezioni 1-6 e 9.
+Blocco 1: §1 Qualità (le tre immagini del gate; la baseline Linux guardata prima di committarla).
+Blocco 2: §2 Qualità (129 prove che non giravano, d5105801; prove a regex, 00b3c82e; nessuna prova guardava il risultato, cfb54b9a; workflow mai partito, a78c48ef; scena statica che pulsa, 658a84b5; baseline macOS non regge su Linux; "26 nomi mai usati" non verificabili, 31d138d6; la famiglia dei bug, invarianti.test.mjs; any che nasconde 305 errori, 995e925f; 354 su 524 errori da una radice sola).
+Blocco 3: §3 Qualità (comando delle prove; 160 prove e 35 file; tre famiglie di prove; controprove; le 8 invarianti; scorciatoie-console; live-controls.test; control-defaults.test; typecheck e jsconfig; globali.d.ts; storia 524->0 con i dodici commit; codice morto con acorn; gate: cattura, impronta, maschere, confronto; due baseline; CI a tre job).
+Blocco 4: §4 Qualità (prove sul comportamento; solo quattro file leggono il sorgente; soglia che non punisce chi corregge; vendor escluso; @types/three; mai any; Object3D & Partial<Mesh>; npm install invece di npm ci; acorn dichiarato; la regex dello spread; il gate aspetta lo stato; MASK_PADDING 16; due baseline; RF_GATE_* sul runner; l'impronta con i valori di runtime; la baseline si guarda prima di rigenerarla; il filtro paths senza package.json; il job manuale).
+Blocco 5: §5 Qualità (numeri) e misure della sessione 2026-09-20.
+Blocco 6: §6 Qualità (file e righe).
+Blocco 7: analogia scritta qui, nessuna affermazione tecnica nuova.
+Omesse per decisione dell'autore: le due eccezioni registrate in invarianti.test.mjs (cielo, LED della folla).
+*/}
+
+# Qualità e controlli
+
+## Cosa vede l'utente
+
+Niente. Questo è l'unico capitolo che descrive cose che il visitatore non incontra
+mai: cinque controlli automatici che girano prima di ogni commit e tre lavori che
+ripartono su GitHub a ogni push. Quello che il visitatore vede, invece, lo fotografa
+uno di quei controlli: il gate visivo apre la demo in Chrome, aspetta che la città sia
+apparsa e scatta tre immagini, la copertina, la scena libera e la scena con folla ed
+equalizzatore fermi.
+
+![La copertina, la prima delle tre immagini che il gate confronta](/img/copertina.webp)
+
+## Il problema
+
+A settembre 2026 la demo aveva tre mesi di vita, 129 prove e un problema: le prove non
+giravano da nessuna parte. Non c'era uno script che le lanciasse, non c'era un lavoro
+di integrazione continua che le eseguisse, e i moduli di scena morivano all'avvio
+perché importano la libreria 3D con un nome che il browser risolve con la importmap e
+che Node da solo non conosce. Erano rosse da giorni senza che nessuno lo sapesse.
+
+Peggio: quelle che giravano guardavano il posto sbagliato. Leggevano il codice
+sorgente con espressioni regolari, cercando un margine di 62 pixel o il nome di una
+funzione. Cambiare apposta un margine le rompeva, e nessuna avrebbe visto un bottone
+coperto da un altro elemento. Nessuna guardava il risultato: un riordino del codice
+poteva passarle tutte e cambiare la scena.
+
+C'era anche un lavoro di integrazione continua, e non era mai partito nemmeno una
+volta. Filtrava il ramo principale, dove la demo non c'è più da agosto.
+
+E infine la famiglia dei bug. Tutti quelli trovati fino a quel momento erano lo stesso
+difetto: un valore che ne annulla un altro in silenzio. Un cursore che sovrascrive una
+costante, un tetto che taglia ogni aumento, un ritardo che si mangia un'animazione, un
+ordine di disegno mai confrontato con gli altri. Nessuno di questi si vede guardando
+lo schermo, e nessuno rompe una prova che legge il sorgente.
+
+## Come funziona
+
+Cinque controlli, in quest'ordine, e devono essere tutti verdi.
+
+```mermaid
+flowchart TB
+  A[modifica al codice] --> B[prove<br/>160, node:test + Chromium]
+  B --> C[typecheck<br/>soglia a cricchetto, oggi 0]
+  C --> D[codice morto<br/>acorn, oggi 0]
+  D --> E[build<br/>pagina italiana + inglese]
+  E --> F[gate visivo<br/>3 foto + impronta]
+  F --> G{tutti verdi?}
+  G -->|sì| H[commit]
+  G -->|no| A
+```
+
+### Le prove
+
+Centosessanta prove in trentacinque file, accanto ai moduli che provano. Si dividono
+in tre famiglie.
+
+Le **prove di pagina** aprono il file della demo in un Chromium controllato dal
+codice, servendo i file da disco con un intercettore di richieste, senza avviare un
+server. Il modulo principale viene sostituito da un modulo vuoto quando alla prova
+interessa solo il markup. Ogni prova dura meno di un secondo. Se il browser non c'è,
+falliscono: saltarle sarebbe un timbro.
+
+Le **prove di scena** girano in Node con un documento finto, in cui ogni metodo del
+disegno su canvas non fa niente. Basta a costruire cartelli, tabelloni e terminale, e
+la prova guarda dove finiscono gli oggetti nella scena e con quali materiali.
+
+Le **prove che leggono il sorgente** sono quattro file soli, e solo per cose che il
+sorgente può dire da solo: il contesto audio unico, la importmap, le invarianti,
+l'ordine del boot e del fotogramma.
+
+Ogni prova nuova ha una controprova: si rompe apposta ciò che deve intercettare e si
+verifica che diventi rossa. Quando ho rimesso in circolo cinque trappole già corrette,
+una per volta, ognuna ha acceso almeno una prova.
+
+Il file delle **invarianti** è quello che tiene la famiglia di bug descritta sopra:
+otto prove, ognuna con accanto il bug che l'ha generata e la data. Tengono relazioni
+fra valori che stanno in file diversi, per esempio che nessun ordine di disegno del
+progetto superi quello dei fumetti, che ogni cursore del markup abbia un valore
+multiplo del proprio passo, che il tetto del battito musicale stia sopra il massimo
+che il calcolo può produrre.
+
+### Il typecheck a cricchetto
+
+Un programma legge i file JavaScript con il controllo dei tipi attivo, tiene solo gli
+errori dei file miei, e confronta il totale con una soglia scritta nello script.
+Fallisce se il numero **sale**. Se scende, non fallisce: chiede di abbassare la soglia
+nello stesso commit. Rendere rossa una correzione insegnerebbe a non correggere.
+
+La soglia era 524 il 19 settembre ed è 0 dal giorno dopo, in dodici commit, ognuno con
+il conteggio nel titolo. Il primo da solo ne ha chiusi 312, perché 354 errori su 524
+erano un solo errore ripetuto: la funzione che cerca i 537 elementi del pannello li
+restituiva senza dire che cosa fossero, e ogni lettura di un cursore diventava un
+errore.
+
+La libreria 3D è esclusa dal conteggio, e i suoi tipi arrivano dal pacchetto di
+dichiarazioni ufficiale invece che dal file compresso: inferirli dal file compresso
+dava centinaia di falsi errori, e il cricchetto puniva ogni prova nuova.
+
+### Il rilevatore di codice morto
+
+Un secondo programma analizza ogni modulo con un parser vero e cerca due cose: nomi
+dichiarati che in tutta la cartella compaiono una volta sola, e nomi importati che nel
+corpo del file non compaiono mai. Conta anche gli esportati, perché in una demo senza
+bundler un export che nessuno importa viaggia comunque sulla rete. Oggi trova zero e
+zero.
+
+### Il gate visivo
+
+Il pezzo più interessante. Uno script avvia un server locale sulla cartella della
+demo, apre Chrome, clicca il bottone di avvio e **aspetta uno stato**, non un tempo:
+che la funzione di ispezione esista, che la copertina si chiuda, che il rivelo della
+città si dichiari concluso. Con un'attesa a tempo la foto finiva sulla copertina, e il
+confronto diceva che tutta la scena era cambiata: un falso allarme molto convincente.
+
+Poi scatta le tre immagini e raccoglie un'**impronta strutturale**: quanti oggetti per
+tipo ci sono nella scena, i loro nomi ordinati, la posa della camera, i numeri civici,
+i ponti, i tabelloni, il terminale, gli identificatori nel DOM, e una sezione di
+valori di runtime, fra cui l'ordine di disegno dei fumetti e la catena dei passaggi di
+post-produzione. Quei valori ci sono perché i cinque bug della famiglia lasciano
+l'immagine quasi uguale: rimessa la trappola dell'ordine di disegno, i pixel diversi
+erano lo 0,17% e l'impronta ha detto il nome esatto del campo cambiato.
+
+Il confronto maschera le zone che hanno rumore per costruzione, cioè il pannello dei
+tempi, il bottone che pulsa, l'equalizzatore. La soglia è 0,05% di pixel diversi sulla
+copertina e 1,5% sulla scena.
+
+C'è un problema che merita il dettaglio: **la scena “statica” non è ferma**. Con folla
+ed equalizzatore spenti restano le luci che pulsano a tempo e le nuvole che scorrono.
+Due fotogrammi a tre secondi di distanza nella stessa sessione differivano del 2,3%, e
+la baseline della mattina batteva le catture del pomeriggio del 3,7% a codice
+identico, cioè sopra la soglia. Fermare l'orologio della scena non si può senza
+toccare quindici moduli. Quindi il gate fotografa a un **istante fisso**
+dell'orologio, e poi scatta una **raffica**: il confronto prende il fotogramma più
+vicino alla baseline e stampa anche il singolo e il peggiore. Una fase diversa abbassa
+solo il migliore; una regressione vera li alza tutti.
+
+### Le due baseline e la CI
+
+La baseline fatta sul mio Mac con Chrome e una scheda grafica vera non vale sul
+runner di GitHub: lì manca il carattere della copertina e il disegno è in software,
+quindi la copertina differisce dell'1,44% contro una soglia dello 0,05%. Non è una
+regressione, è un altro sistema. Il runner ha quindi una baseline sua, generata da lui
+stesso, guardata prima di essere committata. Finché non esisteva, il lavoro fotografava
+e diceva come procedere, senza fingere di aver confrontato.
+
+Su GitHub girano tre lavori: le prove con il typecheck, il codice morto e il build; il
+gate visivo; e il build di questo manuale, dove un link rotto ferma tutto.
+
+## Perché così e non altrimenti
+
+- **Le prove guardano il comportamento, non il sorgente.** Una prova costruisce la
+  scena o apre la pagina e misura dove finiscono le cose. Ventisette prove che
+  leggevano il markup con espressioni regolari sono state sostituite da prove che
+  aprono la pagina vera.
+- **Quattro file leggono ancora il sorgente, e sono dichiarati.** L'ordine del boot e
+  del fotogramma è logica, non stile, e finché il ciclo vive in un file non c'è altro
+  modo di osservarlo. Le tre prove sul contesto audio lo fanno perché il difetto
+  compare solo se fra l'apertura della pagina e il click passa tempo, e una prova di
+  comportamento clicca subito.
+- **Mai il tipo “qualunque cosa”.** Tipizzarlo sulle dipendenze del pannello aveva
+  fatto sparire 305 errori veri in un colpo, e sembrava un miglioramento. Se un
+  conteggio crolla più del previsto, il primo sospetto sono io.
+- **Il nodo della scena è “un oggetto che forse è una mesh”, non un cast a mesh.** La
+  visita all'albero passa gruppi e luci: dire che sono mesh sarebbe una bugia.
+- **La maschera del gate copre 16 pixel di margine, non 6.** Il bottone di avvio ha un
+  bagliore che sborda di 14 pixel dal proprio rettangolo, e il rettangolo non lo sa:
+  una copertina identica sforava lo 0,05%. Prima di alzare una soglia si guarda dove
+  stanno i pixel diversi.
+- **La baseline si rigenera solo dopo aver guardato le immagini.** Una baseline
+  rigenerata senza guardarla trasforma il gate in un timbro: da quel momento approva
+  qualunque cosa ci sia dentro.
+- **In integrazione continua si installa senza il file di lock**, perché quel file è
+  fermo al primo commit e lo strumento lo rifiuta come fuori sincrono.
+
+Cose che non so spiegare, e lo dico:
+
+- Il parser del codice morto è arrivato in produzione come dipendenza indiretta:
+  funzionava in locale e il primo lavoro in CI è morto perché non era dichiarato.
+- Il filtro dei percorsi della CI non include il file delle dipendenze: un cambio lì
+  non fa partire niente, e serve l'avvio a mano.
+
+## I numeri
+
+| cosa | valore | fonte e data |
+|---|---|---|
+| prove | 160 in 35 file | `npm run test:retro-future`, 2026-09-20 |
+| errori di tipo | 0, soglia 0 (524 il giorno prima) | `npm run typecheck:retro-future`, 2026-09-20 |
+| commit per andare da 524 a 0 | 12, ognuno con il conteggio nel titolo | `git log`, 2026-09-20 |
+| errori dovuti a una radice sola | 354 su 524 (68%) | documento della tappa 8 |
+| codice morto | 0 nomi, 0 import, su 132 file | `npm run morto:retro-future`, 2026-09-20 |
+| soglia del gate, copertina | 0,05% di pixel diversi | `retro-future-visual-compare.py` |
+| soglia del gate, scena | 1,5% | stesso file |
+| margine delle maschere | 16 pixel | stesso file, commit 914cd431 |
+| scena statica, due foto a 3 secondi | 2,3% di pixel diversi | misura del 2026-09-19 |
+| baseline macOS sul runner Linux | copertina 1,44%, scena 12,4% | misura del 2026-09-19 |
+| prove sulle invarianti | 8, ognuna con il bug e la data | `src/invarianti.test.mjs` |
+
+## Dove sta nel codice
+
+| file | ruolo |
+|---|---|
+| `scripts/retro-future-typecheck.mjs` | typecheck con soglia a cricchetto |
+| `scripts/retro-future-codice-morto.mjs` | nomi e import mai usati, con parser vero |
+| `scripts/retro-future-visual-gate.mjs` | cattura: server, browser, attesa dello stato, impronta |
+| `scripts/retro-future-visual-compare.py` | confronto: maschere, soglie, raffica, impronta |
+| `src/invarianti.test.mjs` | le otto relazioni che si annullano in silenzio |
+| `src/scorciatoie-console.test.mjs` | chiama tutte e undici le scorciatoie di ispezione |
+| `test/pagina.mjs`, `test/finti-dom.mjs` | le due impalcature delle prove |
+| `.github/workflows/retro-future.yml` | i tre lavori di integrazione continua |
+
+Le due baseline stanno in `test/retro-future-baseline/` (il mio Mac) e
+`test/retro-future-baseline-linux/` (il runner), ognuna con le tre immagini, l'impronta
+e un file che spiega da dove viene e quando si rigenera.
+
+## Per chi viene dal backend
+
+Il typecheck a cricchetto è una soglia di copertura che può solo migliorare, applicata
+ai tipi invece che alle righe coperte. Il gate visivo è un test di integrazione il cui
+oggetto è un'immagine: la parte difficile non è confrontare, è rendere deterministico
+ciò che si confronta, e la soluzione, istante fisso più raffica, è la stessa che si usa
+per un test su un sistema con orologio proprio. L'impronta strutturale è uno snapshot
+test: più stabile dei pixel, e più eloquente, perché quando fallisce dice il nome del
+campo.

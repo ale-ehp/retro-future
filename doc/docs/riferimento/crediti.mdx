@@ -1,0 +1,54 @@
+---
+title: Crediti
+description: Le librerie, i modelli, la musica e i caratteri usati nella demo, con le licenze.
+sidebar_position: 4
+---
+
+{/*
+FONTI
+- three.js: vendor/three.module.min.js intestazione "@license Copyright 2010-2026 Three.js Authors SPDX-License-Identifier: MIT"; vendor/README.md "Licenza MIT, © three.js authors".
+- FXAA: vendor/FXAAShader.js:11 "FXAA algorithm from NVIDIA, C# implementation by Jasper Flick, GLSL port by Dave Hoskins".
+- Kaonashi: commit b3d76634 (2026-09-16) "remove welcome credit line", diff: "Kaonashi (No-Face), adattato · Riccardo Mazzi (sketchfab.com/3d-models/kaonashi-no-face-bc0b122ee31a4909b3b2cee99c824ad0) · CC BY 4.0".
+- Modello del corridore: character-mockups/assets/models/soldier.glb, 1.229.812 byte, senza metadati (scheda 05 §9); l'autore dichiara i modelli da Sketchfab (intervista); link da ricevere.
+- Colonna sonora: intervista 2026-09-20, risposta 8 ("fatta con Suno Pro"); termini Suno letti il 2026-09-20 (sezione "Pro and Premier Accounts": assegnazione all'utente dei diritti sull'output).
+- Space Grotesk: public/fonts/space-grotesk-*.woff2 (self-host); licenza SIL Open Font License 1.1 (Google Fonts, Florian Karsten).
+- Docusaurus, Mermaid: doc/package.json.
+*/}
+
+# Crediti
+
+Quello che nella demo non ho scritto io, con la licenza che lo accompagna.
+
+## Librerie
+
+- **three.js r184**, copiata in `vendor/` e servita in locale, con i moduli aggiuntivi
+  (EffectComposer, RenderPass, ShaderPass, FXAAPass, UnrealBloomPass, GLTFLoader,
+  SkeletonUtils, BufferGeometryUtils). Licenza MIT, © three.js authors. Due file sono
+  modificati rispetto all'originale, e `vendor/README.md` dice quali e come.
+- **FXAA**: algoritmo di NVIDIA, implementazione C# di Jasper Flick, porting GLSL di
+  Dave Hoskins, nella copia distribuita con three.js.
+
+## Modelli
+
+- **Le quattro teste della copertina**: “Kaonashi (No-Face)” di Riccardo Mazzi, da
+  [Sketchfab](https://sketchfab.com/3d-models/kaonashi-no-face-bc0b122ee31a4909b3b2cee99c824ad0),
+  licenza [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), adattato.
+- **Il modello dei personaggi che camminano**: da Sketchfab. Autore e licenza sono
+  riportati qui appena confermati dal link di origine.
+
+## Musica e suoni
+
+- **La colonna sonora** l'ho prodotta io con Suno, piano Pro. I termini di Suno per i
+  piani a pagamento assegnano all'utente i diritti sui brani generati.
+- **I passi**: campioni in `audio/footsteps/`.
+
+## Caratteri
+
+- **Space Grotesk** di Florian Karsten, licenza SIL Open Font License 1.1, ospitato
+  in casa (nessuna richiesta a server di terzi).
+
+## Questo manuale
+
+- Costruito con Docusaurus (MIT); i diagrammi con Mermaid (MIT).
+- Gli screenshot sono catturati dalla demo vera da uno script del repository
+  (`scripts/retro-future-doc-screenshots.mjs`), senza ritocchi.

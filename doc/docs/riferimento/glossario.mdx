@@ -1,0 +1,164 @@
+---
+title: Glossario
+description: Ogni termine tecnico del manuale spiegato in una riga, per chi non ha mai fatto grafica.
+sidebar_position: 1
+---
+
+{/*
+FONTI: sezione 7 ("Termini da spiegare") delle otto schede in docs/manuale-retro-future/schede/, che per ogni voce citano il file o il commit da cui viene. Selezionato e riscritto a mano il 2026-09-20 dalla bozza automatica: tolti gli identificatori di codice puri e i riferimenti di riga, tenuti i concetti, aggiunto il capitolo in cui si incontrano.
+*/}
+
+# Glossario
+
+Le parole della grafica in tempo reale e degli strumenti della demo, spiegate per chi
+viene dal backend, dal cloud o dal web applicativo. Una riga ciascuna; il capitolo fra
+parentesi è quello dove il concetto si incontra per esteso.
+
+## A
+
+- **Analizzatore (analyser)**: nodo audio che restituisce lo spettro del suono in tempo reale, cioè quanta energia c'è per banda di frequenza. (Audio)
+- **Anti-aliasing**: l'insieme delle tecniche che tolgono la scalettatura dai bordi obliqui. (Rendering)
+- **Atlas di texture**: una sola immagine che contiene molte immagini più piccole, per caricarne una invece di venti. (Il mondo)
+
+## B
+
+- **Bake**: calcolare una volta un risultato costoso e salvarlo come immagine o dato, invece di ricalcolarlo a ogni fotogramma. (Cielo e atmosfera)
+- **Beat drop**: il punto del brano in cui entra il basso e la musica si apre; qui è misurato sul segnale, non scelto a orecchio. (Audio)
+- **Billboard**: un piano che ruota sempre verso la camera, usato per fumetti e cartelli. (Personaggi)
+- **Bloom**: l'alone attorno alle zone luminose, ottenuto estraendo i pixel più chiari, sfocandoli su più livelli e sommandoli all'immagine. (Rendering)
+- **Bucket spaziale**: una cella di una griglia che raccoglie gli oggetti che ci stanno dentro, per cercare solo vicino invece che ovunque. (Il mondo)
+- **Budget per fotogramma**: il tempo disponibile prima di perdere la fluidità; a 60 fotogrammi al secondo sono 16,6 millesimi di secondo. (Prestazioni)
+
+## C
+
+- **Canvas**: la superficie di disegno 2D del browser; qui produce le texture di tabelloni, fumetti ed equalizzatore. (Il mondo, Personaggi)
+- **Clip di animazione**: una sequenza registrata di movimenti delle ossa, per esempio camminare o stare fermi. (Personaggi)
+- **Codice morto**: un nome dichiarato che nessuno usa o un import che nessuno legge; senza bundler viaggia comunque sulla rete. (Qualità e controlli)
+- **Composer**: l'oggetto che tiene due immagini di lavoro e fa girare i passaggi di post-produzione in fila, scambiandole. (Rendering)
+- **Controprova**: rompere apposta quello che una prova deve intercettare, per verificare che diventi rossa. (Qualità e controlli)
+- **Cubemap**: sei immagini che formano un cubo attorno alla scena, usate come sfondo o come sorgente di riflessi. (Cielo e atmosfera, Luce e riflessi)
+- **Culling**: non disegnare ciò che non si vede, perché fuori dall'inquadratura o troppo lontano. (Il mondo, Prestazioni)
+
+## D
+
+- **Deadzone**: la zona centrale di un joystick in cui il movimento viene ignorato, per non derivare quando il dito è fermo. (Camera e movimento)
+- **Dirty tracking**: segnare che cosa è cambiato e ricaricare sulla scheda grafica solo quello. (Il mondo)
+- **Draw call**: una richiesta di disegno inviata alla scheda grafica; ridurne il numero è uno dei modi per andare più veloci. (Prestazioni)
+
+## E
+
+- **Emissivo**: un materiale che sembra emettere luce propria; da solo non illumina, ma con il bloom diventa un LED acceso. (Luce e riflessi)
+- **Env map (mappa d'ambiente)**: l'immagine che un materiale riflette; qui non è la scena vera ma un disegno fatto apposta. (Luce e riflessi)
+- **ETag**: un'etichetta che identifica la versione di un file, così il browser può chiedere “è cambiato?” e ricevere un no. (Architettura)
+
+## F
+
+- **Fill-bound**: quando il tempo del fotogramma dipende dal numero di pixel da colorare e dal costo di ognuno, non dal processore. (Prestazioni)
+- **Fotogrammi al secondo (fps)**: quante immagini complete vengono disegnate in un secondo. (Prestazioni)
+- **Fresnel**: il fatto che una superficie rifletta di più quando la guardi di scorcio; qui sostituisce i riflessi veri sul telefono. (Luce e riflessi)
+- **Frustum**: la piramide tronca di ciò che la camera inquadra; quello che sta fuori non si disegna. (Il mondo)
+- **FXAA**: anti-aliasing che lavora sull'immagine finita cercando i bordi e ammorbidendoli; veloce, e sfoca un po'. (Rendering)
+
+## G
+
+- **Gate visivo**: il controllo che fotografa la demo e confronta le immagini con una versione di riferimento. (Qualità e controlli)
+- **GLTF / GLB**: il formato standard per modelli 3D sul web; GLB è la variante in un file solo. (Personaggi)
+
+## H
+
+- **HalfFloat**: immagine di lavoro a 16 bit in virgola mobile; tiene luci sopra il massimo visibile e incrementi piccolissimi. (Rendering)
+- **Halton**: una sequenza di numeri distribuiti in modo regolare ma non ripetitivo, usata per spostare la camera di frazioni di pixel. (Rendering)
+- **Head bob**: l'oscillazione verticale della vista mentre si cammina, che suggerisce il passo. (Camera e movimento)
+- **HRTF**: il modello di come le orecchie percepiscono la provenienza di un suono; serve a sentire i passi arrivare da una direzione. (Audio)
+
+## I
+
+- **Impronta strutturale**: una fotografia in numeri della scena (quanti oggetti, quali nomi, quali valori) confrontata dal gate insieme ai pixel. (Qualità e controlli)
+- **Importmap**: la mappa che dice al browser dove trovare un modulo chiamato per nome, senza bundler. (Architettura)
+- **Instancing**: disegnare lo stesso oggetto migliaia di volte con una sola richiesta, cambiando solo posizione e colore. (Il mondo)
+- **Invariante**: una relazione fra valori che deve restare vera; qui le tiene un file di prove dedicato. (Qualità e controlli)
+- **Isteresi**: due soglie invece di una, per evitare che una cosa si accenda e si spenga di continuo al confine. (Il mondo)
+
+## J
+
+- **Jitter**: spostare la camera di frazioni di pixel a ogni fotogramma, per raccogliere nel tempo più informazione sui bordi. (Rendering)
+
+## L
+
+- **Layer**: un canale di visibilità; una camera può disegnare solo gli oggetti di certi layer. (Il rivelo della città)
+- **Live region**: una zona della pagina che gli screen reader annunciano quando cambia. (Terminale contatti)
+- **LOD (livello di dettaglio)**: usare versioni più semplici, o aggiornare meno spesso, quando una cosa è lontana. (Il mondo, Personaggi)
+
+## M
+
+- **Macchina a stati**: un oggetto che può stare in pochi stati definiti, con transizioni dichiarate fra loro. (Terminale contatti, Personaggi)
+- **Materiale**: l'insieme delle proprietà che dicono come una superficie risponde alla luce: colore, rugosità, metallicità. (Luce e riflessi)
+- **Mip**: le versioni via via dimezzate di un'immagine; sfocare a un livello basso costa meno e sfoca di più. (Rendering)
+- **Mixer di animazione**: l'oggetto che fa avanzare le clip e le mescola fra loro. (Personaggi)
+- **Modulo ES**: un file JavaScript con import ed export, che il browser carica da solo. (Architettura)
+- **MSAA**: anti-aliasing fatto dalla scheda grafica campionando più volte la geometria dentro ogni pixel. (Rendering)
+
+## N
+
+- **no-cache**: l'istruzione che dice al browser di richiedere sempre il file, potendo però ricevere “non è cambiato”. (Architettura)
+
+## O
+
+- **Object3D**: il nodo base dell'albero della scena; può essere un gruppo, una luce o una mesh. (Rendering)
+- **onBeforeCompile**: il gancio che permette di modificare il programma di uno shader standard prima che venga compilato. (Luce e riflessi)
+- **Ordine di disegno (render order)**: il numero che decide chi viene disegnato prima fra oggetti trasparenti. (Terminale contatti)
+
+## P
+
+- **Pass (passaggio)**: uno stadio della catena di post-produzione, che legge l'immagine precedente e scrive la successiva. (Rendering)
+- **Piano di taglio (clipping plane)**: un piano oltre il quale i pixel non vengono disegnati; è il meccanismo del rivelo. (Il rivelo della città)
+- **Pixel ratio**: quanti pixel veri si disegnano per ogni pixel logico; a 2 sono quattro volte quelli di 1. (Rendering, Prestazioni)
+- **PMREM**: il prefiltraggio di una mappa d'ambiente in livelli di rugosità, perché una superficie opaca rifletta sfocato. (Luce e riflessi)
+- **Pointer lock**: il blocco del puntatore dentro la pagina, che permette di girare la camera senza limiti di bordo. (Camera e movimento)
+- **Post-processing**: i passaggi che trasformano l'immagine dopo che la scena è stata disegnata. (Rendering)
+- **Prewarm**: far compilare gli shader e caricare le texture prima che servano, per evitare scatti al primo uso. (Rendering, Prestazioni)
+- **Profilo mobile**: l'insieme di limiti attivati quando la demo riconosce un telefono. (Prestazioni)
+
+## R
+
+- **Raycast**: tirare un raggio dalla camera attraverso il puntatore e vedere che cosa colpisce. (Terminale contatti)
+- **Render target**: un'immagine fuori schermo su cui la scheda grafica disegna invece che sulla finestra. (Rendering)
+- **requestAnimationFrame**: la richiesta al browser di essere richiamati al prossimo aggiornamento dello schermo; è lì che vive il ciclo. (Architettura)
+- **RMS**: la media quadratica di un segnale, cioè la sua energia; qui serve a trovare il colpo di basso. (Audio)
+
+## S
+
+- **Scissor**: limitare il disegno a un rettangolo dello schermo, per non pagare i pixel fuori. (Il rivelo della città)
+- **Shader**: il programma che gira sulla scheda grafica per ogni vertice e per ogni pixel. (Rendering)
+- **Skinning**: deformare la pelle di un modello seguendo le ossa dello scheletro. (Personaggi)
+- **Smoothstep**: una curva che parte e arriva dolcemente invece che di colpo; si usa per le transizioni. (Il mondo, Il rivelo della città)
+- **Soglia a cricchetto**: una soglia che può solo scendere, così un numero non può peggiorare senza che qualcuno se ne accorga. (Qualità e controlli)
+- **Spazio colore lineare e sRGB**: le medie e le moltiplicazioni sono corrette solo in lineare; sRGB è lo spazio del monitor. (Rendering)
+- **Spread (sintassi)**: i tre punti che espandono un elenco; sembrano un accesso a proprietà e hanno ingannato un rilevatore. (Qualità e controlli)
+
+## T
+
+- **TAA**: anti-aliasing temporale, che media i fotogrammi nel tempo dopo averli spostati di frazioni di pixel. (Rendering)
+- **Texture**: un'immagine applicata a una superficie 3D. (Il mondo)
+- **Tile-based GPU**: l'architettura delle schede grafiche dei telefoni, che lavora su piccole piastrelle di schermo per volta. (Rendering)
+- **Timer GPU**: l'estensione che misura quanto tempo la scheda grafica ha impiegato per un blocco di comandi. (Prestazioni)
+- **Tone mapping**: la curva che comprime i valori di luce, anche sopra il massimo, nell'intervallo che uno schermo può mostrare. (Rendering)
+- **Traverse**: attraversare tutto l'albero della scena nodo per nodo. (Rendering)
+
+## U
+
+- **Uniform**: un valore passato dal JavaScript allo shader, uguale per tutti i pixel di quel disegno. (Rendering)
+- **Upscale**: disegnare a risoluzione più bassa e ricostruire l'immagine piena con un filtro che rispetta i bordi. (Rendering)
+
+## V
+
+- **Vertice**: uno dei punti che formano la geometria di un oggetto. (Il mondo)
+- **Vignetta**: l'oscuramento ai bordi dell'immagine, che concentra lo sguardo al centro. (Rendering)
+
+## W
+
+- **Waypoint**: un punto di passaggio di un percorso; i personaggi si muovono da uno all'altro. (Personaggi)
+- **WebGL**: l'interfaccia che permette a una pagina web di parlare con la scheda grafica. (Rendering)
+- **Wireframe (fil di ferro)**: il disegno di un oggetto con le sole linee dei suoi spigoli. (Il rivelo della città)
+- **Worker (Cloudflare)**: un piccolo programma che gira sui server di frontiera e risponde alle richieste; qui serve la demo e questo manuale. (Architettura)
+- **Worktree**: una copia di lavoro separata dello stesso repository, per lavorare su un ramo senza toccare l'altro. (Qualità e controlli)

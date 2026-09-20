@@ -1,0 +1,73 @@
+---
+title: Numeri misurati
+description: Ogni numero del manuale in una tabella sola, con la data e il comando o il commit che lo produce.
+sidebar_position: 3
+---
+
+{/*
+FONTI: le schede in docs/manuale-retro-future/schede/ (sezione 5 di ognuna) e le misure fatte nella sessione del 2026-09-20 (test, typecheck, morto, build, gate, wc, find, git log).
+*/}
+
+# Numeri misurati
+
+Un numero senza data e senza comando è un'opinione. Qui ci sono solo numeri che
+qualcuno può rifare. Dove la misura viene da un commit, c'è l'hash; dove viene da un
+comando, c'è il comando.
+
+## Il codice
+
+| cosa | valore | come |
+|---|---|---|
+| commit sulla demo | 459, dal 3 giugno al 20 settembre 2026 | `git log --oneline -- public/tecnologie/retro-future` |
+| moduli JavaScript in `src/` | 97 | `find src -name "*.js"`, 2026-09-20 |
+| file di prova | 35 | `find src -name "*.test.mjs"`, 2026-09-20 |
+| righe in `src/` | 37.970 (moduli, prove e dichiarazioni) | `wc -l`, 2026-09-20 |
+| `main.js` | 1.280 righe (6.824 prima della tappa 5, 2026-09-19) | `wc -l`; docs della tappa 5 |
+| byte dei 97 moduli su disco | 1.428.704 | `wc -c`, 2026-09-20 |
+| stessi moduli in brotli | 317.479 byte in tutto; `main.js` da 47.778 a 11.909 | `brotli -q 11 -c`, brotli 1.2.0, 2026-09-20 |
+
+## I controlli
+
+| cosa | valore | come |
+|---|---|---|
+| prove | 160 su 160 | `npm run test:retro-future`, 2026-09-20 |
+| errori di tipo | 0 (524 il 2026-09-19, soglia a cricchetto) | `npm run typecheck:retro-future`, 2026-09-20 |
+| codice morto | 0 nomi, 0 import, su 132 file | `npm run morto:retro-future`, 2026-09-20 |
+| gate visivo, copertina | 0,0000% di pixel diversi (soglia 0,05%) | `retro-future-visual-compare.py`, 2026-09-20 |
+| gate visivo, scena statica | 0,28% .. 0,47% in fase (soglia 1,5%) | stesso comparatore, cinque run del 2026-09-20 |
+| tempo del boot fino al rivelo | circa 60 s su macOS con GPU; oltre 140 s sul runner Linux senza GPU | README delle baseline, 2026-09-19 |
+
+## La scena
+
+| cosa | valore | come |
+|---|---|---|
+| piastrelle esagonali attive | 21.637 con i valori canonici | conteggio replicato in node, uguale al valore misurato in pagina nel commit 37754726 |
+| palazzi | 12 numeri civici | `window.__tronInspect()`, 2026-09-20 |
+| membri della folla | 30, da un solo modello con 49 ossa | scheda personaggi, `src/character/` |
+| aggiornamento della folla | 45 Hz | `src/character/runner-crowd-runtime.js` |
+| bake del cielo | cubo 512 su computer, 128 su telefono, una faccia ogni 2 fotogrammi | `src/world/sky-dome.js` |
+| beat drop del brano | 9,35 s, misurato con RMS filtrato a 150 Hz | `src/audio/audio.js` |
+| passate del rivelo | fino a 6 a schermo intero | `src/world/city-reveal-render-runtime.js` |
+| equalizzatore | 16 colonne per 22 segmenti | `src/controls/equalizer.js` |
+
+## Il rendering e le prestazioni
+
+| cosa | valore | come |
+|---|---|---|
+| tetto del bloom | 0,28 della finestra, 3 livelli su 5, aggiornamento ogni 2 fotogrammi da fermi | `src/world/config.js` |
+| MSAA | 2 campioni, solo su computer | `src/engine/post-pipeline.js` |
+| pixel ratio su telefono | 1,7 fisso (72% dei pixel di un 2x) | `src/config/costanti.js`; commit d6c737d3 |
+| fast path dell'upscale | render medio da 4,27 a 3,86 ms, peggiore da 14,3 a 10,9 ms, Mac M3 | commit 1902c65a, 2026-07-07 |
+| bloom di qualità | circa 20 fps | commit 8cbaaaf1, 2026-06-17 |
+| MSAA, prima versione su iPhone | 34 fps | commit eb57f0c9, 2026-07-09 |
+| luce direzionale spenta su telefono | +3,7 fps, render da 8,26 a 6,87 ms | commit be30701c, 2026-07-09, iPhone senza modello |
+| env map tolta da palazzi e marciapiedi su telefono | +1,7 fps | commit d84bc2d0, 2026-07-09 |
+| catena colore corretta | 31,7% dei pixel cambia, luminosità media da 15,74 a 19,97 | commit 5eb888ce, 2026-08-07 |
+| scena a 60 fps | 295 draw, 287.919 triangoli, macchina non dichiarata | commit 3d877968 |
+
+## Questo manuale
+
+| cosa | valore | come |
+|---|---|---|
+| screenshot | 13 file webp, 744 KB | `scripts/retro-future-doc-screenshots.mjs`, 2026-09-20 |
+| schede di fatti | 8 file, circa 2.900 righe con fonte | `docs/manuale-retro-future/schede/` |
