@@ -718,12 +718,13 @@ function addCityRevealRoadGrid(y) {
 }
 
 function clearCityRevealWire() {
+  // children.pop() torna Object3D; la geometria c'e' solo se e' un mesh, e il `?.` lo sa (2026-09-20).
   while (cityRevealWireGroup.children.length) {
-    const object = cityRevealWireGroup.children.pop();
+    const object = /** @type {THREE.Object3D & Partial<THREE.Mesh>} */ (cityRevealWireGroup.children.pop());
     object.geometry?.dispose?.();
   }
   while (cityRevealRoadGridGroup.children.length) {
-    const object = cityRevealRoadGridGroup.children.pop();
+    const object = /** @type {THREE.Object3D & Partial<THREE.Mesh>} */ (cityRevealRoadGridGroup.children.pop());
     object.geometry?.dispose?.();
   }
   cityRevealWireObjects.length = 0;

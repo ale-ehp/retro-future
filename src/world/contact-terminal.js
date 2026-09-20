@@ -266,6 +266,12 @@ function drawContactTerminalTexture(board, selection, state) {
   board.textureUpdates += 1;
 }
 
+/**
+ * Un nodo della scena visto da traverse(), che passa anche gruppi e luci: i campi di
+ * Mesh ci sono forse, e il codice li controlla prima di usarli. Senza questo tipo tsc
+ * vedeva solo Object3D e ogni `.material` era un TS2339 (2026-09-20).
+ * @typedef {THREE.Object3D & Partial<THREE.Mesh>} NodoForseMesh
+ */
 function createContactBoard(deps, record) {
   const canvas = deps.createCanvas();
   canvas.width = CONTACT_TERMINAL_TEXTURE_WIDTH;
@@ -345,7 +351,7 @@ function createContactBoard(deps, record) {
   });
 
   const revealMaterials = [];
-  group.traverse((object) => {
+  group.traverse((/** @type {NodoForseMesh} */ object) => {
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     materials.forEach((material) => {
       if (!material || material === hitMaterial || !Number.isFinite(material.opacity)) return;

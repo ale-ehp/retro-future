@@ -94,6 +94,12 @@ function prewarmMaterialTextureUploads(material, seen) {
   }
 }
 
+/**
+ * Un nodo della scena visto da traverse(), che passa anche gruppi e luci: i campi di
+ * Mesh e SkinnedMesh ci sono forse, e il codice li controlla prima di usarli. Senza questo tipo tsc
+ * vedeva solo Object3D e ogni `.material` era un TS2339 (2026-09-20).
+ * @typedef {THREE.Object3D & Partial<THREE.SkinnedMesh>} NodoForseSkinned
+ */
 function prewarmSceneTextureUploads(root = scene) {
   const started = performance.now();
   sceneTexturePrewarmStats.supported = typeof renderer.initTexture === 'function';
@@ -102,7 +108,7 @@ function prewarmSceneTextureUploads(root = scene) {
   sceneTexturePrewarmStats.errors = 0;
   if (!sceneTexturePrewarmStats.supported) return sceneTexturePrewarmStats;
   const seen = new Set();
-  root.traverse((object) => {
+  root.traverse((/** @type {NodoForseSkinned} */ object) => {
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     for (const material of materials) prewarmMaterialTextureUploads(material, seen);
   });
@@ -117,7 +123,7 @@ function prewarmSkinnedMeshBoneTextures(root = scene) {
   skinnedMeshPrewarmStats.uploaded = 0;
   skinnedMeshPrewarmStats.errors = 0;
   const seenSkeletons = new Set();
-  root.traverse((object) => {
+  root.traverse((/** @type {NodoForseSkinned} */ object) => {
     if (!object?.isSkinnedMesh || !object.skeleton || seenSkeletons.has(object.skeleton)) return;
     seenSkeletons.add(object.skeleton);
     skinnedMeshPrewarmStats.attempted += 1;
@@ -153,7 +159,7 @@ async function prewarmHiddenSkinnedMeshRender(root = scene) {
   const frustumState = [];
   const seenVisibility = new Set();
   try {
-    root.traverse((object) => {
+    root.traverse((/** @type {NodoForseSkinned} */ object) => {
       if (!object?.isSkinnedMesh) return;
       hiddenSkinnedRenderPrewarmStats.attempted += 1;
       if (object.frustumCulled) {
@@ -161,7 +167,8 @@ async function prewarmHiddenSkinnedMeshRender(root = scene) {
         object.frustumCulled = false;
         hiddenSkinnedRenderPrewarmStats.forcedUnculled += 1;
       }
-      let current = object;
+      // Risalendo i genitori si passa per gruppi e per la scena: e' un cammino di Object3D (2026-09-20).
+      /** @type {THREE.Object3D} */ let current = object;
       while (current && current !== root.parent) {
         if (!seenVisibility.has(current) && current.visible === false) {
           seenVisibility.add(current);
