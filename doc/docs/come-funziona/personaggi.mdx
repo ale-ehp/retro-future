@@ -60,10 +60,13 @@ Poi ci sono i dettagli che si vedono subito, se sbagliati:
 
 Il modello sorgente è un GLB (il contenitore binario di glTF: un'intestazione JSON
 più i buffer) da 1.229.812 byte, con due mesh (corpo 7.325 vertici, visiera 109),
-49 giunti e quattro clip: `Idle`, `Run`, `TPose`, `Walk`. Viene da Sketchfab. Non
-contiene texture: le due JPEG da 931 KB che portava non venivano mai mostrate,
-perché ogni consumatore sostituisce il materiale con la tuta procedurale, e
-toglierle ha portato il file da 2,16 a 1,23 MB.
+49 giunti e quattro clip: `Idle`, `Run`, `TPose`, `Walk`. La base è un modello
+rigato con scheletro Mixamo, lo stesso che three.js distribuisce fra i suoi esempi;
+l'ho adattato e alleggerito. Non contiene texture: le due JPEG da 931 KB che portava
+non venivano mai mostrate, perché ogni consumatore sostituisce il materiale con la
+tuta procedurale, e toglierle ha portato il file da 2,16 a 1,23 MB, il 43% in meno
+sull'asset vivo più grande, con due decodifiche JPEG in meno all'avvio. Verificato
+con due primi piani di chi accoglie, prima e dopo: identici.
 
 Il loader glTF e `SkeletonUtils` di three.js arrivano in parallelo ai moduli di
 post-produzione, così le richieste di rete si sovrappongono; se l'import fallisce,
@@ -361,8 +364,9 @@ Cose che non so spiegare, e lo dico:
   prodotto.
 - Un secondo modello per chi accoglie è esistito quattro giorni a giugno; il commit
   che lo toglie non lo dice.
-- Il GLB del sorgente non ha metadati d'autore: viene da Sketchfab, il link per i
-  crediti è da ricevere.
+- Il GLB del sorgente non porta metadati d'autore, a differenza dei modelli della
+  copertina che li hanno dentro il file: la provenienza si ricostruisce dai nomi delle
+  ossa e dei materiali, che sono quelli della base Mixamo.
 
 ## I numeri
 
