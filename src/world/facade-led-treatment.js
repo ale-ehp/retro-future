@@ -7,9 +7,12 @@ export const MAIN_FACADE_VERTICAL_REVEAL_FEATHER = 18;
 
 let PAL = null;
 let reflectionEnvMap = null;
-let refreshCullingBounds = () => {};
-let tunedColor = (color) => color;
-let registerMainBuildingVerticalRevealOverlayObject = () => {};
+// I segnaposto delle dipendenze portano la firma della funzione vera (2026-09-20):
+// da `() => {}` tsc deduceva `() => void` e ogni chiamata con argomenti era un
+// TS2554. Firme confrontate con l'originale: combaciano, erano tipi e non bug.
+/** @type {(oggetto: THREE.Object3D | null) => void} */ let refreshCullingBounds = () => {};
+/** @type {typeof import('../controls/control-panel.js').tunedColor} */ let tunedColor = (color) => color;
+/** @type {(oggetto: THREE.Object3D) => void} cityRevealMainLedReveal.registerOverlayObject */ let registerMainBuildingVerticalRevealOverlayObject = () => {};
 let getSideBuildingWidthScale = () => 1;
 let getSideBuildingDepthScale = () => 1;
 let getMainBuildingWidthScale = () => 1;

@@ -33,7 +33,9 @@ const runtime = {
   stopMouseLookInput: noop,
   updatePointerLockHint: noop,
   syncCityRevealSkyMaterial: noop,
-  scheduleTronSoundtrackIntroLofiStopForReveal: noop,
+  // Firma di soundtrack-runtime: (delayMs = default) => boolean. Da `noop` tsc deduceva
+  // `() => void` e la chiamata con il ritardo era un TS2554 (2026-09-20). Tipi, non bug.
+  scheduleTronSoundtrackIntroLofiStopForReveal: /** @type {(ritardoMs?: number) => boolean} */ (noop),
 };
 
 export let cityRevealScanGlow = null;

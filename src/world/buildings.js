@@ -27,10 +27,11 @@ const buildingRuntime = {
   defaultBuildingColor: 0xffffff,
   tunedColor: null,
   getRoadHalf: () => 0,
-  updateBuildingBasePad: () => {},
+  // Firma della funzione vera, altrimenti la chiamata a 12 argomenti e' un TS2554 (2026-09-20).
+  updateBuildingBasePad: /** @type {typeof import('./base-pads.js').updateBuildingBasePad} */ (() => {}),
   updateSideBuildingDoorTransforms: () => {},
   getCityRoleBoards: () => [],
-  syncCityRoleBoardDoorPose: () => {},
+  syncCityRoleBoardDoorPose: /** @type {typeof import('./city-boards.js').syncCityRoleBoardDoorPose} */ (() => {}),
 };
 
 export function initBuildings({

@@ -356,7 +356,9 @@ export function initRunnerWiring(deps) {
     toneMapped: false,
     transparent: true,
   });
-  tronRunnerParts = createTronRunnerParts({});
+  // createTronRunnerParts() non prende argomenti: l'oggetto vuoto che riceveva era un
+  // residuo che nessuno leggeva (2026-09-20). Tolto l'argomento, non cambiato altro.
+  tronRunnerParts = createTronRunnerParts();
   tronRunnerState = createTronRunnerState({
     footstepBus: FOOTSTEP_NPC_SPATIAL_BUS,
   });

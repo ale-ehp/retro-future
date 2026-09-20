@@ -243,6 +243,8 @@ export const hexRoadRuntimeStats = {
   lodSavedTriangles: 0,
 };
 
+// Firma della funzione vera (main.js), altrimenti la chiamata con il mesh e' un TS2554 (2026-09-20).
+/** @type {{ refreshCullingBounds: (oggetto: THREE.Object3D | null) => void }} */
 const hexTileSyncDeps = {
   refreshCullingBounds: () => {},
 };

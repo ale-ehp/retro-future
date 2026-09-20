@@ -26,9 +26,16 @@ function getBridgeControl(index, key) {
   return document.getElementById(bridgeControlId(index, key));
 }
 
+/**
+ * Il valore numerico di un controllo del ponte, o il default del campo se l'input non
+ * c'e'. Il default passa da Number() perche' l'unico campo con `value: true` e' la
+ * checkbox `visible`, che qui non arriva mai (la legge readBridgeVisible): senza, tsc
+ * deduceva `number | boolean` e ogni somma in building-leds era un errore (2026-09-20).
+ * @returns {number}
+ */
 export function readBridgeNumber(record, key) {
   const input = getBridgeControl(record.index, key);
-  const fallback = bridgeControlFields.find((field) => field.key === key)?.value ?? 0;
+  const fallback = Number(bridgeControlFields.find((field) => field.key === key)?.value ?? 0);
   const value = Number(input?.value ?? fallback);
   if (record.index === BRIDGE_PAIR_5_6_INDEX && key === 'yOffset') return BRIDGE_PAIR_5_6_Y_OFFSET;
   return Number.isFinite(value) ? value : fallback;

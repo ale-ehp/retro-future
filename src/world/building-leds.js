@@ -17,13 +17,16 @@ let getBridgeYOffset = () => 0;
 let getBridgeSpanScale = () => 1;
 let getBridgeHeightScale = () => 1;
 let getBridgeDepthScale = () => 1;
-let bridgeSpanLength = () => 1;
-let readBridgeNumber = () => 0;
-let readBridgeVisible = () => true;
-let refreshCullingBounds = () => {};
+// I segnaposto delle dipendenze portano la firma della funzione vera (2026-09-20):
+// da `() => {}` tsc deduceva `() => void` e ogni chiamata con argomenti era un
+// TS2554. Firme confrontate con l'originale: combaciano, erano tipi e non bug.
+/** @type {(scalaLarghezzaLaterale?: number, larghezzaBordoStrada?: number) => number} bridges.spanLength */ let bridgeSpanLength = () => 1;
+/** @type {typeof import('../controls/bridge-controls.js').readBridgeNumber} */ let readBridgeNumber = () => 0;
+/** @type {typeof import('../controls/bridge-controls.js').readBridgeVisible} */ let readBridgeVisible = () => true;
+/** @type {(oggetto: THREE.Object3D | null) => void} */ let refreshCullingBounds = () => {};
 let createFacadeLedMaterial = null;
-let updateFacadeStripOutsets = () => {};
-let updateFacadeLedRibbons = () => {};
+/** @type {typeof import('./facade-led-treatment.js').updateFacadeStripOutsets} */ let updateFacadeStripOutsets = () => {};
+/** @type {typeof import('./facade-led-treatment.js').updateFacadeLedRibbons} */ let updateFacadeLedRibbons = () => {};
 
 export const edgeStripSpecs = [];
 const sideBuildingEdgeSpecs = [];

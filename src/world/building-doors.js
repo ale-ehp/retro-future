@@ -9,7 +9,10 @@ let reflectionEnvMap = null;
 let PAL = null;
 let sideBuildingRecords = [];
 let laneZ = [];
-let refreshCullingBounds = () => {};
+// I segnaposto delle dipendenze portano la firma della funzione vera (2026-09-20):
+// da `() => {}` tsc deduceva `() => void` e ogni chiamata con argomenti era un
+// TS2554. Firme confrontate con l'originale: combaciano, erano tipi e non bug.
+/** @type {(oggetto: THREE.Object3D | null) => void} */ let refreshCullingBounds = () => {};
 let tunedColor = null;
 let createWetAsphaltFacadeMaterial = null;
 
