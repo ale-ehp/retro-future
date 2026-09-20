@@ -39,6 +39,11 @@ function createElementStub() {
   return element;
 }
 
+// Un canvas finto: il contesto e' un Proxy che risponde a qualunque metodo con un no-op,
+// quindi per costruzione finge di essere un CanvasRenderingContext2D intero. Il cast
+// dice questo a tsc; il runtime chiede un HTMLCanvasElement vero perche' lo passa a
+// CanvasTexture (2026-09-20).
+/** @returns {HTMLCanvasElement} */
 function createCanvasStub() {
   const context = new Proxy({}, {
     get(target, key) {
@@ -50,7 +55,7 @@ function createCanvasStub() {
       return true;
     },
   });
-  return { width: 0, height: 0, getContext: () => context };
+  return /** @type {HTMLCanvasElement} */ (/** @type {unknown} */ ({ width: 0, height: 0, getContext: () => context }));
 }
 
 function createRuntimeFixture({
@@ -103,7 +108,6 @@ function createRuntimeFixture({
     },
     sideBuildingRecords: records,
     PAL: { tealLight: 0x8ffcff },
-    elStrip: () => new THREE.Object3D(),
     addElStripRectFrame: (group) => {
       const frame = new THREE.Object3D();
       group.add(frame);

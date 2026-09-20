@@ -417,7 +417,6 @@ export function initCityWiring(deps) {
     renderer,
     reflectionEnvMap,
     PAL,
-    elStrip,
     addElStripRectFrame,
     sideBuildingRecords,
     getBottomY: cityDepartmentBoardBottomY,

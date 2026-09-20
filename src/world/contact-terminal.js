@@ -191,6 +191,7 @@ function setElementHidden(element, hidden) {
   if (element && element.hidden !== hidden) element.hidden = hidden;
 }
 
+/** @param {DipendenzeTerminale} deps */
 function addContactTerminalFrame(group, width, height, deps, z = 0.16) {
   const halfWidth = width * 0.5;
   const halfHeight = height * 0.5;
@@ -272,6 +273,7 @@ function drawContactTerminalTexture(board, selection, state) {
  * vedeva solo Object3D e ogni `.material` era un TS2339 (2026-09-20).
  * @typedef {THREE.Object3D & Partial<THREE.Mesh>} NodoForseMesh
  */
+/** @param {DipendenzeTerminale} deps */
 function createContactBoard(deps, record) {
   const canvas = deps.createCanvas();
   canvas.width = CONTACT_TERMINAL_TEXTURE_WIDTH;
@@ -394,7 +396,70 @@ function defaultActivateUri(uri) {
   if (typeof window !== 'undefined') window.location.href = uri;
 }
 
+/**
+ * Un elemento del DOM come lo vede il terminale: nascondere, mettere a fuoco, misurare,
+ * ascoltare. Le prove passano stub costruiti su EventTarget, percio' il tipo elenca solo
+ * quello che il runtime tocca davvero, non HTMLElement intero.
+ * @typedef {EventTarget & {
+ *   hidden?: boolean,
+ *   textContent?: string,
+ *   focus?: (opzioni?: { preventScroll?: boolean }) => void,
+ *   getBoundingClientRect?: () => { left: number, top: number, width: number, height: number },
+ * }} ElementoTerminale
+ */
+
+/**
+ * Tutto quello che il runtime del terminale legge da `deps`. I default dentro
+ * createContactTerminalRuntime ne coprono una parte; il resto (scena, camera, renderer,
+ * bottoni, palazzi) arriva da city-wiring o, nelle prove, da stub. Senza questo tipo tsc
+ * deduceva `deps` dai soli default e dava per inesistenti i campi iniettati: 23 errori,
+ * piu' 4 chiamate con argomenti su segnaposto `() => {}` (2026-09-20). Niente `any`:
+ * dove le prove passano uno stub, il tipo dice il minimo che il runtime usa.
+ * @typedef {object} DipendenzeTerminale
+ * @property {() => HTMLCanvasElement} createCanvas
+ * @property {() => number} getBottomY
+ * @property {() => ({ z?: number } | null)} getPlayerSpawn
+ * @property {() => boolean} getRevealComplete
+ * @property {() => number} getRevealFactor
+ * @property {() => boolean} getEffectEnabled
+ * @property {() => boolean} getOtherCameraActive
+ * @property {() => number} getYaw
+ * @property {(valore: number) => void} setYaw
+ * @property {() => number} getPitch
+ * @property {(valore: number) => void} setPitch
+ * @property {() => number} getViewRoll
+ * @property {(valore: number) => void} setViewRoll
+ * @property {() => void} applyCameraLook
+ * @property {() => void} clearMovement
+ * @property {() => void} clearViewMotion
+ * @property {() => void} stopMouseLook
+ * @property {(opzioni?: { requestPointerLock?: boolean }) => void} resumeMouseLook mouse-look.resumeMouseLookInput; il ritorno non si usa
+ * @property {() => void} resetMobileMovement
+ * @property {() => boolean} getPointerLocked
+ * @property {() => boolean} prefersReducedMotion
+ * @property {() => boolean} isMobile
+ * @property {(uri: string) => void} activateUri
+ * @property {EventTarget | undefined} eventTarget
+ * @property {{ pushState?: (dati: unknown, titolo: string, url?: string) => void, back?: () => void } | undefined} history
+ * @property {string | undefined} locationHref
+ * @property {{ classList?: { toggle: (nome: string, forza?: boolean) => boolean } } | undefined} body
+ * @property {() => number} now
+ * @property {THREE.Scene} [scene]
+ * @property {THREE.Camera} [camera]
+ * @property {{ capabilities: { getMaxAnisotropy?: () => number }, domElement: ElementoTerminale }} [renderer]
+ * @property {THREE.Texture | null} [reflectionEnvMap]
+ * @property {{ tealLight?: number }} [PAL]
+ * @property {(gruppo: THREE.Object3D, mezzaLarghezza: number, mezzaAltezza: number, z: number, colore: number, spessore: number, opzioni?: object) => void} [addElStripRectFrame] building-leds.addElStripRectFrame; il ritorno non si usa
+ * @property {Array<{ civicNumberValue: number, mesh?: { position?: { z?: number } } }>} [sideBuildingRecords]
+ * @property {ElementoTerminale} [actionButton]
+ * @property {ElementoTerminale} [backButton]
+ * @property {ElementoTerminale} [interactionSurface]
+ * @property {ElementoTerminale} [liveRegion]
+ */
+
+/** @param {Partial<DipendenzeTerminale>} [injected] */
 export function createContactTerminalRuntime(injected = {}) {
+  /** @type {DipendenzeTerminale} */
   const deps = {
     createCanvas: () => document.createElement('canvas'),
     getBottomY: () => 0,
@@ -830,6 +895,7 @@ export function createContactTerminalRuntime(injected = {}) {
 
 let contactTerminalRuntime = null;
 
+/** @param {Partial<DipendenzeTerminale>} deps */
 export function initContactTerminal(deps) {
   contactTerminalRuntime = createContactTerminalRuntime(deps);
   if (typeof window !== 'undefined') window.__contactTerminalInspect = () => contactTerminalRuntime.inspect();
