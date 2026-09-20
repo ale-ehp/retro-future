@@ -6,6 +6,7 @@ const sidebars: SidebarsConfig = {
   manuale: [
     "index",
     { type: "category", label: "Perché è fatto così", collapsed: false, items: ["perche/visione", "perche/come-e-stata-costruita"] },
+    { type: "category", label: "Come funziona", collapsed: false, items: ["come-funziona/rendering"] },
   ],
 };
 
