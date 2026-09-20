@@ -21,6 +21,12 @@ function structuralPadBounds(record) {
   };
 }
 
+/**
+ * Le opzioni hanno campi senza default (playerZ): tsc deduceva il tipo dai soli default e
+ * li dava per inesistenti (2026-09-20). Tipi, non bug.
+ * @param record
+ * @param {{ bottomY?: number, boardHeight?: number, playerZ?: number, innerSlide?: number }} [opzioni]
+ */
 export function resolveBoardPerimeterPose(record, {
   bottomY = 0,
   boardHeight = 0,

@@ -269,6 +269,9 @@ export function tronRunnerCrowdDetectedSideStreetLanes({
   streetEdgeWidth,
   sideBuildingWidth,
 }) {
+  // streetIndex, streetId e label vengono aggiunti dopo l'ordinamento: senza il tipo qui,
+  // tsc vedeva solo i campi del push e le tre assegnazioni erano errori (2026-09-20).
+  /** @type {Array<{ sideSign: number, z: number, innerX: number, outerX: number, gapIndex: number, sideName: string, streetIndex?: number, streetId?: string, label?: string }>} */
   const lanes = [];
   const bySide = new Map();
   for (const record of records) {

@@ -374,6 +374,12 @@ const hexRoadBatchLodStatsScratch = {
   savedTriangles: 0,
 };
 
+/**
+ * Le opzioni hanno campi senza default (x, z): tsc deduceva il tipo dai soli default e
+ * li dava per inesistenti (2026-09-20). Tipi, non bug.
+ * @param batchRecords
+ * @param {{ x?: number, z?: number, enabled?: boolean, nearDistance?: number, hysteresis?: number, trianglesPerInstance?: number }} [opzioni]
+ */
 export function applyHexRoadBatchLodVisibility(batchRecords, {
   x,
   z,

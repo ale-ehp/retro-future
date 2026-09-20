@@ -786,7 +786,7 @@ export function initRunnerWiring(deps) {
     getCollisionPadding: () => getCollisionPadding(),
     getPlayerSpawn: () => getPlayerSpawn(),
     sideBuildingSpacing: SIDE_BUILDING_SPACING,
-    sideDoorFaceOffset,
+    // sideDoorFaceOffset lo riceveva anche l'orchestrazione, che non lo legge (2026-09-20): tolto.
     doorHalfHeight: () => sideDoorHeight * sideDoorScale * 0.5,
     makeReflectionBodyMaterial: () => tronRunnerReflectionRig.makeBodyMaterial(),
     makeReflectionLedMaterial: (colorPreset) => tronRunnerReflectionRig.makeLedMaterial(colorPreset),

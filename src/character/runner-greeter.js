@@ -28,6 +28,11 @@ export const TRON_RUNNER_WELCOME_BUBBLE_DURATION_MS = 3600;
 export const TRON_RUNNER_WELCOME_BUBBLE_SIZE_SCALE = 0.775;
 export const TRON_RUNNER_FOLLOW_PROMPT_DELAY_MS = 1500;
 
+/**
+ * Le opzioni hanno campi senza default (droneLandingPose, routeStart): tsc deduceva il tipo dai soli default e
+ * li dava per inesistenti (2026-09-20). Tipi, non bug.
+ * @param {{ droneLandingPose?: { x?: number, z?: number } | null, routeStart?: { y?: number, z?: number } | null, sideOffset?: number, backOffset?: number }} [opzioni]
+ */
 export function tronRunnerGreeterStartPosition({
   droneLandingPose,
   routeStart,
