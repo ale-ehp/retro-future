@@ -49,8 +49,9 @@ Il guadagno è che quello che debuggo nel browser è il file che ho aperto nell'
 **I tipi stanno nei commenti, il controllo è vero.** Niente TypeScript nella catena di
 build, ma `tsc` con `checkJs` legge tutti i `.js`. Il debito di partenza, 524 errori, non
 è stato nascosto: è diventato la soglia di un cricchetto che può solo scendere. È
-arrivato a zero in 15 commit, un dominio per commit, senza usare `any` nemmeno una
-volta, e lungo la strada ha scoperto 5 bug veri che i tipi larghi coprivano.
+arrivato a zero in 12 commit che hanno abbassato la soglia, un dominio per commit,
+senza usare `any` nemmeno una volta, e lungo la strada ha scoperto 5 bug veri che i
+tipi larghi coprivano.
 
 **Le prove guardano il comportamento, non il testo del codice.** Costruiscono la scena,
 o aprono la pagina in Chromium, e misurano dove finiscono le cose. Solo 4 file leggono

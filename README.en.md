@@ -50,7 +50,8 @@ is that what I debug in the browser is the file I opened in the editor.
 **Types live in comments, the check is real.** No TypeScript in the build chain, but
 `tsc` with `checkJs` reads every `.js` file. The starting debt, 524 errors, was not
 hidden: it became the threshold of a ratchet that can only go down. It reached zero in
-15 commits, one domain per commit, without a single `any`, and on the way it uncovered
+12 threshold-lowering commits, one domain per commit, without a single `any`, and on
+the way it uncovered
 5 real bugs that loose types had been covering.
 
 **Tests observe behaviour, not the text of the code.** They build the scene, or open the

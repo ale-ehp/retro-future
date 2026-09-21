@@ -46,7 +46,8 @@ Il gate visivo e la sua baseline sono spiegati in
 ## Come si scrivono i tipi, senza bundler e senza TypeScript
 
 `tsc` legge i `.js` con `checkJs` e i tipi stanno nei commenti JSDoc. Il debito di
-partenza, 524 errori il 2026-09-19, è andato a zero il 2026-09-20 in 15 commit.
+partenza, 524 errori il 2026-09-19, è andato a zero il 2026-09-20 in 12 commit che
+hanno abbassato la soglia.
 Le convenzioni che ne sono uscite valgono per chi scrive codice nuovo.
 
 - **Mai `any` per far sparire un errore.** È già successo: tipizzare `any` le dipendenze
@@ -133,7 +134,7 @@ Più refactor che feature, e quasi tante perf quante fix: la demo è stata riscr
 volte per reggere il telefono.
 
 Un commit per dominio. Le tappe di risanamento del typecheck sono andate avanti così:
-15 commit, ognuno con i 5 controlli verdi prima di essere scritto.
+12 commit, ognuno con i 5 controlli verdi prima di essere scritto.
 
 ## Senza JavaScript
 
