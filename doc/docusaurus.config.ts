@@ -1,6 +1,6 @@
-// Il manuale tecnico di Retro Future. Vive accanto a src/ (come av-crm/doc) e viene
-// pubblicato da un Worker suo su avstudio.ai/chi-siamo/retro-future/doc/. Italiano
-// oggi, inglese predisposto. Vedi docs/superpowers/specs/2026-09-20-retro-future-manuale-design.md.
+// Il manuale tecnico di Retro Future. Vive accanto a src/ e viene pubblicato da un
+// Worker suo su avstudio.ai/chi-siamo/retro-future/doc/. Italiano oggi, inglese
+// predisposto.
 import { themes as prismThemes } from "prism-react-renderer";
 import type { Config } from "@docusaurus/types";
 
