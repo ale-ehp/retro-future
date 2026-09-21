@@ -19,7 +19,7 @@ Blocco 7: ponte scritto senza affermazioni tecniche nuove.
 
 :::note In breve
 
-97 moduli ESM serviti senza bundler, risolti da una importmap. `main.js` monta i sottosistemi in un ordine che una prova verifica sul sorgente; lo stato condiviso è un oggetto mutabile per dominio, e chi costruisce lo fa dentro `initX(deps)` perché gli import girano prima di scena, camera e renderer.
+102 moduli ESM serviti senza bundler, risolti da una importmap. `main.js` monta i sottosistemi in un ordine che una prova verifica sul sorgente; lo stato condiviso è un oggetto mutabile per dominio, e chi costruisce lo fa dentro `initX(deps)` perché gli import girano prima di scena, camera e renderer.
 
 :::
 
@@ -37,7 +37,7 @@ demo”, e il secondo click ricarica la pagina.
 
 Questa demo non ha un bundler, e con lui è saltata la diagnostica che il bundling dà gratis:
 firme sbagliate, refusi nei nomi e import di export inesistenti si scoprivano solo aprendo la
-pagina. Il browser carica i 97 moduli ESM così come stanno su disco, senza minificazione, uno
+pagina. Il browser carica i 102 moduli ESM così come stanno su disco, senza minificazione, uno
 per richiesta.
 
 Il 19 settembre 2026, quando l'ho mappato per spezzarlo, `main.js` teneva
@@ -58,7 +58,7 @@ Poi i vincoli di browser e rete:
   Collegare nodi di contesti diversi alzava un `InvalidAccessError` a ogni frame: scena senza
   personaggi né cartelli, comandi morti.
 - **La seconda visita costa richieste, non byte.** I moduli sono serviti con
-  `cache-control: no-cache` più ETag: 97 moduli, 97 richieste condizionate per visita.
+  `cache-control: no-cache` più ETag: 102 moduli, 102 richieste condizionate per visita.
 - **Una copia inglese di `index.html` divergerebbe alla prima modifica.** Il file pesa 114.216 byte fra markup, importmap e script inline, e cambia a ogni intervento.
 - **Il build copiava tutto.** Il 7 agosto erano pubblici sul sito due documenti di lavoro e
   tutti e 23 i file di test, verificato con GET 200.
@@ -73,9 +73,11 @@ Poi i vincoli di browser e rete:
 sono identici a upstream: `UnrealBloomPass.js`, che è un fork, e `GLTFLoader.js`, solo nei
 percorsi degli import.
 
-I 97 moduli stanno sotto `src/`, divisi in `audio/`, `camera/`, `character/`, `config/`,
-`controls/`, `engine/`, `world/`. Nessun file supera le 1.500 righe; il più grande,
-`character/runner-crowd-runtime.js`, ne ha 1.352. Sulla rete viaggiano in brotli da
+I 102 moduli stanno sotto `src/`, divisi in `audio/`, `camera/`, `character/`, `config/`,
+`controls/`, `engine/`, `world/`. La mediana è 241 righe; quattro file stanno sopra le
+1.000, e il più grande è `main.js` con 1.280. La regola non è un tetto di righe: un
+modulo è un sottosistema. I quattro grandi sono ognuno un sottosistema solo, e i file che
+tenevano insieme mestieri diversi sono stati divisi il 21 settembre. Sulla rete viaggiano in brotli da
 Cloudflare: `main.js` passa da 46 KB a 11, il totale compresso è 303 KB.
 
 node:test non legge la importmap, quindi `test/resolve-three.mjs` registra un resolve hook che
@@ -268,13 +270,13 @@ Cose che non so spiegare, e lo dico:
 
 | cosa | valore | fonte e data |
 |---|---|---|
-| moduli sotto `src/` | 97 (più 35 file di test e 1 `.d.ts`) | `find`, misurato il 2026-09-20; `README.md` |
-| peso dei moduli | 1.428.704 byte su disco; 303 KB compressi in brotli | `wc -c` 2026-09-20; `README.md` e commit ba2ec5b7, 2026-09-19 |
+| moduli sotto `src/` | 102 (più 35 file di test e 1 `.d.ts`) | `find`, misurato il 2026-09-21 |
+| peso dei moduli | 1.435.658 byte su disco; 323.738 compressi in brotli | `wc -c` e `brotli -q 11`, 2026-09-21 |
 | `main.js` | 1.280 righe, 46 KB, 11 KB in brotli | `wc` 2026-09-20; `README.md` 2026-09-19 |
 | `main.js` all'inizio della tappa 5 | 7.135 righe | commit a05e8e47, 2026-09-19 |
 | `main.js` a metà tappa, quando è stato mappato | 6.824 righe, 153 `let` di modulo, 220 funzioni | `docs/retro-future-tappa5-opus.md`, 2026-09-19 |
 | `let` di modulo in `main.js` oggi | 4 | `grep`, misurato il 2026-09-20 |
-| file più grande di `src/` | `character/runner-crowd-runtime.js`, 1.352 righe | `wc -l`, misurato il 2026-09-20 |
+| file più grande di `src/` | `main.js`, 1.280 righe; mediana 241; quattro file sopra le 1.000 | `wc -l`, misurato il 2026-09-21 |
 | importmap / modulepreload | 8 voci / 91 voci | `index.html`, misurato il 2026-09-20 |
 | `vendor/` | 16 file, 1,0 MB, three r184 | `ls`, `du` 2026-09-20; `vendor/README.md` |
 | chiavi degli oggetti di stato | `post` 30, `boulevard` 28, `player` 33, `collisioni` 5, `frame` 9 | python, misurato il 2026-09-20 |

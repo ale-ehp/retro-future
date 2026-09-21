@@ -41,8 +41,15 @@ un `alt` non aggiungerebbe niente che uno screen reader non legga gia'.
 ## Come e' diviso `src/`
 
 `main.js` non costruisce piu' la scena da solo: apre i sottosistemi nell'ordine giusto e
-li lega fra loro. Dalla tappa 5 (2026-09-19) i domini stanno in file propri, nessuno
-sopra le 1.500 righe.
+li lega fra loro. Dalla tappa 5 (2026-09-19) i domini stanno in file propri.
+
+La regola non e' un tetto di righe, e' che un modulo sia UN sottosistema. Il 2026-09-21
+tre file che ne tenevano piu' di uno sono stati divisi: la folla in costruzione,
+movimento e diagnostica; il rivelo in materiali, geometria del fronte e regia; i
+tabelloni in reparti e ruoli. Restano quattro file sopra le 1.000 righe (main.js 1.280,
+equalizer 1.190, runner-wiring 1.132, hex-tiles 1.010) e sono ognuno un sottosistema
+solo: dividerli vorrebbe dire inventare un modulo di stato per far scendere un numero.
+Mediana 241 righe su 102 moduli.
 
 | dove | cosa tiene |
 |---|---|
@@ -115,12 +122,12 @@ argomento ignorato, `audio.playsInline` (attributo dei video) ed
 
 ## Quanto pesa `src/` sulla rete
 
-`src/` sono 97 moduli per 1,36 MB su disco, serviti senza minificazione per scelta
-(nessun build step: `index.html` usa una importmap). Sulla rete non pesano quello:
-Cloudflare li comprime in brotli (misurato il 2026-09-19 con `brotli -q 11`: `main.js`
-46 KB -> 11 KB, il totale 303 KB). Le intestazioni live sono `cache-control: no-cache`
-con ETag: a ogni visita successiva il browser rifa' una richiesta condizionata per
-modulo, e adesso i moduli sono 97 invece di 84. E' il numero di richieste, non i byte, a
-decidere il costo della seconda visita; minificare non lo cambierebbe, cambiare la
-politica di cache del worker si'. Nessuna delle due e' stata fatta qui: sono scelte di
-prodotto, e la divisione della tappa 5 ha reso la seconda piu' interessante.
+`src/` sono 102 moduli per 1.435.658 byte su disco, serviti senza minificazione per
+scelta (nessun build step: `index.html` usa una importmap). Sulla rete non pesano quello:
+Cloudflare li comprime in brotli (misurato il 2026-09-21 con `brotli -q 11`: `main.js`
+47.778 -> 11.909 byte, la somma per file 323.738). Le intestazioni live sono
+`cache-control: no-cache` con ETag: a ogni visita successiva il browser rifa' una
+richiesta condizionata per modulo, e adesso i moduli sono 102 invece di 84. E' il numero
+di richieste, non i byte, a decidere il costo della seconda visita; minificare non lo
+cambierebbe, cambiare la politica di cache del worker si'. Nessuna delle due e' stata
+fatta qui: sono scelte di prodotto, e ogni divisione rende la seconda piu' interessante.

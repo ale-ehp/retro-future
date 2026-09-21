@@ -25,7 +25,7 @@ la parte riusabile altrove:
 1. [Come è organizzato il lavoro](./ingegneria/come-e-organizzato-il-lavoro.mdx): tappe, definizione di fatto, deleghe, cancelli.
 2. [Qualità e controlli](./ingegneria/qualita-e-controlli.mdx): 160 test, typecheck a soglia, gate visivo, CI.
 3. [Deploy e infrastruttura](./ingegneria/deploy-e-infrastruttura.mdx): il Worker Cloudflare, le rotte, la cache per tipo di file.
-4. [Architettura](./come-funziona/architettura.mdx): 97 moduli ESM senza bundler, e perché.
+4. [Architettura](./come-funziona/architettura.mdx): 102 moduli ESM senza bundler, e perché.
 
 **Se coordini progetti.** Il primo capitolo è scritto per te; il quarto è quello che di
 solito manca:

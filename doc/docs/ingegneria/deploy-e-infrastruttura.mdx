@@ -12,7 +12,7 @@ FONTI
 - scripts/build-retro-future.mjs: denylist di pubblicazione, controlli che fermano il build (dist-retro/index.html non deve esistere, il prefisso di percorso deve esistere, nessun file non pubblicabile), pagina inglese generata dal dizionario.
 - Commit: 0f6ef89e (2026-06-15) "isolate deploy target"; bcfd63f1 (2026-06-15) "move demo route"; b5bacf17 (2026-07-07) "no-cache for coupled ESM modules to prevent deploy skew", con il corpo che descrive lo schermo nero; 5d17b5cf (2026-09-18) pagina inglese su /en/.
 - README della demo, sezione "Quanto pesa src/ sulla rete": brotli, no-cache con ETag, il numero di richieste come costo della seconda visita.
-- Misure del 2026-09-20: 97 moduli, 1.428.704 byte, 317.479 in brotli, index.html 114.216 byte.
+- Misure del 2026-09-21: 102 moduli, 1.435.658 byte, 323.738 in brotli, index.html 114.216 byte.
 */}
 
 # Deploy e infrastruttura
@@ -35,7 +35,7 @@ una pagina che, dopo un deploy, non si rompe mai a metà.
 
 Servire una demo 3D senza bundler pone 3 problemi che un sito normale non ha.
 
-**Il primo: i moduli sono accoppiati fra loro.** La pagina e i 97 moduli ESM sono una
+**Il primo: i moduli sono accoppiati fra loro.** La pagina e i 102 moduli ESM sono una
 sola applicazione. Se il browser prende la pagina nuova e i moduli vecchi dalla cache,
 il risultato non è una pagina un po' vecchia: è uno schermo nero. È successo: pagina
 senza cache, moduli con 5 minuti di validità, e subito dopo un deploy una pagina fresca
@@ -108,7 +108,7 @@ Qui sta la decisione che vale il capitolo.
 
 “Nessuna cache” non vuol dire riscaricare tutto: il browser rifà la richiesta e
 l'ETag gli fa tornare un 304 senza corpo. Il costo della seconda visita non sono i
-byte, sono 97 richieste. È un costo che conosco e che ho scelto, e la leva per
+byte, sono 102 richieste. È un costo che conosco e che ho scelto, e la leva per
 cambiarlo è il Worker.
 
 ### Il deploy separato
@@ -153,8 +153,8 @@ Cose che non so spiegare, e lo dico:
 |---|---|---|
 | righe del Worker | 120 | `wc -l`, 2026-09-20 |
 | rotte servite | 6: indirizzo attuale, vecchio, inglese, con e senza www | `wrangler.toml` |
-| moduli serviti | 97, per 1.428.704 byte | `find` e `wc -c`, 2026-09-20 |
-| stessi moduli compressi | 317.479 byte | `brotli -q 11`, 2026-09-20 |
+| moduli serviti | 102, per 1.435.658 byte | `find` e `wc -c`, 2026-09-21 |
+| stessi moduli compressi | 323.738 byte | `brotli -q 11`, 2026-09-21 |
 | pagina | 114.216 byte, 16.402 compressa | stesso comando |
 | cache dei media | una settimana, con `stale-while-revalidate` di 1 giorno | `index.ts` |
 | gate bloccanti al build | 3 | `build-retro-future.mjs` |

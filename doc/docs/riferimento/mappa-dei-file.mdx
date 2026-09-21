@@ -5,13 +5,13 @@ sidebar_position: 2
 ---
 
 {/*
-FONTI: `find src -name "*.js"` = 97 moduli; `find src -name "*.test.mjs"` = 35 file di prova; righe con `wc -l` (script python sul worktree, HEAD d323dc81, 2026-09-20).
+FONTI: `find src -name "*.js"` = 102 moduli; `find src -name "*.test.mjs"` = 35 file di prova; righe con `wc -l` (script python sul worktree, 2026-09-21).
 La divisione per cartelle e i ruoli dei moduli principali: public/tecnologie/retro-future/README.md, sezione "Come è diviso src/".
 */}
 
 # Mappa dei file
 
-La demo è `index.html` più la cartella `src/`, servita senza bundler: 97 moduli
+La demo è `index.html` più la cartella `src/`, servita senza bundler: 102 moduli
 JavaScript, 35 file di test accanto ai moduli che provano, un file di dichiarazioni
 (`globali.d.ts`) e la libreria three.js copiata in `vendor/`. Le righe sono contate il
 20 settembre 2026; cambiano a ogni commit, e questa pagina non insegue il numero
@@ -73,7 +73,7 @@ Le cartelle:
 | `mouse-look.test.mjs` | 91 | test |
 | `player-state.js` | 138 |  |
 
-### `character` (9476 righe)
+### `character` (9515 righe)
 
 | file | righe | test |
 |---|---:|---|
@@ -93,11 +93,13 @@ Le cartelle:
 | `runner-animation.js` | 127 |  |
 | `runner-beat-pulse.js` | 273 |  |
 | `runner-controller.js` | 41 |  |
+| `runner-crowd-build-runtime.js` | 241 |  |
+| `runner-crowd-inspect-runtime.js` | 260 |  |
 | `runner-crowd-leds.js` | 55 |  |
 | `runner-crowd-lines.js` | 120 |  |
 | `runner-crowd-materials.js` | 44 |  |
 | `runner-crowd-routes.js` | 223 |  |
-| `runner-crowd-runtime.js` | 1352 |  |
+| `runner-crowd-runtime.js` | 886 |  |
 | `runner-crowd-runtime.test.mjs` | 81 | test |
 | `runner-footsteps.js` | 135 |  |
 | `runner-greeter.js` | 172 |  |
@@ -109,7 +111,7 @@ Le cartelle:
 | `runner-state.js` | 356 |  |
 | `runner-visual-controls.js` | 221 |  |
 | `runner-visual-controls.test.mjs` | 43 | test |
-| `runner-wiring.js` | 1128 |  |
+| `runner-wiring.js` | 1132 |  |
 | `speech-bubbles.js` | 804 |  |
 | `speech-bubbles.test.mjs` | 100 | test |
 
@@ -141,7 +143,7 @@ Le cartelle:
 | `movement.js` | 267 |  |
 | `welcome-ui.js` | 68 |  |
 
-### `engine` (5104 righe)
+### `engine` (5116 righe)
 
 | file | righe | test |
 |---|---:|---|
@@ -149,9 +151,9 @@ Le cartelle:
 | `boot-prewarm.js` | 313 |  |
 | `cinematic-look.test.mjs` | 46 | test |
 | `city-reveal-profiler.js` | 351 |  |
-| `frame-loop.js` | 289 |  |
+| `frame-loop.js` | 294 |  |
 | `fx-debug-toggles.js` | 108 |  |
-| `inspect-hooks.js` | 468 |  |
+| `inspect-hooks.js` | 475 |  |
 | `performance-diagnostics.js` | 701 |  |
 | `performance-mobile.js` | 51 |  |
 | `performance-mobile.test.mjs` | 42 | test |
@@ -167,7 +169,7 @@ Le cartelle:
 | `temporal-aa-pass.js` | 341 |  |
 | `temporal-aa-pass.test.mjs` | 75 | test |
 
-### `world` (12665 righe)
+### `world` (12773 righe)
 
 | file | righe | test |
 |---|---:|---|
@@ -185,13 +187,16 @@ Le cartelle:
 | `building-doors.test.mjs` | 62 | test |
 | `building-leds.js` | 913 |  |
 | `buildings.js` | 275 |  |
-| `city-boards.js` | 1200 |  |
-| `city-boards.test.mjs` | 104 | test |
+| `city-boards.js` | 636 |  |
+| `city-boards.test.mjs` | 107 | test |
 | `city-reveal-main-led.js` | 439 |  |
+| `city-reveal-materials.js` | 168 |  |
 | `city-reveal-render-runtime.js` | 257 |  |
 | `city-reveal-scan-glow.js` | 160 |  |
-| `city-reveal-wireframe.js` | 1235 |  |
-| `city-wiring.js` | 782 |  |
+| `city-reveal-sweep.js` | 166 |  |
+| `city-reveal-wireframe.js` | 975 |  |
+| `city-role-boards.js` | 593 |  |
+| `city-wiring.js` | 784 |  |
 | `config.js` | 50 |  |
 | `contact-terminal.js` | 939 |  |
 | `contact-terminal.test.mjs` | 424 | test |
@@ -203,6 +208,7 @@ Le cartelle:
 | `material-textures.js` | 112 |  |
 | `sky-dome.js` | 730 |  |
 | `sky-dome.test.mjs` | 55 | test |
+
 ## I file citati altrove nel manuale
 
 Le pagine di questo manuale citano la fonte di ogni affermazione, e non tutte le fonti
