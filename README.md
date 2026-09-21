@@ -22,41 +22,51 @@ tenere in piedi in un browser senza toolchain: 102 moduli ES caricati da una imp
 three.js r184 copiato in `vendor/` e servito in locale, nessun passo di build fra il
 file sorgente e quello che arriva al browser.
 
-Dentro ci sono una folla animata con fumetti e riflessi, un terminale dei contatti 3D
-che prende il controllo della camera, un cielo procedurale con temporale e bake a cubo,
-una catena di post-processing con bloom, antialiasing temporale e upscale, una colonna
-sonora che pilota gli equalizzatori sulle facciate, e un pannello di regia con oltre
-cinquecento controlli dal vivo.
+I sottosistemi, con il meccanismo che li tiene in piedi:
+
+| sottosistema | come funziona |
+|---|---|
+| folla | rig condizionato per membro, LOD a griglia spaziale, riflessi come cloni con scala Y negativa |
+| terminale contatti | macchina a 5 stati che prende un lock esclusivo sulla camera e la restituisce nella posa salvata |
+| cielo | cupola procedurale con bake a cubo 512, una faccia ogni 2 frame, env map da canvas 2D più PMREM |
+| post-processing | bloom, FXAA/MSAA/TAA selezionabili da query string, upscale FSR, risoluzione adattiva a budget |
+| audio | `AnalyserNode` con FFT che pilota 16 barre sulle facciate, più un inviluppo del basso per il battito |
+| rivelo | fino a 6 pass a schermo intero in 1,5 s, con clipping plane a 45 gradi |
+| pannello di regia | 234 cursori e 20 menù, 537 ricerche per id risolte da 4 aiutanti tipizzati |
 
 Il **[manuale tecnico](https://avstudio.ai/chi-siamo/retro-future/doc/)** è la
-documentazione vera: diciannove capitoli, uno per sottosistema, ognuno con il problema,
-la soluzione, i numeri misurati e le cose che non so spiegare. La sua sorgente sta in
-[`doc/`](doc/) e viene costruita in CI insieme al resto.
+documentazione vera: 18 capitoli più 4 pagine di riferimento, ognuno con il problema, la
+soluzione, i numeri misurati con data e comando, e le cose che non so spiegare. La
+sorgente sta in [`doc/`](doc/) e viene costruita in CI insieme al resto.
 
 ## Le decisioni che spiegano il resto
 
 **Nessun bundler, di proposito.** `index.html` dichiara una importmap e i moduli
 arrivano come li ho scritti. Il costo lo conosco e l'ho misurato: 1,44 MB su disco che
-diventano 324 KB in brotli, e centodue richieste condizionate alla seconda visita.
+diventano 324 KB in brotli, e 102 richieste condizionate alla seconda visita.
 Il guadagno è che quello che debuggo nel browser è il file che ho aperto nell'editor.
 
 **I tipi stanno nei commenti, il controllo è vero.** Niente TypeScript nella catena di
 build, ma `tsc` con `checkJs` legge tutti i `.js`. Il debito di partenza, 524 errori, non
 è stato nascosto: è diventato la soglia di un cricchetto che può solo scendere. È
-arrivato a zero in quindici commit, un dominio per commit, senza usare `any` nemmeno una
-volta, e lungo la strada ha scoperto cinque bug veri che i tipi larghi coprivano.
+arrivato a zero in 15 commit, un dominio per commit, senza usare `any` nemmeno una
+volta, e lungo la strada ha scoperto 5 bug veri che i tipi larghi coprivano.
 
 **Le prove guardano il comportamento, non il testo del codice.** Costruiscono la scena,
-o aprono la pagina in Chromium, e misurano dove finiscono le cose. Solo quattro file
-leggono il sorgente, e solo per affermazioni che il sorgente può fare da solo. Ogni
-prova nuova nasce con la sua controprova: si rompe apposta quello che deve intercettare
-e si verifica che diventi rossa.
+o aprono la pagina in Chromium, e misurano dove finiscono le cose. Solo 4 file leggono
+il sorgente, e solo per affermazioni che il sorgente può fare da solo: importmap,
+invarianti, ordine di boot e frame, contesto audio unico. Ogni prova nuova nasce con la
+sua controprova: si rompe apposta quello che deve intercettare e si verifica che diventi
+rossa.
 
-**Il gate visivo ha una baseline per piattaforma.** Una scena 3D può passare tutte le
-prove e cambiare aspetto. Il gate fotografa la pagina in Chromium a un istante fisso,
-maschera le zone che pulsano e confronta i pixel contro un pavimento di rumore misurato.
-La baseline di una macchina con GPU vera non vale sul runner senza GPU, e il perché sta
-scritto con i numeri in [`test/baseline-linux/README.md`](test/baseline-linux/README.md).
+**Il gate visivo ha una baseline per piattaforma.** Una scena 3D passa tutte le prove e
+cambia aspetto. Il gate fotografa la pagina in Chromium a un istante fisso
+dell'orologio, maschera le zone con rumore per costruzione (pannello dei tempi, bottone
+che pulsa, equalizzatore) e confronta i pixel: soglia 0,05% sulla copertina, 1,5% sulla
+scena. La scena "statica" non è ferma, quindi dopo l'istante fisso parte una raffica e
+il confronto prende il fotogramma in fase. Una baseline fatta su GPU vera non vale sul
+runner senza GPU, e il perché è misurato in
+[`test/baseline-linux/README.md`](test/baseline-linux/README.md).
 
 ## Cosa gira a ogni push
 
@@ -100,7 +110,7 @@ Il browser va installato: 23 prove aprono la pagina vera in Chromium e misurano
 quello che il browser ha calcolato, invece di leggere l'HTML con espressioni regolari.
 Senza browser falliscono, e falliscono apposta: saltarle sarebbe un timbro.
 
-La demo in sé non ha dipendenze: le quattro di sviluppo servono solo ai controlli e sono
+La demo in sé non ha dipendenze: le 4 di sviluppo servono solo ai controlli e sono
 bloccate nel `package-lock.json`, così `npm ci` installa le stesse versioni oggi e fra un
 anno. three.js è vendorizzato, e le prove lo risolvono con
 [`test/resolve-three.mjs`](test/resolve-three.mjs), l'equivalente node della importmap.

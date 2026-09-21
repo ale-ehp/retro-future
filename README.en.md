@@ -22,40 +22,50 @@ browser with no toolchain: 102 ES modules loaded from an import map, three.js r1
 into `vendor/` and served locally, no build step between the source file and what
 reaches the browser.
 
-It contains an animated crowd with speech bubbles and reflections, a 3D contact terminal
-that takes exclusive control of the camera, a procedural sky with storms and a cube bake,
-a post-processing chain with bloom, temporal antialiasing and upscaling, a soundtrack
-driving the equalisers on the building facades, and a live control panel with more than
-five hundred parameters.
+The subsystems, with the mechanism that holds each one up:
+
+| subsystem | how it works |
+|---|---|
+| crowd | per-member conditioned rig, spatial-grid LOD, reflections as clones with negative Y scale |
+| contact terminal | 5-state machine that takes an exclusive lock on the camera and returns it in the saved pose |
+| sky | procedural dome with a 512 cube bake, one face every 2 frames, env map from a 2D canvas plus PMREM |
+| post-processing | bloom, FXAA/MSAA/TAA selectable from the query string, FSR upscale, budget-driven adaptive resolution |
+| audio | `AnalyserNode` FFT driving 16 bars on the facades, plus a bass envelope for the pulse |
+| reveal | up to 6 full-screen passes in 1.5 s, with a clipping plane at 45 degrees |
+| control panel | 234 sliders and 20 menus, 537 id lookups resolved by 4 typed helpers |
 
 The **[technical manual](https://avstudio.ai/chi-siamo/retro-future/doc/)** is the real
-documentation: nineteen chapters, one per subsystem, each with the problem, the solution,
-the measured numbers and the things I cannot explain. Its source lives in [`doc/`](doc/)
-and is built in CI along with everything else. It is written in Italian.
+documentation: 18 chapters plus 4 reference pages, each with the problem, the solution,
+the numbers with the date and command that produced them, and the things I cannot
+explain. Its source lives in [`doc/`](doc/) and is built in CI along with everything
+else. It is written in Italian.
 
 ## The decisions that explain the rest
 
 **No bundler, on purpose.** `index.html` declares an import map and the modules arrive
 exactly as I wrote them. I know the cost and I measured it: 1.44 MB on disk that become
-324 KB over brotli, and a hundred and two conditional requests on a second visit. The payoff
+324 KB over brotli, and 102 conditional requests on a second visit. The payoff
 is that what I debug in the browser is the file I opened in the editor.
 
 **Types live in comments, the check is real.** No TypeScript in the build chain, but
 `tsc` with `checkJs` reads every `.js` file. The starting debt, 524 errors, was not
 hidden: it became the threshold of a ratchet that can only go down. It reached zero in
-fifteen commits, one domain per commit, without a single `any`, and on the way it
-uncovered five real bugs that loose types had been covering.
+15 commits, one domain per commit, without a single `any`, and on the way it uncovered
+5 real bugs that loose types had been covering.
 
 **Tests observe behaviour, not the text of the code.** They build the scene, or open the
-page in Chromium, and measure where things end up. Only four files read the source, and
-only for claims the source can make on its own. Every new test ships with its
-counter-test: you deliberately break what it should catch and verify that it turns red.
+page in Chromium, and measure where things end up. Only 4 files read the source, and only
+for claims the source can make on its own: import map, invariants, boot and frame order,
+single audio context. Every new test ships with its counter-test: you deliberately break
+what it should catch and verify that it turns red.
 
-**The visual gate keeps one baseline per platform.** A 3D scene can pass every test and
-still change how it looks. The gate photographs the page in Chromium at a fixed instant,
-masks the pulsing regions and compares pixels against a measured noise floor. A baseline
-captured on a machine with a real GPU does not hold on a GPU-less runner, and the reason
-is written out with numbers in
+**The visual gate keeps one baseline per platform.** A 3D scene passes every test and
+still changes how it looks. The gate photographs the page in Chromium at a fixed instant
+of the clock, masks the regions that are noisy by construction (timing panel, pulsing
+button, equaliser) and compares pixels: 0.05% threshold on the cover, 1.5% on the scene.
+The "static" scene is not still, so after the fixed instant it shoots a burst and the
+comparison picks the in-phase frame. A baseline captured on a real GPU does not hold on a
+GPU-less runner, and the reason is measured in
 [`test/baseline-linux/README.md`](test/baseline-linux/README.md).
 
 ## What runs on every push
