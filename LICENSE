@@ -1,0 +1,46 @@
+Copyright (c) 2026 Alessandro Veneziano · avstudio (https://avstudio.ai)
+
+Tutti i diritti riservati / All rights reserved.
+
+Questo repository è pubblicato a scopo dimostrativo. Codice, asset grafici e audio non
+possono essere copiati, modificati o redistribuiti senza permesso scritto dell'autore.
+
+This repository is published for demonstration purposes. Code, graphic assets and audio
+may not be copied, modified or redistributed without the author's written permission.
+
+
+COMPONENTI DI TERZE PARTI / THIRD-PARTY COMPONENTS
+
+Le eccezioni che seguono non sono coperte dalla riserva qui sopra: ognuna resta sotto la
+propria licenza. The exceptions below are not covered by the reservation above: each
+one keeps its own license.
+
+1. three.js r184, in vendor/ (three.core.js, three.module.min.js, EffectComposer.js,
+   RenderPass.js, ShaderPass.js, FXAAPass.js, FXAAShader.js, UnrealBloomPass.js,
+   GLTFLoader.js, SkeletonUtils.js, BufferGeometryUtils.js e le loro dipendenze).
+   Copyright (c) 2010-2026 three.js authors. Licenza MIT.
+   Due file sono modificati rispetto a upstream: vendor/README.md dice quali e come.
+   https://github.com/mrdoob/three.js/blob/dev/LICENSE
+
+2. FXAA: algoritmo di NVIDIA, implementazione C# di Jasper Flick, porting GLSL di
+   Dave Hoskins, nella copia distribuita con three.js. Licenza MIT.
+
+3. "Kaonashi (No-Face)" di Riccardo Mazzi, in assets/models/ e assets/welcome/.
+   Licenza Creative Commons Attribution 4.0 International (CC BY 4.0), adattato:
+   tolti i componenti interni e l'ombra a terra, cappuccio esterno reso opaco.
+   I crediti e la nota delle modifiche viaggiano dentro il file GLB.
+   https://sketchfab.com/3d-models/kaonashi-no-face-bc0b122ee31a4909b3b2cee99c824ad0
+   https://creativecommons.org/licenses/by/4.0/
+
+4. Space Grotesk di Florian Karsten, in doc/static/fonts/.
+   Licenza SIL Open Font License 1.1.
+   https://openfontlicense.org/
+
+5. Il modello del personaggio in character-mockups/assets/models/soldier.glb parte da
+   un rig con scheletro Mixamo, lo stesso distribuito fra gli esempi di three.js. La
+   mesh e i materiali sono rifatti per questa demo.
+
+6. Il manuale in doc/ è costruito con Docusaurus (MIT) e Mermaid (MIT).
+
+La colonna sonora in audio/ è prodotta dall'autore con Suno (piano Pro) e ricade sotto
+la riserva in cima a questo file.

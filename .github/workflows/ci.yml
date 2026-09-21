@@ -1,0 +1,107 @@
+# Tre cancelli su ogni push e ogni pull request. Nessuno si puo' allentare per far
+# passare un commit: la soglia del typecheck scende e basta, e la baseline visiva si
+# rigenera solo dopo aver guardato le immagini nuove.
+#
+# Perche' esiste (2026-09-18): le prove della demo non giravano da nessuna parte ed
+# erano rosse da giorni senza che nessuno lo sapesse.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Avvio a mano: serve quando la correzione sta in un file fuori dai filtri, come
+  # package.json. Successo il 2026-09-19 con acorn non dichiarato: il push che lo
+  # sistemava non faceva partire niente e la CI restava rossa sull'ultimo run.
+  workflow_dispatch:
+
+jobs:
+  # Prove, codice morto, typecheck. Tre comandi, un job: sono veloci e condividono
+  # la stessa installazione.
+  prove:
+    name: prove, codice morto, tipi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Non si usa `npm ci`: il lockfile non e' committato di proposito, le
+      # devDependencies sono quattro e servono solo ai controlli. `--ignore-scripts`
+      # perche' nessun postinstall serve.
+      - run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund
+      # Il browser serve a src/pagina-cover.test.mjs e a control-defaults.test.mjs:
+      # misurano la pagina costruita (bersagli, sovrapposizioni, valori di partenza dei
+      # cursori) invece di leggere HTML e CSS con espressioni regolari. Senza browser
+      # quelle prove falliscono, non si saltano.
+      - run: npx playwright install --with-deps chromium
+
+      # three.js e' vendorizzato sotto vendor/ e le prove lo risolvono con
+      # test/resolve-three.mjs, l'equivalente node della importmap di index.html.
+      - run: npm test
+
+      # Nomi dichiarati che nessuno usa e import che nessuno legge: zero dal
+      # 2026-09-19, e da qui in poi un ritorno e' roba nuova.
+      - run: npm run morto
+
+      # tsc legge i .js con checkJs. La soglia e' zero dal 2026-09-20 e puo' solo
+      # scendere: il comando fallisce se gli errori salgono.
+      - run: npm run typecheck
+
+  # Il gate visivo: fotografa la scena in Chromium e la confronta con la baseline del
+  # runner. La baseline di una macchina con GPU vera non vale qui, per questo ce n'e'
+  # una generata sul runner e committata a mano dopo averla guardata.
+  gate-visivo:
+    name: gate visivo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: pip3 install --quiet numpy pillow
+      # RF_GATE_SLOW moltiplica tutte le attese: qui non c'e' GPU e si disegna in
+      # software, quindi al primo run vero lo screenshot scadeva a 30 secondi.
+      # RF_GATE_STATIC_AT_MS sposta l'istante fisso della foto statica: con il valore
+      # di default il boot lo aveva gia' superato e ogni run fotografava una fase
+      # diversa, con le nuvole altrove.
+      - run: node tools/gate-visivo.mjs gate-linux --port 8811
+        env:
+          RF_GATE_SLOW: '4'
+          RF_GATE_STATIC_AT_MS: '300000'
+          RF_GATE_BURST: '10'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-linux
+          path: |
+            gate-linux/*.png
+            gate-linux/fingerprint.json
+          retention-days: 14
+      # Sul runner scene-static.png e' informativa e non blocca: l'istante fisso non si
+      # centra senza GPU, e in sedici secondi di scarto le nuvole si spostano. Il
+      # cancello vero sono welcome.png e l'impronta strutturale. Il perche', misurato,
+      # sta in test/baseline-linux/README.md.
+      - name: Confronto con la baseline del runner
+        run: RF_COMPARE_STATIC_INFORMATIVO=1 python3 tools/confronto-visivo.py test/baseline-linux gate-linux
+
+  # Il manuale tecnico (doc/, Docusaurus): un link rotto o un'immagine mancante
+  # fermano il build. Ha un lockfile suo, quindi qui `npm ci` va bene.
+  manuale:
+    name: manuale
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: doc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: doc/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build

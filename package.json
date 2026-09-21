@@ -1,0 +1,34 @@
+{
+  "name": "retro-future",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Demo three.js in ESM senza bundler: un boulevard notturno esplorabile, con folla, audio reattivo e gate di qualita' automatici.",
+  "homepage": "https://avstudio.ai/chi-siamo/retro-future/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ale-ehp/retro-future.git"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Alessandro Veneziano <alevene88@gmail.com> (https://avstudio.ai)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.15"
+  },
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node --import ./test/resolve-three.mjs --test \"src/**/*.test.mjs\"",
+    "typecheck": "node tools/typecheck.mjs",
+    "doc:dev": "npm --prefix doc run start",
+    "doc:build": "npm --prefix doc run build",
+    "morto": "node tools/codice-morto.mjs",
+    "gate": "node tools/gate-visivo.mjs",
+    "doc:screenshot": "node tools/screenshot-manuale.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@types/node": "24.9.2",
+    "@types/three": "0.184.1",
+    "acorn": "8.18.0",
+    "typescript": "6.0.3"
+  }
+}

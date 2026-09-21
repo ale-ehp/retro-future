@@ -1,126 +1,173 @@
-# Retro Future: come si lavora sulla demo
+# Retro Future
 
-Documento di lavoro, non viene pubblicato (il build esclude i `.md`). Tutto cio' che
-segue e' stato misurato il 2026-09-19, non assunto.
+Boulevard notturno esplorabile in WebGL: three.js in moduli ES, servito senza bundler,
+con typecheck, prove di comportamento e un gate visivo che gira a ogni push.
 
-## Comandi (dalla radice del repository)
+[![ci](https://github.com/ale-ehp/retro-future/actions/workflows/ci.yml/badge.svg)](https://github.com/ale-ehp/retro-future/actions/workflows/ci.yml)
+![typecheck](https://img.shields.io/badge/typecheck-0%20errori-2fd37a)
+![prove](https://img.shields.io/badge/prove-160-2fd37a)
+![three.js](https://img.shields.io/badge/three.js-r184-000000)
+![node](https://img.shields.io/badge/node-%E2%89%A522.15-5fa04e)
 
+![Il boulevard a scena piena](doc/static/img/panoramica.webp)
+
+**[Demo live](https://avstudio.ai/chi-siamo/retro-future/)** ·
+**[Manuale tecnico](https://avstudio.ai/chi-siamo/retro-future/doc/)** ·
+[English](README.en.md)
+
+## Cos'è
+
+Una città notturna navigabile in prima persona, costruita per misurare quanto si può
+tenere in piedi in un browser senza toolchain: 97 moduli ES caricati da una importmap,
+three.js r184 copiato in `vendor/` e servito in locale, nessun passo di build fra il
+file sorgente e quello che arriva al browser.
+
+Dentro ci sono una folla animata con fumetti e riflessi, un terminale dei contatti 3D
+che prende il controllo della camera, un cielo procedurale con temporale e bake a cubo,
+una catena di post-processing con bloom, antialiasing temporale e upscale, una colonna
+sonora che pilota gli equalizzatori sulle facciate, e un pannello di regia con oltre
+cinquecento controlli dal vivo.
+
+Il **[manuale tecnico](https://avstudio.ai/chi-siamo/retro-future/doc/)** è la
+documentazione vera: diciannove capitoli, uno per sottosistema, ognuno con il problema,
+la soluzione, i numeri misurati e le cose che non so spiegare. La sua sorgente sta in
+[`doc/`](doc/) e viene costruita in CI insieme al resto.
+
+## Le decisioni che spiegano il resto
+
+**Nessun bundler, di proposito.** `index.html` dichiara una importmap e i moduli
+arrivano come li ho scritti. Il costo lo conosco e l'ho misurato: 1,36 MB su disco che
+diventano 303 KB in brotli, e novantasette richieste condizionate alla seconda visita.
+Il guadagno è che quello che debuggo nel browser è il file che ho aperto nell'editor.
+
+**I tipi stanno nei commenti, il controllo è vero.** Niente TypeScript nella catena di
+build, ma `tsc` con `checkJs` legge tutti i `.js`. Il debito di partenza, 524 errori, non
+è stato nascosto: è diventato la soglia di un cricchetto che può solo scendere. È
+arrivato a zero in quindici commit, un dominio per commit, senza usare `any` nemmeno una
+volta, e lungo la strada ha scoperto cinque bug veri che i tipi larghi coprivano.
+
+**Le prove guardano il comportamento, non il testo del codice.** Costruiscono la scena,
+o aprono la pagina in Chromium, e misurano dove finiscono le cose. Solo quattro file
+leggono il sorgente, e solo per affermazioni che il sorgente può fare da solo. Ogni
+prova nuova nasce con la sua controprova: si rompe apposta quello che deve intercettare
+e si verifica che diventi rossa.
+
+**Il gate visivo ha una baseline per piattaforma.** Una scena 3D può passare tutte le
+prove e cambiare aspetto. Il gate fotografa la pagina in Chromium a un istante fisso,
+maschera le zone che pulsano e confronta i pixel contro un pavimento di rumore misurato.
+La baseline di una macchina con GPU vera non vale sul runner senza GPU, e il perché sta
+scritto con i numeri in [`test/baseline-linux/README.md`](test/baseline-linux/README.md).
+
+## Cosa gira a ogni push
+
+| cancello | cosa misura | oggi |
+|---|---|---|
+| prove | 160 prove su 35 file, comportamento della scena e della pagina | verdi |
+| typecheck | `tsc --checkJs` su `src/` e `test/`, soglia a cricchetto | 0 errori |
+| codice morto | nomi top level mai usati e import mai letti | 0 e 0 |
+| gate visivo | copertina, scena statica e impronta strutturale contro la baseline del runner | verde |
+| manuale | il build di Docusaurus si ferma su un link rotto o un'immagine mancante | verde |
+
+Nessuno di questi si allenta per far passare un commit. La soglia del typecheck scende e
+basta; la baseline visiva si rigenera solo dopo aver guardato le immagini nuove.
+
+## Avvio
+
+Sono file statici. Vanno serviti via HTTP, non aperti da `file://`, perché la pagina
+importa moduli ES.
+
+```sh
+npm start                 # python3 -m http.server 8000
+open http://localhost:8000/
 ```
-npm run test:retro-future        # prove node (browser Chromium di Playwright per quelle di pagina)
-npm run typecheck:retro-future   # tsc sui .js, soglia a cricchetto: zero dal 2026-09-20, e resta zero
-npm run morto:retro-future       # nomi mai usati e import inutili: zero, devono restare zero
-npm run build:retro-future       # dist-retro/ + la pagina inglese generata dal dizionario
-node scripts/retro-future-visual-gate.mjs /tmp/rf --port 8811
-python3 scripts/retro-future-visual-compare.py test/retro-future-baseline /tmp/rf
+
+Serve un browser con WebGL2. L'audio parte dopo la prima interazione, come vuole la
+politica di autoplay.
+
+## Comandi
+
+```sh
+npm install               # solo per i controlli: typescript, playwright, acorn, @types
+npm test                  # 160 prove (node --test, Chromium per quelle di pagina)
+npm run typecheck         # tsc con checkJs, soglia a cricchetto
+npm run morto             # nomi morti e import inutili
+npm run gate -- /tmp/rf   # cattura visiva; confronto con tools/confronto-visivo.py
+npm run doc:dev           # il manuale in locale
 ```
 
-Il gate visivo e la sua baseline sono spiegati in `test/retro-future-baseline/README.md`.
+La demo in sé non ha dipendenze: `npm install` serve solo ai controlli. three.js è
+vendorizzato, e le prove lo risolvono con
+[`test/resolve-three.mjs`](test/resolve-three.mjs), l'equivalente node della importmap.
 
-## Regole delle prove
+## Controlli
 
-- Una prova guarda il comportamento: costruisce la scena (o apre la pagina in Chromium)
-  e misura dove finiscono le cose. Solo quattro file leggono il sorgente, e solo per cose
-  che il sorgente puo' dire da solo: `audio-contesto-unico`, `importmap`, `invarianti`,
-  `ordine-boot-frame`.
-- Ogni prova nuova ha una controprova: si rompe apposta cio' che deve intercettare e si
-  verifica che diventi rossa.
-- `src/invarianti.test.mjs` tiene le relazioni fra valori che si annullano in silenzio,
-  la famiglia di tutti i bug trovati finora. Due eccezioni note aspettano una decisione
-  dell'autore, con i numeri scritti nel file: il cursore della luminosita' del cielo
-  arriva a 4.8 ma lo shader si ferma a 2.4; i LED della folla con i cursori canonici
-  darebbero 31 e vengono tagliati a 15, quindi la costante d'intensita' oggi non conta.
-
-## Senza JavaScript
-
-La copertina si vede intera anche senza JavaScript (foto statiche, titolo, link alla
-home). Il bottone "Esplora i reparti" non potrebbe fare niente, quindi un `<noscript>`
-lo nasconde e spiega che la demo e' una scena 3D. Le quattro facce sono canvas
-decorativi con `aria-hidden="true"` e accanto hanno l'etichetta visibile del reparto:
-un `alt` non aggiungerebbe niente che uno screen reader non legga gia'.
-
-## Come e' diviso `src/`
-
-`main.js` non costruisce piu' la scena da solo: apre i sottosistemi nell'ordine giusto e
-li lega fra loro. Dalla tappa 5 (2026-09-19) i domini stanno in file propri, nessuno
-sopra le 1.500 righe.
-
-| dove | cosa tiene |
+| tasto | effetto |
 |---|---|
-| `engine/post-pipeline.js` | composer, bloom, FXAA/MSAA, FSR, TAA, risoluzione adattiva, budget |
-| `engine/retro-benchmark-runtime.js` | pannello del benchmark, fotografia dell'ambiente, partenza da `?benchmark=1` |
-| `engine/boot-prewarm.js` | prewarm di texture e ossa, boot con i valori finali dei controlli |
-| `engine/inspect-hooks.js` | le scorciatoie `window.__tron*` di console |
-| `engine/frame-loop.js` | `tick()`, contatore FPS, ridimensionamento della finestra |
-| `world/boulevard-layout.js` | la mappa del boulevard: larghezze, scale, incroci, strade laterali |
-| `world/city-wiring.js` | montaggio di palazzi, ponti, LED, tabelloni, terminale, equalizer, rivelo |
-| `camera/player-state.js` | posa, spawn, parametri del movimento, superficie di cammino |
-| `camera/camera-collision.js` | collisioni della camera con palazzi, folla e bordo strada |
-| `character/runner-wiring.js` | cablaggio del corridore e della folla, cursori del personaggio |
-| `character/runner-greeter.js` | chi accoglie: posizione, cammino verso il tabellone, sguardo, fumetti |
-| `controls/control-panel.js` | schede del pannello, spawn salvato, benchmark FSR, montaggio |
-| `controls/live-controls.js` | `applyLiveControls` (691 righe, intera) e il suo programmatore |
+| `Spazio` o il bottone a schermo | avvia |
+| `W A S D` o frecce | movimento, `Shift` per correre |
+| mouse | sguardo, `Esc` lo rilascia |
+| `H` | rimette la camera all'altezza di partenza |
+| `E` davanti al terminale | apre i contatti, frecce per scorrere, `Invio` per aprire |
 
-Due regole che tengono in piedi la divisione:
+Su telefono in orizzontale compare un joystick al posto della tastiera.
 
-1. **Lo stato condiviso e' un oggetto, non venti getter.** Dove un dominio ha numeri che
-   altri leggono o scrivono, il modulo esporta un oggetto mutabile (`post`, `boulevard`,
-   `player`, `collisioni`, `frame`, `pannello`) e fuori si scrive `post.bloomEnabled`. Ci
-   finisce un nome SOLO se qualcuno fuori dal file lo tocca; il resto resta `let` privato.
-2. **Chi costruisce lo fa dentro `initX(deps)`.** `main.js` importa i moduli prima di
-   creare scena, camera e renderer, quindi un modulo che chiama `scene.add()` o legge il
-   renderer non puo' farlo al momento dell'import: i binding sono dichiarati in cima al
-   file e assegnati dentro la funzione, che `main.js` chiama dove stava il codice.
+## Parametri URL
 
-## Come si scrivono i tipi (senza bundler, senza TypeScript)
+La scena si pilota dalla query string. Servono ai confronti A/B e a spegnere un effetto
+senza toccare il codice.
 
-Il typecheck legge i `.js` con `checkJs` e i tipi stanno nei commenti JSDoc. Il debito
-di partenza (524 errori il 2026-09-19) e' andato a zero il 2026-09-20 in quindici
-commit, e le convenzioni che ne sono uscite valgono per chi scrive codice nuovo:
+| parametro | effetto |
+|---|---|
+| `?benchmark=1` | registra fps, frame peggiori e memoria, e mostra il pannello |
+| `?benchmarkSeconds=N` | durata della registrazione |
+| `?aa=fxaa\|msaa\|taa\|none` | modalità di antialiasing |
+| `?taa=0` · `?taa.profile=quality\|lite` | spegne o profila l'antialiasing temporale |
+| `?pipeline=0` | torna alla catena colore precedente |
+| `?forceMobile=1` | profilo mobile su qualunque dispositivo |
+| `?techBreakdown=1` | overlay con pipeline, frame, scena, LOD e stato dei bake |
+| `?pixelRatio=N` | forza la risoluzione di render |
 
-- **Mai `any` per far sparire un errore.** E' gia' successo: tipizzare `any` le
-  dipendenze del pannello aveva nascosto 305 errori veri. Se un conteggio crolla piu'
-  del previsto, sospetta di te stesso.
-- **Il cast sta dove nasce il valore, una volta sola.** `document.getElementById`
-  dichiara `HTMLElement`: in `controls/controls.js` quattro aiutanti (`cursore`,
-  `scelta`, `bottone`, `etichetta`) fanno il cast per i 529 elementi del pannello, e
-  chi li usa non deve saperne niente. Stesso principio per `querySelectorAll` (cast
-  del `NodeListOf` sul selettore) e per i pochi `getElementById` locali.
-- **I segnaposto delle dipendenze portano la firma vera.** `let refresh = () => {}`
-  fa dedurre `() => void` e ogni chiamata con argomenti e' un errore. Dove la funzione
-  vera e' esportata il segnaposto ne prende il tipo con `typeof import('./x.js').f`,
-  cosi' non puo' scollarsi; altrimenti la firma e' scritta a mano dopo averla aperta.
-- **Un oggetto di dipendenze ha un typedef intero** (`DipendenzeTerminale` in
-  `world/contact-terminal.js`): i default coprono una parte, i campi iniettati sono
-  opzionali. Dove le prove passano uno stub, il tipo dice il minimo che il runtime
-  tocca, non `HTMLElement` o `WebGLRenderer` interi.
-- **`traverse()` passa anche gruppi e luci**: il nodo e' `THREE.Object3D &
-  Partial<THREE.Mesh>` (`NodoForseMesh`), non un cast a `Mesh`, che sui gruppi
-  sarebbe una bugia.
-- **Le opzioni destrutturate con campi senza default** (`{ x, z, enabled = ... } = {}`)
-  vogliono un `@param` con il tipo intero: tsc deduce solo i campi con default. Per
-  un parametro che non si vuole tipizzare basta `@param nome` senza tipo, che serve
-  solo a far combaciare la posizione.
-- **Una `let` con un letterale** (`let state = STATI.HIDDEN`) diventa quel solo
-  letterale: annota l'unione, ma prima verifica che gli altri valori vengano
-  assegnati davvero, altrimenti hai trovato un ramo morto da togliere.
-- **Quello che il browser ha e lib.dom no** (`navigator.deviceMemory`,
-  `webkitRequestFullscreen`) si dichiara in `src/globali.d.ts`, opzionale com'e'.
-- **I doppi di prova si dichiarano come tali**: un cast doppio (`unknown` poi il tipo)
-  con un commento che dice cosa finge, non un `any`.
+Le altre leve (`skyQuality`, `skyCheap`, `floorLite`, `floorReflect`, `buildingReflect`,
+`dirLight`, `boardUpload`, `aaSamples`, `skyBake`) si leggono nelle funzioni
+`*FromParams` dei moduli che le usano.
 
-Quattro cose che i tipi hanno scovato e che non erano tipi: `elStrip` e
-`sideDoorFaceOffset` iniettati e mai letti, `createTronRunnerParts({})` con un
-argomento ignorato, `audio.playsInline` (attributo dei video) ed
-`extensions.derivatives` (WebGL 1) che non facevano niente. Tolti, gate visivo uguale.
+## Com'è diviso il codice
 
-## Quanto pesa `src/` sulla rete
+97 moduli, 34.578 righe, nessuno sopra le 1.500. `main.js` non costruisce la scena: apre
+i sottosistemi nell'ordine giusto e li lega fra loro.
 
-`src/` sono 97 moduli per 1,36 MB su disco, serviti senza minificazione per scelta
-(nessun build step: `index.html` usa una importmap). Sulla rete non pesano quello:
-Cloudflare li comprime in brotli (misurato il 2026-09-19 con `brotli -q 11`: `main.js`
-46 KB -> 11 KB, il totale 303 KB). Le intestazioni live sono `cache-control: no-cache`
-con ETag: a ogni visita successiva il browser rifa' una richiesta condizionata per
-modulo, e adesso i moduli sono 97 invece di 84. E' il numero di richieste, non i byte, a
-decidere il costo della seconda visita; minificare non lo cambierebbe, cambiare la
-politica di cache del worker si'. Nessuna delle due e' stata fatta qui: sono scelte di
-prodotto, e la divisione della tappa 5 ha reso la seconda piu' interessante.
+| cartella | cosa tiene |
+|---|---|
+| `src/engine/` | post-processing, antialiasing temporale, prewarm, ciclo dei frame, benchmark |
+| `src/world/` | boulevard, palazzi, ponti, LED, tabelloni, terminale, cielo, rivelo della città |
+| `src/character/` | corridore, folla, animazioni, fumetti, riflessi |
+| `src/camera/` | posa, movimento, collisioni, sguardo del mouse |
+| `src/controls/` | pannello di regia, input, equalizzatore, comandi mobile |
+| `src/audio/` | colonna sonora e passi |
+| `vendor/` | three.js r184 e i suoi addon, con `vendor/README.md` che dice cosa è modificato |
+| `tools/` | typecheck, codice morto, gate visivo, screenshot del manuale |
+| `doc/` | sorgente del manuale tecnico (Docusaurus) |
+
+Le convenzioni che tengono in piedi la divisione, e che valgono per chi scrive codice
+nuovo, stanno in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Licenza e crediti
+
+© 2026 Alessandro Veneziano · [avstudio](https://avstudio.ai). Tutti i diritti
+riservati: codice, grafica e musica sono pubblicati come vetrina e non sono riutilizzabili
+senza permesso scritto. Il dettaglio, con le eccezioni di terze parti, sta in
+[LICENSE](LICENSE).
+
+Quello che non ho scritto io, con la sua licenza:
+
+- **three.js r184** e i suoi addon, licenza MIT, © three.js authors. Due file sono
+  modificati rispetto a upstream e [`vendor/README.md`](vendor/README.md) dice quali e
+  come.
+- **Le quattro teste della copertina**: “Kaonashi (No-Face)” di Riccardo Mazzi, da
+  [Sketchfab](https://sketchfab.com/3d-models/kaonashi-no-face-bc0b122ee31a4909b3b2cee99c824ad0),
+  licenza [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), adattato.
+- **Space Grotesk** di Florian Karsten, licenza SIL Open Font License 1.1.
+- **La colonna sonora** è mia, prodotta con Suno (piano Pro).
+
+La pagina dei [crediti nel manuale](https://avstudio.ai/chi-siamo/retro-future/doc/riferimento/crediti)
+tiene l'elenco completo.
