@@ -203,3 +203,26 @@ Le cartelle:
 | `material-textures.js` | 112 |  |
 | `sky-dome.js` | 730 |  |
 | `sky-dome.test.mjs` | 55 | test |
+## I file citati altrove nel manuale
+
+Le pagine di questo manuale citano la fonte di ogni affermazione, e non tutte le fonti
+stanno dentro la cartella della demo. Ci sono tre categorie, e vale la pena distinguerle
+perché non si aprono allo stesso modo.
+
+**Il codice della demo.** `index.html`, `src/`, `test/`, `vendor/`, gli asset e questo
+manuale sono l'intero contenuto del repository pubblico su
+[github.com/ale-ehp/retro-future](https://github.com/ale-ehp/retro-future). Ogni percorso
+che comincia per `src/` o `vendor/` si apre da lì.
+
+**Gli attrezzi di qualità e di pubblicazione.** Il typecheck, il rilevatore di codice
+morto, il gate visivo, il build e il Worker che serve la pagina stanno fuori dalla
+cartella della demo, accanto al resto del sito che la ospita: servono a pubblicare, non a
+disegnare la scena. Nel repository pubblico gli stessi controlli vivono sotto `tools/`,
+adattati a girare da soli.
+
+**I documenti di lavoro.** Le schede dei fatti, le verifiche incrociate, la guida di
+stile e i prompt delle tappe di risanamento non sono pubblicati. Compaiono nelle colonne
+“fonte e data” perché ogni numero di questo manuale deve essere tracciabile a qualcosa di
+scritto, non perché il lettore possa aprirli. Dove una fonte è un documento interno, il
+numero è comunque verificabile sul codice: la colonna dice anche con quale comando è
+stato misurato.
