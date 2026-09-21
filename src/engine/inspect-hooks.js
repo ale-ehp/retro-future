@@ -38,7 +38,12 @@ import {
   sideBuildingCivicNumberGroups,
 } from '../world/building-doors.js';
 import { mainBuildingRecords, sideBuildingRecords } from '../world/buildings.js';
-import { cityDepartmentBoardInspect, cityRoleBoardInspect } from '../world/city-boards.js';
+import {
+  cityDepartmentBoardInspect,
+} from '../world/city-boards.js';
+import {
+  cityRoleBoardInspect,
+} from '../world/city-role-boards.js';
 import {
   CITY_REVEAL_MAIN_BUILDING_LED_WIREFRAME_ENABLED,
   CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS,

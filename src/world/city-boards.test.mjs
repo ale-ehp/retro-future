@@ -8,7 +8,7 @@ function assertNear(actual, expected) {
   );
 }
 
-// city-boards.js all'import legge solo `location.search` e controlla che `window` esista:
+// I due moduli dei tabelloni, all'import, leggono solo `location.search` e controlla che `window` esista:
 // la prova gli da' quel minimo. Il doppio cast dice a tsc che e' una finta dichiarata,
 // non una Window vera (2026-09-20).
 function fingiFinestra() {
@@ -19,29 +19,32 @@ function fingiFinestra() {
 test('city board signs use the shared 30 percent opacity reduction', async () => {
   fingiFinestra();
   const cityBoards = await import(`./city-boards.js?opacity-test=${Date.now()}`);
+  const roleBoards = await import(`./city-role-boards.js?opacity-test=${Date.now()}`);
 
   assertNear(cityBoards.CITY_DEPARTMENT_BOARD_PANEL_BASE_OPACITY, 0.46 * 0.7);
   assertNear(cityBoards.CITY_DEPARTMENT_BOARD_TEXT_BASE_OPACITY, 0.96 * 1.25 * 0.7);
-  assertNear(cityBoards.CITY_ROLE_BOARD_PANEL_BASE_OPACITY, 0.4 * 0.7);
-  assertNear(cityBoards.CITY_ROLE_BOARD_TEXT_BASE_OPACITY, 0.96 * 1.25 * 0.7);
+  assertNear(roleBoards.CITY_ROLE_BOARD_PANEL_BASE_OPACITY, 0.4 * 0.7);
+  assertNear(roleBoards.CITY_ROLE_BOARD_TEXT_BASE_OPACITY, 0.96 * 1.25 * 0.7);
 });
 
 test('city board signs are 50 percent larger in world space', async () => {
   fingiFinestra();
   const cityBoards = await import(`./city-boards.js?size-test=${Date.now()}`);
+  const roleBoards = await import(`./city-role-boards.js?size-test=${Date.now()}`);
 
   assert.equal(cityBoards.CITY_DEPARTMENT_BOARD_WIDTH, 31.5);
   assert.equal(cityBoards.CITY_DEPARTMENT_BOARD_HEIGHT, 15.75);
-  assert.equal(cityBoards.CITY_ROLE_BOARD_WIDTH, 18);
-  assert.equal(cityBoards.CITY_ROLE_BOARD_HEIGHT, 9);
+  assert.equal(roleBoards.CITY_ROLE_BOARD_WIDTH, 18);
+  assert.equal(roleBoards.CITY_ROLE_BOARD_HEIGHT, 9);
 });
 
 test('city board signs respect foreground character depth', async () => {
   fingiFinestra();
   const cityBoards = await import(`./city-boards.js?depth-test=${Date.now()}`);
+  const roleBoards = await import(`./city-role-boards.js?depth-test=${Date.now()}`);
 
   assert.equal(cityBoards.CITY_DEPARTMENT_BOARD_DEPTH_TEST, true);
-  assert.equal(cityBoards.CITY_ROLE_BOARD_DEPTH_TEST, true);
+  assert.equal(roleBoards.CITY_ROLE_BOARD_DEPTH_TEST, true);
 });
 
 // I tabelloni non scrivono profondita' e il loro gruppo sta sotto i cartelli dei

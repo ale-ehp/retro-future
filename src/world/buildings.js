@@ -31,7 +31,7 @@ const buildingRuntime = {
   updateBuildingBasePad: /** @type {typeof import('./base-pads.js').updateBuildingBasePad} */ (() => {}),
   updateSideBuildingDoorTransforms: () => {},
   getCityRoleBoards: () => [],
-  syncCityRoleBoardDoorPose: /** @type {typeof import('./city-boards.js').syncCityRoleBoardDoorPose} */ (() => {}),
+  syncCityRoleBoardDoorPose: /** @type {typeof import('./city-role-boards.js').syncCityRoleBoardDoorPose} */ (() => {}),
 };
 
 export function initBuildings({
