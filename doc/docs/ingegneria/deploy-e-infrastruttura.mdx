@@ -83,7 +83,7 @@ Il Worker risponde su 6 rotte: indirizzo attuale, vecchio di giugno, inglese, og
 con e senza `www`. Il vecchio indirizzo e le richieste senza barra finale ricevono un
 redirect 308.
 
-La versione inglese è la parte interessante: **non esiste una seconda copia della
+La versione inglese non ha una seconda copia: **non esiste un secondo albero della
 demo**. La pagina inglese è generata al build da un dizionario di frasi, e i moduli
 sono gli stessi. Una richiesta sotto `/en/` viene riscritta sulla copia unica prima del
 fetch all'asset binding. Senza, servirebbero 2 copie da un megabyte e mezzo che
@@ -98,7 +98,7 @@ statistiche, niente altro.
 
 ### La politica di cache, e perché è così
 
-Qui sta la decisione che vale il capitolo.
+È la decisione con più conseguenze dopo un deploy.
 
 | tipo di file | cache | perché |
 |---|---|---|
@@ -106,8 +106,8 @@ Qui sta la decisione che vale il capitolo.
 | moduli, stili, dati, modelli | no-cache + ETag | sono accoppiati alla pagina: una coppia disallineata non degrada, si rompe |
 | audio e immagini | una settimana | non sono accoppiati a niente: un file audio vecchio resta un file audio |
 
-“Nessuna cache” non vuol dire riscaricare tutto: il browser rifà la richiesta e
-l'ETag gli fa tornare un 304 senza corpo. Il costo della seconda visita non sono i
+`no-cache` non è `no-store`: il browser rivalida a ogni visita e l'ETag gli fa
+tornare un 304 senza corpo, non il file. Il costo della seconda visita non sono i
 byte, sono 102 richieste. È un costo che conosco e che ho scelto, e la leva per
 cambiarlo è il Worker.
 

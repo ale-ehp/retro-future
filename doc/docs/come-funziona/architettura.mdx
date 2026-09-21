@@ -19,7 +19,7 @@ Blocco 7: ponte scritto senza affermazioni tecniche nuove.
 
 :::note In breve
 
-102 moduli ESM serviti senza bundler, risolti da una importmap. `main.js` monta i sottosistemi in un ordine che una prova verifica sul sorgente; lo stato condiviso è un oggetto mutabile per dominio, e chi costruisce lo fa dentro `initX(deps)` perché gli import girano prima di scena, camera e renderer.
+102 moduli ESM serviti senza bundler, risolti da una importmap. `main.js` monta i sottosistemi in un ordine che un test verifica sul sorgente; lo stato condiviso è un oggetto mutabile per dominio, e chi costruisce lo fa dentro `initX(deps)` perché gli import girano prima di scena, camera e renderer.
 
 :::
 
@@ -76,8 +76,9 @@ percorsi degli import.
 I 102 moduli stanno sotto `src/`, divisi in `audio/`, `camera/`, `character/`, `config/`,
 `controls/`, `engine/`, `world/`. La mediana è 241 righe; quattro file stanno sopra le
 1.000, e il più grande è `main.js` con 1.280. La regola non è un tetto di righe: un
-modulo è un sottosistema. I quattro grandi sono ognuno un sottosistema solo, e i file che
-tenevano insieme mestieri diversi sono stati divisi il 21 settembre. Sulla rete viaggiano in brotli da
+modulo è un sottosistema. I 4 grandi sono ognuno un sottosistema solo, e i 3 file che
+tenevano insieme mestieri diversi sono stati divisi il 21 settembre: la folla, il rivelo
+e i tabelloni. Sulla rete viaggiano in brotli da
 Cloudflare: `main.js` passa da 46 KB a 11, il totale compresso è 303 KB.
 
 node:test non legge la importmap, quindi `test/resolve-three.mjs` registra un resolve hook che
@@ -179,7 +180,7 @@ aggiorna il cursore a disco, ogni 500 ms ricalcola gli FPS e ritocca il budget, 
 drone, chiede al terminale dei contatti se possiede la camera e applica il movimento solo se
 né lui né il drone la tengono; poi il LOD della strada; poi, se il rivelo non è in fase
 critica, esagoni, confine, effetti secondari a passo ridotto, camminata, personaggi, folla;
-l'etichetta della posizione ogni 180 ms; cielo, tabelloni, particelle, fumetti; il profilo
+l'etichetta della posizione ogni 180 ms; cielo, tabelloni, particelle, cartelli; il profilo
 prestazioni; i pass del composer; equalizer e LED; il culling statico; il render con timer
 GPU; i tempi alla diagnostica. Un solo `requestAnimationFrame` per evento di `resize`.
 
@@ -261,7 +262,7 @@ Cose che non so spiegare, e lo dico:
   morto dice che l'oggetto sparisce, e oggi nessun modulo lo esporta.
 - Il README e un commit dicono 84 moduli prima della tappa 5; `git ls-tree` a quel commit ne
   conta 83 non di test.
-- La politica di cache del Worker, 97 richieste condizionate a ogni visita, è dichiarata
+- La politica di cache del Worker, 102 richieste condizionate a ogni visita, è dichiarata
   scelta di prodotto e resta aperta.
 - Al boot l'upscale viene forzato spento e la scala a 1 dopo il JSON canonico e il
   localStorage: nessuna fonte scritta spiega perché il valore del JSON non basti.

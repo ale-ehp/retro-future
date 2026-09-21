@@ -27,8 +27,8 @@ la parte riusabile altrove:
 3. [Deploy e infrastruttura](./ingegneria/deploy-e-infrastruttura.mdx): il Worker Cloudflare, le rotte, la cache per tipo di file.
 4. [Architettura](./come-funziona/architettura.mdx): 102 moduli ESM senza bundler, e perché.
 
-**Se coordini progetti.** Il primo capitolo è scritto per te; il quarto è quello che di
-solito manca:
+**Se coordini progetti.** Il primo capitolo è scritto per te, il quarto elenca rinunce e
+debiti noti:
 
 1. [Come è organizzato il lavoro](./ingegneria/come-e-organizzato-il-lavoro.mdx), con i diagrammi a corsie.
 2. [Come è stata costruita](./perche/come-e-stata-costruita.mdx): il metodo, le tappe, le cicatrici.

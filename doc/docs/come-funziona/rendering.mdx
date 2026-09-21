@@ -19,7 +19,7 @@ Blocco 7: ponte scritto dall'autore del manuale, senza affermazioni tecniche nuo
 
 :::note In breve
 
-WebGLRenderer con tone mapping ACES e uscita sRGB; catena di post con UnrealBloomPass in fork, FXAA o MSAA 2x, TAA opzionale, upscale in shader e grade finale. L'encode di output sta in un pass solo, l'ultimo. Risoluzione adattiva con budget a soglie, spento in produzione.
+WebGLRenderer con tone mapping ACES e uscita sRGB; catena di post con UnrealBloomPass in fork, FXAA o MSAA 2x, TAA opzionale, upscale in shader e grade finale. La codifica di uscita sta in un pass solo, l'ultimo. Risoluzione adattiva con budget a soglie, spento in produzione.
 
 :::
 
@@ -84,7 +84,7 @@ flowchart TB
   G --> H((schermo))
 ```
 
-Un dettaglio che conta: tone mapping e conversione in sRGB, la “codifica di uscita”,
+Tone mapping e conversione in sRGB, la “codifica di uscita”,
 stanno in un pass solo, l'ultimo. Ogni shader porta un segnaposto al suo posto e una
 funzione decide a chi assegnarla; un test verifica che nessuno shader la contenga per
 conto suo e che finisca in uno e un solo pass. Prima di agosto 2026 la codifica stava

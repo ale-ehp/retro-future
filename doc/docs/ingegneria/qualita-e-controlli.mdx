@@ -92,7 +92,7 @@ ognuna ha acceso almeno un test.
 
 Il file delle **invarianti** copre la famiglia di bug qui sopra: 8 test, ognuno con
 accanto il bug che l'ha generato e la data. Tengono relazioni fra valori che stanno in
-file diversi: nessun `renderOrder` del progetto sopra quello dei fumetti, ogni cursore
+file diversi: nessun `renderOrder` del progetto sopra quello dei cartelli, ogni cursore
 del markup con un valore multiplo del proprio `step`, il tetto del battito musicale
 sopra il massimo che il calcolo può produrre.
 
@@ -123,7 +123,7 @@ importa viaggia comunque sulla rete. Oggi trova 0 e 0.
 
 ### Il gate visivo
 
-Il pezzo più interessante. Uno script serve la cartella della demo su un server
+Uno script serve la cartella della demo su un server
 locale, apre Chrome, clicca il bottone di avvio e **aspetta uno stato**, non un tempo:
 funzione di ispezione presente, copertina chiusa, rivelo della città concluso. Con
 un'attesa a tempo la foto finiva sulla copertina e il confronto dichiarava cambiata
@@ -132,7 +132,7 @@ tutta la scena: un falso allarme molto convincente.
 Poi scatta le 3 immagini e raccoglie un'**impronta strutturale**: quanti oggetti per
 tipo nella scena, i loro nomi ordinati, la posa della camera, i numeri civici, i ponti,
 i tabelloni, il terminale, gli id nel DOM, più una sezione di valori di runtime, fra
-cui il `renderOrder` dei fumetti e la catena dei pass di post-produzione. Quei valori
+cui il `renderOrder` dei cartelli e la catena dei pass di post-produzione. Quei valori
 ci sono perché i 5 bug della famiglia lasciano l'immagine quasi uguale: rimessa la
 trappola del `renderOrder`, i pixel diversi erano lo 0,17% e l'impronta ha detto il
 nome esatto del campo cambiato.
@@ -141,7 +141,7 @@ Il confronto maschera le zone con rumore per costruzione: il pannello dei tempi,
 bottone che pulsa, l'equalizzatore. La soglia è 0,05% di pixel diversi sulla copertina,
 1,5% sulla scena.
 
-Un dettaglio che conta: **la scena “statica” non è ferma**. Con folla
+**La scena “statica” non è ferma.** Con folla
 ed equalizzatore spenti restano le luci che pulsano a tempo e le nuvole che scorrono.
 Due frame a 3 secondi di distanza nella stessa sessione differivano del 2,3%, e a
 codice identico la baseline della mattina batteva le catture del pomeriggio del 3,7%,
