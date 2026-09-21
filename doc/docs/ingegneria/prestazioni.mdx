@@ -66,7 +66,7 @@ Il problema tecnico ha una forma precisa:
   rasterizzatore software: i delta di fps possono perfino invertirsi.
 - **Il boot ha blocchi sincroni pesanti.** In fila, senza pause, sono centinaia di ms
   con input e disegno congelati su telefono.
-- **La rete conta le richieste, non i byte.** Il grafo dei moduli (circa 89 file) è
+- **La rete conta le richieste, non i byte.** Il grafo dei moduli (102 file al 2026-09-21) è
   profondo, e le intestazioni live sono `cache-control: no-cache` con ETag: ogni
   visita rifà una richiesta condizionata per modulo.
 
@@ -100,8 +100,9 @@ parametro viene registrato e non applicato.
 
 ### La risoluzione, e il budget che non interviene
 
-Il pixel ratio attivo è il minimo fra `devicePixelRatio`, il valore richiesto per la
-scala manuale per la scala dinamica (non sotto 0,25), il tetto di 2, il cap del rivelo
+Il pixel ratio attivo è il minimo fra `devicePixelRatio`, il valore richiesto
+moltiplicato per la scala manuale e per quella dinamica (mai sotto 0,25), il tetto di 2,
+il cap del rivelo
 (1,5, solo desktop) e il cap del bersaglio adattivo: 1920x1080 se lo schermo arriva al
 Full HD, altrimenti 1280x720. Su mobile è tutto scavalcato: il pixel ratio è forzato a
 1,7, e un valore forzato salta i cap e spegne il downscaler automatico.
@@ -127,7 +128,7 @@ flowchart TB
 ```
 
 Il cooldown conta finestre, quindi 6 vale 3 secondi; la scala non scende sotto 0,25.
-Ora l'onestà: in produzione questo ciclo esce sempre al primo rombo. Il profilo parte da
+In produzione questo ciclo esce sempre alla prima condizione. Il profilo parte da
 `auto`, ma al boot i controlli lo sovrascrivono con il `<select>`, il cui default nel
 markup e nel JSON canonico è `quality`; con `quality` la scala torna a 1 e il cooldown
 a 0. Su mobile lo spegne il pixel ratio forzato. Il budget esiste e non agisce.
@@ -189,7 +190,7 @@ batch visibili, 14.887 istanze nascoste, 21.637 attive.
 ### Memoria
 
 Le cache hanno un tetto, e quelle che tengono risorse della GPU le smontano quando le
-espellono. I fumetti: LRU da 48 voci, canvas 896x360 a metà scala per la folla; era da
+espellono. I cartelli: LRU da 48 voci, canvas 896x360 a metà scala per la folla; era da
 12 contro circa 40 frasi, e 40 texture residenti erano circa 70 MB di GPU. I punti degli
 anelli LED: 64 voci, FIFO. I cartelli di ruolo a 512x256, i numeri civici a 512x320. La
 envMap è prefiltrata con PMREM a 6 livelli, riempiti su richiesta. Il composer smonta
@@ -238,14 +239,14 @@ isolarne il costo.
   dell'interfaccia passava senza cancello mobile.
 - **Pavimento e riflesso leggeri.** La normal map veniva campionata per ogni pixel a
   effetto zero. La envMap del pavimento era il costo per pixel più alto sulla superficie più
-  grande: al suo posto un fresnel, con metallicità da 0,88 a 0,32 e ruvidità da 0,16 a
+  grande: al suo posto un fresnel, con metalness da 0,88 a 0,32 e roughness da 0,16 a
   0,5 perché il pavimento non diventi nero. Il pavimento
   perde i riflessi al neon dei palazzi.
 - **Luce direzionale spenta su telefono.** La sola luce puntuale eseguiva un BRDF per
   ogni pixel illuminato di pavimento e facciate; a intensità 0,18 l'atmosfera la
   fanno la luce d'ambiente e i LED emissivi, e gli screenshot prima e dopo non si
   distinguono.
-- **Cache dei fumetti a 48, non 12.** Con 12 voci contro circa 40 frasi l'espulsione
+- **Cache dei cartelli a 48, non 12.** Con 12 voci contro circa 40 frasi l'espulsione
   era continua, e ogni espulsione ricomprava un raster sincrono nel frame in cui
   parlava il prossimo. A scala ridotta una texture pesa circa 0,32 MB.
 - **Prewarm a blocchi, con pause e `compileAsync`.** In fila sarebbero un solo long
@@ -293,7 +294,7 @@ Cose che non so spiegare, e lo dico:
 | semina delle tessere | capacità 189.263 → 33.155, batch 20 → 6, heap 119 → 67 MB | commit 37754726, 2026-07-08 |
 | LOD della strada a regime | 2 batch visibili, 14.887 istanze nascoste, 21.637 attive | commit 37754726, 2026-07-08 |
 | pulizia del codice | deploy 13 → 7,0 MB, geometrie residenti 338 → 232 | commit 77f76c79, 2026-07-07 |
-| fumetti con cache | texture 237 → 240 in 110 s di folla parlante | commit 8666e535, 2026-07-08 |
+| cartelli con cache | texture 237 → 240 in 110 s di folla parlante | commit 8666e535, 2026-07-08 |
 | modello del soldato | 2,16 → 1,23 MB | commit c84edc8c, 2026-07-08 |
 | matrice headless, solo triangoli | hexFloor -121.500 tris; post spento +194.053 tris e +120 draw; 9/9 toggle, 29/29 leve | `docs/retro-future-mobile-fill-benchmark.md`, 2026-07-09, SwiftShader |
 | boot con GPU vera | foto fissa a 60.110,1 ms, 116 richieste | `test/retro-future-baseline/fingerprint.json`, 2026-09-19, macOS Chrome |
@@ -306,7 +307,7 @@ Cose che non so spiegare, e lo dico:
 | pixel ratio | massimo 2, minimo 0,25, cap rivelo 1,5, mobile forzato 1,7, cap mobile 1 e bloom 0,14 | `src/world/config.js`, `src/config/costanti.js` |
 | benchmark e OSD | 60.000 ms, aggiornamento 250 ms, settle 1.500 ms; EMA 0,12, picco a 22 ms, timer GPU ogni 180 frame | `src/engine/retro-benchmark*.js`, `src/engine/performance-diagnostics.js` |
 | culling e LOD | margine 6 e 3 blocchi; 520/120 desktop, 320/80 mobile, 10 batch per frame | `src/engine/static-city-culling.js`, `src/world/hex-tiles.js`; commit 4aef8dcc, 2026-06-28 |
-| folla e cache | 30 membri, 45 Hz, LOD 190/520, cull 900, riflessi 2 entro 240; fumetti 48, anelli 64 | `src/character/characters.js`, `src/character/speech-bubbles.js`, `src/world/building-leds.js` |
+| folla e cache | 30 membri, 45 Hz, LOD 190/520, cull 900, riflessi 2 entro 240; cartelli 48, anelli 64 | `src/character/characters.js`, `src/character/speech-bubbles.js`, `src/world/building-leds.js` |
 
 ## Dove sta nel codice
 
@@ -322,7 +323,7 @@ Cose che non so spiegare, e lo dico:
 | `src/engine/boot-prewarm.js` | 313 | quattro prewarm e ordine del boot |
 | `src/engine/static-city-culling.js` | 251 | frustum culling di palazzi, ponti, cartelli |
 | `src/world/hex-tiles.js` | 1010 | LOD delle tessere, upload parziali |
-| `src/character/speech-bubbles.js` | 804 | cache LRU dei fumetti |
+| `src/character/speech-bubbles.js` | 804 | cache LRU dei cartelli |
 | `src/world/config.js` | 50 | costanti di risoluzione, bloom, mobile |
 | `docs/retro-future-mobile-fill-benchmark.md` | 240 | il rapporto di misura del 9 luglio 2026 |
 

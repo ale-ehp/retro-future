@@ -40,7 +40,7 @@ l'equalizzatore si accende e i LED battono a tempo.
 ## Il problema
 
 Il rivelo è la finestra con **meno margine di prestazioni di tutta la demo**. Il
-compositore arriva a 6 passate a schermo intero (cielo, scheletro, griglia della
+compositore arriva a 6 pass a schermo intero (cielo, scheletro, griglia della
 strada, città vera, anti-aliasing, upscale) e i picchi di scatto cadono tutti lì. Su
 un iPhone vero il primo percentile scendeva intorno ai 20 fps.
 
@@ -81,7 +81,7 @@ a metà corsa.
 ### Che cosa viene congelato
 
 Mentre il fronte corre, il ciclo dei frame sospende strada esagonale, folla,
-cartelli, particelle e fumetti. Il bloom viene saltato e il pixel ratio limitato. Il
+cartelli e particelle. Il bloom viene saltato e il pixel ratio limitato. Il
 profiler che campiona la scena, e per farlo attraversa tutto l'albero, si accende solo
 su richiesta: girare dentro la finestra che tutto il resto protegge sarebbe una
 contraddizione.
@@ -93,7 +93,7 @@ plane che sale, non da una dissolvenza: quello che è già arrivato sembra mater
 L'anello di luce che accompagna il taglio si ferma all'altezza della testa di **quel**
 personaggio, non a un'altezza nominale: la folla è più bassa del corridore, e l'anello
 arrivava quasi 3 unità sopra le teste. Gli anelli stanno tutti in un `InstancedMesh`,
-perché sono decine e ognuno durerebbe 1,5 s.
+perché sono 18 accesi insieme e ognuno durerebbe 1,5 s.
 
 ### Chi aspetta la fine
 
@@ -111,7 +111,7 @@ che ricostruiva l'intera fotografia diagnostica, dentro la finestra protetta.
   sembrava che apparisse mezza fatta.
 - **L'anello si ferma alla testa di chi arriva.** Con un'altezza nominale unica la
   folla, più bassa, aveva l'anello sopra la testa.
-- **Tutti gli anelli in un `InstancedMesh`.** Decine di chiamate di disegno separate
+- **Tutti gli anelli in un `InstancedMesh`.** 18 chiamate di disegno separate
   per un lampo di 1,5 s sarebbero uno spreco proprio dove il margine manca.
 - **La compilazione preventiva degli shader avviene con il clipping plane già
   installato.** La variante compilata dipende da quello: senza, si sarebbero compilate
@@ -145,7 +145,7 @@ Cose che non so spiegare, e lo dico:
 | momenti in tempo di brano | intro aperta a 9,03 s, fronte a 9,15 s | `city-reveal-wireframe.js` |
 | inclinazione del fronte | 45 gradi | `city-reveal-wireframe.js` |
 | rallentamento sul palazzo principale | metà velocità | `city-reveal-wireframe.js` |
-| passate a schermo intero | fino a 6 | commit 8139be8d |
+| pass a schermo intero | fino a 6 | commit 8139be8d |
 | prestazione nel rivelo su iPhone | primo percentile intorno a 20 fps | commit 8139be8d |
 | materializzazione dei personaggi | attesa 1.000 ms, durata 1.400 ms | `runner-reveal.js` |
 | anelli accesi insieme | 18 | commit a8c3c23d |

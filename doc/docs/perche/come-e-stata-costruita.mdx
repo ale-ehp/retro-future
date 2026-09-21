@@ -67,7 +67,7 @@ test che nessuno lanciava, nessun controllo automatico. Fra il 18 e il 20 settem
 6. **Il gate visivo in CI.** 3 catture confrontate pixel per pixel con la baseline,
    più un'impronta strutturale.
 7. **Rifiniture.**
-8. **Pagare il debito dei tipi.** Da 524 errori a 0, in 15 commit, senza mai usare
+8. **Pagare il debito dei tipi.** Da 524 errori a 0, in 12 commit, senza mai usare
    `any` per farli sparire.
 
 ## I cancelli, oggi
@@ -76,7 +76,7 @@ Prima di ogni commit girano 5 controlli, e devono essere tutti verdi:
 
 | controllo | cosa fa | stato |
 |---|---|---|
-| test | 160 test node:test, con Chromium via Playwright per le prove di pagina | 160 su 160 |
+| test | 160 test node:test, con Chromium via Playwright per quelli di pagina | 160 su 160 |
 | typecheck | tsc sui `.js`, soglia a cricchetto | 0 errori, soglia 0 |
 | codice morto | acorn: nomi dichiarati mai usati, import mai letti | 0 |
 | build | costruisce la pagina italiana e genera l'inglese dal dizionario; si ferma se un testo non si trova più | ok |
@@ -87,7 +87,7 @@ runner Linux con la sua baseline, e il build Docusaurus di questo manuale.
 
 ## Le cicatrici
 
-Ogni cancello è nato da un errore preciso, e lo dico perché è la parte utile.
+Ogni cancello è nato da un errore preciso.
 
 - Un `any` sulle dipendenze del pannello ha fatto sparire 305 errori in un colpo.
   Sembrava un miglioramento: erano tutti veri. Da allora, se un conteggio crolla più

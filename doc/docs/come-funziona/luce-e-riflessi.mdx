@@ -48,7 +48,7 @@ più di un personaggio con scheletro, specchiato. Sono finti: copie del modello 
 attraverso i palazzi. E costruire il rig per tutti i membri della folla, a effetto
 spento, produceva circa 60 rig con scheletro che non avrebbero mai potuto disegnarsi.
 
-Una cosa da dire con onestà: i valori delle luci vivono a 3 livelli. Nel codice
+I valori delle luci vivono a 3 livelli. Nel codice
 la luce emisferica vale 0,10 e la direzionale 0,18, con esposizione 0,85. Nel markup
 0,10, 0,18 e 0,81. Nel JSON canonico, che vince al boot, l'ambientale è 0, la key light
 3 e l'esposizione 0,51, mentre i commenti nel codice ragionano su una key light a 0,18.
@@ -195,9 +195,8 @@ corrente che scorre.
 - **Luce direzionale spenta su mobile.** +3,7 fps, render da 8,26 a 6,87 ms. A
   intensità 0,18 l'atmosfera la reggono il riempimento emisferico e i LED emissivi:
   gli screenshot prima e dopo sono indistinguibili.
-- **Env map tolta a palazzi e piazzole su mobile.** +1,7 fps senza perdita di
-  qualità: il pavimento bagnato resta col suo Fresnel, si perde solo una lucentezza
-  sottile su facciate e marciapiedi.
+- **Env map tolta a palazzi e piazzole su mobile.** +1,7 fps: si perde una lucentezza
+  sottile su facciate e marciapiedi, il pavimento bagnato resta col suo Fresnel.
 - **Il pavimento lite con Fresnel, non nero.** Metalness da 0,88 a 0,32 e roughness da
   0,16 a 0,5, così il pavimento resta illuminato invece di andare al nero. Chiave di
   programma separata perché il desktop resti identico byte per byte. Il compromesso è
@@ -223,7 +222,7 @@ corrente che scorre.
   rasterizza al tasso di campioni della scena senza guadagnare anti-aliasing.
 - **Un materiale per i palazzi laterali.** I loro valori erano già scritti in
   lockstep, mai per palazzo.
-- **Anisotropia a 4 su mobile.** Impercettibile: nitido sotto i piedi, un po' più
+- **Anisotropia a 4 su mobile.** Nitido sotto i piedi, un po' più
   morbido lontano.
 
 Cose che non so spiegare, e lo dico:
@@ -281,7 +280,7 @@ Cose che non so spiegare, e lo dico:
 | `src/character/characters.js` | 142 | costanti dei riflessi |
 | `src/character/runner-orchestration.js` | 630 | il gruppo riflesso del corridore |
 | `src/character/runner-crowd-runtime.js` | 886 | rig condizionato e aggiornamento per membro |
-| `src/character/runner-wiring.js` | 1128 | tuta con env map, getter sui cursori strada |
+| `src/character/runner-wiring.js` | 1132 | tuta con env map, getter sui cursori strada |
 | `boulevard-canonical-settings.json` | 371 | i valori applicati al boot |
 
 I test: `bloom-fork.test.mjs` costruisce il pass senza GPU e verifica che il fork

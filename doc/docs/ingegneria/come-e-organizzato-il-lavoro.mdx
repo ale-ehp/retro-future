@@ -39,7 +39,7 @@ In 3 giorni di settembre sono entrati 66 commit sulla demo, e ne ho letto per
 intero solo una parte. Un metodo che mi chieda di rileggere tutto non scala; uno che si
 fidi e basta produce un sistema che nessuno controlla più.
 
-Altri 3 vincoli, che chiunque coordini lavoro tecnico riconosce:
+Altri 3 vincoli:
 
 - **Il lavoro non è verificabile a occhio.** Un refactor può lasciare la scena
   identica e romperla in un caso su 10.
@@ -104,7 +104,7 @@ cominciare, sempre con le stesse 6 voci:
 6. **Le trappole già costate care**, ognuna con la cicatrice.
 
 Sono 149 e 191 righe, per lavori che hanno prodotto decine di commit: scrivere le
-istruzioni costa una frazione dell'esecuzione, ed è il miglior investimento del
+istruzioni costa una frazione dell'esecuzione, ed è il rapporto che regge il
 metodo.
 
 ### La definizione di fatto
@@ -122,7 +122,7 @@ Prima di ogni commit girano 5 gate bloccanti. [Qualità e
 controlli](./qualita-e-controlli.mdx) li descrive per esteso; qui conta la funzione
 organizzativa: **sono l'unico punto in cui il processo può dire di no a me.**
 
-Due hanno una proprietà che vale la pena rubare altrove: typecheck e codice morto
+Due hanno una proprietà riusabile fuori da qui: typecheck e codice morto
 hanno una soglia che **può solo scendere**. Il numero sta nello script, il gate
 fallisce se sale e chiede di abbassarlo quando scende: un debito a cricchetto non torna
 indietro, e nessuno deve ricordarsi di controllarlo.
@@ -187,7 +187,7 @@ anche nei capitoli tecnici:
 - **Il messaggio dice il problema e la causa, non l'intervento.** Fra 3 mesi il
   codice si legge da sé; quello che non si ricostruisce è perché quel giorno sembrava
   giusto così. I tipi più frequenti sono refactor, feat e perf, in quest'ordine: la
-  forma di un progetto rifinito, non scritto una volta sola.
+  forma di un codice riscritto più volte di quante sia stato esteso.
 - **Le istruzioni sono scritte prima, non durante.** Il documento di consegna
   costringe a misurare il problema prima di toccarlo: è quello che ha evitato di
   correggere 524 errori uno per uno quando le cause erano 5.
