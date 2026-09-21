@@ -27,10 +27,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      # Non si usa `npm ci`: il lockfile non e' committato di proposito, le
-      # devDependencies sono quattro e servono solo ai controlli. `--ignore-scripts`
-      # perche' nessun postinstall serve.
-      - run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund
+          cache: npm
+      # `npm ci` e non `npm install`: installa esattamente le versioni del
+      # package-lock.json committato, quindi un aggiornamento di Playwright non puo'
+      # arrivare qui da solo e far diventare rossa una CI che nessuno ha toccato.
+      # `--ignore-scripts` perche' nessun postinstall serve: il browser si installa
+      # al passo dopo, esplicitamente.
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       # Il browser serve a src/pagina-cover.test.mjs e a control-defaults.test.mjs:
       # misurano la pagina costruita (bersagli, sovrapposizioni, valori di partenza dei
       # cursori) invece di leggere HTML e CSS con espressioni regolari. Senza browser
@@ -60,7 +63,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: pip3 install --quiet numpy pillow
       # RF_GATE_SLOW moltiplica tutte le attese: qui non c'e' GPU e si disegna in
@@ -89,7 +93,7 @@ jobs:
         run: RF_COMPARE_STATIC_INFORMATIVO=1 python3 tools/confronto-visivo.py test/baseline-linux gate-linux
 
   # Il manuale tecnico (doc/, Docusaurus): un link rotto o un'immagine mancante
-  # fermano il build. Ha un lockfile suo, quindi qui `npm ci` va bene.
+  # fermano il build. Ha un albero di dipendenze suo, con il suo lockfile.
   manuale:
     name: manuale
     runs-on: ubuntu-latest

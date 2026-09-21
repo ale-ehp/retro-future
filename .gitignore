@@ -4,7 +4,6 @@
 # node: la demo non ha dipendenze, i controlli si'
 node_modules/
 npm-debug.log*
-package-lock.json
 
 # build del manuale
 doc/build/

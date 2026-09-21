@@ -11,6 +11,8 @@ misure.
 ## Comandi
 
 ```sh
+npm ci                          # versioni bloccate dal package-lock.json
+npx playwright install chromium # una volta sola, serve alle prove di pagina
 npm test                  # 160 prove, node --test, Chromium per quelle di pagina
 npm run typecheck         # tsc con checkJs, soglia a cricchetto
 npm run typecheck -- --tutti

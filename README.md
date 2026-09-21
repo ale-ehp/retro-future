@@ -87,16 +87,22 @@ politica di autoplay.
 ## Comandi
 
 ```sh
-npm install               # solo per i controlli: typescript, playwright, acorn, @types
-npm test                  # 160 prove (node --test, Chromium per quelle di pagina)
-npm run typecheck         # tsc con checkJs, soglia a cricchetto
-npm run morto             # nomi morti e import inutili
-npm run gate -- /tmp/rf   # cattura visiva; confronto con tools/confronto-visivo.py
-npm run doc:dev           # il manuale in locale
+npm ci                          # solo per i controlli: typescript, playwright, acorn, @types
+npx playwright install chromium # il browser delle prove di pagina, una volta sola
+npm test                        # 160 prove (node --test, Chromium per quelle di pagina)
+npm run typecheck               # tsc con checkJs, soglia a cricchetto
+npm run morto                   # nomi morti e import inutili
+npm run gate -- /tmp/rf         # cattura visiva; confronto con tools/confronto-visivo.py
+npm run doc:dev                 # il manuale in locale
 ```
 
-La demo in sé non ha dipendenze: `npm install` serve solo ai controlli. three.js è
-vendorizzato, e le prove lo risolvono con
+Il browser va installato: 23 prove aprono la pagina vera in Chromium e misurano
+quello che il browser ha calcolato, invece di leggere l'HTML con espressioni regolari.
+Senza browser falliscono, e falliscono apposta: saltarle sarebbe un timbro.
+
+La demo in sé non ha dipendenze: le quattro di sviluppo servono solo ai controlli e sono
+bloccate nel `package-lock.json`, così `npm ci` installa le stesse versioni oggi e fra un
+anno. three.js è vendorizzato, e le prove lo risolvono con
 [`test/resolve-three.mjs`](test/resolve-three.mjs), l'equivalente node della importmap.
 
 ## Controlli

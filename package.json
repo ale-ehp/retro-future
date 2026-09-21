@@ -25,7 +25,7 @@
     "doc:screenshot": "node tools/screenshot-manuale.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
+    "@playwright/test": "1.63.0",
     "@types/node": "24.9.2",
     "@types/three": "0.184.1",
     "acorn": "8.18.0",

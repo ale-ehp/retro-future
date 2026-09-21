@@ -87,16 +87,22 @@ policy requires.
 ## Commands
 
 ```sh
-npm install               # only for the checks: typescript, playwright, acorn, @types
-npm test                  # 160 tests (node --test, Chromium for the page ones)
-npm run typecheck         # tsc with checkJs, ratcheted threshold
-npm run morto             # dead names and unused imports
-npm run gate -- /tmp/rf   # visual capture; compare with tools/confronto-visivo.py
-npm run doc:dev           # the manual, locally
+npm ci                          # only for the checks: typescript, playwright, acorn, @types
+npx playwright install chromium # the browser the page tests need, once
+npm test                        # 160 tests (node --test, Chromium for the page ones)
+npm run typecheck               # tsc with checkJs, ratcheted threshold
+npm run morto                   # dead names and unused imports
+npm run gate -- /tmp/rf         # visual capture; compare with tools/confronto-visivo.py
+npm run doc:dev                 # the manual, locally
 ```
 
-The demo itself has no dependencies: `npm install` serves the checks only. three.js is
-vendored, and the tests resolve it through
+The browser is required: 23 tests open the real page in Chromium and measure what the
+browser actually computed, instead of reading the HTML with regular expressions. Without
+it they fail, and they fail on purpose: skipping them would be a rubber stamp.
+
+The demo itself has no dependencies: the four dev ones serve the checks only and are
+locked in `package-lock.json`, so `npm ci` installs the same versions today and a year
+from now. three.js is vendored, and the tests resolve it through
 [`test/resolve-three.mjs`](test/resolve-three.mjs), the node equivalent of the import map.
 
 ## Controls
