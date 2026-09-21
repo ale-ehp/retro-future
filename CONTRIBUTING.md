@@ -87,7 +87,18 @@ che non facevano niente. Tolti, gate visivo identico.
 ## Come si divide il codice
 
 `main.js` non costruisce la scena da solo: apre i sottosistemi nell'ordine giusto e li
-lega fra loro. Due regole tengono in piedi la divisione.
+lega fra loro.
+
+**Un modulo è un sottosistema, e il criterio non è il numero di righe.** Un file di
+trecento righe che fa due mestieri va diviso; uno di milleduecento che ne fa uno resta
+com'è. Il 21 settembre 2026 tre file tenevano insieme cose diverse ed è stato misurato
+prima di toccarli, contando le funzioni condivise nelle due direzioni: la folla
+costruiva, muoveva e si fotografava; il rivelo teneva materiali, matematica del fronte e
+regia; i tabelloni erano due tabelloni diversi. Divisi. I quattro file ancora sopra le
+mille righe sono ognuno un sottosistema solo, e spezzarli vorrebbe dire inventare un
+modulo di stato per far scendere un numero.
+
+Altre due regole tengono in piedi la divisione.
 
 1. **Lo stato condiviso è un oggetto, non venti getter.** Dove un dominio ha numeri che
    altri leggono o scrivono, il modulo esporta un oggetto mutabile (`post`, `boulevard`,

@@ -25,7 +25,7 @@ la parte riusabile altrove:
 1. [Come è organizzato il lavoro](./ingegneria/come-e-organizzato-il-lavoro.mdx): tappe, definizione di fatto, deleghe, cancelli.
 2. [Qualità e controlli](./ingegneria/qualita-e-controlli.mdx): 160 test, typecheck a soglia, gate visivo, CI.
 3. [Deploy e infrastruttura](./ingegneria/deploy-e-infrastruttura.mdx): il Worker Cloudflare, le rotte, la cache per tipo di file.
-4. [Architettura](./come-funziona/architettura.mdx): 97 moduli ESM senza bundler, e perché.
+4. [Architettura](./come-funziona/architettura.mdx): 102 moduli ESM senza bundler, e perché.
 
 **Se coordini progetti.** Il primo capitolo è scritto per te; il quarto è quello che di
 solito manca:
@@ -46,4 +46,5 @@ I capitoli tecnici hanno tutti la stessa forma, si salta al blocco che serve: co
 vede l'utente, il problema, come funziona, perché così e non altrimenti, i numeri,
 dove sta nel codice, e un ponte per chi viene dal backend. Ogni capitolo si apre con un sommario tecnico di 3 righe; il
 [glossario](./riferimento/glossario.mdx) tiene 86 voci per i termini di
-dominio.
+dominio. La [mappa dei file](./riferimento/mappa-dei-file.mdx) dice dove sta ogni modulo
+e, in fondo, dove stanno le fonti citate che non sono nel repository pubblico.

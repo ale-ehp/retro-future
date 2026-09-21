@@ -38,13 +38,15 @@ import {
   sideBuildingCivicNumberGroups,
 } from '../world/building-doors.js';
 import { mainBuildingRecords, sideBuildingRecords } from '../world/buildings.js';
-import { cityDepartmentBoardInspect, cityRoleBoardInspect } from '../world/city-boards.js';
+import {
+  cityDepartmentBoardInspect,
+} from '../world/city-boards.js';
+import {
+  cityRoleBoardInspect,
+} from '../world/city-role-boards.js';
 import {
   CITY_REVEAL_MAIN_BUILDING_LED_WIREFRAME_ENABLED,
-  CITY_REVEAL_ROAD_FADE_BANDS,
-  CITY_REVEAL_ROAD_FADE_MAX_OPACITY,
   CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS,
-  CITY_REVEAL_ROAD_GRID_FADE_BANDS,
   CITY_REVEAL_ROAD_GRID_PROCEDURAL,
   CITY_REVEAL_ROAD_GRID_RENDER_ORDER,
   CITY_REVEAL_ROAD_SOLID_BACKING_ENABLED,
@@ -62,7 +64,6 @@ import {
   cityRevealFrontZ,
   cityRevealMainBuildingSlowDiagnostics,
   cityRevealRealClipPlane,
-  cityRevealRoadFadeMaterials,
   cityRevealRoadFadeObjects,
   cityRevealRoadGridAlphaFactor,
   cityRevealRoadGridBounds,
@@ -70,7 +71,6 @@ import {
   cityRevealRoadGridFadeAt,
   cityRevealRoadGridGroup,
   cityRevealRoadGridHalfWidth,
-  cityRevealRoadGridMat,
   cityRevealRoadGridObjects,
   cityRevealRoadGridSkippedPerimeterSegments,
   cityRevealRoadSolidTopY,
@@ -91,6 +91,13 @@ import {
   isCityRevealCompositeActive,
   isCityRevealRealRevealActive,
 } from '../world/city-reveal-wireframe.js';
+import {
+  CITY_REVEAL_ROAD_FADE_BANDS,
+  CITY_REVEAL_ROAD_FADE_MAX_OPACITY,
+  CITY_REVEAL_ROAD_GRID_FADE_BANDS,
+  cityRevealRoadFadeMaterials,
+  cityRevealRoadGridMat,
+} from '../world/city-reveal-materials.js';
 import {
   BLOOM_RESOLUTION_CAP,
   CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS,

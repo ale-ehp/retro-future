@@ -141,15 +141,17 @@ import {
 } from './buildings.js';
 import {
   CITY_DEPARTMENT_BOARD_ENABLED,
-  CITY_ROLE_BOARD_ENABLED,
   cityDepartmentBoardBottomY,
   cityDepartmentBoardRevealFactor,
   getCityDepartmentBoards,
-  getCityRoleBoards,
   initCityDepartmentBoards,
+} from './city-boards.js';
+import {
+  CITY_ROLE_BOARD_ENABLED,
+  getCityRoleBoards,
   initCityRoleBoards,
   syncCityRoleBoardDoorPose,
-} from './city-boards.js';
+} from './city-role-boards.js';
 import { createCityRevealMainLed } from './city-reveal-main-led.js';
 import { createCityRevealRenderRuntime } from './city-reveal-render-runtime.js';
 import {

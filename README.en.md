@@ -18,7 +18,7 @@ with type checking, behavioural tests and a visual gate running on every push.
 ## What this is
 
 A night city you walk through in first person, built to find out how much holds up in a
-browser with no toolchain: 97 ES modules loaded from an import map, three.js r184 copied
+browser with no toolchain: 102 ES modules loaded from an import map, three.js r184 copied
 into `vendor/` and served locally, no build step between the source file and what
 reaches the browser.
 
@@ -36,8 +36,8 @@ and is built in CI along with everything else. It is written in Italian.
 ## The decisions that explain the rest
 
 **No bundler, on purpose.** `index.html` declares an import map and the modules arrive
-exactly as I wrote them. I know the cost and I measured it: 1.36 MB on disk that become
-303 KB over brotli, and ninety-seven conditional requests on a second visit. The payoff
+exactly as I wrote them. I know the cost and I measured it: 1.44 MB on disk that become
+324 KB over brotli, and a hundred and two conditional requests on a second visit. The payoff
 is that what I debug in the browser is the file I opened in the editor.
 
 **Types live in comments, the check is real.** No TypeScript in the build chain, but
@@ -139,8 +139,14 @@ The rest (`skyQuality`, `skyCheap`, `floorLite`, `floorReflect`, `buildingReflec
 
 ## How the code is split
 
-97 modules, 34,578 lines, none above 1,500. `main.js` does not build the scene: it opens
-the subsystems in the right order and wires them together.
+102 modules, 34,734 lines, median 241. `main.js` does not build the scene: it opens the
+subsystems in the right order and wires them together.
+
+The rule is not a line ceiling, it is that a module is **one subsystem**. Four files sit
+above a thousand lines and stay there because that is what they are: the orchestrator, the
+equaliser, the character wiring, the hex floor. The three that did hold more than one job
+were split: the crowd into build, movement and diagnostics; the reveal into materials,
+front geometry and direction; the boards into departments and roles.
 
 | directory | what it holds |
 |---|---|

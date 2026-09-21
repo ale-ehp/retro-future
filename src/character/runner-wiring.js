@@ -98,20 +98,15 @@ import {
 import { createTronRunnerCrowdMaterialsRuntime } from './runner-crowd-materials.js';
 import { createTronRunnerCrowdRoutesRuntime } from './runner-crowd-routes.js';
 import {
-  buildTronRunnerCrowdMemberRuntime,
   cityRevealPostRevealElapsedMsRuntime,
   clearTronRunnerCrowdState,
   createTronRunnerCrowdRuntime,
-  drainTronRunnerCrowdBuildQueueRuntime,
-  inspectTronRunnerCrowdRuntime,
   invalidateTronRunnerCrowdColliderRecordsRuntime,
   nearbyTronRunnerCrowdMembersRuntime,
   normalizeTronRunnerCrowdStateRuntime,
   prepareTronRunnerCrowdSpatialGridRuntime,
-  processTronRunnerCrowdBuildQueueRuntime,
   resolveTronRunnerCrowdCollisionRuntime,
   setTronRunnerCrowdStateRuntime,
-  startTronRunnerCrowdBuildQueueRuntime,
   syncTronRunnerCrowdScaleAndGround,
   syncTronRunnerCrowdVisibilityState,
   tronRunnerCrowdAvoidanceRuntime,
@@ -128,6 +123,15 @@ import {
   updateTronRunnerCrowdReflectionRuntime,
   updateTronRunnerCrowdRuntime,
 } from './runner-crowd-runtime.js';
+import {
+  buildTronRunnerCrowdMemberRuntime,
+  drainTronRunnerCrowdBuildQueueRuntime,
+  processTronRunnerCrowdBuildQueueRuntime,
+  startTronRunnerCrowdBuildQueueRuntime,
+} from './runner-crowd-build-runtime.js';
+import {
+  inspectTronRunnerCrowdRuntime,
+} from './runner-crowd-inspect-runtime.js';
 import {
   TRON_RUNNER_FOLLOW_PROMPT_DELAY_MS,
   TRON_RUNNER_GREETER_GREET_DISTANCE,

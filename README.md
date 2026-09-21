@@ -18,7 +18,7 @@ con typecheck, prove di comportamento e un gate visivo che gira a ogni push.
 ## Cos'è
 
 Una città notturna navigabile in prima persona, costruita per misurare quanto si può
-tenere in piedi in un browser senza toolchain: 97 moduli ES caricati da una importmap,
+tenere in piedi in un browser senza toolchain: 102 moduli ES caricati da una importmap,
 three.js r184 copiato in `vendor/` e servito in locale, nessun passo di build fra il
 file sorgente e quello che arriva al browser.
 
@@ -36,8 +36,8 @@ la soluzione, i numeri misurati e le cose che non so spiegare. La sua sorgente s
 ## Le decisioni che spiegano il resto
 
 **Nessun bundler, di proposito.** `index.html` dichiara una importmap e i moduli
-arrivano come li ho scritti. Il costo lo conosco e l'ho misurato: 1,36 MB su disco che
-diventano 303 KB in brotli, e novantasette richieste condizionate alla seconda visita.
+arrivano come li ho scritti. Il costo lo conosco e l'ho misurato: 1,44 MB su disco che
+diventano 324 KB in brotli, e centodue richieste condizionate alla seconda visita.
 Il guadagno è che quello che debuggo nel browser è il file che ho aperto nell'editor.
 
 **I tipi stanno nei commenti, il controllo è vero.** Niente TypeScript nella catena di
@@ -139,8 +139,14 @@ Le altre leve (`skyQuality`, `skyCheap`, `floorLite`, `floorReflect`, `buildingR
 
 ## Com'è diviso il codice
 
-97 moduli, 34.578 righe, nessuno sopra le 1.500. `main.js` non costruisce la scena: apre
-i sottosistemi nell'ordine giusto e li lega fra loro.
+102 moduli, 34.734 righe, mediana 241. `main.js` non costruisce la scena: apre i
+sottosistemi nell'ordine giusto e li lega fra loro.
+
+La regola non è un tetto di righe, è che un modulo sia **un sottosistema**. Quattro file
+stanno sopra le mille righe e lo restano perché lo sono: l'orchestratore, l'equalizzatore,
+il cablaggio del personaggio, il pavimento a esagoni. I tre che invece tenevano insieme
+mestieri diversi sono stati divisi: la folla in costruzione, movimento e diagnostica; il
+rivelo in materiali, geometria del fronte e regia; i tabelloni in reparti e ruoli.
 
 | cartella | cosa tiene |
 |---|---|

@@ -199,9 +199,9 @@ e nell'OSD.
 ### Il peso sulla rete
 
 Niente bundler: `index.html` usa una importmap e i moduli sono serviti senza
-minificazione. Misurato il 20 settembre 2026: 97 moduli in `src/` per 1.428.704 byte;
+minificazione. Misurato il 21 settembre 2026: 102 moduli in `src/` per 1.435.658 byte;
 con brotli al livello 11, il comando con cui ho misurato io (Cloudflare comprime in
-brotli, ma il livello non è dichiarato), la somma per file è 317.479 byte, e `main.js`
+brotli, ma il livello non è dichiarato), la somma per file è 323.738 byte, e `main.js`
 passa da 47.778 a 11.909. La cache è `no-cache` con ETag: una richiesta condizionata
 per modulo a ogni visita, 304 se il file non è cambiato.
 
@@ -298,8 +298,8 @@ Cose che non so spiegare, e lo dico:
 | matrice headless, solo triangoli | hexFloor -121.500 tris; post spento +194.053 tris e +120 draw; 9/9 toggle, 29/29 leve | `docs/retro-future-mobile-fill-benchmark.md`, 2026-07-09, SwiftShader |
 | boot con GPU vera | foto fissa a 60.110,1 ms, 116 richieste | `test/retro-future-baseline/fingerprint.json`, 2026-09-19, macOS Chrome |
 | boot senza GPU | prima foto a 143.983 ms, 129 richieste | `test/retro-future-baseline-linux/fingerprint.json`, 2026-09-19, runner Linux |
-| moduli in `src/` | 97 moduli, 1.428.704 byte, 34.578 righe | `find`, `wc`, 2026-09-20 |
-| brotli livello 11 | somma 317.479 byte; `main.js` 47.778 → 11.909; `index.html` 114.216 → 16.402; `three.core.js` 410.546 → 83.155 | `brotli -q 11 -c`, 2026-09-20 |
+| moduli in `src/` | 102 moduli, 1.435.658 byte, 34.734 righe | `find`, `wc`, 2026-09-21 |
+| brotli livello 11 | somma 323.738 byte; `index.html` 114.216 → 16.402; `three.core.js` 410.546 → 83.155 | `brotli -q 11 -c`, 2026-09-21 |
 | preload e cartelle | 91 hint (15 vendor, 76 src); `vendor/` 1,0 MB, `assets/` 1,3 MB, `audio/` 4,5 MB | `index.html`, `du -sh`, 2026-09-20 |
 | triangoli per tessera | 24 | `src/world/hex-tiles.js`, 2026-09-20 |
 | budget automatico | soglie 45 / 54 / 58 / 59,7 fps, passi -0,15 / -0,10 / -0,05 / +0,025, cooldown 6 / 7 / 6 / 8, minimo 0,25 | `src/engine/post-pipeline.js`, `src/world/config.js` |

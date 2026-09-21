@@ -34,7 +34,12 @@ import {
   updateBoundaryError,
   updateRoadBoundaryPulse,
 } from '../world/boundary-error.js';
-import { updateCityDepartmentBoards, updateCityRoleBoard } from '../world/city-boards.js';
+import {
+  updateCityDepartmentBoards,
+} from '../world/city-boards.js';
+import {
+  updateCityRoleBoard,
+} from '../world/city-role-boards.js';
 import {
   cityRevealComplete,
   isCityRevealCompositeActive,
