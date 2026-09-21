@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import {
   DEFAULT_BASE_PAD_Y,
   GRID_BLOCK,
-  MAIN_BUILDING_BASE,
 } from './boulevard-constants.js';
 import {
   CITY_REVEAL_AUDIO_SYNC_EXTRA_DELAY_MS,
@@ -14,6 +13,30 @@ import {
   CITY_REVEAL_MAX_SKY_BACKPLATE_OPACITY,
   CITY_REVEAL_SWEEP_MARGIN_Z,
 } from './config.js';
+import {
+  CITY_REVEAL_ROAD_FADE_BANDS,
+  CITY_REVEAL_ROAD_PERIMETER_EPS,
+  CITY_REVEAL_ROAD_GRID_FADE_BANDS,
+  cityRevealRoadFadeMaterial,
+  cityRevealRoadGridMat,
+  cityRevealRoadGridMaterialForBand,
+  cityRevealRoadGridShaderMat,
+  cityRevealSolidMat,
+  cityRevealWireColor,
+  cityRevealWireCoreMat,
+  cityRevealWireDimMat,
+  cityRevealWireMat,
+  cityRevealWireMaterials,
+} from './city-reveal-materials.js';
+import {
+  CITY_REVEAL_MAIN_BUILDING_SLOW_SPEED,
+  cityRevealSweepValueAt,
+  cityRevealWarpProgressForMainBuilding,
+  setCityRevealObjectBoundsFromBox,
+  setCityRevealObjectBoundsFromPoints,
+  setCityRevealObjectBoxBounds,
+  translateCityRevealObjectBounds,
+} from './city-reveal-sweep.js';
 import { createCityRevealScanGlow } from './city-reveal-scan-glow.js';
 import { bridgeEdgeBatch } from './building-leds.js';
 
@@ -111,7 +134,6 @@ cityRevealWireScene.add(cityRevealWireGroup);
 export const cityRevealRoadGridScene = new THREE.Scene();
 export const cityRevealRoadGridGroup = new THREE.Group();
 cityRevealRoadGridScene.add(cityRevealRoadGridGroup);
-export const cityRevealWireMaterials = [];
 export const cityRevealWireObjects = [];
 export const cityRevealRoadGridObjects = [];
 export const cityRevealRoadFadeObjects = [];
@@ -138,147 +160,16 @@ export const cityRevealRealClipPlane = new THREE.Plane(CITY_REVEAL_SWEEP_NORMAL.
 export const cityRevealBoundsBox = new THREE.Box3();
 const cityRevealStripLineStart = new THREE.Vector3();
 const cityRevealStripLineEnd = new THREE.Vector3();
-const cityRevealWireColor = 0x62f7ff;
-const cityRevealWireCoreColor = 0xe8feff;
-export const CITY_REVEAL_ROAD_FADE_BANDS = 8;
-export const CITY_REVEAL_ROAD_FADE_MAX_OPACITY = 0.42;
-export const CITY_REVEAL_ROAD_GRID_BASE_OPACITY = 0.58;
 export const CITY_REVEAL_ROAD_GRID_RENDER_ORDER = 2;
 export const CITY_REVEAL_ROAD_SOLID_FADE_ENABLED = false;
 export const CITY_REVEAL_ROAD_GRID_EXTRA_BLOCKS = 64;
 export const CITY_REVEAL_ROAD_GRID_PROCEDURAL = true;
-export const CITY_REVEAL_ROAD_GRID_FADE_BANDS = 10;
-export const CITY_REVEAL_ROAD_PERIMETER_EPS = 0.05;
 export const CITY_REVEAL_SIDEWALK_WIRE_ROAD_CLEARANCE = 0.08;
 export const CITY_REVEAL_ROAD_SOLID_BACKING_ENABLED = false;
 export const CITY_REVEAL_SIDEWALK_INTERNAL_LINES_ENABLED = false;
 export const CITY_REVEAL_MAIN_BUILDING_LED_WIREFRAME_ENABLED = false;
-export const CITY_REVEAL_MAIN_BUILDING_SLOW_SPEED = 0.5;
-export const cityRevealRoadFadeMaterials = [];
-const cityRevealRoadGridFadeMaterials = new Map();
 export let cityRevealRoadGridAlphaFactor = 1;
 export let cityRevealRoadGridSkippedPerimeterSegments = 0;
-export const cityRevealSolidMat = new THREE.MeshBasicMaterial({
-  color: 0x000000,
-  transparent: true,
-  opacity: 1,
-  depthWrite: true,
-  depthTest: true,
-  toneMapped: false,
-  polygonOffset: true,
-  polygonOffsetFactor: 1,
-  polygonOffsetUnits: 1,
-});
-
-function registerCityRevealWireMaterial(material, baseOpacity) {
-  material.transparent = true;
-  material.opacity = baseOpacity;
-  material.depthWrite = false;
-  material.depthTest = true;
-  material.toneMapped = false;
-  material.userData.baseOpacity = baseOpacity;
-  material.userData.defaultBaseOpacity = baseOpacity;
-  cityRevealWireMaterials.push(material);
-  return material;
-}
-
-export const cityRevealWireMat = registerCityRevealWireMaterial(new THREE.LineBasicMaterial({
-  color: cityRevealWireColor,
-  blending: THREE.AdditiveBlending,
-}), 0.62);
-export const cityRevealWireDimMat = registerCityRevealWireMaterial(new THREE.LineBasicMaterial({
-  color: cityRevealWireColor,
-  blending: THREE.NormalBlending,
-}), 0.30);
-export const cityRevealWireCoreMat = registerCityRevealWireMaterial(new THREE.LineBasicMaterial({
-  color: cityRevealWireCoreColor,
-  blending: THREE.AdditiveBlending,
-}), 0.42);
-export const cityRevealRoadGridMat = registerCityRevealWireMaterial(new THREE.LineBasicMaterial({
-  color: cityRevealWireColor,
-  blending: THREE.AdditiveBlending,
-}), CITY_REVEAL_ROAD_GRID_BASE_OPACITY);
-cityRevealRoadGridMat.userData.cityRevealRoadGridMaterial = true;
-cityRevealRoadGridMat.depthTest = true;
-export const cityRevealRoadGridShaderMat = registerCityRevealWireMaterial(new THREE.ShaderMaterial({
-  uniforms: {
-    uColor: { value: new THREE.Color(cityRevealWireColor) },
-    uOpacity: { value: CITY_REVEAL_ROAD_GRID_BASE_OPACITY },
-    uXSpacing: { value: GRID_BLOCK },
-    uZSpacing: { value: GRID_BLOCK },
-    uRoadHalfW: { value: 1 },
-    uRoadMinZ: { value: -1 },
-    uRoadMaxZ: { value: 1 },
-    uFadeWidth: { value: 1 },
-    uPerimeterEps: { value: CITY_REVEAL_ROAD_PERIMETER_EPS },
-  },
-  vertexShader: `
-    varying vec3 vWorldPosition;
-
-    void main() {
-      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-      vWorldPosition = worldPosition.xyz;
-      gl_Position = projectionMatrix * viewMatrix * worldPosition;
-    }
-  `,
-  fragmentShader: `
-    uniform vec3 uColor;
-    uniform float uOpacity;
-    uniform float uXSpacing;
-    uniform float uZSpacing;
-    uniform float uRoadHalfW;
-    uniform float uRoadMinZ;
-    uniform float uRoadMaxZ;
-    uniform float uFadeWidth;
-    uniform float uPerimeterEps;
-    varying vec3 vWorldPosition;
-
-    float gridLine(vec2 coord) {
-      vec2 derivative = max(fwidth(coord), vec2(0.0001));
-      vec2 grid = abs(fract(coord - 0.5) - 0.5) / derivative;
-      return 1.0 - min(min(grid.x, grid.y), 1.0);
-    }
-
-    void main() {
-      vec2 gridCoord = vec2(vWorldPosition.x / uXSpacing, vWorldPosition.z / uZSpacing);
-      float line = gridLine(gridCoord);
-      float xOverflow = max(0.0, abs(vWorldPosition.x) - uRoadHalfW) / max(uFadeWidth, 0.001);
-      float zOverflow = max(0.0, max(uRoadMinZ - vWorldPosition.z, vWorldPosition.z - uRoadMaxZ)) / max(uFadeWidth, 0.001);
-      float fade = clamp(1.0 - max(xOverflow, zOverflow), 0.0, 1.0);
-      float roadEdgeX = abs(abs(vWorldPosition.x) - uRoadHalfW);
-      float roadEdgeZ = min(abs(vWorldPosition.z - uRoadMinZ), abs(vWorldPosition.z - uRoadMaxZ));
-      float perimeterMask = smoothstep(uPerimeterEps, uPerimeterEps * 3.0, min(roadEdgeX, roadEdgeZ));
-      float alpha = line * fade * perimeterMask * uOpacity;
-      if (alpha <= 0.002) discard;
-      gl_FragColor = vec4(uColor, alpha);
-    }
-  `,
-  transparent: true,
-  depthWrite: false,
-  depthTest: true,
-  blending: THREE.AdditiveBlending,
-  toneMapped: false,
-  // Niente `extensions: { derivatives }`: three r184 (WebGL 2) non lo legge piu' (2026-09-20).
-}), CITY_REVEAL_ROAD_GRID_BASE_OPACITY);
-cityRevealRoadGridShaderMat.userData.cityRevealRoadGridMaterial = true;
-cityRevealRoadGridShaderMat.userData.cityRevealRoadGridShaderMaterial = true;
-cityRevealRoadGridShaderMat.depthTest = true;
-
-function cityRevealRoadGridMaterialForBand(band) {
-  const safeBand = THREE.MathUtils.clamp(Math.round(band), 1, CITY_REVEAL_ROAD_GRID_FADE_BANDS);
-  if (safeBand >= CITY_REVEAL_ROAD_GRID_FADE_BANDS) return cityRevealRoadGridMat;
-  if (!cityRevealRoadGridFadeMaterials.has(safeBand)) {
-    const opacityScale = safeBand / CITY_REVEAL_ROAD_GRID_FADE_BANDS;
-    const material = registerCityRevealWireMaterial(new THREE.LineBasicMaterial({
-      color: cityRevealWireColor,
-      blending: THREE.AdditiveBlending,
-    }), CITY_REVEAL_ROAD_GRID_BASE_OPACITY * opacityScale);
-    material.userData.cityRevealRoadGridMaterial = true;
-    material.depthTest = true;
-    cityRevealRoadGridFadeMaterials.set(safeBand, material);
-  }
-  return cityRevealRoadGridFadeMaterials.get(safeBand);
-}
 
 function pointsToWireGeometry(points) {
   const vertices = [];
@@ -288,89 +179,6 @@ function pointsToWireGeometry(points) {
   return geometry;
 }
 
-function cityRevealSweepValueAt(z, y = 0) {
-  const safeZ = Number.isFinite(z) ? z : 0;
-  const safeY = Number.isFinite(y) ? y : 0;
-  return safeZ - safeY;
-}
-
-function cityRevealBoxSweepBounds(centerZ, halfDepth, centerY = 0, halfHeight = 0) {
-  const safeZ = Number.isFinite(centerZ) ? centerZ : 0;
-  const safeY = Number.isFinite(centerY) ? centerY : 0;
-  const hd = Math.abs(Number.isFinite(halfDepth) ? halfDepth : 0);
-  const hh = Math.abs(Number.isFinite(halfHeight) ? halfHeight : 0);
-  const values = [
-    cityRevealSweepValueAt(safeZ - hd, safeY - hh),
-    cityRevealSweepValueAt(safeZ + hd, safeY - hh),
-    cityRevealSweepValueAt(safeZ - hd, safeY + hh),
-    cityRevealSweepValueAt(safeZ + hd, safeY + hh),
-  ];
-  return { min: Math.min(...values), max: Math.max(...values) };
-}
-
-function setCityRevealObjectBounds(object, minZ, maxZ, minSweep = null, maxSweep = null) {
-  if (!object) return object;
-  const safeMin = Number.isFinite(minZ) ? minZ : 0;
-  const safeMax = Number.isFinite(maxZ) ? maxZ : safeMin;
-  object.userData.cityRevealMinZ = Math.min(safeMin, safeMax);
-  object.userData.cityRevealMaxZ = Math.max(safeMin, safeMax);
-  object.userData.cityRevealZ = (object.userData.cityRevealMinZ + object.userData.cityRevealMaxZ) * 0.5;
-  const fallbackY = Number.isFinite(object.position?.y) ? object.position.y : 0;
-  const fallbackMinSweep = cityRevealSweepValueAt(object.userData.cityRevealMinZ, fallbackY);
-  const fallbackMaxSweep = cityRevealSweepValueAt(object.userData.cityRevealMaxZ, fallbackY);
-  const safeMinSweep = Number.isFinite(minSweep) ? minSweep : Math.min(fallbackMinSweep, fallbackMaxSweep);
-  const safeMaxSweep = Number.isFinite(maxSweep) ? maxSweep : Math.max(fallbackMinSweep, fallbackMaxSweep);
-  object.userData.cityRevealMinSweep = Math.min(safeMinSweep, safeMaxSweep);
-  object.userData.cityRevealMaxSweep = Math.max(safeMinSweep, safeMaxSweep);
-  object.userData.cityRevealSweep = (object.userData.cityRevealMinSweep + object.userData.cityRevealMaxSweep) * 0.5;
-  return object;
-}
-
-function setCityRevealObjectBoundsFromPoints(object, points) {
-  let minZ = Infinity;
-  let maxZ = -Infinity;
-  let minSweep = Infinity;
-  let maxSweep = -Infinity;
-  for (const point of points) {
-    minZ = Math.min(minZ, point.z);
-    maxZ = Math.max(maxZ, point.z);
-    const sweep = cityRevealSweepValueAt(point.z, point.y);
-    minSweep = Math.min(minSweep, sweep);
-    maxSweep = Math.max(maxSweep, sweep);
-  }
-  return setCityRevealObjectBounds(object, minZ, maxZ, minSweep, maxSweep);
-}
-
-function setCityRevealObjectBoxBounds(object, height, depth, y, z) {
-  const halfDepth = Math.abs(Number.isFinite(depth) ? depth : 0) * 0.5;
-  const sweepBounds = cityRevealBoxSweepBounds(z, halfDepth, y, Math.abs(Number.isFinite(height) ? height : 0) * 0.5);
-  return setCityRevealObjectBounds(object, z - halfDepth, z + halfDepth, sweepBounds.min, sweepBounds.max);
-}
-
-function setCityRevealObjectBoundsFromBox(object, box) {
-  if (!box || box.isEmpty?.()) return setCityRevealObjectBounds(object, 0, 0);
-  const centerZ = (box.min.z + box.max.z) * 0.5;
-  const centerY = (box.min.y + box.max.y) * 0.5;
-  const sweepBounds = cityRevealBoxSweepBounds(centerZ, (box.max.z - box.min.z) * 0.5, centerY, (box.max.y - box.min.y) * 0.5);
-  return setCityRevealObjectBounds(object, box.min.z, box.max.z, sweepBounds.min, sweepBounds.max);
-}
-
-function translateCityRevealObjectBounds(object, zOffset, yOffset = 0) {
-  if (!object || !Number.isFinite(zOffset)) return object;
-  const minZ = object.userData.cityRevealMinZ;
-  const maxZ = object.userData.cityRevealMaxZ;
-  const minSweep = object.userData.cityRevealMinSweep;
-  const maxSweep = object.userData.cityRevealMaxSweep;
-  if (!Number.isFinite(minZ) || !Number.isFinite(maxZ)) return object;
-  const sweepOffset = cityRevealSweepValueAt(zOffset, yOffset);
-  return setCityRevealObjectBounds(
-    object,
-    minZ + zOffset,
-    maxZ + zOffset,
-    Number.isFinite(minSweep) ? minSweep + sweepOffset : null,
-    Number.isFinite(maxSweep) ? maxSweep + sweepOffset : null
-  );
-}
 
 function addCityWireLineSegments(points, material = cityRevealWireMat) {
   const line = new THREE.LineSegments(pointsToWireGeometry(points), material);
@@ -421,21 +229,6 @@ function addCityWireSolidBox(width, height, depth, x, y, z, role = 'solid') {
   return mesh;
 }
 
-function cityRevealRoadFadeMaterial(index) {
-  if (!cityRevealRoadFadeMaterials[index]) {
-    const t = 1 - index / Math.max(1, CITY_REVEAL_ROAD_FADE_BANDS);
-    const material = new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      transparent: true,
-      opacity: CITY_REVEAL_ROAD_FADE_MAX_OPACITY * t * t,
-      depthWrite: true,
-      depthTest: true,
-      toneMapped: false,
-    });
-    cityRevealRoadFadeMaterials[index] = material;
-  }
-  return cityRevealRoadFadeMaterials[index];
-}
 
 function addCityWireRoadFadeBox(width, height, depth, x, y, z, bandIndex) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), cityRevealRoadFadeMaterial(bandIndex));
@@ -777,7 +570,11 @@ function computeCityRevealSweepBounds() {
 
 export function cityRevealFrontForProgress(progress) {
   const t = THREE.MathUtils.clamp(progress, 0, 1);
-  const warped = cityRevealWarpProgressForMainBuilding(t);
+  const warped = cityRevealWarpProgressForMainBuilding(t, {
+    sweepStartZ: cityRevealSweepStartZ,
+    sweepEndZ: cityRevealSweepEndZ,
+    getMainBuildingRecords: runtime.getMainBuildingRecords,
+  });
   return THREE.MathUtils.lerp(cityRevealSweepStartZ, cityRevealSweepEndZ, warped.progress);
 }
 
@@ -789,70 +586,13 @@ export function setCityRevealSweepFront(frontZ) {
   updateCityRevealWireObjectCulling();
 }
 
-function cityRevealMainBuildingSlowZone() {
-  const record = runtime.getMainBuildingRecords()[0];
-  const collider = record?.collider;
-  if (!record?.mesh || !collider) return null;
-  const boxDepth = Math.abs(Number.isFinite(collider.hd) ? collider.hd * 2 : record.baseD || MAIN_BUILDING_BASE);
-  const boxHeight = Math.abs(Number.isFinite(collider.h) ? collider.h : 230);
-  const centerY = (Number.isFinite(collider.y) ? collider.y : record.mesh.position.y || 0) + boxHeight * 0.5;
-  const centerZ = Number.isFinite(collider.z) ? collider.z : record.mesh.position.z;
-  if (![boxDepth, boxHeight, centerY, centerZ].every(Number.isFinite) || boxDepth <= 0 || boxHeight <= 0) return null;
-  const bounds = cityRevealBoxSweepBounds(centerZ, boxDepth * 0.5, centerY, boxHeight * 0.5);
-  return {
-    low: bounds.min,
-    high: bounds.max,
-    centerZ,
-    centerY,
-    depth: boxDepth,
-    height: boxHeight,
-  };
-}
-
-function cityRevealWarpProgressForMainBuilding(progress) {
-  const t = THREE.MathUtils.clamp(progress, 0, 1);
-  const total = cityRevealSweepStartZ - cityRevealSweepEndZ;
-  const zone = cityRevealMainBuildingSlowZone();
-  const speed = THREE.MathUtils.clamp(CITY_REVEAL_MAIN_BUILDING_SLOW_SPEED, 0.05, 1);
-  if (!zone || speed >= 0.999 || !Number.isFinite(total) || total <= 0) {
-    return { progress: t, active: false, zone: null };
-  }
-
-  const zoneStartDistance = THREE.MathUtils.clamp(cityRevealSweepStartZ - zone.high, 0, total);
-  const zoneEndDistance = THREE.MathUtils.clamp(cityRevealSweepStartZ - zone.low, 0, total);
-  const zoneDistance = zoneEndDistance - zoneStartDistance;
-  if (!Number.isFinite(zoneDistance) || zoneDistance <= 0.001) {
-    return { progress: t, active: false, zone: null };
-  }
-
-  const weight = 1 / speed;
-  const weightedTotal = total + zoneDistance * (weight - 1);
-  const weightedDistance = t * weightedTotal;
-  let distance;
-  if (weightedDistance <= zoneStartDistance) {
-    distance = weightedDistance;
-  } else if (weightedDistance <= zoneStartDistance + zoneDistance * weight) {
-    distance = zoneStartDistance + (weightedDistance - zoneStartDistance) / weight;
-  } else {
-    distance = zoneStartDistance + zoneDistance + (weightedDistance - zoneStartDistance - zoneDistance * weight);
-  }
-  distance = THREE.MathUtils.clamp(distance, 0, total);
-  const active = distance >= zoneStartDistance && distance <= zoneEndDistance;
-  return {
-    progress: distance / total,
-    active,
-    zone: {
-      ...zone,
-      startProgress: zoneStartDistance / total,
-      endProgress: zoneEndDistance / total,
-      speed,
-      weight,
-    },
-  };
-}
 
 export function cityRevealMainBuildingSlowDiagnostics() {
-  const warped = cityRevealWarpProgressForMainBuilding(cityRevealSweepProgress);
+  const warped = cityRevealWarpProgressForMainBuilding(cityRevealSweepProgress, {
+    sweepStartZ: cityRevealSweepStartZ,
+    sweepEndZ: cityRevealSweepEndZ,
+    getMainBuildingRecords: runtime.getMainBuildingRecords,
+  });
   return {
     enabled: Boolean(warped.zone),
     active: Boolean(warped.active),
